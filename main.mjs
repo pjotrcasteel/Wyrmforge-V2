@@ -81,7 +81,7 @@ function tick(now) {
 function chooseScene() {
   const rawSeed = seedPicker.value.trim();
   const seed = Number(rawSeed);
-  if (!/^\\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
+  if (!/^\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
     state.textContent = `Invalid seed: enter a whole number from 0 to ${MAX_SCENE_SEED}`;
     return;
   }
