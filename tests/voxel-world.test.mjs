@@ -33,7 +33,7 @@ test('snapshots cannot mutate authoritative world', () => {
 
 test('scene generation is deterministic and cliff is fully solid', () => {
   const a=createScene('cliff',7), b=createScene('cliff',7);
-  assert.equal(a.get(1,8,0),1);
+  assert.equal(a.get(1,9,0),1);
   assert.equal(a.get(-1,8,0),0);
   assert.deepEqual(a.snapshots(),b.snapshots());
 });
