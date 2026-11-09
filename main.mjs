@@ -12,7 +12,8 @@ const state = document.querySelector('#status');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 let activeSeed = 7;
-let world = createScene('hill', activeSeed);
+let activeScene = 'hill';
+let world = createScene(activeScene, activeSeed);
 let cameraX = 0, cameraY = 0, scale = 11, drag = null;
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
@@ -82,10 +83,12 @@ function chooseScene() {
   const rawSeed = seedPicker.value.trim();
   const seed = Number(rawSeed);
   if (!/^\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
+    scenePicker.value = activeScene;
     state.textContent = `Invalid seed: enter a whole number from 0 to ${MAX_SCENE_SEED}`;
     return;
   }
   world = createScene(scenePicker.value, seed);
+  activeScene = scenePicker.value;
   activeSeed = seed;
   frameMetrics.reset();
   previous = null;
@@ -103,7 +106,7 @@ document.querySelector('#carve').addEventListener('click', () => {
 });
 document.querySelector('#report').addEventListener('click', () => {
   const frames = frameMetrics.summary();
-  const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:scenePicker.value,
+  const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:activeScene,
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
