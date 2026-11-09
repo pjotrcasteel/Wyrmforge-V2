@@ -85,3 +85,25 @@ test('removed chunks do not retain revision records', () => {
   world.set(0, 0, 0, 1);
   assert.ok(world.chunkRevision(0, 0, 0) > firstRevision);
 });
+
+test('hill generation is repeatable and responds to the scene seed', () => {
+  const first = createScene('hill', 7).snapshots();
+  const repeated = createScene('hill', 7).snapshots();
+  const different = createScene('hill', 8).snapshots();
+  assert.deepEqual(repeated, first);
+  assert.notDeepEqual(different, first);
+});
+
+test('fixed comparison scenes remain stable across different seeds', () => {
+  for (const name of ['flat', 'cliff', 'arch']) {
+    assert.deepEqual(createScene(name, 7).snapshots(), createScene(name, 8).snapshots());
+  }
+});
+
+test('scene generation rejects out-of-range seeds', () => {
+  for (const seed of [-1, 0x100000000, 1.5, NaN, Infinity]) {
+    assert.throws(() => createScene('hill', seed));
+  }
+  assert.ok(createScene('hill', 0).chunkCount > 0);
+  assert.ok(createScene('hill', 0xffffffff).chunkCount > 0);
+});
