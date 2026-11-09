@@ -32,6 +32,29 @@
 The hill should retain exactly the same shape and carve/reset functionality; status and export show chunk size.
 Do not judge final 2.5D pixel art from this Canvas2D diagnostic view.
 
+## Engine step: exposed-face CPU geometry (0.0.006)
+
+- [x] Newly authored six-direction CPU mesher from copied voxel snapshots (top, bottom and four sides)
+- [x] Omit interior faces including faces shared across positive and negative chunk boundaries
+- [x] Chunk-local vertex positions with explicit origin, outward normals, per-vertex materials and triangle indices
+- [x] Return chunk and six-neighbor revisions for later worker result validation
+- [x] Explicit per-chunk face budget to bound output arrays
+- [x] Automated tests for winding, cavities, arch undersides, deterministic output and chunk seams
+- [x] On-demand "Audit 3D faces" counts with JSON export; no automatic heavy per-frame mesh generation
+- [ ] Render the actual CPU meshes through WebGL2 with a fixed 2.5D pixel-readable camera (V2.2)
+- [ ] Greedy versus exposed-face performance comparison on target mobile devices (V2.2)
+- [ ] Real-device confirmation that auditing is responsive at 16³ and 32³
+
+**Acceptance caveat:** The Canvas2D screen remains the deliberately disposable top-only diagnostic.
+A successful face audit proves geometry was generated, **not** that the finished scene was rendered.
+V2.0 and V2.1 are not yet fully accepted.
+
+**Manual check (0.0.006):** open Hill with seed 7, click Audit 3D faces and verify that
+the count is positive. Switch 16³ ↔ 32³ and audit again; total visible face/triangle counts
+must stay identical for unchanged terrain. In Arch, underside (-Y) count must be positive.
+After Carve sphere, audit again; counts should update. Export benchmark JSON and verify
+`meshAudit`, `faceCounts` and `cpuBufferBytes`.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -40,7 +63,7 @@ This version still uses a top-only Canvas2D diagnostic shell, so it does **not**
 faces or final pixel-art rendering. WebGL2 camera/meshing is V2.2, after the V2.0 and V2.1 gates.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.005
+### Current change: 0.0.006
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
