@@ -12,9 +12,10 @@ const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
+const chunkPicker = document.querySelector('#chunks');
 let activeSeed = 7;
 let activeScene = 'hill';
-let world = createScene(activeScene, activeSeed);
+let world = createScene(activeScene, activeSeed, { chunkEdge: Number(chunkPicker.value) });
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
@@ -23,7 +24,7 @@ const frameMetrics = new FrameMetrics();
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
   const frames = frameMetrics.summary();
-  state.textContent = `V2-only · seed ${activeSeed} · zoom ${zoomFactor.toFixed(2)}×` +
+  state.textContent = `V2-only · ${world.chunkEdge}³ chunks · seed ${activeSeed} · zoom ${zoomFactor.toFixed(2)}×` +
     ` · ${world.chunkCount} chunks · rev ${world.revision}` +
     ` · ${visibleSurfaces} columns · p95 ${formatMs(frames.p95)}` +
     ` · p99 ${formatMs(frames.p99)} · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
@@ -114,7 +115,7 @@ function chooseScene() {
     state.textContent = `Invalid seed: enter a whole number from 0 to ${MAX_SCENE_SEED}`;
     return;
   }
-  world = createScene(scenePicker.value, seed);
+  world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
   activeScene = scenePicker.value;
   activeSeed = seed;
   frameMetrics.reset();
@@ -125,6 +126,7 @@ function chooseScene() {
 }
 scenePicker.addEventListener('change', chooseScene);
 seedPicker.addEventListener('change', chooseScene);
+chunkPicker.addEventListener('change', chooseScene);
 document.querySelector('#reset').addEventListener('click', chooseScene);
 document.querySelector('#carve').addEventListener('click', () => {
   for (let z = -3; z <= 3; z++) for (let x = -3; x <= 3; x++) for (let y = -1; y <= 8; y++) {
@@ -139,7 +141,8 @@ document.querySelector('#report').addEventListener('click', () => {
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
     frames,
-    chunks:world.chunkCount, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
+    chunkEdge:world.chunkEdge, chunks:world.chunkCount,
+    voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoxelWorld, createScene, CHUNK_EDGE } from '../src/voxel-world.mjs';
+import { VoxelWorld, createScene, CHUNK_EDGE, CHUNK_EDGE_CANDIDATES } from '../src/voxel-world.mjs';
 
 test('signed coordinates and chunk boundaries are independent', () => {
   const world = new VoxelWorld();
@@ -106,4 +106,66 @@ test('scene generation rejects out-of-range seeds', () => {
   }
   assert.ok(createScene('hill', 0).chunkCount > 0);
   assert.ok(createScene('hill', 0xffffffff).chunkCount > 0);
+});
+
+test('16 and 32 chunk sizes keep the same authoritative terrain', () => {
+  assert.deepEqual([...CHUNK_EDGE_CANDIDATES], [16, 32]);
+  for (const scene of ['flat', 'hill', 'cliff', 'arch']) {
+    const small = createScene(scene, 7, { chunkEdge: 16 });
+    const large = createScene(scene, 7, { chunkEdge: 32 });
+    assert.equal(small.chunkEdge, 16);
+    assert.equal(large.chunkEdge, 32);
+
+    for (let x = -12; x <= 12; x++) {
+      for (let z = -12; z <= 12; z++) {
+        for (let y = -3; y <= 15; y++) {
+          assert.equal(small.get(x, y, z), large.get(x, y, z),
+            `mismatch in ${scene} at (${x}, ${y}, ${z})`);
+        }
+      }
+    }
+  }
+});
+
+test('32-sized chunks use Euclidean boundaries in all three axes', () => {
+  const world = new VoxelWorld({ chunkEdge: 32 });
+  for (const [x, y, z] of [[-1,-1,-1], [0,0,0], [31,31,31],
+    [32,32,32], [-32,-32,-32], [-33,-33,-33]]) {
+    assert.equal(world.set(x, y, z, 3), true);
+    assert.equal(world.get(x, y, z), 3);
+  }
+  assert.equal(world.chunkCount, 4);
+  assert.equal(world.allocatedVoxelBytes, 4 * 32 ** 3);
+});
+
+test('chunk allocation and reclamation use the chosen chunk size', () => {
+  for (const chunkEdge of CHUNK_EDGE_CANDIDATES) {
+    const world = new VoxelWorld({ chunkEdge });
+    assert.equal(world.allocatedVoxelBytes, 0);
+    world.set(chunkEdge - 1, 0, 0, 1);
+    world.set(chunkEdge, 0, 0, 2);
+    assert.equal(world.chunkCount, 2);
+    assert.equal(world.allocatedVoxelBytes, 2 * chunkEdge ** 3);
+    world.set(chunkEdge - 1, 0, 0, 0);
+    assert.equal(world.allocatedVoxelBytes, chunkEdge ** 3);
+    world.clear();
+    assert.equal(world.allocatedVoxelBytes, 0);
+  }
+});
+
+test('unrelated chunk revisions stay fixed at both chunk sizes', () => {
+  for (const chunkEdge of CHUNK_EDGE_CANDIDATES) {
+    const world = new VoxelWorld({ chunkEdge });
+    world.set(0, 0, 0, 1);
+    world.set(chunkEdge, 0, 0, 2);
+    const untouched = world.chunkRevision(1, 0, 0);
+    world.set(0, 0, 0, 3);
+    assert.equal(world.chunkRevision(1, 0, 0), untouched);
+  }
+});
+
+test('unsupported or invalid chunk sizes are rejected', () => {
+  for (const chunkEdge of [0, 8, 24, 64, -16, 16.5, NaN, null]) {
+    assert.throws(() => new VoxelWorld({ chunkEdge }), RangeError);
+  }
 });
