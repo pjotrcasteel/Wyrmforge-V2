@@ -44,3 +44,44 @@ test('invalid inputs are rejected', () => {
   assert.throws(()=>world.set(0,0,0,256),RangeError);
   assert.throws(()=>createScene('unknown'),RangeError);
 });
+
+test('editing one chunk does not invalidate unrelated chunk snapshots', () => {
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 1);
+  world.set(16, 0, 0, 2);
+  const before = new Map(world.snapshots().map(s => [s.id, s.revision]));
+  world.set(0, 0, 0, 3);
+  const after = new Map(world.snapshots().map(s => [s.id, s.revision]));
+  assert.notEqual(after.get('0,0,0'), before.get('0,0,0'));
+  assert.equal(after.get('1,0,0'), before.get('1,0,0'));
+  assert.equal(world.chunkRevision(1, 0, 0), before.get('1,0,0'));
+});
+
+test('chunk occupancy is retained until its last solid voxel is removed', () => {
+  const world = new VoxelWorld();
+  world.set(-1, 0, 0, 1);
+  world.set(-2, 0, 0, 2);
+  world.set(-1, 0, 0, 0);
+  assert.equal(world.chunkCount, 1);
+  assert.equal(world.get(-2, 0, 0), 2);
+  world.set(-2, 0, 0, 0);
+  assert.equal(world.chunkCount, 0);
+});
+
+test('clear invalidates chunk revision history', () => {
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 1);
+  assert.ok(world.chunkRevision(0, 0, 0) > 0);
+  world.clear();
+  assert.equal(world.chunkRevision(0, 0, 0), 0);
+});
+
+test('removed chunks do not retain revision records', () => {
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 1);
+  const firstRevision = world.chunkRevision(0, 0, 0);
+  world.set(0, 0, 0, 0);
+  assert.equal(world.chunkRevision(0, 0, 0), 0);
+  world.set(0, 0, 0, 1);
+  assert.ok(world.chunkRevision(0, 0, 0) > firstRevision);
+});
