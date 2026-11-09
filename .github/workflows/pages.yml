@@ -39,6 +39,8 @@ jobs:
           node --check scripts/write-build-info.mjs
           node --check src/frame-metrics.mjs
           node --check tests/frame-metrics.test.mjs
+          node --check src/pointer-gestures.mjs
+          node --check tests/pointer-gestures.test.mjs
 
   deploy:
     if: github.event_name != 'pull_request'
