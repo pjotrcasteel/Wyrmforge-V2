@@ -4,7 +4,7 @@ import { VoxelWorld, createScene, CHUNK_EDGE } from '../src/voxel-world.mjs';
 
 test('signed coordinates and chunk boundaries are independent', () => {
   const world = new VoxelWorld();
-  for (const [x,y,z] of [[-1,-1,-1],[0,0,0],[16,16,16],[-16,-16,-16]]) {
+  for (const [x,y,z] of [[-1,-1,-1],[0,0,0],[16,16,16],[-17,-17,-17]]) {
     assert.equal(world.set(x,y,z,3),true);
     assert.equal(world.get(x,y,z),3);
   }
