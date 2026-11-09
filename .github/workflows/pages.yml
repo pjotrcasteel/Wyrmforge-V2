@@ -2,6 +2,8 @@ name: V2 tests and independent Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -35,6 +37,7 @@ jobs:
           node --check tests/voxel-world.test.mjs
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
     environment:
