@@ -10,9 +10,16 @@ const index = (x, y, z) => x + CHUNK_EDGE * (z + CHUNK_EDGE * y);
 export class VoxelWorld {
   #chunks = new Map();
   #revision = 0;
+  #chunkRevisions = new Map();
+  #occupied = new Map();
 
   get revision() { return this.#revision; }
   get chunkCount() { return this.#chunks.size; }
+
+  chunkRevision(cx, cy, cz) {
+    this.#validate(cx, cy, cz);
+    return this.#chunkRevisions.get(key(cx, cy, cz)) ?? 0;
+  }
 
   get(x, y, z) {
     this.#validate(x, y, z);
@@ -32,23 +39,34 @@ export class VoxelWorld {
     if (!chunk) {
       chunk = new Uint8Array(volume);
       this.#chunks.set(id, chunk);
+      this.#occupied.set(id, 0);
     }
     const offset = index(local(x), local(y), local(z));
     if (chunk[offset] === material) return false;
+    const wasSolid = chunk[offset] !== 0;
     chunk[offset] = material;
-    if (material === 0 && !chunk.some(Boolean)) this.#chunks.delete(id);
+    const count = this.#occupied.get(id) + (material !== 0 ? 1 : 0) - (wasSolid ? 1 : 0);
     this.#revision++;
+    this.#chunkRevisions.set(id, this.#revision);
+    if (count === 0) {
+      this.#chunks.delete(id);
+      this.#occupied.delete(id);
+    } else {
+      this.#occupied.set(id, count);
+    }
     return true;
   }
 
   // Consumer receives copies: no mutable access to the authoritative store.
   snapshots() {
     return [...this.#chunks.entries()].sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, data]) => ({ id, revision: this.#revision, data: data.slice() }));
+      .map(([id, data]) => ({ id, revision: this.#chunkRevisions.get(id), data: data.slice() }));
   }
 
   clear() {
     this.#chunks.clear();
+    this.#occupied.clear();
+    this.#chunkRevisions.clear();
     this.#revision++;
   }
 
