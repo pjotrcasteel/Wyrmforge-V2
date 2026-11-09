@@ -41,6 +41,9 @@ jobs:
           node --check tests/frame-metrics.test.mjs
           node --check src/pointer-gestures.mjs
           node --check tests/pointer-gestures.test.mjs
+          node --check scripts/benchmark-chunks.mjs
+      - name: Run independent 16-vs-32 storage benchmark
+        run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
 
   deploy:
     if: github.event_name != 'pull_request'
