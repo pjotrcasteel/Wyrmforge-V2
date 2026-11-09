@@ -78,14 +78,35 @@ export class VoxelWorld {
   }
 }
 
+export const SCENE_GENERATOR_VERSION = 'v2.scene.v1';
+export const MAX_SCENE_SEED = 0xffffffff;
+
+// Stable 32-bit integer mixing; all scene variations are derived from the supplied seed.
+function mixSceneSeed(seed) {
+  let hash = seed >>> 0;
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b);
+  hash ^= hash >>> 16;
+  return hash >>> 0;
+}
+
 export function createScene(name = 'hill', seed = 7) {
   if (!['flat', 'hill', 'cliff', 'arch'].includes(name)) throw new RangeError('Unknown scene');
-  if (!Number.isSafeInteger(seed)) throw new TypeError('Seed must be an integer');
+  if (!Number.isSafeInteger(seed)) throw new TypeError('Seed must be a safe integer');
+  if (seed < 0 || seed > MAX_SCENE_SEED) throw new RangeError('Seed must be an unsigned 32-bit integer');
+  // Flat, cliff and arch stay fixed as comparable baseline fixtures.
+  // The hill's position and height change with the seed.
+  const variation = mixSceneSeed(seed);
+  const hillCenterX = (variation % 5) - 2;
+  const hillCenterZ = (Math.floor(variation / 5) % 5) - 2;
+  const hillHeight = 6 + (Math.floor(variation / 25) % 3);
   const world = new VoxelWorld();
   for (let z = -12; z < 12; z++) {
     for (let x = -12; x < 12; x++) {
       let top = 1;
-      if (name === 'hill') top += Math.max(0, Math.floor(7 - Math.hypot(x + 1, z - 1) / 2));
+      if (name === 'hill') top += Math.max(0, Math.floor(hillHeight - Math.hypot(x - hillCenterX, z - hillCenterZ) / 2));
       if (name === 'cliff') top += x >= 0 ? 8 : 0;
       if (name === 'arch') top += 2;
       for (let y = -2; y <= top; y++) {
