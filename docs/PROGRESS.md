@@ -14,10 +14,23 @@
 - [ ] Verified production route preservation and V2 site after deploy
 - [x] Numeric scene seed control and exported reproducibility metadata (PR #4; merged, CI passed)
 - [ ] Deterministic multi-edit stress scenarios
-- [x] Mobile pointer pan/pinch with cancel/blur/visibility cleanup (PR #5; pending CI and device acceptance)
+- [x] Mobile pointer pan/pinch with cancel/blur/visibility cleanup (PR #5; code merged; physical-device acceptance pending)
 - [ ] CPU, worker and GPU-memory estimates with correctly marked unavailable values
 - [ ] Strong dependency audit including static asset provenance
 - [ ] Define and record V2.0 acceptance thresholds
+
+## Current engine-focused step: V2.1 candidate-size comparison (0.0.005)
+
+- V2 now supports **independent** 16³ and 32³ chunk configurations, each with correct signed coordinate handling.
+- Same scene and seed produce the same committed voxel materials at either chunk pitch.
+- Diagnostic UI can switch chunk pitch, export it, and report **payload bytes only**, explicitly excluding JavaScript Map overhead and GPU/worker memory.
+- `node scripts/benchmark-chunks.mjs` compares generation, sampling, and edit cost across both sizes and four scenes.
+- No chunk size has been selected as universally faster. Physical-device measurements remain required.
+- No renderer or input polish in this change; V2.0 acceptance is still pending.
+
+**Player validation for this increment:** load 0.0.005, select Hill with seed 7, switch between 16³ and 32³.
+The hill should retain exactly the same shape and carve/reset functionality; status and export show chunk size.
+Do not judge final 2.5D pixel art from this Canvas2D diagnostic view.
 
 ### Research and limitations
 
@@ -27,7 +40,7 @@ This version still uses a top-only Canvas2D diagnostic shell, so it does **not**
 faces or final pixel-art rendering. WebGL2 camera/meshing is V2.2, after the V2.0 and V2.1 gates.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.004
+### Current change: 0.0.005
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
