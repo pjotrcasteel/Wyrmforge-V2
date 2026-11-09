@@ -12,7 +12,7 @@
 - [ ] Recorded measured desktop browser result for exact live commit
 - [ ] Measured iPhone Safari and Android Chrome runs
 - [ ] Verified production route preservation and V2 site after deploy
-- [x] Numeric scene seed control and exported reproducibility metadata (PR #4; pending CI/merge)
+- [x] Numeric scene seed control and exported reproducibility metadata (PR #4; merged, CI passed)
 - [ ] Deterministic multi-edit stress scenarios
 - [ ] Robust mobile touch/pinch/cancellation handling
 - [ ] CPU, worker and GPU-memory estimates with correctly marked unavailable values
