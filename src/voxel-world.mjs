@@ -1,20 +1,33 @@
 // Voxel V2: independent, deterministic terrain authority. No legacy imports.
 // World coordinates are signed integers; chunk dimensions are a V2 choice.
+// 16 and 32 are explicit V2 experiment configurations, not inherited V1 constants.
 export const CHUNK_EDGE = 16;
-const volume = CHUNK_EDGE ** 3;
-const floorDiv = n => Math.floor(n / CHUNK_EDGE);
-const local = n => ((n % CHUNK_EDGE) + CHUNK_EDGE) % CHUNK_EDGE;
+export const CHUNK_EDGE_CANDIDATES = Object.freeze([16, 32]);
+const floorDiv = (n, edge) => Math.floor(n / edge);
+const local = (n, edge) => ((n % edge) + edge) % edge;
 const key = (x, y, z) => `${x},${y},${z}`;
-const index = (x, y, z) => x + CHUNK_EDGE * (z + CHUNK_EDGE * y);
+const index = (x, y, z, edge) => x + edge * (z + edge * y);
 
 export class VoxelWorld {
   #chunks = new Map();
   #revision = 0;
   #chunkRevisions = new Map();
   #occupied = new Map();
+  #chunkEdge;
+
+  constructor({ chunkEdge = CHUNK_EDGE } = {}) {
+    if (!CHUNK_EDGE_CANDIDATES.includes(chunkEdge)) {
+      throw new RangeError('chunkEdge must be 16 or 32');
+    }
+    this.#chunkEdge = chunkEdge;
+  }
 
   get revision() { return this.#revision; }
   get chunkCount() { return this.#chunks.size; }
+  get chunkEdge() { return this.#chunkEdge; }
+
+  // Voxel payload only; excludes Map/object overhead and renderer/worker memory.
+  get allocatedVoxelBytes() { return this.chunkCount * this.#chunkEdge ** 3; }
 
   chunkRevision(cx, cy, cz) {
     this.#validate(cx, cy, cz);
@@ -23,8 +36,9 @@ export class VoxelWorld {
 
   get(x, y, z) {
     this.#validate(x, y, z);
-    const chunk = this.#chunks.get(key(floorDiv(x), floorDiv(y), floorDiv(z)));
-    return chunk ? chunk[index(local(x), local(y), local(z))] : 0;
+    const edge = this.#chunkEdge;
+    const chunk = this.#chunks.get(key(floorDiv(x, edge), floorDiv(y, edge), floorDiv(z, edge)));
+    return chunk ? chunk[index(local(x, edge), local(y, edge), local(z, edge), edge)] : 0;
   }
 
   set(x, y, z, material) {
@@ -32,16 +46,17 @@ export class VoxelWorld {
     if (!Number.isInteger(material) || material < 0 || material > 255) {
       throw new RangeError('Material must be an integer from 0 to 255');
     }
-    const cx = floorDiv(x), cy = floorDiv(y), cz = floorDiv(z);
+    const edge = this.#chunkEdge;
+    const cx = floorDiv(x, edge), cy = floorDiv(y, edge), cz = floorDiv(z, edge);
     const id = key(cx, cy, cz);
     let chunk = this.#chunks.get(id);
     if (!chunk && material === 0) return false;
     if (!chunk) {
-      chunk = new Uint8Array(volume);
+      chunk = new Uint8Array(edge ** 3);
       this.#chunks.set(id, chunk);
       this.#occupied.set(id, 0);
     }
-    const offset = index(local(x), local(y), local(z));
+    const offset = index(local(x, edge), local(y, edge), local(z, edge), edge);
     if (chunk[offset] === material) return false;
     const wasSolid = chunk[offset] !== 0;
     chunk[offset] = material;
@@ -92,7 +107,7 @@ function mixSceneSeed(seed) {
   return hash >>> 0;
 }
 
-export function createScene(name = 'hill', seed = 7) {
+export function createScene(name = 'hill', seed = 7, { chunkEdge = CHUNK_EDGE } = {}) {
   if (!['flat', 'hill', 'cliff', 'arch'].includes(name)) throw new RangeError('Unknown scene');
   if (!Number.isSafeInteger(seed)) throw new TypeError('Seed must be a safe integer');
   if (seed < 0 || seed > MAX_SCENE_SEED) throw new RangeError('Seed must be an unsigned 32-bit integer');
@@ -102,7 +117,7 @@ export function createScene(name = 'hill', seed = 7) {
   const hillCenterX = (variation % 5) - 2;
   const hillCenterZ = (Math.floor(variation / 5) % 5) - 2;
   const hillHeight = 6 + (Math.floor(variation / 25) % 3);
-  const world = new VoxelWorld();
+  const world = new VoxelWorld({ chunkEdge });
   for (let z = -12; z < 12; z++) {
     for (let x = -12; x < 12; x++) {
       let top = 1;
