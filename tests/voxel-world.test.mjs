@@ -75,3 +75,13 @@ test('clear invalidates chunk revision history', () => {
   world.clear();
   assert.equal(world.chunkRevision(0, 0, 0), 0);
 });
+
+test('removed chunks do not retain revision records', () => {
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 1);
+  const firstRevision = world.chunkRevision(0, 0, 0);
+  world.set(0, 0, 0, 0);
+  assert.equal(world.chunkRevision(0, 0, 0), 0);
+  world.set(0, 0, 0, 1);
+  assert.ok(world.chunkRevision(0, 0, 0) > firstRevision);
+});
