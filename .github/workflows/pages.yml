@@ -28,6 +28,11 @@ jobs:
           ! grep -R -nE '(Wyrmforge\.Presentation|/experimental/voxel/|/art/|/assets/|\.\./\.\./Wyrmforge)' --include='*.mjs' src main.mjs tests
       - name: Verify static entry
         run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs
+      - name: Validate JavaScript syntax
+        run: |
+          node --check main.mjs
+          node --check src/voxel-world.mjs
+          node --check tests/voxel-world.test.mjs
 
   deploy:
     needs: validate
