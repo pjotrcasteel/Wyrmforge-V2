@@ -1,6 +1,7 @@
 import { createScene, MAX_SCENE_SEED, SCENE_GENERATOR_VERSION } from './src/voxel-world.mjs';
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
+import { PointerGestures } from './src/pointer-gestures.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -14,14 +15,16 @@ const seedPicker = document.querySelector('#seed');
 let activeSeed = 7;
 let activeScene = 'hill';
 let world = createScene(activeScene, activeSeed);
-let cameraX = 0, cameraY = 0, scale = 11, drag = null;
+let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
+const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
   const frames = frameMetrics.summary();
-  state.textContent = `V2-only · seed ${activeSeed} · ${world.chunkCount} chunks · rev ${world.revision}` +
+  state.textContent = `V2-only · seed ${activeSeed} · zoom ${zoomFactor.toFixed(2)}×` +
+    ` · ${world.chunkCount} chunks · rev ${world.revision}` +
     ` · ${visibleSurfaces} columns · p95 ${formatMs(frames.p95)}` +
     ` · p99 ${formatMs(frames.p99)} · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
 }
@@ -32,11 +35,35 @@ function project(x, y, z) {
 }
 
 function resize() {
+  gestures.reset();
   const dpr = Math.min(devicePixelRatio || 1, 2);
   canvas.width = Math.round(canvas.clientWidth * dpr);
   canvas.height = Math.round(canvas.clientHeight * dpr);
-  scale = Math.max(7, Math.min(16, canvas.width / 35));
+  baseScale = Math.max(7, Math.min(16, canvas.width / 35));
+  scale = baseScale * zoomFactor;
   dirty = true;
+}
+
+function zoomAt(cssX, cssY, ratio) {
+  if (!Number.isFinite(ratio) || ratio <= 0) return;
+  const nextZoom = Math.max(0.55, Math.min(2.5, zoomFactor * ratio));
+  if (nextZoom === zoomFactor) return;
+  const factor = nextZoom / zoomFactor;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const pixelX = cssX * canvas.width / rect.width;
+  const pixelY = cssY * canvas.height / rect.height;
+  // Keep the world coordinate below the pinch midpoint stationary.
+  cameraX = (canvas.width / 2 + cameraX - pixelX) * factor + pixelX - canvas.width / 2;
+  cameraY = (canvas.height / 2 + cameraY - pixelY) * factor + pixelY - canvas.height / 2;
+  zoomFactor = nextZoom;
+  scale = baseScale * zoomFactor;
+  dirty = true;
+}
+
+function pointerPosition(event) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
 function draw() {
@@ -93,6 +120,7 @@ function chooseScene() {
   frameMetrics.reset();
   previous = null;
   visibleSurfaces = 0;
+  gestures.reset();
   dirty = true;
 }
 scenePicker.addEventListener('change', chooseScene);
@@ -116,16 +144,35 @@ document.querySelector('#report').addEventListener('click', () => {
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
-canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); drag={x:e.clientX,y:e.clientY}; });
-canvas.addEventListener('pointermove', e => {
-  if (!drag) return;
-  const dpr=canvas.width/canvas.clientWidth;
-  cameraX+=(e.clientX-drag.x)*dpr; cameraY+=(e.clientY-drag.y)*dpr;
-  drag={x:e.clientX,y:e.clientY}; dirty=true;
+canvas.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const point = pointerPosition(event);
+  if (gestures.begin(event.pointerId, point.x, point.y)) {
+    canvas.setPointerCapture(event.pointerId);
+  }
 });
-canvas.addEventListener('pointerup',()=>drag=null);
-canvas.addEventListener('pointercancel',()=>drag=null);
+canvas.addEventListener('pointermove', event => {
+  const point = pointerPosition(event);
+  const delta = gestures.move(event.pointerId, point.x, point.y);
+  if (!delta) return;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  cameraX += delta.panX * canvas.width / rect.width;
+  cameraY += delta.panY * canvas.height / rect.height;
+  zoomAt(delta.centerX, delta.centerY, delta.zoomRatio);
+  dirty = true;
+});
+canvas.addEventListener('pointerup', event => gestures.end(event.pointerId));
+canvas.addEventListener('pointercancel', event => gestures.end(event.pointerId));
+canvas.addEventListener('lostpointercapture', event => gestures.end(event.pointerId));
+canvas.addEventListener('wheel', event => {
+  if (event.cancelable) event.preventDefault();
+  const point = pointerPosition(event);
+  const unit = event.deltaMode === 1 ? 0.03 : event.deltaMode === 2 ? 0.25 : 0.002;
+  zoomAt(point.x, point.y, Math.exp(-event.deltaY * unit));
+}, { passive: false });
 window.addEventListener('resize',resize);
-document.addEventListener('visibilitychange', () => { previous = null; });
+document.addEventListener('visibilitychange', () => { previous = null; if (document.hidden) gestures.reset(); });
+window.addEventListener('blur', () => gestures.reset());
 resize();
 requestAnimationFrame(tick);
