@@ -1,5 +1,6 @@
 import { VoxelWorld, createScene, CHUNK_EDGE } from './src/voxel-world.mjs';
 import { VERSION, COMMIT } from './src/build-info.mjs';
+import { FrameMetrics } from './src/frame-metrics.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -11,8 +12,16 @@ const state = document.querySelector('#status');
 const scenePicker = document.querySelector('#scene');
 let world = createScene('hill');
 let cameraX = 0, cameraY = 0, scale = 11, drag = null;
-let dirty = true, frameCount = 0, previous = null;
-const frameTimes = [];
+let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
+const frameMetrics = new FrameMetrics();
+
+const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
+function updateStatus() {
+  const frames = frameMetrics.summary();
+  state.textContent = `V2-only · ${world.chunkCount} chunks · rev ${world.revision}` +
+    ` · ${visibleSurfaces} columns · p95 ${formatMs(frames.p95)}` +
+    ` · p99 ${formatMs(frames.p99)} · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
+}
 
 function project(x, y, z) {
   return [canvas.width / 2 + (x - z) * scale * 0.75 + cameraX,
@@ -53,21 +62,25 @@ function draw() {
     ctx.closePath();
     ctx.fill();
   }
-  state.textContent = `V2-only · ${world.chunkCount} chunks · revision ${world.revision} · ${surfaces.length} visible columns`;
+  visibleSurfaces = surfaces.length;
+  updateStatus();
 }
 
 function tick(now) {
-  if (previous !== null && !document.hidden && now - previous < 1000) {
-    frameTimes.push(now - previous);
-    if (frameTimes.length > 1800) frameTimes.shift();
-  }
-  previous = now;
-  frameCount++;
+  if (previous !== null && !document.hidden) frameMetrics.record(now - previous);
+  previous = document.hidden ? null : now;
   draw();
+  if (now - lastStatusAt >= 1000 && !document.hidden) {
+    updateStatus();
+    lastStatusAt = now;
+  }
   requestAnimationFrame(tick);
 }
 function chooseScene() {
   world = createScene(scenePicker.value);
+  frameMetrics.reset();
+  previous = null;
+  visibleSurfaces = 0;
   dirty = true;
 }
 scenePicker.addEventListener('change', chooseScene);
@@ -79,11 +92,10 @@ document.querySelector('#carve').addEventListener('click', () => {
   dirty = true;
 });
 document.querySelector('#report').addEventListener('click', () => {
-  const sorted = [...frameTimes].sort((a,b)=>a-b);
-  const p = q => sorted.length ? sorted[Math.ceil(q*sorted.length)-1] : null;
+  const frames = frameMetrics.summary();
   const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:scenePicker.value,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
-    frames:{ count:sorted.length,p50:p(.5),p95:p(.95),p99:p(.99) },
+    frames,
     chunks:world.chunkCount, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
@@ -99,5 +111,6 @@ canvas.addEventListener('pointermove', e => {
 canvas.addEventListener('pointerup',()=>drag=null);
 canvas.addEventListener('pointercancel',()=>drag=null);
 window.addEventListener('resize',resize);
+document.addEventListener('visibilitychange', () => { previous = null; });
 resize();
 requestAnimationFrame(tick);
