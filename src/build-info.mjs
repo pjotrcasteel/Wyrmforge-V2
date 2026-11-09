@@ -1,3 +1,3 @@
 // Local builds show "local"; Pages stamps the exact deployment SHA.
-export const VERSION = '0.0.004';
+export const VERSION = '0.0.005';
 export const COMMIT = 'local';
