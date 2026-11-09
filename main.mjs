@@ -1,4 +1,4 @@
-import { VoxelWorld, createScene, CHUNK_EDGE } from './src/voxel-world.mjs';
+import { createScene, MAX_SCENE_SEED, SCENE_GENERATOR_VERSION } from './src/voxel-world.mjs';
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 
@@ -10,7 +10,9 @@ const canvas = document.querySelector('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const scenePicker = document.querySelector('#scene');
-let world = createScene('hill');
+const seedPicker = document.querySelector('#seed');
+let activeSeed = 7;
+let world = createScene('hill', activeSeed);
 let cameraX = 0, cameraY = 0, scale = 11, drag = null;
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
@@ -18,7 +20,7 @@ const frameMetrics = new FrameMetrics();
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
   const frames = frameMetrics.summary();
-  state.textContent = `V2-only · ${world.chunkCount} chunks · rev ${world.revision}` +
+  state.textContent = `V2-only · seed ${activeSeed} · ${world.chunkCount} chunks · rev ${world.revision}` +
     ` · ${visibleSurfaces} columns · p95 ${formatMs(frames.p95)}` +
     ` · p99 ${formatMs(frames.p99)} · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
 }
@@ -77,13 +79,21 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 function chooseScene() {
-  world = createScene(scenePicker.value);
+  const rawSeed = seedPicker.value.trim();
+  const seed = Number(rawSeed);
+  if (!/^\\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
+    state.textContent = `Invalid seed: enter a whole number from 0 to ${MAX_SCENE_SEED}`;
+    return;
+  }
+  world = createScene(scenePicker.value, seed);
+  activeSeed = seed;
   frameMetrics.reset();
   previous = null;
   visibleSurfaces = 0;
   dirty = true;
 }
 scenePicker.addEventListener('change', chooseScene);
+seedPicker.addEventListener('change', chooseScene);
 document.querySelector('#reset').addEventListener('click', chooseScene);
 document.querySelector('#carve').addEventListener('click', () => {
   for (let z = -3; z <= 3; z++) for (let x = -3; x <= 3; x++) for (let y = -1; y <= 8; y++) {
@@ -94,7 +104,9 @@ document.querySelector('#carve').addEventListener('click', () => {
 document.querySelector('#report').addEventListener('click', () => {
   const frames = frameMetrics.summary();
   const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:scenePicker.value,
+    sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
+    viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
     frames,
     chunks:world.chunkCount, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
