@@ -2,6 +2,7 @@ import { createScene, MAX_SCENE_SEED, SCENE_GENERATOR_VERSION } from './src/voxe
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
+import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -10,6 +11,7 @@ build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 const canvas = document.querySelector('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
+const meshAuditStatus = document.querySelector('#mesh-audit');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
@@ -20,6 +22,12 @@ let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
+let lastMeshAudit = null;
+
+function invalidateMeshAudit() {
+  lastMeshAudit = null;
+  meshAuditStatus.textContent = '3D geometry changed. Select Audit 3D faces to recompute.';
+}
 
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
@@ -116,6 +124,7 @@ function chooseScene() {
     return;
   }
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
+  invalidateMeshAudit();
   activeScene = scenePicker.value;
   activeSeed = seed;
   frameMetrics.reset();
@@ -132,8 +141,38 @@ document.querySelector('#carve').addEventListener('click', () => {
   for (let z = -3; z <= 3; z++) for (let x = -3; x <= 3; x++) for (let y = -1; y <= 8; y++) {
     if (x*x + z*z + (y-3)*(y-3) < 22) world.set(x,y,z,0);
   }
+  invalidateMeshAudit();
   dirty = true;
 });
+
+document.querySelector('#mesh-audit-button').addEventListener('click', () => {
+  meshAuditStatus.textContent = 'Auditing exposed voxel faces…';
+  try {
+    const startedAt = performance.now();
+    const meshes = buildExposedFaceMeshes(world);
+    const faceCounts = { '+x': 0, '-x': 0, '+y': 0, '-y': 0, '+z': 0, '-z': 0 };
+    let faceCount = 0, triangleCount = 0, cpuBufferBytes = 0;
+    for (const mesh of meshes) {
+      faceCount += mesh.faceCount;
+      triangleCount += mesh.triangleCount;
+      cpuBufferBytes += mesh.cpuBufferBytes;
+      for (const face of Object.keys(faceCounts)) faceCounts[face] += mesh.faceCounts[face];
+    }
+    lastMeshAudit = {
+      chunkEdge: world.chunkEdge, worldRevision: world.revision,
+      chunks: meshes.length, faceCount, triangleCount, faceCounts,
+      cpuBufferBytes, elapsedMs: performance.now() - startedAt
+    };
+    meshAuditStatus.textContent = '3D faces: ' + faceCount + ' · triangles: ' + triangleCount +
+      ' · underside (-Y): ' + faceCounts['-y'] + ' · side faces: ' +
+      (faceCounts['+x'] + faceCounts['-x'] + faceCounts['+z'] + faceCounts['-z']) +
+      ' · CPU geometry: ' + Math.round(cpuBufferBytes / 1024) + ' KiB';
+  } catch (error) {
+    lastMeshAudit = null;
+    meshAuditStatus.textContent = 'Mesh audit failed: ' + error.message;
+  }
+});
+
 document.querySelector('#report').addEventListener('click', () => {
   const frames = frameMetrics.summary();
   const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:activeScene,
@@ -142,7 +181,8 @@ document.querySelector('#report').addEventListener('click', () => {
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
-    voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
+    voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
+    meshAudit:lastMeshAudit, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
