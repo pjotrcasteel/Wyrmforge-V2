@@ -51,6 +51,7 @@ export class VoxelWorld {
     if (count === 0) {
       this.#chunks.delete(id);
       this.#occupied.delete(id);
+      this.#chunkRevisions.delete(id);
     } else {
       this.#occupied.set(id, count);
     }
