@@ -14,7 +14,7 @@
 - [ ] Verified production route preservation and V2 site after deploy
 - [x] Numeric scene seed control and exported reproducibility metadata (PR #4; merged, CI passed)
 - [ ] Deterministic multi-edit stress scenarios
-- [ ] Robust mobile touch/pinch/cancellation handling
+- [x] Mobile pointer pan/pinch with cancel/blur/visibility cleanup (PR #5; pending CI and device acceptance)
 - [ ] CPU, worker and GPU-memory estimates with correctly marked unavailable values
 - [ ] Strong dependency audit including static asset provenance
 - [ ] Define and record V2.0 acceptance thresholds
@@ -27,7 +27,7 @@ This version still uses a top-only Canvas2D diagnostic shell, so it does **not**
 faces or final pixel-art rendering. WebGL2 camera/meshing is V2.2, after the V2.0 and V2.1 gates.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.003
+### Current change: 0.0.004
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
@@ -40,6 +40,12 @@ Chunk size 16 is experimental, not a final optimized choice.
 - Seed changes regenerate the hill's voxel geometry deterministically; flat, cliff and arch remain fixed baseline fixtures.
 - Reports include the scene generator schema, CSS viewport, and canvas render scale.
 - No claim is made that this is a complete seeded world generator, or that V2.0 is accepted.
+
+- Two-pointer state machine: one finger pans; two fingers pan and pinch-zoom with anchored midpoint.
+- Pointer cancellation, lost capture, tab hiding, and window blur clear active gestures.
+- Desktop mouse drag and wheel zoom use the same camera, with zoom limits 0.55×–2.5×.
+- Pure Node interaction tests do not replace iPhone Safari and Android Chrome acceptance.
+- View remains fixed orthographic/oblique 2.5D; no new rotation or 3D renderer in this PR.
 
 **Next small step:** verify site deployment/build identity on the actual live route, then tackle
 remaining V2.0 instrumentation and interaction gates. Do not skip ahead to V2.2.
