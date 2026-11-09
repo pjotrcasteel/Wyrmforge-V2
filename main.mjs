@@ -1,4 +1,9 @@
 import { VoxelWorld, createScene, CHUNK_EDGE } from './src/voxel-world.mjs';
+import { VERSION, COMMIT } from './src/build-info.mjs';
+
+const build = document.querySelector('#build');
+build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
+build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 
 const canvas = document.querySelector('#view');
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -76,7 +81,7 @@ document.querySelector('#carve').addEventListener('click', () => {
 document.querySelector('#report').addEventListener('click', () => {
   const sorted = [...frameTimes].sort((a,b)=>a-b);
   const p = q => sorted.length ? sorted[Math.ceil(q*sorted.length)-1] : null;
-  const report = { schema:'voxel-v2.benchmark.v1', scene:scenePicker.value,
+  const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:scenePicker.value,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     frames:{ count:sorted.length,p50:p(.5),p95:p(.95),p99:p(.99) },
     chunks:world.chunkCount, revision:world.revision, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };

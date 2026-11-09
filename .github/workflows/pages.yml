@@ -35,6 +35,8 @@ jobs:
           node --check main.mjs
           node --check src/voxel-world.mjs
           node --check tests/voxel-world.test.mjs
+          node --check src/build-info.mjs
+          node --check scripts/write-build-info.mjs
 
   deploy:
     if: github.event_name != 'pull_request'
@@ -45,6 +47,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Stamp exact deployed commit
+        run: node scripts/write-build-info.mjs
+      - name: Verify build stamp
+        run: node --input-type=module -e "import { COMMIT } from './src/build-info.mjs'; if (COMMIT !== process.env.GITHUB_SHA) process.exit(1)"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
