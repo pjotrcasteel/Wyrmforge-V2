@@ -11,7 +11,9 @@ export const ACTOR_STEP_HEIGHT = 1.05;
 export const ACTOR_MOVE_SPEED = 4.4;
 export const ACTOR_GRAVITY = 22;
 export const ACTOR_MAX_FALL_SPEED = 22;
-export const ACTOR_JUMP_SPEED = 7;
+// Upward velocity is retained for external Physics V2 impulses (e.g. knockback).
+// The Wyrmforge player controller deliberately has no jump action.
+export const ACTOR_MAX_UPWARD_SPEED = 8;
 
 const AXES = ['x', 'y', 'z'];
 const SKIN = 1e-5;
@@ -171,11 +173,11 @@ export function spawnTerrainActor(world,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,jump=false,dt=1/60
+  moveX=0,moveZ=0,dt=1/60
 }={}) {
   validateWorld(world);
   validatePosition(actor);
-  if (!Number.isFinite(dt) || dt<=0 || dt>1/20 || typeof jump !== 'boolean' ||
+  if (!Number.isFinite(dt) || dt<=0 || dt>1/20 ||
       !Number.isFinite(actor.vy) ||
       ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1)) {
     throw new RangeError('Actor inputs or fixed-step delta outside supported bounds');
@@ -189,15 +191,15 @@ export function simulateTerrainActor(world,actor,{
   const dx=moveX/divisor*ACTOR_MOVE_SPEED*dt;
   const dz=moveZ/divisor*ACTOR_MOVE_SPEED*dt;
   const initialSupport=groundProbe(world,actor);
-  const jumping = jump && initialSupport;
-  // Step-up only makes sense when feet are walking on supported terrain.
-  // In a jump the X/Z sweeps must instead collide with the real wall.
-  const xMotion=moveHorizontal(world,actor,'x',dx,initialSupport && !jumping);
-  const zMotion=moveHorizontal(world,xMotion.position,'z',dz,initialSupport && !jumping);
+  // Short ledge steps are automatic walking. No player jump mechanic.
+  const canStep=initialSupport && actor.vy<=0;
+  const xMotion=moveHorizontal(world,actor,'x',dx,canStep);
+  const zMotion=moveHorizontal(world,xMotion.position,'z',dz,canStep);
   let position=zMotion.position;
-  const initialVy=jumping ? ACTOR_JUMP_SPEED : actor.vy;
+  // Other V2 physics systems may supply a bounded upward impulse later.
+  // It is swept against ceilings, but no game/player input initiates it.
   const vy=Math.max(-ACTOR_MAX_FALL_SPEED,
-    Math.min(ACTOR_JUMP_SPEED,initialVy-ACTOR_GRAVITY*dt));
+    Math.min(ACTOR_MAX_UPWARD_SPEED,actor.vy-ACTOR_GRAVITY*dt));
   // Sweep both ascending AND descending travel. The first hit on an upward
   // sweep is a ceiling; it must stop ascent, not count as grounded.
   const vertical=sweepActorAxis(world,position,'y',vy*dt);
@@ -211,7 +213,6 @@ export function simulateTerrainActor(world,actor,{
     wallContact:xMotion.blocked || zMotion.blocked,
     ceilingContact,
     stepUp:xMotion.stepped || zMotion.stepped,
-    jumped:jumping,
     worldRevision:world.revision,
     error:null
   };
