@@ -71,6 +71,9 @@ jobs:
           node --check src/demo-burst.mjs
           node --check tests/demo-burst.test.mjs
           node --check tests/material-resistance.test.mjs
+          node --check src/replay-checkpoint.mjs
+          node --check tests/replay-checkpoint.test.mjs
+          node --check tests/replay-lab.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures

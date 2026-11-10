@@ -541,6 +541,62 @@ each pulse, checking `lastDamage`, `damageLedger.editRevision`,
 restore the intact hill and clear all damage. Confirm **Carve sphere**
 and **3-hit burst** still operate normally.
 
+## 0.0.021 — replay checkpoint of voxels and accumulated material damage
+
+**Physical iPhone Safari v0.0.020 report** (build b7b15c1, Hill/Hunt/32³,
+seed 7):
+- Third damage pulse (`lab-damage-3`) removed 174 voxels, completed
+  `editRevision:3` with zero remaining partially damaged cells and
+  `acceptedTerrainEditIds:3`.
+- Warm worker CPU mesh 16 ms; 17 ms end-to-end mesh update; GPU upload
+  displayed 0 ms at the browser timer's resolution (not a zero-cost upload).
+- p95/p99 frame intervals 22/31 ms over 282 frames; zero >33/>50 ms frames,
+  no renderer error and zero context loss.
+- This export is **only the third pulse**. Earlier pulse-by-pulse damage
+  progression and Reset restoration are not independently verified.
+
+**New V2-native bounded replay checkpoint:**
+- [x] The authoritative ledger exports a JSON-friendly ordered journal of
+  up to 1,024 accepted commands, retaining each command's ID, type, geometry,
+  damage power, and original expected world/edit revision.
+- [x] Include **partial material damage** in an independent checksum, even
+  when no voxel was destroyed and the voxel world's revision is unchanged.
+- [x] Versioned replay checkpoint stores the independent V2 generator schema,
+  scene/seed/chunk size, world revision, edit revision, pending damage count,
+  journal, and 16-hex-character deterministic voxel/damage/journal fingerprints.
+  These hashes detect accidental mismatch; **they are not cryptographic**.
+- [x] Restore constructs a **new V2 world** from its generator, replays every
+  accepted edit in original order, checks all three fingerprints, and rejects
+  conflicting, corrupted or different-scene results **before** replacing
+  the live authority.
+- [x] Two lab actions: **Save replay point** verifies and retains a point in
+  this browser tab; **Restore replay point** replaces the current world and
+  ledger after verification, clears stale meshing requests, re-derives all
+  GPU meshes, and preserves future unique lab command ID counters.
+- [x] Benchmark JSON reports `lastReplay` outcome, restore duration,
+  command count, world/damage checksums, and `replayPointAvailable`.
+- [x] Tests cover all four terrains at 16³/32³, JSON roundtrip, partial-only
+  stone damage, continued damage progression after restore, duplicate command
+  protection, burst-then-damage replay, bad-seed/tampered-journal rejection,
+  and no mutation of existing authority when replay validation fails.
+- [ ] **Not persistent** across page refresh or browser closure. The checkpoint
+  is generator + complete bounded command journal, not a direct arbitrary
+  chunk-state snapshot or a checkpoint compacting the journal.
+- [ ] No file import/export, persistent storage, atomic burst transactions,
+  scene-independent chunk snapshots, or 10-minute/Android acceptance yet.
+- [ ] Optional gravity and all V2 ecosystem hooks remain separate later tasks.
+
+**0.0.021 iPhone acceptance:** Hill/Hunt-style/32³/seed 7, choose
+Background pilot. Press **Damage pulse** once or twice, then
+**Save replay point**. Export a benchmark: expect `lastReplay.status`
+`saved-and-verified` and nonzero `pendingDamageCells`. Continue pulsing
+until the crater deepens or Reset the world, then press
+**Restore replay point**. The terrain must return to the saved intermediate
+state, including invisible accumulated partial damage: the next pulse should
+continue the original progression rather than start over. Export a second
+benchmark with `lastReplay.status:restored`. Confirm worker state and
+`rendererError` remain healthy. No V1 code or assets are imported.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -549,7 +605,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.020
+### Current change: 0.0.021
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

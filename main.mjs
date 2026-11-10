@@ -11,6 +11,7 @@ import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
+import { createReplayCheckpoint, restoreReplayCheckpoint } from './src/replay-checkpoint.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -23,6 +24,7 @@ const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
 const meshCompareButton = document.querySelector('#mesh-compare-button');
 const terrainMeshMode = document.querySelector('#terrain-mesh-mode');
+const restoreReplayButton = document.querySelector('#checkpoint-restore');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
@@ -44,6 +46,7 @@ let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
 let lastBurst = null, nextBurstId = 0;
 let lastDamage = null;
+let replayCheckpoint = null, replayCounters = null, lastReplay = null;
 
 function cancelMeshWorker() {
   compareJobId++;
@@ -500,6 +503,94 @@ document.querySelector('#burst').addEventListener('click', () => {
   dirty = true;
 });
 
+document.querySelector('#checkpoint-save').addEventListener('click', () => {
+  const startedAt = performance.now();
+  try {
+    const checkpoint = createReplayCheckpoint({
+      scene:activeScene, seed:activeSeed, world, ledger:terrainEdits
+    });
+    // Verify by independent V2 generator + command replay BEFORE advertising it
+    // as usable. If this fails, retain any previously saved good checkpoint.
+    restoreReplayCheckpoint(checkpoint);
+    replayCheckpoint = checkpoint;
+    replayCounters = {
+      nextTerrainEditId, nextDamageId, nextBurstId
+    };
+    restoreReplayButton.disabled = false;
+    lastReplay = {
+      status:'saved-and-verified',
+      schema:checkpoint.schema,
+      commands:checkpoint.journal.commands.length,
+      pendingDamageCells:checkpoint.pendingDamageCells,
+      worldChecksum:checkpoint.checksums.world,
+      damageChecksum:checkpoint.checksums.damage,
+      elapsedMs:performance.now()-startedAt
+    };
+    meshAuditStatus.textContent = 'Replay point verified and saved in this tab: ' +
+      lastReplay.commands + ' edits / ' + lastReplay.pendingDamageCells +
+      ' partially damaged cells. Restore after additional edits or Reset.';
+  } catch (error) {
+    lastReplay = {status:'error',operation:'save',message:error.message};
+    meshAuditStatus.textContent = 'Cannot save replay point: ' + error.message;
+  }
+});
+
+restoreReplayButton.addEventListener('click', () => {
+  if (!replayCheckpoint) return;
+  const startedAt = performance.now();
+  let restored;
+  try {
+    // Fail closed without changing the current world, ledger, or live buffers.
+    restored = restoreReplayCheckpoint(replayCheckpoint);
+  } catch (error) {
+    lastReplay = {status:'error',operation:'restore',message:error.message};
+    meshAuditStatus.textContent = 'Replay restore rejected: ' + error.message;
+    return;
+  }
+  cancelTerrainWorker();
+  pendingTerrainDirty.clear();
+  world = restored.world;
+  terrainEdits = restored.ledger;
+  activeScene = restored.source.scene;
+  activeSeed = restored.source.seed;
+  scenePicker.value = activeScene;
+  seedPicker.value = String(activeSeed);
+  chunkPicker.value = String(restored.source.chunkEdge);
+  nextTerrainEditId = replayCounters.nextTerrainEditId;
+  nextDamageId = replayCounters.nextDamageId;
+  nextBurstId = replayCounters.nextBurstId;
+  lastCarve = null;
+  lastBurst = null;
+  lastDamage = null;
+  lastTerrainWorker = null;
+  invalidateMeshAudit();
+  rebuildGpuMeshes();
+  frameMetrics.reset();
+  previous = null;
+  gestures.reset();
+  if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
+    try {
+      terrainSession().start();
+    } catch (error) {
+      terrainMeshMode.value = 'sync';
+      cancelTerrainWorker({dispose:true});
+    }
+  }
+  lastReplay = {
+    status:'restored',
+    schema:replayCheckpoint.schema,
+    commands:replayCheckpoint.journal.commands.length,
+    pendingDamageCells:replayCheckpoint.pendingDamageCells,
+    worldChecksum:replayCheckpoint.checksums.world,
+    damageChecksum:replayCheckpoint.checksums.damage,
+    elapsedMs:performance.now()-startedAt
+  };
+  meshAuditStatus.textContent = 'Verified replay restored: ' +
+    lastReplay.commands + ' edits and ' + lastReplay.pendingDamageCells +
+    ' partial-damage cells. No stale GPU meshes were reused.';
+  dirty = true;
+});
+
 document.querySelector('#mesh-audit-button').addEventListener('click', () => {
   meshAuditStatus.textContent = 'Auditing exposed voxel faces…';
   try {
@@ -606,7 +697,8 @@ document.querySelector('#report').addEventListener('click', () => {
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
-    lastDamage, damageLedger:{ editRevision:terrainEdits.editRevision,
+    lastDamage, lastReplay, replayPointAvailable:replayCheckpoint !== null,
+    damageLedger:{ editRevision:terrainEdits.editRevision,
       pendingDamageCells:terrainEdits.pendingDamageCells,
       resistanceByMaterial:MATERIAL_RESISTANCE },
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
@@ -614,7 +706,7 @@ document.querySelector('#report').addEventListener('click', () => {
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
-    caveat:'Optional reusable background worker handles real CPU meshes; cold/warm timings are experimental, GPU upload still synchronous. Baseline remains default.' };
+    caveat:'Replay points are session-local, regenerate V2 fixture + journal and verify terrain/damage checksums; not yet durable file persistence. Live GPU uploads remain synchronous.' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
