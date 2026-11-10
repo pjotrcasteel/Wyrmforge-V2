@@ -16,6 +16,8 @@ import { createReplayFile, parseReplayFile, MAX_REPLAY_FILE_BYTES } from './src/
 import { terrainRayFromScreen } from './src/terrain-raycast.mjs';
 import { applyTerrainSpellHit } from './src/hunt-terrain-impact.mjs';
 import { TerrainTapRecognizer } from './src/terrain-tap-recognizer.mjs';
+import { spawnTerrainActor, simulateTerrainActor, ACTOR_HEIGHT,
+  ACTOR_PHYSICS_SCHEMA } from './src/terrain-actor.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -23,6 +25,11 @@ build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 
 const canvas = document.querySelector('#view');
 const gpuCanvas = document.querySelector('#gpu-view');
+const actorCanvas = document.querySelector('#actor-view');
+const actorCtx = actorCanvas.getContext('2d');
+const actorToggle = document.querySelector('#actor-toggle');
+const actorReset = document.querySelector('#actor-reset');
+const actorDpad = document.querySelector('#actor-dpad');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
@@ -45,6 +52,127 @@ let nextTerrainEditId = 0, nextDamageId = 0;
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
 const terrainTaps = new TerrainTapRecognizer();
+let actorEnabled = false, actor = null, actorFallen = false;
+let actorPrevious = null, actorAccumulator = 0, actorSteps = 0, actorOverflowFrames = 0;
+let actorOverlayKey = null;
+const heldActorKeys = new Set();
+const heldActorButtons = new Set();
+
+function actorInput() {
+  const active = dir => heldActorKeys.has(dir) || heldActorButtons.has(dir);
+  return {
+    moveX: Number(active('right'))-Number(active('left')),
+    moveZ: Number(active('back'))-Number(active('forward'))
+  };
+}
+
+function resetActorPilot() {
+  actorPrevious = null;
+  actorAccumulator = 0;
+  actorFallen = false;
+  actorOverlayKey = null;
+  heldActorKeys.clear();
+  heldActorButtons.clear();
+  actor = spawnTerrainActor(world, { x:-7.5,z:-5.5 });
+  if (!actor) {
+    actorEnabled = false;
+    actorToggle.textContent = 'Actor pilot: No safe spawn';
+    actorToggle.setAttribute('aria-pressed','false');
+    actorReset.hidden = true;
+    actorDpad.hidden = true;
+    meshAuditStatus.textContent = 'Actor pilot: no supported spawn found in this terrain.';
+    return;
+  }
+  actorToggle.textContent = 'Actor pilot: On';
+  actorToggle.setAttribute('aria-pressed','true');
+  actorReset.hidden = false;
+  actorDpad.hidden = false;
+  meshAuditStatus.textContent = 'Actor pilot active: move with touch arrows or WASD. ' +
+    'Excavate underneath to test falling.';
+}
+
+function updateActorPhysics(now) {
+  if (!actorEnabled || !actor || actorFallen || document.hidden) {
+    actorPrevious = null;
+    actorAccumulator = 0;
+    return;
+  }
+  if (actorPrevious===null) {
+    actorPrevious=now;
+    return;
+  }
+  const elapsed=Math.min(0.10,Math.max(0,(now-actorPrevious)/1000));
+  actorPrevious=now;
+  actorAccumulator+=elapsed;
+  let steps=0;
+  while(actorAccumulator >= 1/60 && steps < 4) {
+    const current=simulateTerrainActor(world,actor,{...actorInput(),dt:1/60});
+    if(current.error) {
+      actorFallen=true;
+      meshAuditStatus.textContent = 'Actor collision rejected a blocked position: ' +
+        current.error + '. Press Respawn actor.';
+      break;
+    }
+    actor=current;
+    actorSteps++;
+    actorAccumulator-=1/60;
+    steps++;
+    if (actor.y < -12) {
+      actorFallen=true;
+      meshAuditStatus.textContent = 'Actor fell below the test world. ' +
+        'Collision followed committed terrain; press Respawn actor.';
+      break;
+    }
+  }
+  if (actorAccumulator >= 1/60) {
+    actorOverflowFrames++;
+    actorAccumulator = 0; // Bounded catch-up; never freeze a slow iPhone.
+  }
+}
+
+function drawActorOverlay() {
+  const pos=actorEnabled && actor ? actor : null;
+  const key=pos ? [
+    pos.x.toFixed(4),pos.y.toFixed(4),pos.z.toFixed(4),
+    activeCamera,scale,cameraX,cameraY,
+    actorCanvas.width,actorCanvas.height,actorFallen
+  ].join('|') : 'off';
+  if (key===actorOverlayKey) return;
+  actorOverlayKey=key;
+  actorCtx.clearRect(0,0,actorCanvas.width,actorCanvas.height);
+  if (!pos || actorFallen) return;
+
+  const foot=projectVoxel(pos.x,pos.y,pos.z,{
+    width:actorCanvas.width,height:actorCanvas.height,
+    scale,panX:cameraX,panY:cameraY,camera:activeCamera
+  });
+  const top=projectVoxel(pos.x,pos.y+ACTOR_HEIGHT,pos.z,{
+    width:actorCanvas.width,height:actorCanvas.height,
+    scale,panX:cameraX,panY:cameraY,camera:activeCamera
+  });
+  const dpr=actorCanvas.width/Math.max(1,actorCanvas.clientWidth);
+  const radius=Math.max(4*dpr,scale*0.24);
+  const height=Math.max(15*dpr,foot.y-top.y);
+  // Diagnostic overlay only: deliberately not a production character asset
+  // or final terrain-occluded actor renderer.
+  actorCtx.fillStyle='rgba(8,18,30,0.35)';
+  actorCtx.beginPath();
+  actorCtx.ellipse(foot.x,foot.y,radius*1.4,radius*0.55,0,0,Math.PI*2);
+  actorCtx.fill();
+  actorCtx.lineWidth=Math.max(1.2,dpr);
+  actorCtx.strokeStyle='#10222b';
+  actorCtx.fillStyle=pos.grounded ? '#f3d48d' : '#ffb982';
+  actorCtx.beginPath();
+  actorCtx.roundRect(foot.x-radius*0.75,foot.y-height,radius*1.5,height,
+    radius*0.65);
+  actorCtx.fill();
+  actorCtx.stroke();
+  actorCtx.fillStyle='#f4f8ff';
+  actorCtx.beginPath();
+  actorCtx.arc(foot.x,foot.y-height-radius*0.7,radius*0.55,0,Math.PI*2);
+  actorCtx.fill();
+}
+
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
@@ -241,7 +369,10 @@ function updateStatus() {
   state.textContent = `V2-only · ${rendererStatus} · camera ${activeCamera} · ${world.chunkEdge}³ chunks · seed ${activeSeed}` +
     ` · zoom ${zoomFactor.toFixed(2)}× · rev ${world.revision}` +
     ` · p95 ${formatMs(frames.p95)} · p99 ${formatMs(frames.p99)}` +
-    ` · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
+    ` · >50ms: ${frames.hitchesOver50Ms}/${frames.count}` +
+    (actorEnabled && actor
+      ? ` · actor y=${actor.y.toFixed(2)} ${actorFallen?'fell':actor.grounded?'grounded':'falling'}`
+      : '');
 }
 
 function project(x, y, z) {
@@ -259,6 +390,9 @@ function resize() {
   canvas.height = Math.round(canvas.clientHeight * dpr);
   gpuCanvas.width = canvas.width;
   gpuCanvas.height = canvas.height;
+  actorCanvas.width = canvas.width;
+  actorCanvas.height = canvas.height;
+  actorOverlayKey = null;
   baseScale = Math.max(7, Math.min(16, canvas.width / 35));
   scale = baseScale * zoomFactor;
   dirty = true;
@@ -328,7 +462,9 @@ function draw() {
 function tick(now) {
   if (previous !== null && !document.hidden) frameMetrics.record(now - previous);
   previous = document.hidden ? null : now;
+  updateActorPhysics(now);
   draw();
+  drawActorOverlay();
   if (now - lastStatusAt >= 1000 && !document.hidden) {
     updateStatus();
     lastStatusAt = now;
@@ -362,6 +498,7 @@ function chooseScene() {
   previous = null;
   visibleSurfaces = 0;
   gestures.reset();
+  if (actorEnabled) resetActorPilot();
   // A reset discards in-flight jobs but prewarms again for the next edit.
   if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
     try {
@@ -578,6 +715,7 @@ function installVerifiedReplay(checkpoint, restored, counters, operation, starte
   frameMetrics.reset();
   previous = null;
   gestures.reset();
+  if (actorEnabled) resetActorPilot();
   if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
     try {
       terrainSession().start();
@@ -781,6 +919,11 @@ document.querySelector('#report').addEventListener('click', () => {
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
+    actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
+      actor,fallen:actorFallen,simulatedSteps:actorSteps,
+      catchUpOverflowFrames:actorOverflowFrames,
+      input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
+      overlay:'diagnostic Canvas2D, not final actor art'},
     lastReplay, replayPointAvailable:replayCheckpoint !== null,
     damageLedger:{ editRevision:terrainEdits.editRevision,
       pendingDamageCells:terrainEdits.pendingDamageCells,
@@ -840,6 +983,59 @@ function applyHuntSpellTap(tap) {
   }
 }
 
+actorToggle.addEventListener('click', () => {
+  actorEnabled = !actorEnabled;
+  if (actorEnabled) {
+    resetActorPilot();
+  } else {
+    actor = null;
+    actorFallen = false;
+    heldActorKeys.clear();
+    heldActorButtons.clear();
+    actorToggle.textContent = 'Actor pilot: Off';
+    actorToggle.setAttribute('aria-pressed','false');
+    actorReset.hidden = true;
+    actorDpad.hidden = true;
+    actorOverlayKey = null;
+  }
+  drawActorOverlay();
+});
+actorReset.addEventListener('click', () => {
+  actorEnabled = true;
+  resetActorPilot();
+  drawActorOverlay();
+});
+for(const button of actorDpad.querySelectorAll('[data-actor-dir]')) {
+  const dir=button.dataset.actorDir;
+  button.addEventListener('pointerdown',event => {
+    if (!actorEnabled) return;
+    event.preventDefault();
+    heldActorButtons.add(dir);
+    button.setPointerCapture(event.pointerId);
+  });
+  const release=() => heldActorButtons.delete(dir);
+  button.addEventListener('pointerup',release);
+  button.addEventListener('pointercancel',release);
+  button.addEventListener('lostpointercapture',release);
+}
+const actorKeyDirections={
+  arrowup:'forward',w:'forward',
+  arrowdown:'back',s:'back',
+  arrowleft:'left',a:'left',
+  arrowright:'right',d:'right'
+};
+window.addEventListener('keydown',event => {
+  if (!actorEnabled || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  const direction=actorKeyDirections[event.key.toLowerCase()];
+  if (!direction) return;
+  event.preventDefault();
+  heldActorKeys.add(direction);
+});
+window.addEventListener('keyup',event => {
+  const direction=actorKeyDirections[event.key.toLowerCase()];
+  if (direction) heldActorKeys.delete(direction);
+});
+
 canvas.addEventListener('pointerdown', event => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   const point = pointerPosition(event);
@@ -889,8 +1085,25 @@ canvas.addEventListener('wheel', event => {
   zoomAt(point.x, point.y, Math.exp(-event.deltaY * unit));
 }, { passive: false });
 window.addEventListener('resize',resize);
-document.addEventListener('visibilitychange', () => { previous = null; if (document.hidden) { gestures.reset(); terrainTaps.cancel(); } });
-window.addEventListener('blur', () => { gestures.reset(); terrainTaps.cancel(); });
+document.addEventListener('visibilitychange', () => {
+  previous = null;
+  actorPrevious = null;
+  actorAccumulator = 0;
+  if (document.hidden) {
+    gestures.reset();
+    terrainTaps.cancel();
+    heldActorKeys.clear();
+    heldActorButtons.clear();
+  }
+});
+window.addEventListener('blur', () => {
+  gestures.reset();
+  terrainTaps.cancel();
+  heldActorKeys.clear();
+  heldActorButtons.clear();
+  actorPrevious = null;
+  actorAccumulator = 0;
+});
 try {
   gpuRenderer = new WebGLVoxelView(gpuCanvas, {
     onAvailabilityChange(available, error) {
