@@ -95,6 +95,9 @@ jobs:
           node --check src/terrain-consumer-probes.mjs
           node --check tests/terrain-integration-port.test.mjs
           node --check tests/terrain-integration-lab.test.mjs
+          node --check src/demo-tunnel.mjs
+          node --check tests/tunnel-carving.test.mjs
+          node --check tests/tunnel-lab.test.mjs
           node --check scripts/create-versioned-lab.mjs
           node --check tests/versioned-lab.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
