@@ -617,6 +617,7 @@ function tick(now) {
       rebuildGpuMeshes();
     }
   }
+  if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
   if (previous !== null && !document.hidden) frameMetrics.record(now - previous);
   previous = document.hidden ? null : now;
   updateActorPhysics(now);
