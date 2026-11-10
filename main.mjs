@@ -26,7 +26,7 @@ const meshAuditStatus = document.querySelector('#mesh-audit');
 const meshCompareButton = document.querySelector('#mesh-compare-button');
 const terrainMeshMode = document.querySelector('#terrain-mesh-mode');
 const restoreReplayButton = document.querySelector('#checkpoint-restore');
-const replayFileAction = document.querySelector('#replay-file-action');
+const replayExportButton = document.querySelector('#replay-export');
 const replayImportFile = document.querySelector('#replay-import-file');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
@@ -606,15 +606,10 @@ restoreReplayButton.addEventListener('click', () => {
   installVerifiedReplay(replayCheckpoint, restored, replayCounters, 'restored', startedAt);
 });
 
-replayFileAction.addEventListener('change', () => {
-  const option = replayFileAction.value;
-  replayFileAction.value = '';
-  if (option === 'import') {
-    // Must be triggered directly by the user's selection for iPhone Safari.
-    replayImportFile.click();
-    return;
-  }
-  if (option !== 'export') return;
+// Keep export a normal click, and import a real visible native file control.
+ // iPhone Safari must receive its file-picker gesture directly; a select
+ // change -> hidden input.click() is not a reliable gesture chain.
+replayExportButton.addEventListener('click', () => {
   const startedAt = performance.now();
   try {
     const text = createReplayFile({
@@ -644,7 +639,7 @@ replayImportFile.addEventListener('change', async () => {
   const file = replayImportFile.files?.[0];
   if (!file) return;
   const startedAt = performance.now();
-  replayFileAction.disabled = true;
+  replayImportFile.disabled = true;
   try {
     if (!file.size || file.size > MAX_REPLAY_FILE_BYTES) {
       throw new RangeError('Replay file must be 1–256 KiB');
@@ -662,7 +657,7 @@ replayImportFile.addEventListener('change', async () => {
     meshAuditStatus.textContent = 'Replay import rejected: ' + error.message +
       '. Current terrain was retained.';
   } finally {
-    replayFileAction.disabled = false;
+    replayImportFile.disabled = false;
     replayImportFile.value = ''; // Allow reselecting the same file.
   }
 });
