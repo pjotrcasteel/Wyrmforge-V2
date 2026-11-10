@@ -1,6 +1,7 @@
 import { createScene, MAX_SCENE_SEED, SCENE_GENERATOR_VERSION } from './src/voxel-world.mjs';
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
+import { SustainedTelemetry } from './src/sustained-telemetry.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './src/mesh-worker-protocol.mjs';
@@ -302,6 +303,7 @@ function drawActorOverlay() {
 
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
+const sustainedTelemetry = new SustainedTelemetry();
 let lastMeshAudit = null;
 let lastMeshComparison = null;
 let lastMeshWorker = null;
@@ -620,6 +622,17 @@ function tick(now) {
   updateActorPhysics(now);
   draw();
   drawActorOverlay();
+  if (!document.hidden) {
+    sustainedTelemetry.record(now, {
+      frames: frameMetrics.summary(),
+      queue: gpuRenderer?.uploadQueueStatistics ?? null,
+      renderer: gpuRenderer?.ready ? gpuRenderer.statistics : null,
+      voxelBytes: world.allocatedVoxelBytes,
+      edits: terrainEdits.recordedEdits,
+      pendingTerrainChunks: pendingTerrainDirty.size,
+      heapBytes: performance.memory?.usedJSHeapSize ?? null
+    });
+  }
   if (now - lastStatusAt >= 1000 && !document.hidden) {
     updateStatus();
     lastStatusAt = now;
@@ -651,6 +664,7 @@ function chooseScene() {
   activeScene = scenePicker.value;
   activeSeed = seed;
   frameMetrics.reset();
+  sustainedTelemetry.reset();
   previous = null;
   visibleSurfaces = 0;
   gestures.reset();
@@ -1129,7 +1143,7 @@ document.querySelector('#report').addEventListener('click', () => {
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
-    frames,
+    frames, sustainedTelemetry:sustainedTelemetry.report(),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastTunnel, lastBurst,
