@@ -327,6 +327,7 @@ let lastMeshUpdate = null;
 let lastTerrainWorker = null;
 let terrainWorkerWarmupMs = null, terrainWorkerSession = null;
 let activeTerrainJob = null, terrainJobId = 0;
+let queuedUploadStartedAt = null;
 const pendingTerrainDirty = new Set();
 
 function fallbackTerrainMeshes(reason) {
@@ -363,11 +364,11 @@ function terrainSession() {
         return;
       }
       try {
-        const uploadStart = performance.now();
-        gpuRenderer.replaceMeshes(new Set(job.dirtyIds),reply.meshes);
-        const gpuUploadMs = performance.now() - uploadStart;
-        const endToEndMs = performance.now() - active.startedAt;
-        gpuBuildMs = gpuUploadMs;
+        gpuRenderer.queueReplacementMeshes(new Set(job.dirtyIds), reply.meshes);
+        queuedUploadStartedAt = active.startedAt;
+        const gpuUploadMs = null;
+        const endToEndMs = null;
+        gpuBuildMs = null;
         lastMeshUpdate = {
           mode:'worker-localized', chunksUpdated:job.dirtyIds.length,
           worldChunks:world.chunkCount, elapsedMs:endToEndMs,
@@ -375,7 +376,7 @@ function terrainSession() {
           uploadedCpuMeshBytes:reply.meshBytes
         };
         lastTerrainWorker = {
-          status:'complete', snapshotBytes:job.snapshotBytes,
+          status:'upload-queued', snapshotBytes:job.snapshotBytes,
           chunksUpdated:job.dirtyIds.length, snapshotPrepareMs:active.snapshotPrepareMs,
           wasWarmAtSubmission:timing.wasWarmAtSubmission,
           workerWarmupMs:timing.warmupMs,
@@ -387,8 +388,7 @@ function terrainSession() {
         meshAuditStatus.textContent =
           'Background mesh (' + (timing.wasWarmAtSubmission ? 'warm' : 'cold') +
           '): ' + job.dirtyIds.length + ' chunks · CPU ' +
-          reply.cpuMs.toFixed(1) + 'ms · GPU ' + gpuUploadMs.toFixed(1) +
-          'ms · total ' + endToEndMs.toFixed(1) + 'ms';
+          reply.cpuMs.toFixed(1) + 'ms · GPU upload queued (2ms/frame budget)';
         dirty = true;
       } catch (error) {
         fallbackTerrainMeshes(error.message);
@@ -413,6 +413,8 @@ function terrainSession() {
 }
 
 function cancelTerrainWorker({ dispose = false } = {}) {
+  gpuRenderer?.cancelQueuedUploads();
+  queuedUploadStartedAt = null;
   terrainJobId++;
   activeTerrainJob = null;
   if (terrainWorkerSession) {
@@ -591,6 +593,23 @@ function draw() {
 }
 
 function tick(now) {
+  if (gpuRenderer?.pendingUploads) {
+    try {
+      const upload = gpuRenderer.flushQueuedUploads({budgetMs:2});
+      if (upload.chunks) dirty = true;
+      if (!gpuRenderer.pendingUploads && lastTerrainWorker?.status === 'upload-queued') {
+        const visibleMs = queuedUploadStartedAt === null ? null : performance.now() - queuedUploadStartedAt;
+        lastTerrainWorker = { ...lastTerrainWorker, status:'complete', editToVisibleMs:visibleMs,
+          uploadQueuePeak:gpuRenderer.uploadQueueStatistics.peakChunks };
+        queuedUploadStartedAt = null;
+      }
+    } catch (error) {
+      cancelTerrainWorker();
+      gpuError = error.message;
+      terrainMeshMode.value = 'sync';
+      rebuildGpuMeshes();
+    }
+  }
   if (previous !== null && !document.hidden) frameMetrics.record(now - previous);
   previous = document.hidden ? null : now;
   updateActorPhysics(now);
@@ -1113,6 +1132,7 @@ document.querySelector('#report').addEventListener('click', () => {
       resistanceByMaterial:MATERIAL_RESISTANCE },
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
     terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
+    gpuUploadQueue:gpuRenderer?.uploadQueueStatistics ?? null,
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
