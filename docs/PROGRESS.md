@@ -659,6 +659,34 @@ after import and `damageLedger.editRevision` after follow-up pulses.
 Also try importing the normal benchmark JSON: it must be rejected without
 changing the visible terrain. No V1 assets, schemas or source reused.
 
+## 0.0.023 — iPhone replay import UI fix, return to core engine roadmap
+
+**Import issue reported on physical iPhone in 0.0.022.** The lab used a
+native select change listener to programmatically click a `hidden` file
+input. This indirect activation is not a reliable way to open iOS Safari's
+file picker. The exact on-device failure mode has not been captured.
+
+- [x] Replace that select/hidden-input chain with a small, permanently visible
+  native `input type="file"`, allowing a direct tap to invoke the iOS file
+  chooser. Separate single-click `Export replay` action remains available.
+- [x] Preserve the existing replay-file format, strict UTF-8 parsing,
+  import bounds (256 KiB, 128 commands), checksum verification,
+  unchanged-authority-on-failure behavior and complete world rebuild.
+- [x] Add test coverage that rejects hidden file inputs and synthetic
+  `input.click()` import activation.
+- [ ] Physical iPhone Safari import confirmation, then **freeze portable replay
+  UI work**; expand only if a real engine integration requires it.
+
+**Reprioritization:** deterministic replay, partial damage, and independent
+worker correctness are sufficient supporting foundations for the next phase.
+Portable save UI is not a gameplay blocker. The next improvements should
+focus on the voxel engine: editable 3D terrain (cliffs and hills included),
+bounded and measured stress from repeated damage, collision/terrain query
+interfaces, mobile performance, and independent V2 integration contracts.
+Avoid new save/cloud/checkpoint features until required by those goals.
+Continue keeping V1 untouched; do not promote Baseline/Background pilot
+based on short samples alone.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -667,7 +695,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.022
+### Current change: 0.0.023
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
