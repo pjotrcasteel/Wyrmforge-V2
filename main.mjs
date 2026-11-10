@@ -148,7 +148,7 @@ function cancelTerrainWorker({ dispose = false } = {}) {
       terrainWorkerWarmupMs = null;
     } else {
       // An idle worker remains prewarmed. Any in-flight work is terminated.
-      terrainWorkerSession.cancel();
+      if (terrainWorkerSession.cancel()) terrainWorkerWarmupMs = null;
     }
   }
   meshCompareButton.disabled = false;
@@ -338,6 +338,16 @@ function chooseScene() {
   previous = null;
   visibleSurfaces = 0;
   gestures.reset();
+  // A reset discards in-flight jobs but prewarms again for the next edit.
+  if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
+    try {
+      terrainSession().start();
+    } catch (error) {
+      terrainMeshMode.value = 'sync';
+      cancelTerrainWorker({dispose:true});
+      meshAuditStatus.textContent = 'Worker prewarm failed: ' + error.message;
+    }
+  }
   dirty = true;
 }
 scenePicker.addEventListener('change', chooseScene);
