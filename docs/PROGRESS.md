@@ -487,6 +487,60 @@ and rendered triangles. If needed, try Cliff and Arch to inspect breaches.
 Single Carve sphere should remain unchanged. Physical Android validation
 and 10-minute thermal tests are still open.
 
+## 0.0.020 — deterministic cumulative damage and V2 material resistance
+
+**Physical iPhone Safari v0.0.019 multi-hit evidence** (de21058,
+Hill/Hunt-style/32³/seed 7):
+- Three accepted ordered edits: 39 + 93 + 67 = **199 removed voxels**.
+- Correct four-chunk union of dirty footprints from an eight-chunk world.
+- Edit processing **4 ms**; one warm-worker mesh **15 ms CPU**;
+  total update **19 ms**; GPU upload displayed **0 ms** due timer resolution
+  (not literally free).
+- 4,036 rendered triangles; p95/p99 frame intervals **19/29 ms** across
+  799 samples; zero >50 ms and zero context losses.
+- Repeat-after-Reset and sustained-performance acceptance remain open.
+
+**New small authoritative behavior:**
+- [x] New `damage-sphere` command in the same V2 TerrainEditLedger.
+  The original `carve-sphere` retains instant-removal semantics.
+- [x] V2-only resistance policy: grass=1, dirt=2, stone=3 unit-damage
+  pulses to remove; protected bedrock material ID 4 is still unbreakable.
+  These are experimental values, not imported from Wyrmforge V1.
+- [x] Record partial per-voxel damage in the edit ledger. Each subsequent
+  unique command ID accumulates integer power. Duplicate IDs do not
+  accumulate again, and changing a prior command's payload is rejected.
+- [x] Separate monotonically increasing `editRevision` from the voxel
+  world's `revision`. A partial-only pulse still advances edit revision,
+  enabling `expectedEditRevision` ordering checks without unnecessary
+  world-mesh invalidation.
+- [x] Hard per-command bounds: sphere radius <= 8, damage power 1..8,
+  at most 8,192 active partially damaged cells, and the existing 1,024
+  accepted command ID history cap. Preflight damage-state capacity
+  prevents partially applied resource-overflow operations.
+- [x] Surface `damageLedger.editRevision`, `pendingDamageCells`,
+  `resistanceByMaterial` and `lastDamage` in benchmark JSON.
+- [x] Add **Damage pulse** lab button that repeatedly damages the same
+  deterministic test sphere. Worker/GPU rebuild only when voxels are
+  actually removed; partial-only pulses do not cancel valid workers.
+- [x] Tests for all material thresholds, protected voxels, damage duplicate
+  suppression, ordered partial-only revisions, exact signed chunk seams,
+  deterministic replay on 16³/32³, and bounded memory preflight.
+- [ ] Partial damage is not yet in a durable world snapshot or replay
+  checkpoint. The ledger is the current authoritative damage-state owner,
+  so full save/restore and hashed replay require explicit new V2 schemas.
+- [ ] No cracks/VFX, resistances for future materials, native integration,
+  optional hybrid gravity, or real-device sustained thermal evidence.
+
+**Physical iPhone 0.0.020 check:** load Hill/Hunt-style/seed 7/32³ and
+Background pilot; press **Damage pulse** three times at the same target.
+Pulse 1 removes weak grass and weakens dirt/stone, pulse 2 removes dirt,
+pulse 3 removes remaining stone inside that sphere. The crater should
+progress rather than appear fully formed on the first pulse. Export after
+each pulse, checking `lastDamage`, `damageLedger.editRevision`,
+`pendingDamageCells`, and only necessary worker mesh updates. Reset must
+restore the intact hill and clear all damage. Confirm **Carve sphere**
+and **3-hit burst** still operate normally.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -495,7 +549,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.019
+### Current change: 0.0.020
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
