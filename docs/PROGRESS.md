@@ -1110,6 +1110,73 @@ body/head stays inside the box. The status shows physical headroom
 pass around the pillar, even though projected art overlaps the arch.
 No production Character Visibility implementation is implied.
 
+## 0.0.031 — V2.6 typed terrain integration contracts (first live slice)
+
+**Physical iPhone validation:** the owner confirmed that v0.0.030's
+physics-aligned diagnostic actor and Arch collision setup work. This is
+accepted evidence for the V2.5 Arch/pillar/headroom *slice*, not proof
+of completed swept-capsule comparison, ten-minute device performance or
+production Wyrmforge integration.
+
+**Purpose:** establish **one newly authored, independent V2-native
+integration contract** that actual Wyrmforge Hunt gameplay and the future
+Physics V2, Lighting V2, VFX V2, Audio V2 and AI/navigation V2 systems can
+eventually consume. This is the first **V2.6 milestone slice**, not a
+separate roadmap or another UI/replay feature.
+
+- [x] A `V2TerrainPort` facade references the existing **single**
+  `VoxelWorld` and **single** `TerrainEditLedger`. No second world, no
+  separate collision authority, no renderer-dependent material reads.
+- [x] Versioned, synchronous, JSON/structured-clone-safe change events
+  (schema `voxel-v2.terrain-change.v1`) emitted once **after each
+  accepted edit**. Every notification carries world epoch, ordered edit
+  sequence, original edit ID/type, exact world/edit revisions,
+  changed-bounds, sorted dirty chunk IDs, partial-damage and geometry
+  indicators. A duplicate or rejected edit produces **no** notification.
+- [x] Read-only V2 contracts cover material queries, partial damage,
+  immutable-by-copy snapshots, authoritative 3D raycast and swept-box
+  collision/occupancy; commands still route through the ledger. No V1
+  contract, asset or implementation is imported.
+- [x] Six **new V2-only adapter fakes** prove that independent gameplay,
+  physics, lighting, VFX, audio and navigation consumers receive exactly
+  the same ordered stream and can distinguish geometry and partial damage.
+  These are not implementations of their respective future engines.
+- [x] Subscriber failures do not undo terrain commits or prevent other
+  consumers receiving the event. Nested writer calls during notification
+  are rejected, subscriptions are bounded, and listeners cannot mutate
+  frozen event data.
+- [x] Integrate the port into the **actual V2 lab**. The carve button,
+  material pulse, 3-hit burst, tap-to-target spell and actor-footprint
+  excavation all use the same facade; Reset and replay restore dispose
+  prior subscriptions and create a fresh world epoch.
+- [x] Benchmark JSON now includes `terrainIntegration` with port
+  revision/epoch, published/delivered counts, listener failures, last
+  event, and evidence from all six consumer probes. Partial-only edits
+  are events even when the renderer has nothing to remesh.
+- [x] Tests cover 16³/32³ authoritative queries, duplicate/rejected
+  writes, partial stone damage, signed chunk seams, JSON portability,
+  subscriber ordering/failure isolation, capacity limits, replay epoch
+  isolation and every live lab edit path.
+- [ ] **Not yet:** full typed external process transports, cross-worker
+  event delivery, backpressure for effect consumers, game-side adapters
+  in actual Wyrmforge Hunt, production V2 Lighting/Physics/VFX/Audio/AI
+  engines or gravity. These belong to later V2.6, V2.8 and V2.9 work.
+- [ ] Full V2.5 device/capsule comparisons and V2.2/V2.3/V2.4 mobile
+  performance and destruction gates remain open; passing this contract
+  slice does not silently complete them.
+
+**Acceptance on iPhone:** open the commit-specific v0.0.031 lab.
+With Arch/Hunt/32³/seed7, enable Actor pilot; do a damage pulse
+(which may accumulate partial damage), carve or target a spell, then
+export benchmark JSON. In `terrainIntegration`, expect all six
+probe counters to advance together for accepted edits; a
+partial-only hit must have `geometryChanged:false` and a
+destructive hit `geometryChanged:true` with precise dirty chunk
+IDs. Test Reset then repeat: `epoch` increases and new subscriber
+counts do not include previous-world edits. Existing actor and terrain
+performance should remain stable. No Wyrmforge V1 assets or code are
+used.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -1118,7 +1185,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.030
+### Current change: 0.0.031
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
