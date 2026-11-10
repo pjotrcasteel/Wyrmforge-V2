@@ -3,10 +3,10 @@
 **Authoritative plan:** the November 9 **Work-authored Wyrmforge Voxel v2 Implementation Handover**, expanded by independent research and engineering verification in this **single roadmap**. Original V2.0–V2.7 milestone definitions and acceptance intent are preserved.
 **Delivery objective:** a clean-room, mobile-first **voxel engine actually used in Wyrmforge Hunt**, with full 3D destruction, measured mobile performance, and bounded hybrid structural gravity.
 **Repository:** `pjotrcasteel/Wyrmforge-V2` (`main`); the original Wyrmforge repository remains unaffected until a separate V2 game cutover.
-**Status:** capabilities have been implemented incrementally through laboratory build **0.0.024**, but individual original V2.0–V2.7 acceptance gates are **not** all passed. No current Wyrmforge Hunt runtime integration or structural gravity is implemented.
+**Status:** capabilities have been implemented incrementally through laboratory build **0.0.031**, but individual original V2.0–V2.7 acceptance gates are **not** all passed. No current Wyrmforge Hunt runtime integration or structural gravity is implemented.
 **References:** [Research evidence](RESEARCH.md) · [Architecture decisions](ARCHITECTURE-DECISIONS.md) · [Implementation evidence](PROGRESS.md) · [Hybrid gravity design](VOXEL-GRAVITY-V2.md).
 
-**Roadmap identity:** `0.0.024` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
+**Roadmap identity:** `0.0.031` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
 
 ## 0. Clean-room V2 mandate — owner decision (2026-11-09)
 
