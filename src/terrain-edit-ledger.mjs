@@ -2,20 +2,24 @@ import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 
 // Independent V2.3 foundation: one synchronous authoritative writer for bounded,
 // ordered, idempotent sphere edits. No rendering, physics or V1 dependencies.
-// Material 4 is the experimental V2 protected bedrock ID; other materials remain
-// fully destructible. Resistance/damage accumulation is deliberately future work.
+// Protected material 4 is independent V2 bedrock. Partial damage is private to
+// this ledger and must eventually be included in a versioned snapshot/replay.
 export const TERRAIN_EDIT_SCHEMA = 'voxel-v2.terrain-edit.v1';
 export const V2_BEDROCK_MATERIAL = 4;
 export const MAX_EDIT_RADIUS = 8;
 export const MAX_RECORDED_EDITS = 1024;
+export const MAX_PENDING_DAMAGE_CELLS = 8192;
+export const MATERIAL_RESISTANCE = Object.freeze({ 1: 1, 2: 2, 3: 3 });
+export const MAX_DAMAGE_POWER = 8;
 const EDIT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function validateEdit(command) {
-  if (!command || typeof command !== 'object' || command.type !== 'carve-sphere' ||
+  if (!command || typeof command !== 'object' ||
+      !['carve-sphere','damage-sphere'].includes(command.type) ||
       typeof command.id !== 'string' || !EDIT_ID.test(command.id)) {
-    throw new TypeError('Expected a bounded carve-sphere command with a stable edit ID');
+    throw new TypeError('Expected a bounded sphere command with a stable edit ID');
   }
-  const { x, y, z, radius, expectedRevision } = command;
+  const { x, y, z, radius, expectedRevision, expectedEditRevision } = command;
   if (![x, y, z].every(Number.isSafeInteger) ||
       !Number.isFinite(radius) || radius <= 0 || radius > MAX_EDIT_RADIUS) {
     throw new RangeError('Invalid sphere center or radius');
@@ -29,10 +33,23 @@ function validateEdit(command) {
       (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
     throw new RangeError('Expected revision must be a nonnegative safe integer');
   }
+  if (expectedEditRevision !== undefined &&
+      (!Number.isSafeInteger(expectedEditRevision) || expectedEditRevision < 0)) {
+    throw new RangeError('Expected edit revision must be a nonnegative safe integer');
+  }
+  if (command.type === 'damage-sphere' &&
+      (!Number.isSafeInteger(command.power) || command.power < 1 ||
+       command.power > MAX_DAMAGE_POWER)) {
+    throw new RangeError('Damage power must be an integer from 1 to 8');
+  }
+  if (command.type === 'carve-sphere' && command.power !== undefined) {
+    throw new TypeError('Instant carve must not supply damage power');
+  }
   // Normalize -0 and avoid property-order-dependent payload comparisons.
   return {
     id: command.id, type: command.type, x: x + 0, y: y + 0, z: z + 0,
-    radius, expectedRevision
+    radius, power: command.type === 'damage-sphere' ? command.power : null,
+    expectedRevision, expectedEditRevision
   };
 }
 
@@ -47,6 +64,8 @@ export class TerrainEditLedger {
   #world;
   #protected;
   #history = new Map();
+  #damage = new Map();
+  #editRevision = 0;
 
   constructor(world, { protectedMaterials = [V2_BEDROCK_MATERIAL] } = {}) {
     if (!world || typeof world.get !== 'function' ||
@@ -63,12 +82,23 @@ export class TerrainEditLedger {
   }
 
   get recordedEdits() { return this.#history.size; }
+  get pendingDamageCells() { return this.#damage.size; }
+  get editRevision() { return this.#editRevision; }
+
+  damageAt(x, y, z) {
+    if (![x,y,z].every(Number.isSafeInteger)) {
+      throw new TypeError('Damage query requires safe integer coordinates');
+    }
+    const material = this.#world.get(x, y, z);
+    const stored = this.#damage.get(`${x},${y},${z}`);
+    return stored?.material === material ? stored.amount : 0;
+  }
 
   apply(command) {
     const edit = validateEdit(command);
     const signature = JSON.stringify([
-      edit.type, edit.x, edit.y, edit.z, edit.radius,
-      edit.expectedRevision ?? null
+      edit.type, edit.x, edit.y, edit.z, edit.radius, edit.power,
+      edit.expectedRevision ?? null, edit.expectedEditRevision ?? null
     ]);
     const recorded = this.#history.get(edit.id);
     if (recorded) {
@@ -77,24 +107,33 @@ export class TerrainEditLedger {
       }
       return Object.freeze({
         schema: TERRAIN_EDIT_SCHEMA, editId: edit.id, status: 'duplicate',
-        removedVoxels: 0, dirtyChunks: Object.freeze([]), changedBounds: null,
-        worldRevision: this.#world.revision,
-        originalWorldRevision: recorded.result.worldRevision
+        removedVoxels: 0, damagedVoxels: 0, dirtyChunks: Object.freeze([]), changedBounds: null,
+        worldRevision: this.#world.revision, editRevision: this.#editRevision,
+        pendingDamageCells: this.#damage.size,
+        originalWorldRevision: recorded.result.worldRevision,
+        originalEditRevision: recorded.result.editRevision
       });
     }
     if (edit.expectedRevision !== undefined &&
         edit.expectedRevision !== this.#world.revision) {
       throw new Error('Stale terrain edit: expected world revision mismatch');
     }
+    if (edit.expectedEditRevision !== undefined &&
+        edit.expectedEditRevision !== this.#editRevision) {
+      throw new Error('Stale terrain edit: expected edit revision mismatch');
+    }
     if (this.#history.size >= MAX_RECORDED_EDITS) {
       throw new RangeError('Terrain edit history capacity exceeded: checkpoint required');
     }
 
     const dirty = new Set();
-    let removed = 0;
+    const planned = [];
+    let removed = 0, damaged = 0, newDamageSlots = 0;
     let min = null, max = null;
     const r2 = edit.radius * edit.radius;
-    // Maximum 8-voxel radius guarantees bounded scan and edit cost.
+
+    // Plan a bounded edit before committing its world changes. Damage pulses
+    // consume capacity only for partial voxels. Carve removes partial entries.
     for (let z = Math.floor(edit.z - edit.radius); z <= Math.ceil(edit.z + edit.radius); z++) {
       for (let y = Math.floor(edit.y - edit.radius); y <= Math.ceil(edit.y + edit.radius); y++) {
         for (let x = Math.floor(edit.x - edit.radius); x <= Math.ceil(edit.x + edit.radius); x++) {
@@ -102,25 +141,55 @@ export class TerrainEditLedger {
           if (dx * dx + dy * dy + dz * dz >= r2) continue;
           const material = this.#world.get(x, y, z);
           if (material === 0 || this.#protected.has(material)) continue;
-          if (!this.#world.set(x, y, z, 0)) continue;
-          removed++;
-          markDirtyForEditedVoxel(dirty, this.#world.chunkEdge, x, y, z);
-          if (!min) {
-            min = [x, y, z];
-            max = [x, y, z];
-          } else {
-            min[0] = Math.min(min[0], x); min[1] = Math.min(min[1], y);
-            min[2] = Math.min(min[2], z); max[0] = Math.max(max[0], x);
-            max[1] = Math.max(max[1], y); max[2] = Math.max(max[2], z);
-          }
+
+          const cellKey = `${x},${y},${z}`;
+          const stored = this.#damage.get(cellKey);
+          const previous = stored?.material === material ? stored.amount : 0;
+          const resistance = MATERIAL_RESISTANCE[material] ?? 1;
+          const accumulated = edit.type === 'carve-sphere'
+            ? resistance
+            : previous + edit.power;
+          const destroy = accumulated >= resistance;
+          planned.push({ x,y,z,cellKey,material,accumulated,destroy });
+          if (!destroy && !stored) newDamageSlots++;
         }
       }
     }
 
+    // Do not partially apply a pulse if its bounded damage-state allocation
+    // cannot fit. Already stored slots can be updated in place.
+    if (this.#damage.size + newDamageSlots > MAX_PENDING_DAMAGE_CELLS) {
+      throw new RangeError('Pending terrain damage capacity exceeded: checkpoint required');
+    }
+
+    for (const cell of planned) {
+      if (!cell.destroy) {
+        this.#damage.set(cell.cellKey, {
+          material: cell.material, amount: cell.accumulated
+        });
+        damaged++;
+        continue;
+      }
+      this.#damage.delete(cell.cellKey);
+      if (!this.#world.set(cell.x, cell.y, cell.z, 0)) continue;
+      removed++;
+      markDirtyForEditedVoxel(dirty, this.#world.chunkEdge, cell.x, cell.y, cell.z);
+      const { x, y, z } = cell;
+      if (!min) {
+        min = [x,y,z]; max = [x,y,z];
+      } else {
+        min[0] = Math.min(min[0],x); min[1] = Math.min(min[1],y); min[2] = Math.min(min[2],z);
+        max[0] = Math.max(max[0],x); max[1] = Math.max(max[1],y); max[2] = Math.max(max[2],z);
+      }
+    }
+
+    this.#editRevision++;
     const result = Object.freeze({
       schema: TERRAIN_EDIT_SCHEMA, editId: edit.id, status: 'accepted',
-      removedVoxels: removed, dirtyChunks: Object.freeze([...dirty].sort()),
-      changedBounds: resultBounds(min, max), worldRevision: this.#world.revision
+      removedVoxels: removed, damagedVoxels: damaged,
+      dirtyChunks: Object.freeze([...dirty].sort()),
+      changedBounds: resultBounds(min, max), worldRevision: this.#world.revision,
+      editRevision: this.#editRevision, pendingDamageCells: this.#damage.size
     });
     this.#history.set(edit.id, { signature, result });
     return result;
