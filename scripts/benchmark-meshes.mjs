@@ -43,6 +43,8 @@ for (const scene of ['flat','hill','cliff','arch','fragmented']) {
       greedy: {
         triangles: baseline.greedy.triangles,
         cpuGeometryBytes: baseline.greedy.cpuGeometryBytes,
+        candidateCellsVisited: baseline.greedy.candidateCellsVisited,
+        fullChunkCandidateCells: baseline.greedy.fullChunkCandidateCells,
         medianCpuBuildMs: median(runs.map(run=>run.greedy.cpuBuildMs))
       },
       triangleReductionPercent: 100*(1-baseline.greedy.triangles/baseline.exposed.triangles)
