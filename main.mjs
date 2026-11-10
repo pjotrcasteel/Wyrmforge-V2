@@ -10,6 +10,7 @@ import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
+import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
 import { demoTunnelTarget } from './src/demo-tunnel.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
@@ -600,15 +601,21 @@ const presetStopButton = document.querySelector('#preset-stop');
 const presetProgress = document.querySelector('#preset-progress');
 let preset = null;
 let lastPresetReport = null;
+let presetDamageTarget = null;
 function stopPreset(reason = 'Stopped', exportReport = false) {
   if (!preset) return;
   const elapsedMs = Math.max(0, performance.now() - preset.startedAt);
   lastPresetReport = {
     schema:'voxel-v2.preset.v1', status:exportReport ? 'complete' : 'stopped',
     reason, elapsedMs:Math.round(elapsedMs), impacts:preset.impacts,
+    changedImpacts:preset.changedImpacts, removedVoxels:preset.removedVoxels,
+    uniqueSites:preset.sites.size, rejectedImpacts:preset.rejectedImpacts,
+    verdict:exportReport && preset.changedImpacts > 0 && preset.rejectedImpacts === 0 && !gpuError
+      ? 'pass' : 'incomplete',
     plannedDurationMs:180000, seed:7, scene:'hill', meshing:'worker'
   };
   preset = null;
+  presetDamageTarget = null;
   presetRunButton.disabled = false;
   presetStopButton.disabled = true;
   presetProgress.textContent = reason + ' · ' + lastPresetReport.impacts + ' impacts';
@@ -628,13 +635,23 @@ function advancePreset(now) {
   // Three 40-second attack phases separated by 20-second recovery periods.
   const phase = elapsed % 60000;
   if (phase < 40000 && now >= preset.nextImpactAt) {
+    presetDamageTarget = spatialDamageTarget(world, preset.impacts);
+    preset.sites.add(presetDamageTarget.x + ',' + presetDamageTarget.z);
+    const beforeRevision = world.revision;
+    const beforeEditRevision = terrainEdits.editRevision;
     document.querySelector('#damage').click();
+    if (terrainEdits.editRevision === beforeEditRevision) preset.rejectedImpacts++;
+    if (world.revision > beforeRevision) preset.changedImpacts++;
+    preset.removedVoxels += terrainEdits.editRevision !== beforeEditRevision
+      ? (lastDamage?.removedVoxels ?? 0) : 0;
+    presetDamageTarget = null;
     preset.impacts++;
     preset.nextImpactAt = now + 650;
   }
   if (now >= preset.nextStatusAt) {
     presetProgress.textContent = Math.floor(elapsed / 1000) + '/180 s · ' +
-      preset.impacts + ' impacts · ' + (phase < 40000 ? 'destruction' : 'recovery');
+      preset.impacts + ' impacts / ' + preset.changedImpacts + ' terrain changes · ' +
+      (phase < 40000 ? 'destruction' : 'recovery');
     preset.nextStatusAt = now + 1000;
   }
 }
@@ -654,7 +671,8 @@ presetRunButton.addEventListener('click', () => {
   }
   lastPresetReport = null;
   const now = performance.now();
-  preset = {startedAt:now, nextImpactAt:now + 1000, nextStatusAt:now, impacts:0};
+  preset = {startedAt:now, nextImpactAt:now + 1000, nextStatusAt:now, impacts:0,
+    changedImpacts:0, removedVoxels:0, rejectedImpacts:0, sites:new Set()};
   presetRunButton.disabled = true;
   presetStopButton.disabled = false;
   controlsPanel.hidden = true;
@@ -858,7 +876,7 @@ document.querySelector('#tunnel').addEventListener('click', () => {
 });
 
 document.querySelector('#damage').addEventListener('click', () => {
-  const target = demoCarveTarget(activeScene);
+  const target = presetDamageTarget ?? demoCarveTarget(activeScene);
   const startedAt = performance.now();
   let damage;
   try {
