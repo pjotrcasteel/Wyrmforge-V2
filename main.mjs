@@ -4,6 +4,7 @@ import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
+import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -25,6 +26,7 @@ const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
+let lastCarve = null;
 let gpuRenderer = null;
 let gpuBuildMs = null;
 let gpuError = null;
@@ -156,6 +158,7 @@ function chooseScene() {
     return;
   }
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
+  lastCarve = null;
   invalidateMeshAudit();
   rebuildGpuMeshes();
   activeScene = scenePicker.value;
@@ -171,11 +174,15 @@ seedPicker.addEventListener('change', chooseScene);
 chunkPicker.addEventListener('change', chooseScene);
 document.querySelector('#reset').addEventListener('click', chooseScene);
 document.querySelector('#carve').addEventListener('click', () => {
-  for (let z = -3; z <= 3; z++) for (let x = -3; x <= 3; x++) for (let y = -1; y <= 8; y++) {
-    if (x*x + z*z + (y-3)*(y-3) < 22) world.set(x,y,z,0);
-  }
+  const target = demoCarveTarget(activeScene);
+  const removedVoxels = carveDemoSphere(world, target);
+  lastCarve = { scene: activeScene, ...target, removedVoxels, worldRevision: world.revision };
   invalidateMeshAudit();
-  rebuildGpuMeshes();
+  // Do not upload new meshes if the demo hit only empty space.
+  if (removedVoxels > 0) rebuildGpuMeshes();
+  meshAuditStatus.textContent = removedVoxels > 0
+    ? `Carved ${removedVoxels} voxels at (${target.x},${target.y},${target.z}). Audit 3D faces to inspect.`
+    : 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
   dirty = true;
 });
 
@@ -216,7 +223,7 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit,
+    meshAudit:lastMeshAudit, lastCarve,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, rendererError:gpuError,
     caveat:'Flat-shaded V2 WebGL2 baseline; GPU frame timing, worker budgets and final pixel-art materials are not validated' };
