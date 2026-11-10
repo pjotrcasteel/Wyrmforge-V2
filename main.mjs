@@ -4,7 +4,8 @@ import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './src/mesh-worker-protocol.mjs';
-import { createTerrainMeshJob, terrainJobTransfers, isCurrentTerrainMeshReply } from './src/terrain-mesh-protocol.mjs';
+import { createTerrainMeshJob, isCurrentTerrainMeshReply } from './src/terrain-mesh-protocol.mjs';
+import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
@@ -50,57 +51,48 @@ let gpuBuildMs = null;
 let gpuError = null;
 let lastMeshUpdate = null;
 let lastTerrainWorker = null;
-let terrainWorker = null, terrainJobId = 0;
+let terrainWorkerWarmupMs = null, terrainWorkerSession = null;
+let activeTerrainJob = null, terrainJobId = 0;
 const pendingTerrainDirty = new Set();
 
-function cancelTerrainWorker() {
-  terrainJobId++;
-  if (terrainWorker) terrainWorker.terminate();
-  terrainWorker = null;
+function fallbackTerrainMeshes(reason) {
+  const affectedChunks = new Set(pendingTerrainDirty);
   meshCompareButton.disabled = false;
+  if (affectedChunks.size) rebuildGpuMeshes(affectedChunks);
+  pendingTerrainDirty.clear();
+  lastTerrainWorker = { status:'fallback', reason, chunksUpdated:affectedChunks.size };
+  meshAuditStatus.textContent = 'Background unavailable (' + reason +
+    '); safe synchronous terrain meshing restored.';
 }
 
-function updateTerrainMeshes() {
-  if (!pendingTerrainDirty.size) return;
-  const affectedChunks = new Set(pendingTerrainDirty);
-  const syncFallback = reason => {
-    meshCompareButton.disabled = false;
-    rebuildGpuMeshes(affectedChunks);
-    pendingTerrainDirty.clear();
-    lastTerrainWorker = { status:'fallback', reason, chunksUpdated:affectedChunks.size };
-    meshAuditStatus.textContent = 'Background unavailable (' + reason +
-      '); restored safe synchronous terrain meshing.';
-  };
-
-  if (terrainMeshMode.value !== 'worker' || typeof Worker !== 'function' || !gpuRenderer) {
-    syncFallback(terrainMeshMode.value !== 'worker' ? 'baseline selected' : 'worker or WebGL2 unavailable');
-    return;
-  }
-  let worker;
-  try {
-    const job = createTerrainMeshJob(world, affectedChunks, ++terrainJobId);
-    const originWorld = world;
-    const start = performance.now();
-    worker = new Worker(new URL('./src/terrain-mesh.worker.mjs', import.meta.url),{type:'module'});
-    terrainWorker = worker;
-    meshCompareButton.disabled = true;
-    lastTerrainWorker = { status:'running', snapshotBytes:job.snapshotBytes,
-      dirtyChunks:job.dirtyIds.length };
-    function finish(reply) {
-      if (terrainWorker !== worker) return;
-      worker.terminate();
-      terrainWorker = null;
+function terrainSession() {
+  if (terrainWorkerSession) return terrainWorkerSession;
+  terrainWorkerSession = new TerrainWorkerSession({
+    createWorker:() => new Worker(new URL('./src/terrain-mesh.worker.mjs', import.meta.url),
+      {type:'module'}),
+    now:() => performance.now(),
+    onWarm:warmMs => {
+      terrainWorkerWarmupMs = warmMs;
+      if (terrainMeshMode.value === 'worker' && !activeTerrainJob) {
+        meshAuditStatus.textContent = 'Background terrain worker ready (' +
+          warmMs.toFixed(1) + 'ms warm-up). Carve sphere to compare.';
+      }
+    },
+    onResult:(reply,job,timing) => {
+      const active = activeTerrainJob;
+      if (!active || active.job !== job) return; // Reset, edit, or mode change.
+      activeTerrainJob = null;
       meshCompareButton.disabled = false;
-      if (world !== originWorld) return; // Reset replaced the authority: never touch its GPU meshes.
+      if (world !== active.originWorld || terrainMeshMode.value !== 'worker') return;
       if (!isCurrentTerrainMeshReply(reply,job,world.revision)) {
-        syncFallback(reply?.message || 'stale/invalid worker result');
+        fallbackTerrainMeshes('Stale/invalid worker mesh result');
         return;
       }
       try {
         const uploadStart = performance.now();
         gpuRenderer.replaceMeshes(new Set(job.dirtyIds),reply.meshes);
-        const gpuUploadMs = performance.now()-uploadStart;
-        const endToEndMs = performance.now()-start;
+        const gpuUploadMs = performance.now() - uploadStart;
+        const endToEndMs = performance.now() - active.startedAt;
         gpuBuildMs = gpuUploadMs;
         lastMeshUpdate = {
           mode:'worker-localized', chunksUpdated:job.dirtyIds.length,
@@ -110,30 +102,83 @@ function updateTerrainMeshes() {
         };
         lastTerrainWorker = {
           status:'complete', snapshotBytes:job.snapshotBytes,
-          chunksUpdated:job.dirtyIds.length, workerCpuMs:reply.cpuMs,
-          gpuUploadMs, endToEndMs
+          chunksUpdated:job.dirtyIds.length, snapshotPrepareMs:active.snapshotPrepareMs,
+          wasWarmAtSubmission:timing.wasWarmAtSubmission,
+          workerWarmupMs:timing.warmupMs,
+          waitForReadyMs:timing.waitForReadyMs,
+          workerRoundTripMs:timing.workerRoundTripMs,
+          workerCpuMs:reply.cpuMs, gpuUploadMs, endToEndMs
         };
         pendingTerrainDirty.clear();
         meshAuditStatus.textContent =
-          'Background meshing complete: ' + job.dirtyIds.length +
-          ' chunks · CPU ' + reply.cpuMs.toFixed(1) + 'ms · GPU upload ' +
-          gpuUploadMs.toFixed(1) + 'ms · total ' + endToEndMs.toFixed(1) + 'ms';
-        // Schedule a draw after the GPU mesh replacement becomes current.
-        requestAnimationFrame(() => { dirty = true; });
+          'Background mesh (' + (timing.wasWarmAtSubmission ? 'warm' : 'cold') +
+          '): ' + job.dirtyIds.length + ' chunks · CPU ' +
+          reply.cpuMs.toFixed(1) + 'ms · GPU ' + gpuUploadMs.toFixed(1) +
+          'ms · total ' + endToEndMs.toFixed(1) + 'ms';
+        dirty = true;
       } catch (error) {
-        syncFallback(error.message);
+        fallbackTerrainMeshes(error.message);
+      }
+    },
+    onFailure:(reason,job) => {
+      const active = activeTerrainJob;
+      activeTerrainJob = null;
+      meshCompareButton.disabled = false;
+      if (terrainMeshMode.value !== 'worker') return;
+      // Do not keep retrying a failing worker on every subsequent edit.
+      terrainMeshMode.value = 'sync';
+      if (active && (!job || active.job === job) && world === active.originWorld) {
+        fallbackTerrainMeshes(reason);
+      } else {
+        meshAuditStatus.textContent = 'Background worker failed (' + reason +
+          '); switched to safe Baseline mode.';
       }
     }
-    worker.addEventListener('message',event=>finish(event.data),{once:true});
-    worker.addEventListener('error',event=>{
-      event.preventDefault();
-      finish({type:'error',message:event.message || 'Worker runtime error'});
-    },{once:true});
-    worker.postMessage(job,terrainJobTransfers(job));
-  } catch(error) {
-    worker?.terminate();
-    terrainWorker = null;
-    syncFallback(error.message);
+  });
+  return terrainWorkerSession;
+}
+
+function cancelTerrainWorker({ dispose = false } = {}) {
+  terrainJobId++;
+  activeTerrainJob = null;
+  if (terrainWorkerSession) {
+    if (dispose) {
+      terrainWorkerSession.close();
+      terrainWorkerSession = null;
+      terrainWorkerWarmupMs = null;
+    } else {
+      // An idle worker remains prewarmed. Any in-flight work is terminated.
+      if (terrainWorkerSession.cancel()) terrainWorkerWarmupMs = null;
+    }
+  }
+  meshCompareButton.disabled = false;
+}
+
+function updateTerrainMeshes() {
+  if (!pendingTerrainDirty.size) return;
+  const affectedChunks = new Set(pendingTerrainDirty);
+  if (terrainMeshMode.value !== 'worker' || typeof Worker !== 'function' || !gpuRenderer) {
+    fallbackTerrainMeshes(terrainMeshMode.value !== 'worker'
+      ? 'baseline selected' : 'worker or WebGL2 unavailable');
+    return;
+  }
+  const startedAt = performance.now();
+  try {
+    const job = createTerrainMeshJob(world, affectedChunks, ++terrainJobId);
+    const snapshotPrepareMs = performance.now() - startedAt;
+    const session = terrainSession();
+    activeTerrainJob = { job, originWorld:world, startedAt, snapshotPrepareMs };
+    meshCompareButton.disabled = true;
+    lastTerrainWorker = {
+      status:'running', snapshotBytes:job.snapshotBytes,
+      chunksUpdated:job.dirtyIds.length,
+      wasWarmAtSubmission:session.ready, snapshotPrepareMs
+    };
+    session.submit(job);
+  } catch (error) {
+    cancelTerrainWorker({dispose:true});
+    terrainMeshMode.value = 'sync';
+    fallbackTerrainMeshes(error.message);
   }
 }
 
@@ -293,6 +338,16 @@ function chooseScene() {
   previous = null;
   visibleSurfaces = 0;
   gestures.reset();
+  // A reset discards in-flight jobs but prewarms again for the next edit.
+  if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
+    try {
+      terrainSession().start();
+    } catch (error) {
+      terrainMeshMode.value = 'sync';
+      cancelTerrainWorker({dispose:true});
+      meshAuditStatus.textContent = 'Worker prewarm failed: ' + error.message;
+    }
+  }
   dirty = true;
 }
 scenePicker.addEventListener('change', chooseScene);
@@ -306,9 +361,19 @@ cameraPicker.addEventListener('change', () => {
 });
 document.querySelector('#reset').addEventListener('click', chooseScene);
 terrainMeshMode.addEventListener('change', () => {
-  if (!pendingTerrainDirty.size) return;
-  cancelTerrainWorker();
-  updateTerrainMeshes();
+  cancelTerrainWorker({dispose:terrainMeshMode.value !== 'worker'});
+  if (terrainMeshMode.value === 'worker' && typeof Worker === 'function') {
+    try {
+      meshAuditStatus.textContent = 'Warming V2 terrain worker…';
+      terrainSession().start();
+    } catch (error) {
+      terrainMeshMode.value = 'sync';
+      cancelTerrainWorker({dispose:true});
+      meshAuditStatus.textContent = 'Cannot warm worker (' + error.message +
+        '); returned to Baseline mode.';
+    }
+  }
+  if (pendingTerrainDirty.size) updateTerrainMeshes();
 });
 document.querySelector('#carve').addEventListener('click', () => {
   cancelTerrainWorker();
@@ -324,7 +389,7 @@ document.querySelector('#carve').addEventListener('click', () => {
   // a worker. Otherwise earlier changed GPU chunks might be left stale.
   for (const id of dirtyChunks) pendingTerrainDirty.add(id);
   if (pendingTerrainDirty.size) updateTerrainMeshes();
-  if (terrainWorker) {
+  if (activeTerrainJob) {
     meshAuditStatus.textContent = `Carved ${removedVoxels} voxels. Background remesh pending for ${pendingTerrainDirty.size}/${world.chunkCount} chunks…`;
   } else if (removedVoxels === 0 && !pendingTerrainDirty.size) {
     meshAuditStatus.textContent = 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
@@ -441,10 +506,10 @@ document.querySelector('#report').addEventListener('click', () => {
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve,
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
-    pendingTerrainChunks:pendingTerrainDirty.size,
+    terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
-    caveat:'Optional worker carve path builds real CPU meshes off-thread; GPU uploads remain synchronous and unbudgeted. Baseline remains default.' };
+    caveat:'Optional reusable background worker handles real CPU meshes; cold/warm timings are experimental, GPU upload still synchronous. Baseline remains default.' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
