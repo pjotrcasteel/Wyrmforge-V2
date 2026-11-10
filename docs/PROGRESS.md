@@ -247,6 +247,50 @@ then export again. The terrain must not change on Compare meshes; only Carve cha
 it. Check `candidateCellsVisited`, greedy CPU ms, and unchanged live WebGL2 renderer.
 No requirement that any one timing result reaches a fixed performance target.
 
+## 0.0.015 — first bounded background meshing path (diagnostic comparison)
+
+**Device result for 0.0.014:** user supplied two iPhone Safari reports for
+Hill / Hunt-style / 32³ / seed 7, deployment SHA `121e482`.
+On intact terrain, exposed CPU build took 19 ms, optimized greedy 9 ms
+(previous 0.0.012 sample was around 100–139 ms), with 3,600 vs 774
+triangles and 158,400 vs 34,056 geometry bytes. Greedy visited 31,104 of
+1,572,864 full-chunk face candidate cells (about 98% pruned).
+After carving, 378 real voxels were removed, eight chunk boundaries were touched,
+and all 8 world chunks had to be rebuilt in 15 ms; p95/p99 frame intervals were
+19/26 ms in the second recording. The after-carve report had
+`meshComparison: null`, so **post-carve greedy CPU build speed remains unmeasured**.
+This is a small sample and must not be treated as a sustained-performance guarantee.
+
+**New foundation in 0.0.015:**
+- [x] Add a browser module worker for **CPU mesh comparison only**. Full
+  comparisons no longer run synchronously inside the lab's click handler.
+- [x] Transfer copies of authoritative snapshots into the worker; the actual
+  VoxelWorld and renderer remain on the main thread.
+- [x] Cap comparison jobs to **64 chunks / 2 MiB** of snapshot payload.
+- [x] Run **at most one comparison worker job**; no queued backlog. A reset,
+  scene change or carve terminates the worker and invalidates its result.
+- [x] Verify job ID, originating world identity, world revision and reply
+  revision before exposing the diagnostic result. Stale results are never
+  applied to benchmark UI state.
+- [x] Include separate `meshWorker` status, transferred snapshot bytes,
+  worker CPU duration and end-to-end response latency in JSON exports.
+- [x] Unit tests for transferable snapshots, 16³/32³ equivalence, payload
+  caps, malformed jobs and stale revision rejection.
+- [ ] **Not yet:** off-main-thread gameplay mesh builds, automatic worker
+  fallback for live rendering, GPU upload budgets, progressive per-frame
+  GPU disposal, worker pool or fast-forward burst coalescing.
+- [ ] **Not yet accepted:** browser Worker runtime behavior and recovery on
+  physical iPhone Safari and Android Chrome.
+
+**Player validation for 0.0.015:** open Hill/Hunt-style/32³/seed 7.
+Press **Compare meshes**; the result should appear as `CPU meshes (worker)`
+without changing the terrain or freezing gestures. Export a report.
+Press **Carve sphere**, then **Compare meshes again** and export a second report.
+The second export must contain a non-null `meshComparison`,
+`meshWorker.status: complete`, `lastCarve.removedVoxels: 378`.
+Reset must restore the original terrain. If the worker is unsupported or fails,
+the status panel reports that clearly and the live WebGL2 renderer remains usable.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -255,7 +299,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.014
+### Current change: 0.0.015
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

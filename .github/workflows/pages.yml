@@ -58,6 +58,9 @@ jobs:
           node --check src/meshing-comparison.mjs
           node --check scripts/benchmark-meshes.mjs
           node --check tests/lab-viewport.test.mjs
+          node --check src/mesh-worker-protocol.mjs
+          node --check src/mesh-comparison.worker.mjs
+          node --check tests/mesh-worker-protocol.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures
