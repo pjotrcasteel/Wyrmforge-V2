@@ -1,0 +1,75 @@
+name: V2 CI/CD status reporter
+on:
+  workflow_run:
+    workflows:
+      - V2 tests and independent Pages
+    types: [completed]
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish workflow outcome to a persistent GitHub issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const run = context.payload.workflow_run;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = 'V2 CI/CD deployment status (automated)';
+            const label = 'v2-ci-status';
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner, repo, run_id: run.id, per_page: 100
+            });
+            const jobLines = jobs.map(job => {
+              const failed = job.steps?.filter(step =>
+                step.conclusion === 'failure' || step.conclusion === 'cancelled') ?? [];
+              const suffix = failed.length
+                ? ' — failed steps: ' + failed.map(step => step.name).join(', ')
+                : '';
+              return '- ' + job.name + ': ' + (job.conclusion ?? job.status) + suffix;
+            });
+            const success = run.conclusion === 'success';
+            const isMain = run.head_branch === 'main' && run.event !== 'pull_request';
+            const body = [
+              '# Wyrmforge V2 CI/CD status',
+              '',
+              '**Result:** ' + (run.conclusion ?? 'unknown'),
+              '**Branch:** ' + run.head_branch,
+              '**Commit:** \`' + run.head_sha + '\`',
+              '**Event:** ' + run.event,
+              '**Run:** ' + run.html_url,
+              '**Completed:** ' + (run.updated_at ?? 'unknown'),
+              '',
+              '## Jobs',
+              ...jobLines,
+              '',
+              '## Deployment',
+              isMain && success
+                ? 'Pages deployment job succeeded. Verify the published version independently.'
+                : isMain
+                  ? 'Main branch was NOT successfully deployed by this run.'
+                  : 'This was not a main-branch deployment run.',
+              '',
+              'Immutable build URL (only if deployment succeeded):',
+              'https://' + owner + '.github.io/' + repo + '/builds/' + run.head_sha + '/'
+            ].join('\\n');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'all', labels: label, per_page: 100
+            });
+            const issue = issues.find(item => !item.pull_request && item.title === title);
+            if (issue) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: issue.number, body, state: 'open'
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo, title, body, labels: [label]
+              });
+            }
