@@ -135,3 +135,34 @@ test('browser diagnostic context loss and restore drains retained meshes', () =>
   assert.equal(view.simulateContextTransition('restore'), false);
   view.dispose();
 });
+
+test('context loss during queued uploads restores latest authoritative meshes only', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('old-a'), mesh('old-b')]);
+  view.queueReplacementMeshes(['old-a'], [mesh('old-a')]);
+  view.queueReplacementMeshes(['old-b'], []);
+  assert.equal(view.pendingUploads, 2);
+  assert.equal(view.simulateContextTransition('lose'), true);
+  assert.equal(view.ready, false);
+  assert.equal(view.simulateContextTransition('restore'), true);
+  // Pending replacements have priority; recovery must never resurrect a deleted mesh.
+  while (view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 0);
+  assert.equal(view.statistics.drawCalls, 1);
+  assert.equal(view.statistics.contextLosses, 1);
+  view.dispose();
+});
+
+test('scene reset during lost context does not restore old-world meshes', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('old-a'), mesh('old-b')]);
+  assert.equal(view.simulateContextTransition('lose'), true);
+  view.setMeshes([mesh('new-world')]);
+  assert.equal(view.simulateContextTransition('restore'), true);
+  while (view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.statistics.drawCalls, 1);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks, 0);
+  view.dispose();
+});
