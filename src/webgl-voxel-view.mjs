@@ -89,6 +89,9 @@ export class WebGLVoxelView {
   #uniforms = null;
   #gpuMeshes = new Map();
   #sourceMeshes = new Map();
+  #queuedUploads = new Map();
+  #uploadQueuePeak = 0;
+  #uploadQueueBytes = 0;
   #lost = false;
   #losses = 0;
   #onAvailabilityChange;
@@ -124,6 +127,63 @@ export class WebGLVoxelView {
   }
 
   get ready() { return !this.#lost && this.#program !== null; }
+  get pendingUploads() { return this.#queuedUploads.size; }
+  get uploadQueueStatistics() {
+    return { pendingChunks: this.#queuedUploads.size,
+      pendingBytes: this.#uploadQueueBytes, peakChunks: this.#uploadQueuePeak };
+  }
+
+  // V2.4: stage a bounded batch; caller invalidates it on new edits/reset.
+  queueReplacementMeshes(dirtyIds, meshes) {
+    const ids = new Set(dirtyIds);
+    if (!ids.size || ids.size > 128 || !Array.isArray(meshes)) {
+      throw new RangeError('Invalid bounded GPU replacement batch');
+    }
+    const replacements = new Map();
+    for (const mesh of meshes) {
+      if (!mesh || !ids.has(mesh.id) || replacements.has(mesh.id)) {
+        throw new TypeError('Invalid queued replacement mesh');
+      }
+      replacements.set(mesh.id, mesh);
+    }
+    if (this.#queuedUploads.size + ids.size > 128) {
+      throw new RangeError('GPU upload queue capacity exceeded');
+    }
+    for (const id of ids) {
+      const mesh = replacements.get(id) ?? null;
+      this.#queuedUploads.set(id, mesh);
+      if (mesh) this.#uploadQueueBytes += mesh.cpuBufferBytes ??
+        (mesh.positions.byteLength + mesh.normals.byteLength +
+         mesh.materials.byteLength + mesh.indices.byteLength);
+    }
+    this.#uploadQueuePeak = Math.max(this.#uploadQueuePeak, this.#queuedUploads.size);
+  }
+
+  cancelQueuedUploads() {
+    this.#queuedUploads.clear();
+    this.#uploadQueueBytes = 0;
+  }
+
+  // One chunk minimum per frame; WebGL bufferData itself is not preemptible.
+  flushQueuedUploads({ budgetMs = 2, now = () => performance.now() } = {}) {
+    if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+      throw new RangeError('Invalid GPU upload frame budget');
+    }
+    if (!this.ready || !this.#queuedUploads.size) return { chunks: 0, elapsedMs: 0 };
+    const start = now();
+    let chunks = 0;
+    while (this.#queuedUploads.size && (chunks === 0 || now() - start < budgetMs)) {
+      const [id, mesh] = this.#queuedUploads.entries().next().value;
+      this.#queuedUploads.delete(id);
+      const bytes = mesh ? (mesh.cpuBufferBytes ??
+        (mesh.positions.byteLength + mesh.normals.byteLength +
+         mesh.materials.byteLength + mesh.indices.byteLength)) : 0;
+      this.#uploadQueueBytes -= bytes;
+      this.replaceMeshes(new Set([id]), mesh ? [mesh] : []);
+      chunks++;
+    }
+    return { chunks, elapsedMs: now() - start };
+  }
   get statistics() {
     let triangles = 0, gpuBytes = 0;
     for (const record of this.#gpuMeshes.values()) {
@@ -136,6 +196,7 @@ export class WebGLVoxelView {
       drawCalls: this.#gpuMeshes.size,
       gpuBufferBytesEstimate: gpuBytes,
       contextLosses: this.#losses,
+      ...this.uploadQueueStatistics,
       gpuTimingMs: null
     };
   }
@@ -215,6 +276,7 @@ export class WebGLVoxelView {
 
   // Full reset for a new scene/seed/chunk size; remove all old GPU resources.
   setMeshes(meshes) {
+    this.cancelQueuedUploads();
     if (!Array.isArray(meshes)) throw new TypeError('Expected V2 chunk meshes');
     const next = new Map();
     for (const mesh of meshes) {
@@ -283,6 +345,7 @@ export class WebGLVoxelView {
   }
 
   dispose() {
+    this.cancelQueuedUploads();
     this.#discardGpuMeshes();
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
