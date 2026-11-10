@@ -3,6 +3,7 @@ import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
+import { compareMeshing } from './src/meshing-comparison.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
@@ -29,6 +30,7 @@ const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
+let lastMeshComparison = null;
 let lastCarve = null;
 let gpuRenderer = null;
 let gpuBuildMs = null;
@@ -61,6 +63,7 @@ function rebuildGpuMeshes(dirtyChunks = null) {
 
 function invalidateMeshAudit() {
   lastMeshAudit = null;
+  lastMeshComparison = null;
   meshAuditStatus.textContent = '3D geometry changed. Select Audit 3D faces to recompute.';
 }
 
@@ -242,6 +245,22 @@ document.querySelector('#mesh-audit-button').addEventListener('click', () => {
   }
 });
 
+document.querySelector('#mesh-compare-button').addEventListener('click', () => {
+  meshAuditStatus.textContent = 'Comparing CPU mesh algorithms on the current voxel scene…';
+  try {
+    lastMeshComparison = compareMeshing(world);
+    const { exposed, greedy } = lastMeshComparison;
+    meshAuditStatus.textContent =
+      `Meshes (CPU only): exposed ${exposed.triangles} triangles / ${Math.round(exposed.cpuGeometryBytes/1024)} KiB` +
+      ` / ${exposed.cpuBuildMs.toFixed(1)} ms · greedy ${greedy.triangles} triangles` +
+      ` / ${Math.round(greedy.cpuGeometryBytes/1024)} KiB / ${greedy.cpuBuildMs.toFixed(1)} ms` +
+      ' · live rendering unchanged';
+  } catch (error) {
+    lastMeshComparison = null;
+    meshAuditStatus.textContent = 'Mesh comparison failed: ' + error.message;
+  }
+});
+
 document.querySelector('#report').addEventListener('click', () => {
   const frames = frameMetrics.summary();
   const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:activeScene,
@@ -251,7 +270,7 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, lastCarve,
+    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, lastCarve,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
     caveat:'Flat-shaded V2 WebGL2 baseline; GPU frame timing, worker budgets and final pixel-art materials are not validated' };
