@@ -70,6 +70,7 @@ export class V2TerrainPort {
 
   constructor(world,ledger,{epoch=1}={}) {
     if (!validWorld(world) || !validLedger(ledger) ||
+        typeof ledger.isBoundTo !== 'function' || !ledger.isBoundTo(world) ||
         !Number.isSafeInteger(epoch) || epoch<1) {
       throw new TypeError('Expected V2 world, edit ledger and positive epoch');
     }
