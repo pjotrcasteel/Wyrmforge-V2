@@ -10,6 +10,7 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { TerrainEditLedger } from './src/terrain-edit-ledger.mjs';
+import { applyDemoBurst } from './src/demo-burst.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -41,6 +42,7 @@ let lastMeshComparison = null;
 let lastMeshWorker = null;
 let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
+let lastBurst = null, nextBurstId = 0;
 
 function cancelMeshWorker() {
   compareJobId++;
@@ -334,7 +336,9 @@ function chooseScene() {
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
   terrainEdits = new TerrainEditLedger(world);
   nextTerrainEditId = 0;
+  nextBurstId = 0;
   lastCarve = null;
+  lastBurst = null;
   invalidateMeshAudit();
   rebuildGpuMeshes();
   activeScene = scenePicker.value;
@@ -407,6 +411,44 @@ document.querySelector('#carve').addEventListener('click', () => {
     meshAuditStatus.textContent = 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
   } else if (lastTerrainWorker?.status === 'fallback' && terrainMeshMode.value === 'sync') {
     meshAuditStatus.textContent = `Carved ${removedVoxels} voxels. Remeshed ${dirtyChunks.size}/${world.chunkCount} chunks (baseline).`;
+  }
+  dirty = true;
+});
+
+document.querySelector('#burst').addEventListener('click', () => {
+  cancelTerrainWorker();
+  const startedAt = performance.now();
+  let result;
+  try {
+    result = applyDemoBurst(world, terrainEdits, {
+      scene: activeScene, runId: ++nextBurstId
+    });
+  } catch (error) {
+    // A failed batch is not a promised atomic multi-chunk transaction.
+    // Restore the renderer from authoritative voxels if an unexpected error
+    // occurred partway through a batch.
+    pendingTerrainDirty.clear();
+    rebuildGpuMeshes();
+    meshAuditStatus.textContent = 'Terrain burst failed: ' + error.message;
+    return;
+  }
+
+  const editCpuMs = performance.now() - startedAt;
+  lastBurst = { ...result, editCpuMs };
+  lastCarve = null;
+  invalidateMeshAudit();
+  // Exactly one mesh-update request for the union of three distinct impacts.
+  // Merge with any dirty chunks carried over from canceled worker work.
+  for (const id of result.dirtyChunks) pendingTerrainDirty.add(id);
+  if (pendingTerrainDirty.size) updateTerrainMeshes();
+  if (activeTerrainJob) {
+    meshAuditStatus.textContent = `3-hit burst removed ${result.removedVoxels} voxels.
+      Remeshing ${pendingTerrainDirty.size} chunks in background…`;
+  } else if (result.removedVoxels === 0) {
+    meshAuditStatus.textContent = '3-hit burst made no further changes; Reset to restore terrain.';
+  } else {
+    meshAuditStatus.textContent = `3-hit burst committed ${result.removedVoxels} voxels
+      across ${result.dirtyChunks.length} dirty chunks with one geometry update.`;
   }
   dirty = true;
 });
@@ -516,7 +558,7 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve,
+    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
     terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
