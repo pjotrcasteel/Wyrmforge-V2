@@ -1,37 +1,62 @@
-# Wyrmforge V2
+# Wyrmforge V2 — clean-room voxel engine
 
-A completely independent, mobile-first voxel engine laboratory. **No V1 runtime, source, assets, shaders, event contracts, terrain constants, or deployment artifacts.**
+An independent mobile-first **true-3D destructible terrain engine**, built for
+the eventual **Wyrmforge Hunt** game. The long-term required deliverables are
+stable mobile performance, destructible hills/cliffs/arches/overhangs,
+authoritative character/projectile collision, **bounded structural gravity**,
+pixel-readable 2.5D rendering and real integration into Wyrmforge.
 
-## Live site (once Pages is enabled and deployment succeeds)
+**V1 protection:** no V1 runtime, engine code, shaders, material schemas,
+internal contracts or assets are reused. The existing game remains playable
+and unchanged during standalone engine development. Any future game-side
+integration must use newly authored V2 contracts and a guarded rollout.
+
+## One authoritative roadmap
+
+**[docs/ROADMAP.md](docs/ROADMAP.md)** is the single source of truth. It
+preserves the original November 9 Work implementation handover's foundation
+milestones **V2.0–V2.7**, incorporates the independent research, and names
+the required outcomes beyond the first lab release:
+
+- **V2.8:** first genuine Wyrmforge V2 Hunt terrain integration.
+- **V2.9:** bounded hybrid structural gravity, falling clusters and settlement.
+- **V2.10:** sustained full-game mobile acceptance and controlled production cutover.
+
+Read [the gravity design](docs/VOXEL-GRAVITY-V2.md),
+[architecture decisions](docs/ARCHITECTURE-DECISIONS.md), and
+[current evidence / gaps](docs/PROGRESS.md) alongside that **same roadmap**.
+Build numbers such as `0.0.024` are **laboratory increments**, not completed
+roadmap milestones.
+
+## Playable standalone V2 lab
 
 https://pjotrcasteel.github.io/Wyrmforge-V2/
 
-## Repository
+The lab currently exercises sparse signed-coordinate voxel terrain, WebGL2
+exposed-face rendering, deterministic damage and replays, worker-based
+meshing experiments, orthographic camera controls, and targeted projectile
+terrain rays. **It is not yet the Wyrmforge Hunt renderer or finished engine**.
 
-- `src/voxel-world.mjs`: independently authored signed-coordinate, sparse 16³ voxel storage with snapshot copies.
-- `main.mjs` and `index.html`: intentionally minimal Canvas2D foundation visualizer. **Not the final WebGL2 mesher or production engine.**
-- `tests/voxel-world.test.mjs`: deterministic and isolation-oriented unit tests.
-- `docs/ROADMAP.md`: V2.0–V2.7 implementation and acceptance plan.
-- `docs/RESEARCH.md`: independent external technical research.
-- `docs/ARCHITECTURE-DECISIONS.md`: initial design decisions.
-
-## Run
+## Local V2 checks
 
 ```bash
 node --test tests/*.test.mjs
 python -m http.server 8000
 ```
 
-Open http://localhost:8000/.
+Open http://localhost:8000/ to inspect the standalone lab.
 
-## Pages deployment
+## Device and production gates
 
-The workflow `.github/workflows/pages.yml` runs V2-only tests and deploys **this repository only**. In repository **Settings → Pages → Build and deployment**, select **GitHub Actions** as the source. This setting is controlled by the repository owner; a committed workflow does not itself prove Pages is enabled.
+A green GitHub CI result, a working iPhone demo and a Pages deployment are
+**not** proof that the whole engine meets its performance goals. Require the
+original Work thresholds as initial measured targets (including 60 FPS
+supported-device baseline, ~2 ms/frame main-thread terrain budget,
+<=100 ms typical edit-to-visible latency, and >=10-minute sustained sessions),
+plus physical iPhone Safari **and** Android Chrome evidence under realistic
+Hunt enemy, spell, gravity and destruction workloads. Hardware-specific
+quality tiers and a slower-device fallback must be measured, not invented.
 
-## Status
-
-Initial standalone foundation committed. CI execution, Pages availability, and real iPhone/Android performance are **not yet verified**. The Canvas2D lab is a deliberately disposable diagnostic shell; it is not the final V2 rendering architecture.
-
-## V1 protection
-
-This repository never publishes to the V1 Pages site. It has no V1 code dependencies. Any future game integration requires a separately approved project.
+This repository deploys only the independent V2 lab. Actual Wyrmforge
+integration is a required **future milestone**, with separate device and
+production-safety acceptance and no automatic replacement of V1.
