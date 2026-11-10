@@ -93,3 +93,22 @@ test('reset during context recovery discards old-world uploads', () => {
   assert.equal(view.statistics.drawCalls,1);
   view.dispose();
 });
+
+test('superseding queued uploads keeps byte accounting bounded and exact', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  const first = mesh('0,0,0');
+  view.queueReplacementMeshes(['0,0,0'], [first]);
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 60);
+  view.queueReplacementMeshes(['0,0,0'], [mesh('0,0,0')]);
+  assert.equal(view.pendingUploads, 1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 60);
+  view.queueReplacementMeshes(['0,0,0'], []);
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 0);
+  view.queueReplacementMeshes(['0,0,0'], [first]);
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 60);
+  view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 0);
+  assert.equal(view.statistics.drawCalls, 1);
+  view.dispose();
+});
