@@ -1303,3 +1303,12 @@ Chunk size 16 is experimental, not a final optimized choice.
 - View remains fixed orthographic/oblique 2.5D; no new rotation or 3D renderer in this PR.
 
 **Next small step:** implement and unit-test committed-voxel player grounding and swept capsule/AABB collision (V2.5), then close outstanding V2.2/V2.3/V2.4 device/performance gates. Verify deployment and complete device evidence before claiming any foundation milestone accepted. See the [single authoritative Work-derived roadmap](ROADMAP.md).
+
+## V2 0.0.033 — V2.4 budgeted worker-result GPU uploads (foundation slice)
+
+- Worker mesh replies now stage bounded dirty-chunk uploads instead of uploading the entire batch in the worker message callback.
+- The animation frame drains a 2 ms CPU-time budget, with at least one chunk per frame. WebGL bufferData is non-preemptible; individual large chunk uploads can still exceed the budget.
+- Cancel/reset/new edits discard staged derived geometry, while the authoritative voxel ledger and collision queries remain immediately committed.
+- Export reports pending upload chunks/CPU mesh bytes and queue peak; completed worker updates record edit-to-visible CPU-side completion latency.
+- Node tests cover frame-budget draining, negative chunk IDs, cancel/reset and queue cap.
+- **Not accepted yet:** physical iPhone/Android sustained tests, WebGL context-loss during partial uploads, GPU driver timing and complete V2.4/V2.7 gates. Baseline synchronous mode remains intentionally unchanged.
