@@ -1,7 +1,9 @@
 # Voxel V2 — research synthesis and architecture decisions
 
-Date: 2026-11-09
-Evidence: [75-document research ledger](RESEARCH.md). Research/documentation gate complete; empirical performance and device acceptance **not** complete.
+Date: 2026-11-09 — historical independent research baseline, not a separate execution roadmap.
+Evidence: [75-document research ledger](RESEARCH.md). Research/documentation gate complete; whole-engine and game device acceptance **not** complete.
+
+**For the current required Wyrmforge delivery sequence, follow the single [Work-derived V2 roadmap](ROADMAP.md): original V2.0–V2.7 foundation, V2.8 playable Hunt integration, V2.9 hybrid gravity, V2.10 full-game acceptance.**
 
 ## Owner override — V2-only, zero V1 reuse
 
@@ -33,7 +35,7 @@ Voxel V2 is a **ground-up implementation**. No V1 code, assets, shaders, interna
 
 ## Explicitly deferred
 
-Octrees/DAGs/brickmaps, WebGPU compute, density-field meshing, LOD/Transvoxel, flowing liquids, automatic collapse, advanced lighting, full enemies, complex rigid-body physics and production Hunt migration.
+**Deferred from the initial V2.0–V2.7 foundation, not canceled:** automatic structural collapse and bounded hybrid gravity become required at V2.9, and playable V2 Hunt terrain integration is required at V2.8. Octrees/DAGs/brickmaps, WebGPU compute, density-field meshing, LOD/Transvoxel and flowing liquids remain separate evidence-driven options. Full enemy/lighting implementations are owned by distinct V2 consumers, not the voxel core.
 
 ## Evidence quality and caveats
 
@@ -41,4 +43,4 @@ The ledger contains **75 distinct reference documents**, not 75 independent auth
 
 ## Immediate next work
 
-Resume V2.0 only: secure isolated publication ownership, instrument frame-time/export and deterministic stress scenes, add tests and visible build identity. Record test outcomes in PROGRESS.md. Do not mark V2.0 accepted until live production preservation and physical-device checks pass.
+Research-time instruction (2026-11-09): establish V2.0 instrumentation and isolated hosting. Since that date the lab has progressed through build 0.0.024 with accepted initial iPhone targeting; follow [PROGRESS.md](PROGRESS.md) for remaining real device and original milestone gates. The immediate core engine coding priority is V2.5 grounding and voxel collision, without skipping incomplete mobile acceptance.
