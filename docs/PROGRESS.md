@@ -882,6 +882,62 @@ V2.8 Wyrmforge integration and V2.9 hybrid gravity as *required* outcomes.
 cliff/wall blocking, single-voxel steps and falling into a freshly carved
 pit while camera pan/pinch still behave. No V1 imports.
 
+## 0.0.027 — V2.5 support-loss and landing validation in real excavated terrain
+
+**Physical iPhone evidence (V2 0.0.026, Cliff / Hunt / chunk16³ / seed7):**
+The user created a walkable ramp by destroying cliff voxels, walked the
+diagnostic actor onto higher ground, and captured an on-device screenshot.
+At export the actor was grounded at **y=10.00001**, with x≈7.79, z≈1.28,
+after **4,601 fixed physics steps** and **zero catch-up overflows**.
+During 1,800 frame samples p95/p99 were **18/32 ms**, with **2 frames >50 ms**
+and zero context losses. **37 edit commands** were accepted; the most
+recent localized mesh update rebuilt **1/8 chunks in 4 ms**. The final
+recorded spell tap was a miss; this does not invalidate the earlier ramp
+edit but is not proof of that tap's geometry. The final-step
+`stepUp:false` does not capture earlier successful step-ups.
+
+**Next targeted V2.5 acceptance fixture:**
+- [x] New pure `excavateActorSupport(world,ledger,actor,id)` identifies
+  immediate solid footing over the actor's swept AABB footprint and
+  commits a bounded 2.5-voxel-radius sphere beneath it through the
+  *existing V2 authoritative terrain edit ledger*, preserving signed
+  chunk seam and edit ID/revision guarantees.
+- [x] Add **Excavate under actor** to the collapsed lab destruction panel.
+  Available only while Actor pilot is enabled. Keep existing normal
+  spell targeting, actor controls, camera and mobile viewport intact.
+- [x] Report `actorPilot.supportExcavation` with before/after support,
+  committed voxel count and exact dirty chunks, actor position at edit,
+  number of physics steps until first airborne, latency, fall distance,
+  landing step/elevation and whether a worker mesh was still pending
+  when the actor first fell.
+- [x] Collision is evaluated directly from committed V2 voxels in the
+  *very next* fixed physics tick, even if the warm background mesher
+  has not returned its GPU buffers. Fall and landing are never
+  decided by screen pixels or GPU mesh availability.
+- [x] Unit tests for high platform drop and landing on lower solid
+  terrain, tall-cliff footing loss, negative chunk seams, proper edit
+  journal duplicate protection, and equivalent localized worker
+  geometry across both 16³ and 32³.
+- [x] Track aggregate `actorPilot.stepUps` rather than relying on the
+  `stepUp` value of the most recent individual physics tick.
+- [ ] Await a physical iPhone test of excavation beneath an elevated
+  actor, falling and landing, with benchmark JSON and 10-minute stress.
+- [ ] Full production player capsule, continuous diagonal contact, V2.8
+  integration in actual Wyrmforge Hunt and structural gravity V2.9
+  remain separate required milestones.
+
+**Phone test:** load Cliff, Hunt-style, chunk 16³, seed 7; enable Actor
+pilot and walk onto the top or a user-created walkable ramp. Open Controls
+→ Destruction → **Excavate under actor**. The actor must immediately lose
+support and fall into the newly cut pit (or out of the level), without
+ghost collision; the state line should show falling and then grounded
+if lower terrain catches it. Export the benchmark; inspect
+`actorPilot.supportExcavation` for `falling`, `landed` or
+`fell-out`, `physicsStepsUntilFall`, `fallDistance`,
+`supportAfter=0` and current actor elevation. Try Background pilot
+for a genuine worker-pending case, too. Reset should restore the cliff.
+No V1 import, no structural terrain-body physics implied.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -890,7 +946,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.026
+### Current change: 0.0.027
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

@@ -18,6 +18,7 @@ import { applyTerrainSpellHit } from './src/hunt-terrain-impact.mjs';
 import { TerrainTapRecognizer } from './src/terrain-tap-recognizer.mjs';
 import { spawnTerrainActor, simulateTerrainActor, ACTOR_HEIGHT,
   ACTOR_PHYSICS_SCHEMA } from './src/terrain-actor.mjs';
+import { excavateActorSupport } from './src/actor-support-excavation.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -29,6 +30,7 @@ const actorCanvas = document.querySelector('#actor-view');
 const actorCtx = actorCanvas.getContext('2d');
 const actorToggle = document.querySelector('#actor-toggle');
 const actorReset = document.querySelector('#actor-reset');
+const actorExcavate = document.querySelector('#actor-excavate');
 const actorDpad = document.querySelector('#actor-dpad');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
@@ -83,6 +85,7 @@ const gestures = new PointerGestures();
 const terrainTaps = new TerrainTapRecognizer();
 let actorEnabled = false, actor = null, actorFallen = false;
 let actorPrevious = null, actorAccumulator = 0, actorSteps = 0, actorOverflowFrames = 0;
+let actorStepUps = 0, actorSupportTest = null;
 let actorOverlayKey = null;
 const heldActorKeys = new Set();
 const heldActorButtons = new Set();
@@ -100,6 +103,8 @@ function resetActorPilot() {
   actorAccumulator = 0;
   actorFallen = false;
   actorOverlayKey = null;
+  actorSupportTest = null;
+  actorStepUps = 0;
   heldActorKeys.clear();
   heldActorButtons.clear();
   actor = spawnTerrainActor(world, { x:-7.5,z:-5.5 });
@@ -109,6 +114,7 @@ function resetActorPilot() {
     actorToggle.setAttribute('aria-pressed','false');
     actorReset.hidden = true;
     actorDpad.hidden = true;
+    actorExcavate.disabled = true;
     meshAuditStatus.textContent = 'Actor pilot: no supported spawn found in this terrain.';
     return;
   }
@@ -116,6 +122,7 @@ function resetActorPilot() {
   actorToggle.setAttribute('aria-pressed','true');
   actorReset.hidden = false;
   actorDpad.hidden = false;
+  actorExcavate.disabled = false;
   meshAuditStatus.textContent = 'Actor pilot active: move with touch arrows or WASD. ' +
     'Excavate underneath to test falling.';
 }
@@ -142,11 +149,40 @@ function updateActorPhysics(now) {
         current.error + '. Press Respawn actor.';
       break;
     }
-    actor=current;
+    const wasGrounded = actor.grounded;
+    actor = current;
     actorSteps++;
+    if (current.stepUp) actorStepUps++;
+    if (actorSupportTest?.status === 'committed') {
+      if (!current.grounded) {
+        actorSupportTest.status = 'falling';
+        actorSupportTest.firstAirborneStep = actorSteps;
+        actorSupportTest.physicsStepsUntilFall = actorSteps -
+          actorSupportTest.stepsAtCommit;
+        actorSupportTest.fallStartLatencyMs = Math.max(0, now -
+          actorSupportTest.committedAtMs);
+        actorSupportTest.meshPendingWhenFell = activeTerrainJob !== null;
+      } else if (actorSteps - actorSupportTest.stepsAtCommit >= 4) {
+        actorSupportTest.status = 'still-grounded';
+      }
+    }
+    if (actorSupportTest?.status === 'falling' && !wasGrounded && current.grounded) {
+      actorSupportTest.status = 'landed';
+      actorSupportTest.landingY = current.y;
+      actorSupportTest.fallDistance = Math.max(0,
+        actorSupportTest.actorPosition.y - current.y);
+      actorSupportTest.stepsUntilLanding = actorSteps - actorSupportTest.stepsAtCommit;
+      actorSupportTest.landedWorldRevision = world.revision;
+      meshAuditStatus.textContent = 'Actor landed after a ' +
+        actorSupportTest.fallDistance.toFixed(2) + '-voxel fall on committed terrain.';
+    }
     actorAccumulator-=1/60;
     steps++;
     if (actor.y < -12) {
+      if (actorSupportTest?.status === 'falling') {
+        actorSupportTest.status = 'fell-out';
+        actorSupportTest.fallDistance = actorSupportTest.actorPosition.y-actor.y;
+      }
       actorFallen=true;
       meshAuditStatus.textContent = 'Actor fell below the test world. ' +
         'Collision followed committed terrain; press Respawn actor.';
@@ -950,7 +986,8 @@ document.querySelector('#report').addEventListener('click', () => {
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
     labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
-      actor,fallen:actorFallen,simulatedSteps:actorSteps,
+      actor,fallen:actorFallen,simulatedSteps:actorSteps,stepUps:actorStepUps,
+      supportExcavation:actorSupportTest,
       catchUpOverflowFrames:actorOverflowFrames,
       input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
       overlay:'diagnostic Canvas2D, not final actor art'},
@@ -1026,6 +1063,8 @@ actorToggle.addEventListener('click', () => {
     actorToggle.setAttribute('aria-pressed','false');
     actorReset.hidden = true;
     actorDpad.hidden = true;
+    actorExcavate.disabled = true;
+    actorSupportTest = null;
     actorOverlayKey = null;
   }
   drawActorOverlay();
@@ -1035,6 +1074,43 @@ actorReset.addEventListener('click', () => {
   resetActorPilot();
   drawActorOverlay();
 });
+actorExcavate.addEventListener('click', () => {
+  if (!actorEnabled || !actor || actorFallen || !actor.grounded) {
+    meshAuditStatus.textContent = 'Excavation requires a grounded actor. Respawn first.';
+    return;
+  }
+  const startedAt = performance.now();
+  let changedSupport;
+  try {
+    // Use an existing journal ID family so saves/restores preserve uniqueness.
+    changedSupport = excavateActorSupport(world,terrainEdits,actor,
+      `lab-hit-${++nextTerrainEditId}`);
+  } catch (error) {
+    meshAuditStatus.textContent = 'Cannot excavate actor support: ' + error.message;
+    return;
+  }
+  actorSupportTest = {
+    ...changedSupport,
+    status:changedSupport.status === 'accepted' && changedSupport.supportAfter === 0
+      ? 'committed' : changedSupport.status,
+    committedAtMs:performance.now(),
+    editCpuMs:performance.now()-startedAt,
+    stepsAtCommit:actorSteps
+  };
+  if (changedSupport.dirtyChunks.length) {
+    cancelTerrainWorker();
+    invalidateMeshAudit();
+    for (const id of changedSupport.dirtyChunks) pendingTerrainDirty.add(id);
+    updateTerrainMeshes();
+  }
+  meshAuditStatus.textContent = changedSupport.supportAfter === 0
+    ? 'Removed ' + changedSupport.removedVoxels +
+      ' voxels beneath the actor; next physics step must lose support.'
+    : 'Excavation committed, but the actor still has ' +
+      changedSupport.supportAfter + ' supporting cells.';
+  dirty=true;
+});
+
 for(const button of actorDpad.querySelectorAll('[data-actor-dir]')) {
   const dir=button.dataset.actorDir;
   button.addEventListener('pointerdown',event => {
