@@ -38,6 +38,9 @@ test('GPU upload queue drains within bounded per-frame CPU budget', () => {
   assert.equal(view.pendingUploads,0);
   assert.equal(view.statistics.drawCalls,3);
   assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  assert.throws(() => view.queueReplacementMeshes(['huge'], [{
+    ...mesh('huge'), positions:new Float32Array(5 * 1024 * 1024)
+  }]), /byte capacity/);
   view.dispose();
 });
 test('cancel and full scene replacement invalidate stale pending geometry', () => {
