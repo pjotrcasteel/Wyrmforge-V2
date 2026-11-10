@@ -981,6 +981,31 @@ Export benchmark and verify `actorPilot.jumps`, `ceilingHits`,
 `error:null` and frame-time/hitch counts. The first validation is a
 small physically tested slice, not full V2.5 acceptance.
 
+## Pages cache mitigation for lab 0.0.028 — November 10, 2026
+
+**Physical iPhone screenshot at 14:48 Europe/Amsterdam** displayed
+`v0.0.027 · 4b3667f`, although `0.0.028 · 9aeec0e` was already merged.
+The **actual push workflow** `42826912463` deployed `9aeec0e`
+successfully at **14:43 local**: validation, commit stamp, Pages upload
+and `actions/deploy-pages@v4` all passed. The screenshot five minutes
+later is **consistent with stale cached HTML/ES modules**. No live HTTP
+response/Cache-Control header was available in this environment, so
+caching is a likely explanation rather than a proven root cause.
+
+**Permanent deployment test route:** after stamping every main-branch
+deploy, copy `index.html`, `main.mjs` and the entire independent
+`src/` module tree into `builds/<deployed-full-commit-sha>/` in
+the **same Pages artifact**. This path is unique for each merge, so a
+user can test a fresh URL without reusing an older cached HTML/JS graph.
+The canonical lab root URL stays unchanged. A build mismatch or missing
+artifact makes the deploy job fail. Tests verify a complete relative
+module graph, root preservation, and stamp matching. The build-specific
+route is a **diagnostic URL**; it is replaced with the next release's
+build directory by the next deployment, not an archival hosting policy.
+
+No engine code, voxel collision, save/replay format, Wyrmforge V1,
+or Character Visibility system changes in this deployment correction.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
