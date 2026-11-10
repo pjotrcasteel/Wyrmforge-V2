@@ -11,5 +11,8 @@ test('dynamic collision stays valid during edits across 16 and 32 voxel chunk se
     assert.equal(entry.overlaps,0);
     assert.equal(entry.edits,4);
     assert.ok(entry.removedVoxels>0);
+    assert.equal(entry.landedAfterFall,true);
+    assert.ok(entry.groundedTail>=30);
+    if(entry.boundary!==null) assert.equal(entry.crossedBoundary,true);
   }
 });
