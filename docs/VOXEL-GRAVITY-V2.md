@@ -1,7 +1,7 @@
-# Voxel V2 — optional hybrid gravity and structural collapse
+# Voxel V2 — required hybrid gravity and structural collapse (V2.9)
 
-**Status:** approved design direction, **NOT IMPLEMENTED**.  
-**Owner decision:** 2026-11-10; Wyrmforge must remain a fixed-camera **2.5D pixel-art** game with real 3D destructible terrain and mobile-first performance.  
+**Status:** required post-foundation V2.9 delivery milestone, **NOT IMPLEMENTED**. Gravity remains configurable/disableable per material and scene; implementation and Wyrmforge acceptance are required.  
+**Owner decision:** 2026-11-10; Wyrmforge must remain a fixed-camera **2.5D pixel-art** game with real 3D destructible terrain and mobile-first performance. The completed engine must include bounded support-based rock collapse, loose-material gravity and settlement. Original Work V2.0–V2.7 foundation milestones and gates remain unchanged.  
 **Scope:** entirely new V2 design. No V1 modules, physics, scene assets, or contracts may be reused.
 
 ## 1. Player-facing goal
@@ -75,8 +75,10 @@ No global support scan per frame, no per-voxel rigid-body simulation, no unbound
 - **V2.3:** ordered idempotent edit commands, material IDs/resistance policy, bounded multi-chunk changed-cell notifications; **no falling terrain yet**.
 - **V2.4:** bounded worker scheduling, stale-result rejection and budgeted CPU/GPU updates, required before dynamic collapse bursts.
 - **V2.5/V2.6:** committed-state collision/raycast and typed Physics V2 interfaces.
-- **Post-foundation, optional gravity milestone:** granular sandbox → grounded/unsupported component detection → falling stone body → safe landing → impacts/fractures → sustained mobile acceptance.
-- **V2.7 release gate:** V2 foundation must be accepted without relying on optional gravity. Gravity gets its *own* device/behavior acceptance gate and cannot silently expand release scope.
+- **V2.8 — Wyrmforge playable V2 integration:** establish a guarded genuine V2 terrain Hunt scene; do not use V1 terrain internals as engine dependencies. Gravity can initially be off while basic collisions and destruction are validated.
+- **V2.9 — REQUIRED hybrid gravity:** granular sandbox → grounded/unsupported component detection → falling stone body → safe landing → impacts/fractures → sustained mobile acceptance, first in lab then in the V2 Hunt scene.
+- **V2.10 — Wyrmforge full acceptance:** normal Hunt combat/ambush and gravity active, measured on iPhone Safari and Android Chrome before a production cutover.
+- **V2.7 foundation release gate:** the original Work foundation may be accepted before gravity exists. This does **not** complete the Wyrmforge V2 engine program: gravity has its own mandatory V2.9 behavior/device gate and V2.10 integrated Hunt gate. No unbounded physics workload is permitted.
 
 ## 8. Test fixtures and acceptance
 
@@ -96,4 +98,4 @@ Choose via experiments: what counts as ground support; anchor policy for floatin
 
 ## 10. Current action
 
-The immediate prerequisite is **localized remeshing and GPU resource replacement after edits**. Build and validate that foundation before any real gravity loop. Future collapse needs to emit accurate changed chunks without regenerating the entire terrain mesh after every impact.
+The immediate prerequisites are **correct committed-state player/collision queries, bounded localized worker and GPU replacement, and typed Physics V2 change contracts**. Their laboratory implementations are incomplete or only partially device-verified. Close those gates, validate the first Wyrmforge V2 Hunt integration slice, then implement required V2.9 structural gravity in small steps. Falling clusters must emit accurate affected regions without rebuilding the entire terrain after every impact.

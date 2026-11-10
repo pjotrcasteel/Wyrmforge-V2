@@ -738,6 +738,53 @@ functions; the future V2 Hunt gameplay adapter owns projectile spawning,
 hit origin/direction, game balance, visuals and effects. Wyrmforge V1
 repo and assets remain untouched.
 
+## Canonical roadmap reconciliation — 2026-11-10
+
+**Source of truth:** the original November 9 Work-authored *Wyrmforge Voxel
+v2 — Implementation Handover*, expanded by the independent research,
+acceptance checks and architecture decisions in
+[ROADMAP.md](ROADMAP.md). Keep **ONE** V2.0–V2.7 foundation sequence; use
+V2.8–V2.10 for the now-explicit game, gravity and release outcomes.
+Laboratory versions 0.0.xxx are not those milestones.
+
+**End state (required):** the newly authored, independent V2 voxel world
+must actually run Wyrmforge Hunt gameplay with player/projectile/AI
+interactions, full hills/cliffs/overhangs excavation, pixel-readable
+2.5D graphics, bounded structural gravity and falling rubble, and
+measured stable performance on mobile. V1 remains untouched during
+V2 experimentation.
+
+| Milestone | Existing proof | Acceptance still outstanding |
+| --- | --- | --- |
+| V2.0 lab instrumentation | Separate V2 GitHub Pages, build SHA, real iPhone Safari benchmark exports | Android Chrome, complete deployment/interaction acceptance |
+| V2.1 sparse terrain | 16³/32³ signed coordinates, Hill/Cliff/Arch/Flat, unit tests | Document independent world-units/voxel pitch and full storage gate |
+| V2.2 rendering | WebGL2 exposed faces, Hunt camera, diagnostic greedy mesher | Pixel-art material atlas, stable world-space textures, mesher decision, full context-loss/device tests |
+| V2.3 destruction | Authoritative sphere/damage edits, material resistance, 3-hit test, direct screen targeting | Tunnel/line/area/crater command shapes, bounded **atomic** edits, physical cliff and overhang regression |
+| V2.4 async/mobile | Opt-in warm worker, stale-result protection, iPhone 18–25 ms small edits | Frame-budgeted GPU uploads, overload/backpressure, larger worker stress and sustained thermal evidence |
+| V2.5 player/physics | DDA targeting and test impacts from build 0.0.024 (iPhone user accepted) | Player capsule/swept collision, grounding, falling through excavated floor, wall/ceiling, moving actor tests |
+| V2.6 interfaces | V2 spell-hit module and isolated engine code | Typed read/edit/change/metrics contracts + test Lighting/Physics/VFX/Audio/AI consumers |
+| V2.7 foundation gate | Replay/checkpoint experiments and independent tests | Final snapshot/restore metadata, 10-minute iPhone and Android Hunt-like stress, accepted performance thresholds |
+| V2.8 Wyrmforge integration | Planned; not implemented | First playable guarded V2 Hunt terrain scene, V2 gameplay control, projectile impact and correct collision |
+| V2.9 structural gravity | Detailed [design](VOXEL-GRAVITY-V2.md); not implemented | Support detection, falling cohesive clusters, granular simulation, safe settlement and mobile tests |
+| V2.10 production release | Planned; not implemented | Integrated V2 pixel art + normal Hunt workloads/ambush, measured device acceptance, safe cutover |
+
+**Original Work provisional performance targets:** support a measured 60 FPS
+baseline (whole-game p95 <=16.7 ms), ~2 ms/frame main-thread terrain work,
+typical edit-to-visible <=100 ms, explicit fallback quality tier for slower
+hardware, and >=10-minute physical device runs. These are **not verified
+guarantees** and must reserve capacity for Wyrmforge enemy AI, effects,
+lighting, audio and UI. No claim of universally "perfect" FPS is possible.
+
+**Immediate next implementation step:** close the missing **V2.5 player
+grounding and swept voxel collision** capability using the newly validated
+V2 3D raycast and authoritative terrain state. Build a tiny player/capsule
+fixture that can walk over a hill, stop at a wall/cliff and fall when
+support is removed, with deterministic unit tests on both chunk sizes.
+Then continue the oldest incomplete **V2.2/V2.3/V2.4** performance/material/
+explosion acceptance gates rather than jumping to new replay UI.
+Wyrmforge V1 production code remains unchanged until the guarded
+V2.8 game integration milestone.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -766,5 +813,4 @@ Chunk size 16 is experimental, not a final optimized choice.
 - Pure Node interaction tests do not replace iPhone Safari and Android Chrome acceptance.
 - View remains fixed orthographic/oblique 2.5D; no new rotation or 3D renderer in this PR.
 
-**Next small step:** verify site deployment/build identity on the actual live route, then tackle
-remaining V2.0 instrumentation and interaction gates. Do not skip ahead to V2.2.
+**Next small step:** implement and unit-test committed-voxel player grounding and swept capsule/AABB collision (V2.5), then close outstanding V2.2/V2.3/V2.4 device/performance gates. Verify deployment and complete device evidence before claiming any foundation milestone accepted. See the [single authoritative Work-derived roadmap](ROADMAP.md).
