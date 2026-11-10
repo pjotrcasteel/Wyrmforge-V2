@@ -32,6 +32,7 @@ const actorToggle = document.querySelector('#actor-toggle');
 const actorReset = document.querySelector('#actor-reset');
 const actorExcavate = document.querySelector('#actor-excavate');
 const actorDpad = document.querySelector('#actor-dpad');
+const actorJumpButton = document.querySelector('#actor-jump');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
@@ -86,6 +87,7 @@ const terrainTaps = new TerrainTapRecognizer();
 let actorEnabled = false, actor = null, actorFallen = false;
 let actorPrevious = null, actorAccumulator = 0, actorSteps = 0, actorOverflowFrames = 0;
 let actorStepUps = 0, actorSupportTest = null;
+let jumpQueued = false, actorJumps = 0, actorCeilingHits = 0;
 let actorOverlayKey = null;
 const heldActorKeys = new Set();
 const heldActorButtons = new Set();
@@ -105,6 +107,9 @@ function resetActorPilot() {
   actorOverlayKey = null;
   actorSupportTest = null;
   actorStepUps = 0;
+  actorJumps = 0;
+  actorCeilingHits = 0;
+  jumpQueued = false;
   heldActorKeys.clear();
   heldActorButtons.clear();
   actor = spawnTerrainActor(world, { x:-7.5,z:-5.5 });
@@ -142,7 +147,10 @@ function updateActorPhysics(now) {
   actorAccumulator+=elapsed;
   let steps=0;
   while(actorAccumulator >= 1/60 && steps < 4) {
-    const current=simulateTerrainActor(world,actor,{...actorInput(),dt:1/60});
+    const current=simulateTerrainActor(world,actor,{
+      ...actorInput(),jump:jumpQueued,dt:1/60
+    });
+    jumpQueued = false; // One press generates at most one jump impulse.
     if(current.error) {
       actorFallen=true;
       meshAuditStatus.textContent = 'Actor collision rejected a blocked position: ' +
@@ -153,6 +161,11 @@ function updateActorPhysics(now) {
     actor = current;
     actorSteps++;
     if (current.stepUp) actorStepUps++;
+    if (current.jumped) actorJumps++;
+    if (current.ceilingContact && !actor.ceilingContact) {
+      actorCeilingHits++;
+      meshAuditStatus.textContent = 'Actor head contacted solid voxel ceiling; ascent stopped.';
+    }
     if (actorSupportTest?.status === 'committed') {
       if (!current.grounded) {
         actorSupportTest.status = 'falling';
@@ -987,6 +1000,7 @@ document.querySelector('#report').addEventListener('click', () => {
     labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
       actor,fallen:actorFallen,simulatedSteps:actorSteps,stepUps:actorStepUps,
+      jumps:actorJumps,ceilingHits:actorCeilingHits,
       supportExcavation:actorSupportTest,
       catchUpOverflowFrames:actorOverflowFrames,
       input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
@@ -1059,6 +1073,7 @@ actorToggle.addEventListener('click', () => {
     actorFallen = false;
     heldActorKeys.clear();
     heldActorButtons.clear();
+    jumpQueued = false;
     actorToggle.textContent = 'Actor pilot: Off';
     actorToggle.setAttribute('aria-pressed','false');
     actorReset.hidden = true;
@@ -1111,11 +1126,16 @@ actorExcavate.addEventListener('click', () => {
   dirty=true;
 });
 
+actorJumpButton.addEventListener('click', () => {
+  if (!actorEnabled || !actor || actorFallen) return;
+  jumpQueued = true; // Native click supports iPhone touch and keyboard activation.
+});
 for(const button of actorDpad.querySelectorAll('[data-actor-dir]')) {
   const dir=button.dataset.actorDir;
   button.addEventListener('pointerdown',event => {
     if (!actorEnabled) return;
     event.preventDefault();
+    if (dir === 'jump') return;
     heldActorButtons.add(dir);
     button.setPointerCapture(event.pointerId);
   });
@@ -1132,6 +1152,11 @@ const actorKeyDirections={
 };
 window.addEventListener('keydown',event => {
   if (!actorEnabled || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  if (event.code === 'Space') {
+    event.preventDefault();
+    if (!event.repeat) jumpQueued = true;
+    return;
+  }
   const direction=actorKeyDirections[event.key.toLowerCase()];
   if (!direction) return;
   event.preventDefault();
@@ -1200,6 +1225,7 @@ document.addEventListener('visibilitychange', () => {
     terrainTaps.cancel();
     heldActorKeys.clear();
     heldActorButtons.clear();
+    jumpQueued = false;
   }
 });
 window.addEventListener('blur', () => {
@@ -1207,6 +1233,7 @@ window.addEventListener('blur', () => {
   terrainTaps.cancel();
   heldActorKeys.clear();
   heldActorButtons.clear();
+  jumpQueued = false;
   actorPrevious = null;
   actorAccumulator = 0;
 });
