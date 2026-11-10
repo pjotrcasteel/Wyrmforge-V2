@@ -51,6 +51,8 @@ jobs:
           node --check src/chunk-dirty.mjs
           node --check tests/chunk-local-remesh.test.mjs
           node --check tests/webgl-local-updates.test.mjs
+          node --check src/camera-presets.mjs
+          node --check tests/camera-presets.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
 
