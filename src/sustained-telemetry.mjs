@@ -4,6 +4,9 @@ export class SustainedTelemetry {
   #samples = [];
   #start = null;
   #last = null;
+  #peakPendingBytes = 0;
+  #peakPendingChunks = 0;
+  #peakRecoveryChunks = 0;
   constructor({ intervalMs = 1000, capacity = 900 } = {}) {
     if (!Number.isFinite(intervalMs) || intervalMs <= 0 ||
         !Number.isInteger(capacity) || capacity < 1 || capacity > 3600) {
@@ -12,6 +15,12 @@ export class SustainedTelemetry {
     this.intervalMs = intervalMs;
     this.capacity = capacity;
   }
+  observeQueue(queue) {
+    if (!queue) return;
+    this.#peakPendingBytes = Math.max(this.#peakPendingBytes, queue.pendingBytes ?? 0);
+    this.#peakPendingChunks = Math.max(this.#peakPendingChunks, queue.pendingChunks ?? 0);
+    this.#peakRecoveryChunks = Math.max(this.#peakRecoveryChunks, queue.recoveryChunks ?? 0);
+  }
   due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
   record(now, { frames, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
     heapBytes = null }) {
@@ -19,6 +28,7 @@ export class SustainedTelemetry {
     if (this.#start === null) this.#start = now;
     if (this.#last !== null && now - this.#last < this.intervalMs) return false;
     this.#last = now;
+    this.observeQueue(queue);
     const sample = {
       elapsedSeconds: Math.round((now - this.#start) / 1000),
       p95Ms: frames.p95, p99Ms: frames.p99,
@@ -33,7 +43,12 @@ export class SustainedTelemetry {
     this.#samples.push(sample);
     return true;
   }
-  reset() { this.#samples = []; this.#start = null; this.#last = null; }
+  reset() {
+    this.#samples = []; this.#start = null; this.#last = null;
+    this.#peakPendingBytes = 0;
+    this.#peakPendingChunks = 0;
+    this.#peakRecoveryChunks = 0;
+  }
   report() {
     const samples = this.#samples.map(s => ({...s}));
     const max = key => samples.reduce((m,s) => s[key] === null ? m : Math.max(m,s[key]), 0);
@@ -42,8 +57,9 @@ export class SustainedTelemetry {
       intervalMs: this.intervalMs, capacity: this.capacity,
       sampleCount: samples.length,
       elapsedSeconds: samples.at(-1)?.elapsedSeconds ?? 0,
-      peakPendingBytes: max('pendingBytes'),
-      peakPendingChunks: max('pendingChunks'),
+      peakPendingBytes: this.#peakPendingBytes,
+      peakPendingChunks: this.#peakPendingChunks,
+      peakRecoveryChunks: this.#peakRecoveryChunks,
       peakGpuBytesEstimate: max('gpuBytesEstimate'),
       heapAvailable: samples.some(s => s.heapBytes !== null),
       samples
