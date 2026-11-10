@@ -57,12 +57,14 @@ function cancelTerrainWorker() {
   terrainJobId++;
   if (terrainWorker) terrainWorker.terminate();
   terrainWorker = null;
+  meshCompareButton.disabled = false;
 }
 
 function updateTerrainMeshes() {
   if (!pendingTerrainDirty.size) return;
   const affectedChunks = new Set(pendingTerrainDirty);
   const syncFallback = reason => {
+    meshCompareButton.disabled = false;
     rebuildGpuMeshes(affectedChunks);
     pendingTerrainDirty.clear();
     lastTerrainWorker = { status:'fallback', reason, chunksUpdated:affectedChunks.size };
@@ -81,12 +83,14 @@ function updateTerrainMeshes() {
     const start = performance.now();
     worker = new Worker(new URL('./src/terrain-mesh.worker.mjs', import.meta.url),{type:'module'});
     terrainWorker = worker;
+    meshCompareButton.disabled = true;
     lastTerrainWorker = { status:'running', snapshotBytes:job.snapshotBytes,
       dirtyChunks:job.dirtyIds.length };
     function finish(reply) {
       if (terrainWorker !== worker) return;
       worker.terminate();
       terrainWorker = null;
+      meshCompareButton.disabled = false;
       if (world !== originWorld) return; // Reset replaced the authority: never touch its GPU meshes.
       if (!isCurrentTerrainMeshReply(reply,job,world.revision)) {
         syncFallback(reply?.message || 'stale/invalid worker result');
