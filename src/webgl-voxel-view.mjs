@@ -85,6 +85,7 @@ function createProgram(gl) {
 
 export class WebGLVoxelView {
   #gl;
+  #contextLossExtension = null;
   #program = null;
   #uniforms = null;
   #gpuMeshes = new Map();
@@ -106,6 +107,8 @@ export class WebGLVoxelView {
     });
     if (!gl) throw new Error('WebGL2 is unavailable on this device');
     this.#gl = gl;
+    // WebGL extensions cannot reliably be queried while the context is lost.
+    this.#contextLossExtension = gl.getExtension?.('WEBGL_lose_context') ?? null;
     this.#initialize();
 
     canvas.addEventListener('webglcontextlost', event => {
@@ -142,7 +145,7 @@ export class WebGLVoxelView {
     if (action !== 'lose' && action !== 'restore') {
       throw new RangeError('Invalid WebGL context transition');
     }
-    const extension = this.#gl.getExtension?.('WEBGL_lose_context');
+    const extension = this.#contextLossExtension;
     if (!extension) return false;
     if (action === 'lose' && this.ready) extension.loseContext();
     else if (action === 'restore' && this.#lost) extension.restoreContext();
