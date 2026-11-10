@@ -20,6 +20,8 @@ import { spawnTerrainActor, simulateTerrainActor, actorHeadClearance,
   ACTOR_PHYSICS_SCHEMA } from './src/terrain-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import { excavateActorSupport } from './src/actor-support-excavation.mjs';
+import { V2TerrainPort } from './src/terrain-integration-port.mjs';
+import { attachTerrainConsumerProbes } from './src/terrain-consumer-probes.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -79,7 +81,19 @@ let activeCamera = getCameraPreset(cameraPicker.value).id;
 let activeSeed = 7;
 let activeScene = 'hill';
 let world = createScene(activeScene, activeSeed, { chunkEdge: Number(chunkPicker.value) });
-let terrainEdits = new TerrainEditLedger(world);
+// A single authoritatively backed V2 port handles all lab terrain commands:
+ // projectile hits, normal carves, partial damage, bursts and underfoot edits.
+ // Its six subscriber fakes are V2.6 integration proof, not gameplay systems.
+let terrainEpoch = 0;
+let terrainEdits = null;
+let terrainConsumers = null;
+function installTerrainPort(nextWorld, ledger) {
+  if (terrainConsumers) terrainConsumers.dispose();
+  if (terrainEdits) terrainEdits.dispose();
+  terrainEdits = new V2TerrainPort(nextWorld, ledger, {epoch:++terrainEpoch});
+  terrainConsumers = attachTerrainConsumerProbes(terrainEdits);
+}
+installTerrainPort(world, new TerrainEditLedger(world));
 let nextTerrainEditId = 0, nextDamageId = 0;
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
@@ -598,7 +612,7 @@ function chooseScene() {
   pendingTerrainDirty.clear();
   lastTerrainWorker = null;
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
-  terrainEdits = new TerrainEditLedger(world);
+  installTerrainPort(world, new TerrainEditLedger(world));
   nextTerrainEditId = 0;
   nextDamageId = 0;
   nextBurstId = 0;
@@ -809,7 +823,7 @@ function installVerifiedReplay(checkpoint, restored, counters, operation, starte
   cancelTerrainWorker();
   pendingTerrainDirty.clear();
   world = restored.world;
-  terrainEdits = restored.ledger;
+  installTerrainPort(world, restored.ledger);
   activeScene = restored.source.scene;
   activeSeed = restored.source.seed;
   scenePicker.value = activeScene;
@@ -1046,6 +1060,8 @@ document.querySelector('#report').addEventListener('click', () => {
       input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
       overlay:'diagnostic Canvas2D, not final actor art'},
     lastReplay, replayPointAvailable:replayCheckpoint !== null,
+    terrainIntegration:{...terrainEdits.metrics(),
+      probes:terrainConsumers.report()},
     damageLedger:{ editRevision:terrainEdits.editRevision,
       pendingDamageCells:terrainEdits.pendingDamageCells,
       resistanceByMaterial:MATERIAL_RESISTANCE },
