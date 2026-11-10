@@ -85,6 +85,10 @@ export class TerrainEditLedger {
   get pendingDamageCells() { return this.#damage.size; }
   get editRevision() { return this.#editRevision; }
 
+  // A V2 integration port must never pair a ledger with a different world,
+  // even if both happen to have identical revision numbers.
+  isBoundTo(world) { return this.#world === world; }
+
   // JSON-friendly bounded journal. Commands retain their original expected
   // revisions so a replay can reject reordering instead of silently accepting it.
   exportJournal() {
