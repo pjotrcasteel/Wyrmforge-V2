@@ -49,16 +49,26 @@ test('underfoot test is opt-in and records fall before asynchronous mesh complet
   assert.match(main,/actorExcavate\.disabled = true/);
 });
 
-test('V2.5 jump uses native touch/keyboard input and records ceiling contacts', () => {
+test('Arch pilot spawns in the actual 3D corridor and reports wall contact', () => {
+  const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
+  assert.match(main,/activeScene === 'arch'/);
+  assert.match(main,/x:0\.5, z:2\.5, searchTopY:6/);
+  assert.match(main,/Arch collision lane: move LEFT or RIGHT into the stone pillars/);
+  assert.match(main,/current\.wallContact && !previousWallContact/);
+  assert.match(main,/Arch pillar COLLISION/);
+  assert.match(main,/actor x=\$\{actor\.x\.toFixed\(2\)\}/);
+  assert.match(main,/z=\$\{actor\.z\.toFixed\(2\)\}/);
+  assert.match(main,/wallContactSteps:actorWallContacts/);
+});
+
+test('Wyrmforge actor has no jump control or player jump simulation input', () => {
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
-  assert.match(html, /id="actor-jump"[^>]*type="button"[^>]*aria-label="Jump"/);
-  assert.match(html, /#actor-jump\{grid-column:3;grid-row:1/);
-  assert.match(main, /actorJumpButton\.addEventListener\('click'/);
-  assert.match(main, /jump:jumpQueued,dt:1\/60/);
-  assert.match(main, /jumpQueued = false; \/\/ One press generates at most one jump impulse/);
-  assert.match(main, /event\.code === 'Space'/);
-  assert.match(main, /if \(!event\.repeat\) jumpQueued = true/);
-  assert.match(main, /if \(current\.ceilingContact && !actor\.ceilingContact\)/);
-  assert.match(main, /jumps:actorJumps,ceilingHits:actorCeilingHits/);
+  const physics=readFileSync(new URL('../src/terrain-actor.mjs',import.meta.url),'utf8');
+  assert.doesNotMatch(html,/id="actor-jump"/);
+  assert.doesNotMatch(main,/actorJumpButton|jumpQueued|actorJumps/);
+  assert.doesNotMatch(main,/jump:jumpQueued|event\.code === 'Space'/);
+  assert.doesNotMatch(physics,/ACTOR_JUMP_SPEED|jump=false|jumping/);
+  assert.match(physics,/const canStep=initialSupport/);
+  assert.match(physics,/ACTOR_MAX_UPWARD_SPEED/);
 });
