@@ -211,7 +211,7 @@ export class TerrainEditLedger {
           const stored = this.#damage.get(cellKey);
           const previous = stored?.material === material ? stored.amount : 0;
           const resistance = MATERIAL_RESISTANCE[material] ?? 1;
-          const accumulated = edit.type === 'carve-sphere'
+          const accumulated = edit.type !== 'damage-sphere'
             ? resistance
             : previous + edit.power;
           const destroy = accumulated >= resistance;
