@@ -76,6 +76,12 @@ jobs:
           node --check tests/replay-lab.test.mjs
           node --check src/replay-file.mjs
           node --check tests/replay-file.test.mjs
+          node --check src/terrain-raycast.mjs
+          node --check tests/terrain-raycast.test.mjs
+          node --check src/hunt-terrain-impact.mjs
+          node --check src/terrain-tap-recognizer.mjs
+          node --check tests/terrain-tap-recognizer.test.mjs
+          node --check tests/hunt-terrain-lab.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures
