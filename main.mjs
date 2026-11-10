@@ -8,7 +8,8 @@ import { createTerrainMeshJob, isCurrentTerrainMeshReply } from './src/terrain-m
 import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
-import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
+import { demoCarveTarget } from './src/demo-carve.mjs';
+import { TerrainEditLedger } from './src/terrain-edit-ledger.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -29,6 +30,8 @@ let activeCamera = getCameraPreset(cameraPicker.value).id;
 let activeSeed = 7;
 let activeScene = 'hill';
 let world = createScene(activeScene, activeSeed, { chunkEdge: Number(chunkPicker.value) });
+let terrainEdits = new TerrainEditLedger(world);
+let nextTerrainEditId = 0;
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
@@ -329,6 +332,8 @@ function chooseScene() {
   pendingTerrainDirty.clear();
   lastTerrainWorker = null;
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
+  terrainEdits = new TerrainEditLedger(world);
+  nextTerrainEditId = 0;
   lastCarve = null;
   invalidateMeshAudit();
   rebuildGpuMeshes();
@@ -378,11 +383,18 @@ terrainMeshMode.addEventListener('change', () => {
 document.querySelector('#carve').addEventListener('click', () => {
   cancelTerrainWorker();
   const target = demoCarveTarget(activeScene);
-  const dirtyChunks = new Set();
-  const removedVoxels = carveDemoSphere(world, target, { dirtyChunks });
+  const edit = terrainEdits.apply({
+    id: `lab-hit-${++nextTerrainEditId}`,
+    type: 'carve-sphere', ...target,
+    expectedRevision: world.revision
+  });
+  const { removedVoxels } = edit;
+  const dirtyChunks = new Set(edit.dirtyChunks);
   lastCarve = {
     scene: activeScene, ...target, removedVoxels,
-    worldRevision: world.revision, dirtyChunks: [...dirtyChunks].sort()
+    editId: edit.editId, editStatus: edit.status,
+    changedBounds: edit.changedBounds,
+    worldRevision: edit.worldRevision, dirtyChunks: edit.dirtyChunks
   };
   invalidateMeshAudit();
   // Coalesce all previously uncommitted dirty regions when a newer edit cancels
@@ -507,6 +519,7 @@ document.querySelector('#report').addEventListener('click', () => {
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve,
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
     terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
+    acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
     caveat:'Optional reusable background worker handles real CPU meshes; cold/warm timings are experimental, GPU upload still synchronous. Baseline remains default.' };
