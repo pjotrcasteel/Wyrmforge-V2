@@ -88,6 +88,8 @@ jobs:
           node --check src/actor-support-excavation.mjs
           node --check tests/actor-support-excavation.test.mjs
           node --check tests/terrain-actor-jump.test.mjs
+          node --check scripts/create-versioned-lab.mjs
+          node --check tests/versioned-lab.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures
@@ -109,6 +111,14 @@ jobs:
         run: node scripts/write-build-info.mjs
       - name: Verify build stamp
         run: node --input-type=module -e "import { COMMIT } from './src/build-info.mjs'; if (COMMIT !== process.env.GITHUB_SHA) process.exit(1)"
+      - name: Create cache-independent V2 test URL
+        run: node scripts/create-versioned-lab.mjs
+      - name: Validate versioned Pages artifact
+        run: |
+          test -s "builds/$GITHUB_SHA/index.html"
+          test -s "builds/$GITHUB_SHA/main.mjs"
+          test -s "builds/$GITHUB_SHA/src/build-info.mjs"
+          grep -q "$GITHUB_SHA" "builds/$GITHUB_SHA/src/build-info.mjs"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
