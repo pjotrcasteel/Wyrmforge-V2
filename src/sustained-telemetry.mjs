@@ -12,6 +12,7 @@ export class SustainedTelemetry {
     this.intervalMs = intervalMs;
     this.capacity = capacity;
   }
+  due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
   record(now, { frames, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
     heapBytes = null }) {
     if (!Number.isFinite(now)) return false;
