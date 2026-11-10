@@ -54,6 +54,11 @@ export class TerrainWorkerSession {
       event.preventDefault?.();
       this.#fail(event.message || 'Terrain worker runtime error');
     });
+    worker.addEventListener('messageerror', event => {
+      if (this.#worker !== worker) return;
+      event.preventDefault?.();
+      this.#fail('Terrain worker message could not be deserialized');
+    });
     try {
       worker.postMessage({ schema: SCHEMA, type: 'warmup', id: generation });
     } catch (error) {
