@@ -1,12 +1,6 @@
-// Ground-up V2 WebGL2 baseline. Orthographic/oblique 2.5D view; not a texture-atlas art pass.
-// The renderer owns every GPU buffer. Voxel data and collision never depend on GPU state.
-export function projectVoxel(x, y, z, { width, height, scale, panX = 0, panY = 0 }) {
-  return {
-    x: width / 2 + (x - z) * scale * 0.75 + panX,
-    y: height / 2 + (x + z) * scale * 0.35 - y * scale + panY,
-    depth: -(x + z + 0.7 * y) / 128
-  };
-}
+// Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
+import { getCameraPreset } from './camera-presets.mjs';
+export { projectVoxel } from './camera-presets.mjs';
 
 const VERTEX_SHADER = `#version 300 es
 precision highp float;
@@ -17,17 +11,18 @@ uniform vec3 uOrigin;
 uniform vec2 uViewport;
 uniform vec2 uPan;
 uniform float uScale;
+uniform vec3 uCameraRight;
+uniform vec3 uCameraDown;
+uniform vec3 uCameraDepth;
 out vec3 vNormal;
 flat out float vMaterial;
 
 void main() {
   vec3 world = aPosition + uOrigin;
-  vec2 pixel = vec2((world.x - world.z) * 0.75,
-                    (world.x + world.z) * 0.35 - world.y) * uScale
+  vec2 pixel = vec2(dot(world, uCameraRight),
+                    dot(world, uCameraDown)) * uScale
                + uViewport * 0.5 + uPan;
-  // The camera looks along +X, +Y, +Z. The nullspace of the two
-  // projected axes is (1, 0.7, 1), matching the independent depth.
-  float depth = -(world.x + world.z + 0.7 * world.y) / 128.0;
+  float depth = dot(world, uCameraDepth);
   gl_Position = vec4(2.0 * pixel.x / uViewport.x - 1.0,
                      1.0 - 2.0 * pixel.y / uViewport.y,
                      depth, 1.0);
@@ -152,7 +147,10 @@ export class WebGLVoxelView {
       origin: gl.getUniformLocation(this.#program, 'uOrigin'),
       viewport: gl.getUniformLocation(this.#program, 'uViewport'),
       pan: gl.getUniformLocation(this.#program, 'uPan'),
-      scale: gl.getUniformLocation(this.#program, 'uScale')
+      scale: gl.getUniformLocation(this.#program, 'uScale'),
+      cameraRight: gl.getUniformLocation(this.#program, 'uCameraRight'),
+      cameraDown: gl.getUniformLocation(this.#program, 'uCameraDown'),
+      cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth')
     };
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
@@ -260,7 +258,7 @@ export class WebGLVoxelView {
     }
   }
 
-  render({ width, height, scale, panX, panY }) {
+  render({ width, height, scale, panX, panY, camera = 'inspection' }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -271,6 +269,10 @@ export class WebGLVoxelView {
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
+    const basis = getCameraPreset(camera);
+    gl.uniform3fv(this.#uniforms.cameraRight, basis.right);
+    gl.uniform3fv(this.#uniforms.cameraDown, basis.down);
+    gl.uniform3fv(this.#uniforms.cameraDepth, basis.depth);
     for (const mesh of this.#gpuMeshes.values()) {
       gl.uniform3fv(this.#uniforms.origin, mesh.origin);
       gl.bindVertexArray(mesh.vao);

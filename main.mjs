@@ -4,6 +4,7 @@ import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
+import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
 
 const build = document.querySelector('#build');
@@ -18,6 +19,8 @@ const meshAuditStatus = document.querySelector('#mesh-audit');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
+const cameraPicker = document.querySelector('#camera');
+let activeCamera = getCameraPreset(cameraPicker.value).id;
 let activeSeed = 7;
 let activeScene = 'hill';
 let world = createScene(activeScene, activeSeed, { chunkEdge: Number(chunkPicker.value) });
@@ -67,15 +70,18 @@ function updateStatus() {
   const rendererStatus = gpuRenderer?.ready
     ? `WebGL2 · ${gpuRenderer.statistics.triangles} triangles · ${gpuRenderer.statistics.drawCalls} draws`
     : `Canvas2D fallback${gpuError ? ' (' + gpuError + ')' : ''}`;
-  state.textContent = `V2-only · ${rendererStatus} · ${world.chunkEdge}³ chunks · seed ${activeSeed}` +
+  state.textContent = `V2-only · ${rendererStatus} · camera ${activeCamera} · ${world.chunkEdge}³ chunks · seed ${activeSeed}` +
     ` · zoom ${zoomFactor.toFixed(2)}× · rev ${world.revision}` +
     ` · p95 ${formatMs(frames.p95)} · p99 ${formatMs(frames.p99)}` +
     ` · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
 }
 
 function project(x, y, z) {
-  return [canvas.width / 2 + (x - z) * scale * 0.75 + cameraX,
-    canvas.height / 2 + (x + z) * scale * 0.35 - y * scale + cameraY];
+  const pixel = projectVoxel(x, y, z, {
+    width: canvas.width, height: canvas.height, scale, panX: cameraX, panY: cameraY,
+    camera: activeCamera
+  });
+  return [pixel.x, pixel.y];
 }
 
 function resize() {
@@ -117,7 +123,7 @@ function draw() {
   dirty = false;
   if (gpuRenderer?.ready && gpuRenderer.render({
     width: gpuCanvas.width, height: gpuCanvas.height,
-    scale, panX: cameraX, panY: cameraY
+    scale, panX: cameraX, panY: cameraY, camera: activeCamera
   })) {
     return;
   }
@@ -134,13 +140,17 @@ function draw() {
   }
   surfaces.sort((a, b) => a.depth - b.depth || a.y - b.y);
   for (const { x, y, z, material } of surfaces) {
-    const [px, py] = project(x, y, z);
+    const top = y + 1;
+    const corners = [
+      project(x - .5, top, z - .5),
+      project(x + .5, top, z - .5),
+      project(x + .5, top, z + .5),
+      project(x - .5, top, z + .5)
+    ];
     ctx.fillStyle = material === 1 ? '#638c48' : material === 2 ? '#806449' : '#727b85';
     ctx.beginPath();
-    ctx.moveTo(px, py - scale * .35);
-    ctx.lineTo(px + scale * .75, py);
-    ctx.lineTo(px, py + scale * .35);
-    ctx.lineTo(px - scale * .75, py);
+    ctx.moveTo(...corners[0]);
+    for (let i = 1; i < corners.length; i++) ctx.lineTo(...corners[i]);
     ctx.closePath();
     ctx.fill();
   }
@@ -180,6 +190,12 @@ function chooseScene() {
 scenePicker.addEventListener('change', chooseScene);
 seedPicker.addEventListener('change', chooseScene);
 chunkPicker.addEventListener('change', chooseScene);
+cameraPicker.addEventListener('change', () => {
+  activeCamera = getCameraPreset(cameraPicker.value).id;
+  dirty = true;
+  // Switching camera is presentation-only: no generation, remesh or GPU upload.
+  updateStatus();
+});
 document.querySelector('#reset').addEventListener('click', chooseScene);
 document.querySelector('#carve').addEventListener('click', () => {
   const target = demoCarveTarget(activeScene);
@@ -229,7 +245,7 @@ document.querySelector('#mesh-audit-button').addEventListener('click', () => {
 document.querySelector('#report').addEventListener('click', () => {
   const frames = frameMetrics.summary();
   const report = { schema:'voxel-v2.benchmark.v1', version:VERSION, commit:COMMIT, scene:activeScene,
-    sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed,
+    sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
     frames,
