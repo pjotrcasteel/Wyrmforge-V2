@@ -813,5 +813,4 @@ Chunk size 16 is experimental, not a final optimized choice.
 - Pure Node interaction tests do not replace iPhone Safari and Android Chrome acceptance.
 - View remains fixed orthographic/oblique 2.5D; no new rotation or 3D renderer in this PR.
 
-**Next small step:** verify site deployment/build identity on the actual live route, then tackle
-remaining V2.0 instrumentation and interaction gates. Do not skip ahead to V2.2.
+**Next small step:** implement and unit-test committed-voxel player grounding and swept capsule/AABB collision (V2.5), then close outstanding V2.2/V2.3/V2.4 device/performance gates. Verify deployment and complete device evidence before claiming any foundation milestone accepted. See the [single authoritative Work-derived roadmap](ROADMAP.md).
