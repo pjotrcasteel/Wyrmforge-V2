@@ -31,3 +31,20 @@ test('actor collision never uses GPU meshes or Canvas 2D for physics authority',
   assert.doesNotMatch(physics,/WebGLVoxelView|CanvasRenderingContext2D|gpuRenderer|document\./);
   assert.doesNotMatch(physics,/set\(x,y,z/);
 });
+
+test('underfoot test is opt-in and records fall before asynchronous mesh completion', () => {
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
+  assert.match(html,/id="actor-excavate"[^>]*disabled/);
+  assert.match(main,/actorExcavate\.addEventListener\('click'/);
+  assert.match(main,/excavateActorSupport\(world,terrainEdits,actor/);
+  assert.match(main,/if \(changedSupport\.dirtyChunks\.length\)/);
+  assert.match(main,/for \(const id of changedSupport\.dirtyChunks\) pendingTerrainDirty\.add\(id\)/);
+  assert.match(main,/physicsStepsUntilFall/);
+  assert.match(main,/fallStartLatencyMs/);
+  assert.match(main,/meshPendingWhenFell/);
+  assert.match(main,/stepsUntilLanding/);
+  assert.match(main,/supportExcavation:actorSupportTest/);
+  assert.match(main,/actorExcavate\.disabled = false/);
+  assert.match(main,/actorExcavate\.disabled = true/);
+});
