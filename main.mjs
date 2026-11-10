@@ -3,7 +3,7 @@ import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
-import { compareMeshing } from './src/meshing-comparison.mjs';
+import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './src/mesh-worker-protocol.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { carveDemoSphere, demoCarveTarget } from './src/demo-carve.mjs';
@@ -17,6 +17,7 @@ const gpuCanvas = document.querySelector('#gpu-view');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
+const meshCompareButton = document.querySelector('#mesh-compare-button');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
@@ -31,7 +32,17 @@ let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
 let lastMeshComparison = null;
+let lastMeshWorker = null;
+let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
+
+function cancelMeshWorker() {
+  compareJobId++;
+  if (compareWorker) compareWorker.terminate();
+  compareWorker = null;
+  compareJob = null;
+  meshCompareButton.disabled = false;
+}
 let gpuRenderer = null;
 let gpuBuildMs = null;
 let gpuError = null;
@@ -62,8 +73,10 @@ function rebuildGpuMeshes(dirtyChunks = null) {
 }
 
 function invalidateMeshAudit() {
+  cancelMeshWorker();
   lastMeshAudit = null;
   lastMeshComparison = null;
+  lastMeshWorker = null;
   meshAuditStatus.textContent = '3D geometry changed. Select Audit 3D faces to recompute.';
 }
 
@@ -245,19 +258,71 @@ document.querySelector('#mesh-audit-button').addEventListener('click', () => {
   }
 });
 
-document.querySelector('#mesh-compare-button').addEventListener('click', () => {
-  meshAuditStatus.textContent = 'Comparing CPU mesh algorithms on the current voxel scene…';
+meshCompareButton.addEventListener('click', () => {
+  if (compareJob) return; // Explicit one-in-flight, zero-backlog limit.
+  if (typeof Worker !== 'function') {
+    meshAuditStatus.textContent = 'Background mesh comparison requires browser module workers.';
+    return;
+  }
+  let worker;
   try {
-    lastMeshComparison = compareMeshing(world);
-    const { exposed, greedy } = lastMeshComparison;
-    meshAuditStatus.textContent =
-      `Meshes (CPU only): exposed ${exposed.triangles} triangles / ${Math.round(exposed.cpuGeometryBytes/1024)} KiB` +
-      ` / ${exposed.cpuBuildMs.toFixed(1)} ms · greedy ${greedy.triangles} triangles` +
-      ` / ${Math.round(greedy.cpuGeometryBytes/1024)} KiB / ${greedy.cpuBuildMs.toFixed(1)} ms` +
-      ' · live rendering unchanged';
-  } catch (error) {
+    const job = createMeshingJob(world, ++compareJobId);
+    const targetWorld = world;
+    const started = performance.now();
+    worker = new Worker(new URL('./src/mesh-comparison.worker.mjs', import.meta.url),
+      { type: 'module' });
+    compareWorker = worker;
+    compareJob = { id: job.id, world: targetWorld, revision: job.revision };
+    meshCompareButton.disabled = true;
     lastMeshComparison = null;
-    meshAuditStatus.textContent = 'Mesh comparison failed: ' + error.message;
+    lastMeshWorker = { status: 'running', snapshotBytes: job.snapshotBytes };
+    meshAuditStatus.textContent = 'Comparing meshes in V2 background worker…';
+
+    function finish(message) {
+      if (compareWorker !== worker) return; // A reset/carve superseded this worker.
+      worker.terminate();
+      compareWorker = null;
+      compareJob = null;
+      meshCompareButton.disabled = false;
+      const elapsed = performance.now() - started;
+      if (world !== targetWorld || world.revision !== job.revision) {
+        meshAuditStatus.textContent = 'Discarded stale mesh result after terrain changed.';
+        lastMeshWorker = { status: 'stale', endToEndMs: elapsed };
+        return;
+      }
+      if (!isCurrentMeshingResult(message, job.id, job.revision)) {
+        meshAuditStatus.textContent = 'Background mesh comparison failed: ' +
+          (message?.message || 'Invalid or stale worker response');
+        lastMeshWorker = { status: 'error', endToEndMs: elapsed,
+          message: message?.message || 'Invalid worker response' };
+        return;
+      }
+      lastMeshComparison = message.comparison;
+      lastMeshWorker = { status: 'complete', snapshotBytes: job.snapshotBytes,
+        endToEndMs: elapsed, workerCpuBuildMs:
+          message.comparison.exposed.cpuBuildMs + message.comparison.greedy.cpuBuildMs };
+      const { exposed, greedy } = lastMeshComparison;
+      meshAuditStatus.textContent =
+        `CPU meshes (worker): exposed ${exposed.triangles} triangles / ${Math.round(exposed.cpuGeometryBytes/1024)} KiB` +
+        ` / ${exposed.cpuBuildMs.toFixed(1)} ms · greedy ${greedy.triangles} triangles` +
+        ` / ${Math.round(greedy.cpuGeometryBytes/1024)} KiB / ${greedy.cpuBuildMs.toFixed(1)} ms` +
+        ' · live renderer unchanged';
+    }
+
+    worker.addEventListener('message', event => finish(event.data), { once: true });
+    worker.addEventListener('error', event => {
+      event.preventDefault();
+      finish({ type: 'error', message: event.message || 'Worker runtime error' });
+    }, { once: true });
+    worker.postMessage(job, jobTransferBuffers(job));
+  } catch (error) {
+    worker?.terminate();
+    compareWorker = null;
+    compareJob = null;
+    meshCompareButton.disabled = false;
+    lastMeshComparison = null;
+    lastMeshWorker = { status: 'error', message: error.message };
+    meshAuditStatus.textContent = 'Cannot start background mesh comparison: ' + error.message;
   }
 });
 
@@ -270,10 +335,10 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, lastCarve,
+    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
-    caveat:'Flat-shaded V2 WebGL2 baseline; GPU frame timing, worker budgets and final pixel-art materials are not validated' };
+    caveat:'Flat-shaded V2 WebGL2 baseline; only diagnostic mesh comparison uses a bounded worker. Live terrain remeshing and GPU upload budgets are not yet asynchronous.' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
