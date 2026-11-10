@@ -211,16 +211,16 @@ export class TerrainEditLedger {
       changedBounds: resultBounds(min, max), worldRevision: this.#world.revision,
       editRevision: this.#editRevision, pendingDamageCells: this.#damage.size
     });
-    const command = {
+    const recordedCommand = {
       id: edit.id, type: edit.type,
       x: edit.x, y: edit.y, z: edit.z, radius: edit.radius
     };
-    if (edit.power !== null) command.power = edit.power;
-    if (edit.expectedRevision !== undefined) command.expectedRevision = edit.expectedRevision;
+    if (edit.power !== null) recordedCommand.power = edit.power;
+    if (edit.expectedRevision !== undefined) recordedCommand.expectedRevision = edit.expectedRevision;
     if (edit.expectedEditRevision !== undefined) {
-      command.expectedEditRevision = edit.expectedEditRevision;
+      recordedCommand.expectedEditRevision = edit.expectedEditRevision;
     }
-    this.#history.set(edit.id, { signature, result, command });
+    this.#history.set(edit.id, { signature, result, command: recordedCommand });
     return result;
   }
 }
