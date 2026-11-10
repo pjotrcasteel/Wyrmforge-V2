@@ -1177,6 +1177,63 @@ counts do not include previous-world edits. Existing actor and terrain
 performance should remain stable. No Wyrmforge V1 assets or code are
 used.
 
+## 0.0.032 — V2.3 true 3D tunnel carving via existing authoritative edit path
+
+**Input:** owner accepted the iPhone **0.0.031** six-consumer V2.6
+integration test (18/18 deliveries from three accepted edits, zero
+listener failures, p95/p99 frame intervals 18/24 ms, 0 >50 ms hitches
+across 1,800 frame samples). The owner explicitly chose **not to
+implement structural gravity yet**; it remains a required **V2.9**
+milestone under the single Work-derived roadmap.
+
+**V2.3 implementation slice:**
+- [x] Add `carve-tunnel` to the **same** revisioned
+  `TerrainEditLedger` as `carve-sphere` and `damage-sphere`.
+  A capsule-shaped 3D cut follows a segment between two signed integer
+  voxel-space endpoints; this is one accepted command/ID, not multiple
+  sphere edits with intermediate partial commits.
+- [x] Prevalidate the complete command and voxel-scan AABB before
+  changing terrain. Enforce **max segment length 16 voxels**,
+  **max radius 3.5 voxels**, and a **12,000-cell preflight scan ceiling**
+  so a diagonal tunnel can't introduce unbounded synchronous work.
+  These are experimental limits, not production performance promises.
+- [x] Bedrock material 4 is protected. Previously accumulated partial
+  damage is cleaned up for removed voxels. Idempotent command IDs,
+  expected world/edit revisions, exact changed bounds, signed chunk-seam
+  invalidations and per-voxel authority remain unchanged.
+- [x] Journal and portable replay retain the tunnel endpoints; accepted
+  tunnel commands regenerate identical terrain for every V2 scene at
+  16³ and 32³, without changing the existing replay format.
+- [x] A single accepted tunnel emits a single ordered
+  `voxel-v2.terrain-change.v1` event through the already wired
+  V2.6 port. All six consumer adapters receive it; the existing
+  worker/renderer sees only the precise dirty chunk set.
+- [x] New **Controls → Destruction → Carve tunnel** action with
+  deterministic Hill/Cliff/Arch/Flat fixtures; existing tap-to-target,
+  actor physics, game-view camera and 3D collision remain unchanged.
+- [x] Report `lastTunnel` with endpoints, radius, removed voxels,
+  CPU edit time, changed bounds and dirty chunks; Reset and replay
+  restore clear stale per-action diagnostics.
+- [x] Regression tests cover continuous diagonal paths, negative seam
+  boundaries, invalid/oversize edits rejected pre-commit, protected
+  rock, duplicate ID safety, replay round trips, emitted event schema,
+  worker/baseline mesh parity and lab integration.
+- [ ] **Not yet:** general area, line-damage, crater deformation
+  profiles and atomic multi-edit batching; sustained iPhone/Android
+  performance measurements with tunnels; frame-budgeted GPU uploads;
+  V2.8 real Hunt integration; V2.9 falling structural terrain.
+
+**On-device check:** once version `0.0.032` is deployed, choose
+**Cliff** (Hunt-style, seed 7, chunk 32³), select
+**Controls → Destruction → Carve tunnel**. The cliff should gain
+a visibly traversable 3D bore / breach. Try the Inspection camera to
+see its interior and **Actor pilot** to check real post-edit collision.
+Export benchmark: `lastTunnel.removedVoxels>0`,
+`lastTunnel.dirtyChunks` lists only affected chunks,
+`terrainIntegration.lastChange.editType === 'carve-tunnel'`,
+all six consumer counters advance together, and `rendererError`
+remains null. This is the first small V2.3 tunnel acceptance slice.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -1185,7 +1242,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.031
+### Current change: 0.0.032
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

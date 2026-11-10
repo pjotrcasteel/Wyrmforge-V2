@@ -9,6 +9,7 @@ import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
+import { demoTunnelTarget } from './src/demo-tunnel.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
 import { createReplayCheckpoint, restoreReplayCheckpoint } from './src/replay-checkpoint.mjs';
@@ -306,6 +307,7 @@ let lastMeshComparison = null;
 let lastMeshWorker = null;
 let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
+let lastTunnel = null;
 let lastBurst = null, nextBurstId = 0;
 let lastDamage = null;
 let lastTargetedImpact = null;
@@ -617,6 +619,7 @@ function chooseScene() {
   nextDamageId = 0;
   nextBurstId = 0;
   lastCarve = null;
+  lastTunnel = null;
   lastBurst = null;
   lastDamage = null;
   invalidateMeshAudit();
@@ -681,6 +684,7 @@ document.querySelector('#carve').addEventListener('click', () => {
   });
   const { removedVoxels } = edit;
   lastDamage = null;
+  lastTunnel = null;
   const dirtyChunks = new Set(edit.dirtyChunks);
   lastCarve = {
     scene: activeScene, ...target, removedVoxels,
@@ -703,6 +707,45 @@ document.querySelector('#carve').addEventListener('click', () => {
   dirty = true;
 });
 
+document.querySelector('#tunnel').addEventListener('click', () => {
+  // First deterministic V2.3 tunnel fixture. No game-side tunnel tools
+  // or new source of terrain truth: one command and one change event.
+  const target = demoTunnelTarget(activeScene);
+  const startedAt = performance.now();
+  let edit;
+  try {
+    edit = terrainEdits.apply({
+      id:`lab-hit-${++nextTerrainEditId}`, type:'carve-tunnel',
+      ...target,expectedRevision:world.revision,
+      expectedEditRevision:terrainEdits.editRevision
+    });
+  } catch (error) {
+    meshAuditStatus.textContent = 'Tunnel rejected: ' + error.message;
+    return;
+  }
+  lastTunnel = {
+    scene:activeScene, ...target, ...edit,
+    editCpuMs:performance.now()-startedAt
+  };
+  lastCarve = null;
+  lastBurst = null;
+  lastDamage = null;
+  if (!edit.dirtyChunks.length) {
+    meshAuditStatus.textContent = 'Tunnel found no remaining destructible stone. ' +
+      'Choose Reset or another scene.';
+    return;
+  }
+  cancelTerrainWorker();
+  invalidateMeshAudit();
+  for (const id of edit.dirtyChunks) pendingTerrainDirty.add(id);
+  updateTerrainMeshes();
+  meshAuditStatus.textContent = 'Tunnel removed ' + edit.removedVoxels +
+    ' voxels in one authoritative edit. ' +
+    edit.dirtyChunks.length + ' chunks invalidated; ' +
+    (activeTerrainJob ? 'background geometry pending.' : 'geometry updated.');
+  dirty = true;
+});
+
 document.querySelector('#damage').addEventListener('click', () => {
   const target = demoCarveTarget(activeScene);
   const startedAt = performance.now();
@@ -721,6 +764,7 @@ document.querySelector('#damage').addEventListener('click', () => {
   lastDamage = { ...target, power: 1, ...damage,
     editCpuMs: performance.now() - startedAt };
   lastCarve = null;
+  lastTunnel = null;
   lastBurst = null;
 
   // Partial damage is authoritative ledger state but changes no voxel geometry.
@@ -766,6 +810,7 @@ document.querySelector('#burst').addEventListener('click', () => {
   const editCpuMs = performance.now() - startedAt;
   lastBurst = { ...result, editCpuMs };
   lastCarve = null;
+  lastTunnel = null;
   lastDamage = null;
   invalidateMeshAudit();
   // Exactly one mesh-update request for the union of three distinct impacts.
@@ -836,6 +881,7 @@ function installVerifiedReplay(checkpoint, restored, counters, operation, starte
   replayCounters = { ...counters };
   restoreReplayButton.disabled = false;
   lastCarve = null;
+  lastTunnel = null;
   lastBurst = null;
   lastDamage = null;
   lastTerrainWorker = null;
@@ -1046,7 +1092,7 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
+    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastTunnel, lastBurst,
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
     labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
