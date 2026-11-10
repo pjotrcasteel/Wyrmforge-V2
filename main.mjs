@@ -12,6 +12,7 @@ import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
 import { runCollisionProbe } from './src/collision-benchmark.mjs';
+import { runCollisionFixtureSuite } from './src/collision-fixtures.mjs';
 import { demoTunnelTarget } from './src/demo-tunnel.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
@@ -599,6 +600,7 @@ function draw() {
 
 const presetRunButton = document.querySelector('#preset-run');
 const collisionPresetRunButton = document.querySelector('#collision-preset-run');
+const collisionFixturesButton = document.querySelector('#collision-fixtures-run');
 const presetStopButton = document.querySelector('#preset-stop');
 const presetProgress = document.querySelector('#preset-progress');
 let preset = null;
@@ -682,6 +684,19 @@ presetRunButton.addEventListener('click', () => {
   presetProgress.textContent = 'Running · 0/180 s';
 });
 presetStopButton.addEventListener('click', () => stopPreset('Stopped manually'));
+collisionFixturesButton.addEventListener('click', () => {
+  if (preset) {
+    presetProgress.textContent = 'Stop the destruction preset before collision fixtures';
+    return;
+  }
+  const startedAt=performance.now();
+  const report=runCollisionFixtureSuite();
+  lastPresetReport={...report,status:'complete',
+    durationMs:Math.round(performance.now()-startedAt)};
+  presetProgress.textContent='Collision fixtures: '+report.passed+'/'+report.total+
+    ' passed · '+report.verdict;
+  document.querySelector('#report').click();
+});
 collisionPresetRunButton.addEventListener('click', () => {
   if (preset) {
     presetProgress.textContent = 'Stop the destruction preset before collision checks';
