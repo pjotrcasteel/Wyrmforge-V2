@@ -93,7 +93,7 @@ export class VoxelWorld {
   }
 }
 
-export const SCENE_GENERATOR_VERSION = 'v2.scene.v1';
+export const SCENE_GENERATOR_VERSION = 'v2.scene.v2';
 export const MAX_SCENE_SEED = 0xffffffff;
 
 // Stable 32-bit integer mixing; all scene variations are derived from the supplied seed.
@@ -123,9 +123,28 @@ export function createScene(name = 'hill', seed = 7, { chunkEdge = CHUNK_EDGE } 
       let top = 1;
       if (name === 'hill') top += Math.max(0, Math.floor(hillHeight - Math.hypot(x - hillCenterX, z - hillCenterZ) / 2));
       if (name === 'cliff') top += x >= 0 ? 8 : 0;
-      if (name === 'arch') top += 2;
+      if (name === 'arch') {
+        // V2-only arch fixture: a freestanding, stepped stone span on solid ground.
+        // The opening faces the camera and is open through its full depth,
+        // unlike the previous sealed underground cavity.
+        for (let y = -2; y <= 1; y++) {
+          world.set(x, y, z, y === 1 ? 1 : y >= -1 ? 2 : 3);
+        }
+        if (Math.abs(x) <= 5 && z >= 1 && z <= 3) {
+          for (let y = 2; y <= 8; y++) {
+            const distanceFromCenter = Math.abs(x);
+            const pillar = distanceFromCenter === 5;
+            const shoulder = distanceFromCenter === 4 && y >= 5;
+            const steppedArch = distanceFromCenter === 3 && y >= 7;
+            const lintel = y === 8;
+            if (pillar || shoulder || steppedArch || lintel) {
+              world.set(x, y, z, 3);
+            }
+          }
+        }
+        continue;
+      }
       for (let y = -2; y <= top; y++) {
-        if (name === 'arch' && x >= -4 && x <= 4 && y >= 0 && y <= 2 && Math.abs(z) <= 2) continue;
         world.set(x, y, z, y === top ? 1 : y > top - 3 ? 2 : 3);
       }
     }
