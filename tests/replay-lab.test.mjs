@@ -15,14 +15,16 @@ test('lab checkpoint actions are interactive and include replay diagnostics in J
   assert.match(main, /lastReplay, replayPointAvailable:replayCheckpoint !== null/);
 });
 
-test('portable replay UI remains compact and never trusts file JSON before restoring', () => {
+test('portable replay UI uses native file control and verifies JSON before restoring', () => {
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
-  assert.match(html, /id="replay-file-action"/);
-  assert.match(html, /value="export">Export JSON/);
-  assert.match(html, /value="import">Import JSON/);
+  assert.match(html, /id="replay-export" type="button"/);
   assert.match(html, /id="replay-import-file" type="file"/);
-  assert.match(html, /id="replay-import-file"[^>]* hidden/);
+  assert.doesNotMatch(html, /id="replay-import-file"[^>]* hidden/);
+  assert.match(main, /replayExportButton\.addEventListener\('click'/);
+  assert.match(main, /replayImportFile\.addEventListener\('change'/);
+  assert.doesNotMatch(main, /replayImportFile\.click\(/);
+  assert.doesNotMatch(main, /replayFileAction/);
   assert.match(main, /const parsed = parseReplayFile\(text\)/);
   assert.match(main, /installVerifiedReplay\(parsed\.checkpoint, parsed\.restored, parsed\.counters/);
   assert.match(main, /const text = createReplayFile\(/);
