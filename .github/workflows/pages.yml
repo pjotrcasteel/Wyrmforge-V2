@@ -25,9 +25,8 @@ jobs:
           node-version: '22'
       - name: Run independent V2 unit tests
         run: node --test tests/*.test.mjs
-      - name: Check V2-only imports
-        run: |
-          ! grep -R -nE '(Wyrmforge\.Presentation|/experimental/voxel/|/art/|/assets/|\.\./\.\./Wyrmforge)' --include='*.mjs' src main.mjs tests
+      - name: Audit clean-room V2 dependencies
+        run: node scripts/audit-v2-dependencies.mjs
       - name: Verify static entry
         run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs
       - name: Validate JavaScript syntax
