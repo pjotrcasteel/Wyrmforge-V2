@@ -785,6 +785,60 @@ explosion acceptance gates rather than jumping to new replay UI.
 Wyrmforge V1 production code remains unchanged until the guarded
 V2.8 game integration milestone.
 
+## 0.0.025 — V2.5 physical interaction: grounded actor and swept voxel collision
+
+**Scope:** first player-sized actor **physics pilot**, part of the original
+Work-derived V2.5 gate. It is not full capsule physics, Wyrmforge V2 Hunt
+integration or structural gravity (required later at V2.9).
+
+- [x] Add a pure V2 swept-AABB actor volume (half-width 0.28, height 1.6)
+  with authoritative occupancy tests, exact one-axis integer-plane sweeps
+  and capped 32-voxel displacement. Unlike checking only the final
+  position, swept collision cannot skip a one-cell wall during high-speed
+  movement. All signed chunk coordinates come from VoxelWorld.
+- [x] Spawn actor through existing 3D DDA terrain raycast and confirm
+  clearance plus real support before treating actor as grounded.
+- [x] Bounded fixed-step 60 Hz gravity simulation with a terminal
+  fall velocity, X/Z sliding, wall contact and conservative one-voxel
+  stepping. The actor has no renderer-owned collision truth.
+- [x] Lab has a default-off **Actor pilot** toggle, a diagnostic Canvas2D
+  marker overlay and mobile touch D-pad / desktop WASD keys; no new sprite
+  art, engine imports from V1 or changes to existing Hunt targeting.
+- [x] Removing support affects committed voxel collision on the next
+  physics tick, regardless of any pending worker mesh update.
+- [x] Report actor position, grounded/falling status, world revision,
+  fixed-step count and dropped catch-up-frame events in benchmark JSON.
+- [x] Tests cover spawn at all four scenes and 16³/32³ chunks, removed
+  ground/falling, tall cliff blocking, one-voxel step, diagonal wall
+  slide, overhang/ceiling obstruction, negative seam and high-speed
+  wall sweep. UI tests ensure the actor physics is opt-in.
+- [ ] **Not yet:** swept capsule-versus-AABB comparative benchmark,
+  continuous diagonal collision simultaneous TOI, slopes beyond voxel
+  steps, player acceleration/jumping, enemy collision and actual
+  gameplay. The current actor is a diagnostic shape drawn over the
+  terrain, not depth-occluded production art.
+- [ ] **Not yet:** quality/performance acceptance with normal Wyrmforge
+  Hunt, 10-minute device runs, Android Chrome, V2.8 production integration
+  or V2.9 falling *terrain* (the actor is affected by ordinary gravity only).
+- [ ] The stage's 60 Hz is a fixed simulation frequency, **not**
+  evidence of guaranteed 60 FPS rendering on any device.
+
+**Physical-device acceptance:** load Hill/Hunt-style/32³/seed 7,
+enable **Actor pilot: On**. Move with the D-pad (or desktop WASD):
+the marker should remain above real ground, walk onto one-voxel edges,
+stop against a high Cliff, and never pass through a solid wall.
+Use **Carve sphere** or **Target spell** to remove ground beneath the
+actor, verify actor falls without waiting for mesh rebuild, and
+**Respawn actor**. Repeat on Arch and negative-coordinate chunks.
+Export benchmark JSON including `actorPilot`, `terrainWorker`,
+`renderer` and frame-time percentiles.
+
+**Next required follow-up before V2.5 gate:** measure and improve the
+swept actor collision and step/slide rules on a real phone, then add
+high-speed actor and projectile underfoot edit tests before choosing
+capsule or AABB permanently. Preserve the consolidated Work roadmap's
+V2.8 Wyrmforge integration and V2.9 hybrid gravity as *required* outcomes.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -793,7 +847,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.024
+### Current change: 0.0.025
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
