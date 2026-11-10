@@ -137,6 +137,19 @@ export class WebGLVoxelView {
     });
   }
 
+  // Diagnostic only: browser-supported WEBGL_lose_context; no synthetic events.
+  simulateContextTransition(action) {
+    if (action !== 'lose' && action !== 'restore') {
+      throw new RangeError('Invalid WebGL context transition');
+    }
+    const extension = this.#gl.getExtension?.('WEBGL_lose_context');
+    if (!extension) return false;
+    if (action === 'lose' && this.ready) extension.loseContext();
+    else if (action === 'restore' && this.#lost) extension.restoreContext();
+    else return false;
+    return true;
+  }
+
   get ready() { return !this.#lost && this.#program !== null; }
   get pendingUploads() { return this.#queuedUploads.size + this.#recoveryQueue.size; }
   get recovering() { return this.#recovering; }
