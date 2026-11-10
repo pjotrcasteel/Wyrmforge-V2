@@ -445,6 +445,48 @@ Press Carve again: since the sphere is unchanged, the edit count advances but
 removedVoxels should be 0. Reset restores the original hill. No new UI polish,
 camera change, or gravity simulation.
 
+## 0.0.019 — deterministic three-hit burst and one combined remesh
+
+**Real iPhone Safari v0.0.018 report** (`01845b3`, Hill/Hunt-style/32³/seed 7):
+- First terrain-edit ledger command accepted as `lab-hit-1`; 378 voxels
+  removed, changed bounds `(-4,-1,-4)..(4,7,4)`, eight dirty chunks.
+- Warm worker CPU mesh 20 ms, GPU upload 1 ms, total 25 ms;
+  p95/p99 18/25 ms over 1,402 frame samples, zero >50 ms, no WebGL errors.
+- `acceptedTerrainEditIds = 1`, and `terrainWorker.status = complete`.
+- This does **not** prove the separate duplicate-area and Reset checks; the
+  report captures the first carve only.
+
+**New V2.3 test fixture:**
+- [x] Three deterministic sphere impacts at separate positions for each of
+  Flat/Hill/Cliff/Arch (16³ and 32³ chunk sizes), using the existing
+  authoritative `TerrainEditLedger`, unique IDs and revision checks.
+- [x] Aggregate true changed-cell bounds, removed voxel counts and dirty
+  chunk IDs across all impacts; worker receives the **union** once after
+  all edits instead of one job for each hit.
+- [x] Add a **3-hit burst** lab action beside the existing Carve sphere.
+  Preserve Baseline and Background pilot modes and the Hunt camera.
+- [x] Include `lastBurst` in the report with each accepted edit, world
+  revision, bounding box, `editCpuMs`, and unioned dirty chunks.
+- [x] Fail early on invalid or over-capacity requests; tests assert identical
+  authoritative world snapshots compared with independent sequential carving.
+- [x] Test exact worker mesh equivalence for the combined dirty footprint,
+  unchanged negative-coordinate chunk seam culling, deterministic repeated
+  runs and protected-material behavior.
+- [ ] Not atomic across multiple edit commands; if an unexpected failure
+  occurs partway through, the lab rebuilds from authoritative state.
+- [ ] No gameplay command log persistence, resistance accumulation, gravity
+  or native game integration yet.
+
+**0.0.019 iPhone test:** Hill/Hunt-style/32³/seed 7; select Background
+pilot and allow worker prewarm; press **3-hit burst**. Confirm distinct
+craters, worker finishes, and export JSON with `lastBurst.impactCount=3`,
+`lastBurst.edits.length=3`, `lastBurst.removedVoxels>0`,
+`lastBurst.dirtyChunks`, and `terrainWorker.status=complete`.
+Press **Reset**, run the same burst again and compare removed-voxel counts
+and rendered triangles. If needed, try Cliff and Arch to inspect breaches.
+Single Carve sphere should remain unchanged. Physical Android validation
+and 10-minute thermal tests are still open.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -453,7 +495,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.018
+### Current change: 0.0.019
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
