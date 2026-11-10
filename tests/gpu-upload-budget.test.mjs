@@ -17,6 +17,10 @@ function fakeCanvas() {
     deleteBuffer(){}, isContextLost:()=>false, deleteProgram(){}
   };
   const listeners = new Map();
+  gl.getExtension = name => name === 'WEBGL_lose_context' ? {
+    loseContext: () => listeners.get('webglcontextlost')?.({preventDefault(){}}),
+    restoreContext: () => listeners.get('webglcontextrestored')?.({preventDefault(){}})
+  } : null;
   return { canvas:{getContext:()=>gl,addEventListener:(type,fn)=>listeners.set(type,fn)},
     now:()=>clock, emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
 }
@@ -110,5 +114,22 @@ test('superseding queued uploads keeps byte accounting bounded and exact', () =>
   view.flushQueuedUploads({budgetMs:2,now});
   assert.equal(view.uploadQueueStatistics.pendingBytes, 0);
   assert.equal(view.statistics.drawCalls, 1);
+  view.dispose();
+});
+
+test('browser diagnostic context loss and restore drains retained meshes', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'), mesh('b')]);
+  assert.equal(view.simulateContextTransition('lose'), true);
+  assert.equal(view.ready, false);
+  assert.equal(view.statistics.contextLosses, 1);
+  assert.equal(view.simulateContextTransition('restore'), true);
+  assert.equal(view.ready, true);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks, 2);
+  while (view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.statistics.drawCalls, 2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes, 0);
+  assert.equal(view.simulateContextTransition('restore'), false);
   view.dispose();
 });
