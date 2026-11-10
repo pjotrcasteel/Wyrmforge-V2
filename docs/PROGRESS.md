@@ -170,6 +170,32 @@ switching. Carve sphere must work in either preset, and switching back must not
 reset the destruction. Send **two screenshots** (same Arch before carving, one per
 preset) and a short judgment on which Hunt view elements need refinement.
 
+## 0.0.012 — benchmark greedy versus exposed-face meshing
+
+- [x] Owner validated all four V2 0.0.011 interaction checks: Hunt-style top-down view,
+  inspection camera, destruction retained when changing views, and reset restoration.
+  This does **not** yet certify an exact camera match to Wyrmforge's shipping view.
+- Added an independent V2-only material-aware greedy rectangle mesher, preserving all six
+  face normals and only merging contiguous, exposed coplanar unit faces with matching material.
+- The benchmark tests exact world-space surface coverage, face winding, material changes,
+  cavity/underside faces, signed chunk seams, 16³/32³ pitch and fragmented scenes.
+- Added Node CPU comparison across flat/hill/cliff/arch/fragmented fixtures; this is a
+  diagnostic runner result, not a claim of GPU or sustained mobile performance.
+- The laboratory's **Compare meshes** button reports the same world's triangle count,
+  CPU geometry-buffer bytes, and one-off CPU build time for each algorithm. Export
+  includes `meshComparison`; it clears automatically on terrain reset/carve.
+- **Crucial limitation:** the **live WebGL2 renderer still uses exposed-face meshes**.
+  Greedy UV tiling, atlas mapping, partial rebuild latency, GPU upload budgeting,
+  and iPhone/Android comparison are not accepted. No algorithm is selected yet.
+- No gravity simulation and no modifications to the separate Wyrmforge V1 repository.
+
+**0.0.012 device acceptance:** On an iPhone, open Flat at seed 7, chunk 16³ and
+press **Compare meshes**; export benchmark JSON. Repeat for Arch after
+**Carve sphere**, and if practical repeat Arch at 32³. Confirm no geometry
+changes, renderer still shows WebGL2 and both algorithms report matching unit faces.
+Compare triangle, memory and build-time differences rather than assuming greedy wins.
+No visual change should occur when the button is pressed.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -178,7 +204,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.011
+### Current change: 0.0.012
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
