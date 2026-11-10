@@ -16,8 +16,9 @@ import { createReplayFile, parseReplayFile, MAX_REPLAY_FILE_BYTES } from './src/
 import { terrainRayFromScreen } from './src/terrain-raycast.mjs';
 import { applyTerrainSpellHit } from './src/hunt-terrain-impact.mjs';
 import { TerrainTapRecognizer } from './src/terrain-tap-recognizer.mjs';
-import { spawnTerrainActor, simulateTerrainActor, ACTOR_HEIGHT,
+import { spawnTerrainActor, simulateTerrainActor, actorHeadClearance,
   ACTOR_PHYSICS_SCHEMA } from './src/terrain-actor.mjs';
+import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import { excavateActorSupport } from './src/actor-support-excavation.mjs';
 
 const build = document.querySelector('#build');
@@ -235,35 +236,53 @@ function drawActorOverlay() {
   actorCtx.clearRect(0,0,actorCanvas.width,actorCanvas.height);
   if (!pos || actorFallen) return;
 
-  const foot=projectVoxel(pos.x,pos.y,pos.z,{
-    width:actorCanvas.width,height:actorCanvas.height,
-    scale,panX:cameraX,panY:cameraY,camera:activeCamera
-  });
-  const top=projectVoxel(pos.x,pos.y+ACTOR_HEIGHT,pos.z,{
+  const proxy=projectActorDiagnostic(pos,{
     width:actorCanvas.width,height:actorCanvas.height,
     scale,panX:cameraX,panY:cameraY,camera:activeCamera
   });
   const dpr=actorCanvas.width/Math.max(1,actorCanvas.clientWidth);
-  const radius=Math.max(4*dpr,scale*0.24);
-  const height=Math.max(15*dpr,foot.y-top.y);
-  // Diagnostic overlay only: deliberately not a production character asset
-  // or final terrain-occluded actor renderer.
-  actorCtx.fillStyle='rgba(8,18,30,0.35)';
-  actorCtx.beginPath();
-  actorCtx.ellipse(foot.x,foot.y,radius*1.4,radius*0.55,0,0,Math.PI*2);
-  actorCtx.fill();
-  actorCtx.lineWidth=Math.max(1.2,dpr);
+
+  // Lab-only physics debug prism. These 12 projected edges are exactly
+  // the swept actor's X/Y/Z box, not a Character Visibility/occlusion mask.
+  // Render it on the Arch scene to make the true solid volume inspectable.
+  if (activeScene === 'arch') {
+    actorCtx.save();
+    actorCtx.strokeStyle='rgba(165,230,238,0.55)';
+    actorCtx.lineWidth=Math.max(0.75,dpr*0.6);
+    actorCtx.setLineDash([2*dpr,2*dpr]);
+    for (const [a,b] of proxy.boxEdges) {
+      actorCtx.beginPath();
+      actorCtx.moveTo(a.x,a.y);
+      actorCtx.lineTo(b.x,b.y);
+      actorCtx.stroke();
+    }
+    actorCtx.restore();
+  }
+
+  // The complete character marker fits inside the collider's projected
+  // vertical height. Never use a minimum-height sprite or add a head above
+  // the box: those two previous shortcuts made the head appear inside rock.
+  actorCtx.lineWidth=Math.max(0.8,dpr*0.65);
   actorCtx.strokeStyle='#10222b';
   actorCtx.fillStyle=pos.grounded ? '#f3d48d' : '#ffb982';
+  const {torso,head,foot}=proxy;
   actorCtx.beginPath();
-  actorCtx.roundRect(foot.x-radius*0.75,foot.y-height,radius*1.5,height,
-    radius*0.65);
+  actorCtx.roundRect(torso.x,torso.y,torso.width,torso.height,
+    Math.min(head.radius,torso.width/3));
   actorCtx.fill();
   actorCtx.stroke();
   actorCtx.fillStyle='#f4f8ff';
   actorCtx.beginPath();
-  actorCtx.arc(foot.x,foot.y-height-radius*0.7,radius*0.55,0,Math.PI*2);
+  actorCtx.arc(head.x,head.y,head.radius,0,Math.PI*2);
   actorCtx.fill();
+  actorCtx.stroke();
+  // Thin foot locator distinguishes the tiny true-scale proxy, without
+  // making a fake head or changing any authoritative collision geometry.
+  actorCtx.beginPath();
+  actorCtx.strokeStyle='rgba(197,250,234,0.65)';
+  actorCtx.ellipse(foot.x,foot.y,Math.max(1.5,torso.width*.5),
+    Math.max(0.7,torso.width*.15),0,0,Math.PI*2);
+  actorCtx.stroke();
 }
 
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
@@ -464,7 +483,10 @@ function updateStatus() {
     ` · p95 ${formatMs(frames.p95)} · p99 ${formatMs(frames.p99)}` +
     ` · >50ms: ${frames.hitchesOver50Ms}/${frames.count}` +
     (actorEnabled && actor
-      ? ` · actor x=${actor.x.toFixed(2)} y=${actor.y.toFixed(2)} z=${actor.z.toFixed(2)} ${actorFallen?'fell':actor.grounded?'grounded':'falling'}${actor.wallContact?' · WALL':''}`
+      ? ` · actor x=${actor.x.toFixed(2)} y=${actor.y.toFixed(2)} z=${actor.z.toFixed(2)} ${actorFallen?'fell':actor.grounded?'grounded':'falling'}${actor.wallContact?' · WALL':''}` +
+        (activeScene === 'arch'
+          ? ` · overhead clearance ${actorHeadClearance(world,actor).distance.toFixed(2)}v`
+          : '')
       : '');
 }
 
@@ -1017,6 +1039,8 @@ document.querySelector('#report').addEventListener('click', () => {
       actor,fallen:actorFallen,simulatedSteps:actorSteps,stepUps:actorStepUps,
       wallContactSteps:actorWallContacts,ceilingHits:actorCeilingHits,
       archFixtureLane:activeScene === 'arch' ? 'z=1..3' : null,
+      headClearance:actorEnabled && actor ? actorHeadClearance(world,actor) : null,
+      visualProxy:'true projected V2 collider; no pixel occlusion',
       supportExcavation:actorSupportTest,
       catchUpOverflowFrames:actorOverflowFrames,
       input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
