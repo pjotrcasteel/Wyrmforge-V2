@@ -138,6 +138,38 @@ Repeat at 16³ and optionally export the JSON.
 - **Player acceptance:** on physical iPhone Safari load version 0.0.010, select Arch / seed 7 / chunk 32³, Carve sphere. Verify a visible piece of the stone pillar disappears; the status shows a **positive** removal count and a **localized remesh count smaller than the total chunks**. Reset restores the arch. Repeat once at 16³ and send one JSON export.
 - The iPhone 0.0.008 report is evidence only for that old build (p95 17 ms, p99 33 ms, 4 >33ms hitches of 590 frames). It does not prove that 0.0.010 performance is better; compare device reports before concluding.
 
+## 0.0.011 — Hunt-style camera candidate, independent of voxel data
+
+**Owner intent:** The shipping Wyrmforge Hunt is a steeper, north-up, mostly overhead
+2.5D pixel-art game. The old V2 inspection-only camera is an isometric diagonal view;
+it is useful for inspecting cliffs but is not the required gameplay framing.
+
+**Implementation:** Add two clean-room camera presets with shared orthographic camera
+basis and consistent CPU fallback / WebGL2 projections. The lab defaults to
+**Hunt-style (candidate)**, with **Voxel inspection** selectable at any time.
+
+- Hunt-style aligns world X horizontally and Z vertically, with a steeper view of the
+  ground and an elevation contribution for cliffs/overhangs; this is an **initial
+  independent approximation** based on the user-provided Hunt screenshot,
+  **not a validated match** to the production game's exact view.
+- Inspection retains the prior V2 diamond/oblique projection so geometry can still
+  be inspected clearly.
+- Switching presets changes only camera uniforms and the Canvas2D fallback;
+  it never edits the world, remeshes chunks or allocates new GPU buffers.
+- Tests check screen axes, occlusion ordering, snapshot integrity, and no re-upload
+  when switching cameras; automated CI alone does not validate visual matching.
+- Preset name is exported with each benchmark JSON for meaningful comparisons.
+- The real 2.5D **pixel-art material atlas, shadowing, game integration and final
+  game camera fit are not yet implemented or accepted**. Wyrmforge V1 untouched.
+
+**Player validation for 0.0.011 (iPhone Safari):** confirm header shows this version
+and commit, choose Arch/seed 7/32³, switch between Hunt-style and Voxel inspection.
+The former should be visibly more top-down and north-up, the latter a diamond
+isometric diagnostic. The arch and all carved voxels must remain **identical** after
+switching. Carve sphere must work in either preset, and switching back must not
+reset the destruction. Send **two screenshots** (same Arch before carving, one per
+preset) and a short judgment on which Hunt view elements need refinement.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -146,7 +178,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.010
+### Current change: 0.0.011
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
