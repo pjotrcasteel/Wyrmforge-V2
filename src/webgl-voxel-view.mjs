@@ -164,21 +164,24 @@ export class WebGLVoxelView {
       }
       replacements.set(mesh.id, mesh);
     }
-    if (this.#queuedUploads.size + ids.size > 128) {
+    const newIds = [...ids].filter(id => !this.#queuedUploads.has(id));
+    if (this.#queuedUploads.size + newIds.length > 128) {
       throw new RangeError('GPU upload queue capacity exceeded');
     }
-    let additionalBytes = 0;
-    for (const mesh of replacements.values()) {
-      additionalBytes += this.#meshBytes(mesh);
+    let nextBytes = this.#uploadQueueBytes;
+    for (const id of ids) {
+      const previous = this.#queuedUploads.get(id);
+      if (previous) nextBytes -= this.#meshBytes(previous);
+      const mesh = replacements.get(id);
+      if (mesh) nextBytes += this.#meshBytes(mesh);
     }
-    if (this.#uploadQueueBytes + additionalBytes > 16 * 1024 * 1024) {
+    if (nextBytes > 16 * 1024 * 1024) {
       throw new RangeError('GPU upload queue byte capacity exceeded');
     }
     for (const id of ids) {
-      const mesh = replacements.get(id) ?? null;
-      this.#queuedUploads.set(id, mesh);
-      if (mesh) this.#uploadQueueBytes += this.#meshBytes(mesh);
+      this.#queuedUploads.set(id, replacements.get(id) ?? null);
     }
+    this.#uploadQueueBytes = nextBytes;
     this.#uploadQueuePeak = Math.max(this.#uploadQueuePeak, this.#queuedUploads.size);
   }
 
