@@ -291,6 +291,62 @@ The second export must contain a non-null `meshComparison`,
 Reset must restore the original terrain. If the worker is unsupported or fails,
 the status panel reports that clearly and the live WebGL2 renderer remains usable.
 
+## 0.0.016 — opt-in background meshing for actual terrain edits
+
+**Input evidence (physical iPhone Safari, v0.0.015 SHA 8c1fc13):**
+
+| Metric | Intact Hill | Carved Hill |
+| --- | ---: | ---: |
+| Exposed CPU mesh comparison | 17 ms | 17 ms |
+| Greedy CPU mesh comparison | 9 ms | 10 ms |
+| Diagnostic worker end-to-end | 288 ms | 34 ms |
+| P95 / P99 frames | 19 / 21 ms | 17 / 25 ms |
+| Frames >50 ms | 0 | 0 |
+
+The carve removed 378 voxels, crossing 8/8 chunk borders; actual live
+WebGL2 remeshing still took 17 ms synchronously. The 288 ms initial diagnostic
+worker call likely includes setup but has not been separately profiled; no
+claim of sustained timing or thermal stability is made.
+
+**New opt-in experiment:**
+
+- [x] Add a second V2-only module worker for actual **exposed-face** geometry
+  generation (not greedy rendering). Worker receives immutable copied chunk
+  snapshots for changed chunks and their six face-neighbors; missing chunks
+  are correctly treated as air.
+- [x] Limit one job to 64 nonempty snapshots and 2 MiB of transferred payload.
+  Work uses a maximum of one worker with no growing backlog.
+- [x] Transfer actual typed mesh arrays back to the main thread, including
+  geometry for changed chunks and explicit deleted-chunk IDs.
+- [x] Reject stale world/revision/job results; terminate old jobs on reset or
+  additional edits and coalesce dirty chunks across interrupted edits.
+- [x] Keep **Baseline** synchronous meshing as the default and an opt-in
+  **Background pilot** selector for live carving tests.
+- [x] Fallback to the known synchronous path if worker initialization,
+  resource limits or processing fails; renderer/terrain authority remain V2-only.
+- [x] Export `terrainMeshingMode`, `terrainWorker`,
+  `pendingTerrainChunks`, and worker CPU vs synchronous GPU upload times.
+- [x] Unit tests cover unchanged authoritative world, true carve mesh
+  equivalence, signed seams, fully removed chunks, transferred output buffers,
+  invalid payloads, and stale revision rejection.
+
+**Important incomplete gates:** GPU uploads and disposal still occur
+synchronously on main thread; there is no frame-budgeted upload queue,
+worker pool, async greedy renderer, real GPU timing or full disaster recovery.
+The initial background worker may cause delayed visible terrain updates even
+though voxel truth changes immediately. Gameplay should not use this
+experimental mode until measured and approved.
+
+**0.0.016 physical-device validation:** open Hill / Hunt-style / seed 7 / 32³;
+select **Carve meshing: Background pilot**, then Carve sphere. The crater
+should appear after a brief worker completion, and status must say
+"Background meshing complete" (or explicitly report synchronous fallback).
+Export JSON: expect `terrainWorker.status = "complete"`,
+`lastMeshUpdate.mode = "worker-localized"` and removedVoxels 378.
+Reset must restore the hill. Run again with **Baseline** and compare frames
+and visible correctness; send both reports. Also try Carve twice quickly,
+then Reset, checking old geometry never reappears.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -299,7 +355,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.015
+### Current change: 0.0.016
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
