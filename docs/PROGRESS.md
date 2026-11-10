@@ -839,6 +839,49 @@ high-speed actor and projectile underfoot edit tests before choosing
 capsule or AABB permanently. Preserve the consolidated Work roadmap's
 V2.8 Wyrmforge integration and V2.9 hybrid gravity as *required* outcomes.
 
+## 0.0.026 — mobile V2.5 testing viewport (iPhone)
+
+**Physical iPhone Safari evidence from v0.0.025 (`e4feef9`, 2026-11-10):**
+- Hill / seed 7 / Hunt camera / 16³ chunks.
+- Real diagnostic actor enabled: x≈6.14, y≈2.00001, z≈6.72, grounded,
+  zero actor simulation errors, **677 fixed physics steps** and
+  **zero catch-up overflow frames**.
+- 1,186 frame samples, p95 **17 ms**, p99 **25 ms**,
+  one >33 ms sample and zero >50 ms samples; renderer 4,036 triangles /
+  8 draws, no WebGL errors or context losses.
+- Baseline synchronous three-hit geometry update: **8 ms** for four changed
+  chunks after 199 committed voxel removals.
+- **Major usability blocker:** screenshot and benchmark show only
+  **402×141 CSS pixels** remaining for terrain (804×282 backing pixels).
+  The permanently expanded controls occupied most of the mobile viewport.
+  This is not a GPU slowdown; it prevents meaningful player collision tests.
+- A successful grounded actor does **not yet** independently prove cliff
+  blocking, step ascent or falling after support removal on this phone.
+
+**Fix for the next V2.5 device test:**
+- [x] Compact V2 top bar shows version/build identity and a **Controls**
+  toggle. All 20+ existing world, damage, replay and benchmark controls move
+  into a scrollable *overlay drawer*, **collapsed by default**.
+- [x] Drawer overlay does not participate in viewport sizing. The terrain
+  canvas keeps its height while temporary controls are open.
+- [x] Accessibility: button with `aria-expanded` and `aria-controls`,
+  native labelled input controls, Escape dismissal, click-outside dismissal
+  and automatic drawer close after action buttons.
+- [x] Keep actor touch movement and optional spell targeting available when
+  the drawer is closed. No renderer, collision, world, edit or worker logic
+  modified in this increment.
+- [x] Export `labControlsOpen` with benchmark JSON. Test preserved IDs,
+  fixed status height and default-collapsed drawer.
+- [ ] On-device acceptance: confirm viewport is significantly taller
+  than 141 CSS px, and actor movement, Reset, targeted impact,
+  diagnostics and export remain usable.
+- [ ] Still required: real-world player collision/falling experiments and
+  sustained iOS/Android performance before V2.5 can pass.
+
+**Next:** resume the single Work-derived V2.5 roadmap: validate high
+cliff/wall blocking, single-voxel steps and falling into a freshly carved
+pit while camera pan/pinch still behave. No V1 imports.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -847,7 +890,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.025
+### Current change: 0.0.026
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
