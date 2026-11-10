@@ -66,6 +66,8 @@ jobs:
           node --check tests/terrain-mesh-protocol.test.mjs
           node --check src/terrain-worker-session.mjs
           node --check tests/terrain-worker-session.test.mjs
+          node --check src/terrain-edit-ledger.mjs
+          node --check tests/terrain-edit-ledger.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures

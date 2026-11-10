@@ -400,6 +400,51 @@ doesn't require another worker startup. Also try rapid carve then Reset:
 the intact hill must remain visible; no stale geometry may reappear.
 This gate concerns user-perceived latency, not total FPS or final 2.5D art.
 
+## 0.0.018 — deterministic idempotent terrain edit foundation
+
+**0.0.017 iPhone Safari evidence** (two reports, Hill/Hunt-style/32³/seed 7):
+- First warm-worker edit: 18 ms edit-to-mesh-update, worker CPU 16 ms,
+  worker round trip 16 ms, GPU upload 1 ms, p95/p99 18/25 ms (264 frames).
+- Second warm-worker edit after reset: 23 ms edit-to-mesh-update, worker CPU
+  18 ms, round trip 21 ms, GPU upload 1 ms, p95/p99 18/30 ms (782 frames).
+- Both report worker warm-up 272 ms **outside the edit**, worker ready at submission,
+  no >50 ms frames, 378 voxels removed, 8/8 chunks updated, no context loss.
+- Versus the earlier first-worker report (258 ms), prewarming avoids repeated
+  worker startup. This is strong initial device validation, **not** 10-minute
+  thermal/stress or Android acceptance. Baseline stays default.
+- The measured GPU upload was 1 ms in both reports; defer GPU upload budgeting
+  until burst or larger-scene measurements show it is a bottleneck.
+
+**New small V2.3 preparation:**
+- [x] One V2-native synchronous `TerrainEditLedger` is the authoritative writer
+  for bounded sphere edits, independent of rendering and worker code.
+- [x] Stable edit IDs with duplicate suppression; a repeated ID never removes
+  voxels twice and a conflicting payload is rejected.
+- [x] Optional expected-world-revision guard rejects stale edits before mutation.
+- [x] Explicit material policy: reserved V2 bedrock material ID 4 is protected,
+  grass/dirt/stone remain destructible.
+- [x] Each accepted edit returns changed-cell bounds, exact dirty chunk IDs,
+  removed voxel count and resulting world revision.
+- [x] Maximum sphere radius 8 and 1024 retained command IDs; overflow reports
+  an explicit checkpoint-required error instead of silently forgetting IDs.
+- [x] Laboratory Carve sphere exercises the actual ledger; export retains
+  `lastCarve` details and adds `acceptedTerrainEditIds`.
+- [x] Tests compare legacy demo carve with the new authoritative writer
+  on all four scenes and 16³/32³, plus duplicate IDs, material policy,
+  two-edit deterministic replay, stale revision and bounded history.
+- [ ] **Not yet:** persistence of edit IDs across save/load, resistance-based
+  multiple hits, area/line/tunnel commands, atomic multi-chunk transactions,
+  hashes and replay checkpoint serialization.
+- [ ] **Not yet:** deterministic multi-hit workload UI or sustained performance.
+
+**Player check:** load v0.0.018, Hill/Hunt-style/seed 7/32³, Background pilot,
+Carve sphere. It must remove 378 voxels and show the crater. Export JSON and
+confirm `lastCarve.editId`, `lastCarve.changedBounds`,
+`acceptedTerrainEditIds` and `terrainWorker.status: complete`.
+Press Carve again: since the sphere is unchanged, the edit count advances but
+removedVoxels should be 0. Reset restores the original hill. No new UI polish,
+camera change, or gravity simulation.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -408,7 +453,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.017
+### Current change: 0.0.018
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
