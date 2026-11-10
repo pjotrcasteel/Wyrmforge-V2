@@ -684,6 +684,7 @@ document.querySelector('#carve').addEventListener('click', () => {
   });
   const { removedVoxels } = edit;
   lastDamage = null;
+  lastTunnel = null;
   const dirtyChunks = new Set(edit.dirtyChunks);
   lastCarve = {
     scene: activeScene, ...target, removedVoxels,
@@ -763,6 +764,7 @@ document.querySelector('#damage').addEventListener('click', () => {
   lastDamage = { ...target, power: 1, ...damage,
     editCpuMs: performance.now() - startedAt };
   lastCarve = null;
+  lastTunnel = null;
   lastBurst = null;
 
   // Partial damage is authoritative ledger state but changes no voxel geometry.
@@ -808,6 +810,7 @@ document.querySelector('#burst').addEventListener('click', () => {
   const editCpuMs = performance.now() - startedAt;
   lastBurst = { ...result, editCpuMs };
   lastCarve = null;
+  lastTunnel = null;
   lastDamage = null;
   invalidateMeshAudit();
   // Exactly one mesh-update request for the union of three distinct impacts.
