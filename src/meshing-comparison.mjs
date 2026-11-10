@@ -26,7 +26,11 @@ export function compareMeshing(world, now = () => performance.now()) {
   const greedyMs = now() - startGreedy;
 
   const exposedSummary = summarize(exposed, 'faceCount');
-  const greedySummary = summarize(greedy, 'unitFaceCount');
+  const greedySummary = {
+    ...summarize(greedy, 'unitFaceCount'),
+    candidateCellsVisited: greedy.reduce((total, mesh) => total + mesh.faceCandidateCells, 0),
+    fullChunkCandidateCells: greedy.length * 6 * world.chunkEdge ** 3
+  };
   if (world.revision !== revision || exposedSummary.unitFaces !== greedySummary.unitFaces ||
       exposedSummary.chunks !== greedySummary.chunks) {
     throw new Error('Meshing comparison mismatch: terrain changed or surface coverage differs');
