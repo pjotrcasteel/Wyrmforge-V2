@@ -41,9 +41,10 @@ Do not judge final 2.5D pixel art from this Canvas2D diagnostic view.
 - [x] Explicit per-chunk face budget to bound output arrays
 - [x] Automated tests for winding, cavities, arch undersides, deterministic output and chunk seams
 - [x] On-demand "Audit 3D faces" counts with JSON export; no automatic heavy per-frame mesh generation
-- [ ] Render the actual CPU meshes through WebGL2 with a fixed 2.5D pixel-readable camera (V2.2)
+- [x] Initial WebGL2 solid-color exposed-face rendering with fixed oblique camera (0.0.007, device acceptance pending)
 - [ ] Greedy versus exposed-face performance comparison on target mobile devices (V2.2)
-- [ ] Real-device confirmation that auditing is responsive at 16³ and 32³
+- [x] One real iPhone Safari 32³ Arch audit received for commit 14dd128 (0.0.006): 1,902 faces, 3,804 triangles, 621 undersides, 19 ms CPU mesh audit, 167,376 CPU bytes
+- [ ] Equivalent iPhone Safari 16³ and Android Chrome observations
 
 **Acceptance caveat:** The Canvas2D screen remains the deliberately disposable top-only diagnostic.
 A successful face audit proves geometry was generated, **not** that the finished scene was rendered.
@@ -55,15 +56,37 @@ must stay identical for unchanged terrain. In Arch, underside (-Y) count must be
 After Carve sphere, audit again; counts should update. Export benchmark JSON and verify
 `meshAudit`, `faceCounts` and `cpuBufferBytes`.
 
+## WebGL2 solid terrain milestone (0.0.007)
+
+**Scope:** connect newly authored V2 CPU meshes to an independent WebGL2 renderer. No V1 code/assets.
+
+- WebGL2 uses the exact orthographic/oblique camera from the diagnostic view, retaining 2.5D composition.
+- Render six-sided solid-colored blocks, using depth testing and three V2-native material colors.
+- Rebuild meshes only after terrain or scene changes, **not** on each camera movement.
+- Upload chunk-local vertices, normals, materials and indices; explicitly delete previous GPU buffers and vertex arrays.
+- Initial browser context-loss handling recreates shader resources and re-uploads authoritative-derived mesh data.
+- Overlay preserves Canvas2D fallback and existing touch control surface; if WebGL2 is unavailable, the old diagnostic remains usable.
+- Export GPU buffer **estimates**, draw calls, triangle counts and one-off CPU mesh/upload time. GPU timing is unknown (`null`), not fabricated.
+- The 2.5D pixel-art goal remains mandatory, but material textures/atlas, greedy mesher, shadows and performance tuning are later steps.
+
+**Validation required:** the deployed header must say v0.0.007 and commit SHA.
+On iPhone Safari, open Hill, Cliff and Arch. The Hill must show *solid sloping sides*,
+the Cliff a visible wall, and Arch real underneath space (not only green diamonds).
+Use Carve sphere, then confirm removed voxels do not reappear when moving the view.
+Check 16³ and 32³; both must show identical world geometry.
+Export benchmark JSON with `renderer` and `cpuMeshAndUploadMs`.
+If `Canvas2D fallback` is shown, report it; do not count it as passing WebGL2.
+Physical-device acceptance is still open.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
 guide all decisions. Its evidence is not a measured guarantee of mobile performance.
-This version still uses a top-only Canvas2D diagnostic shell, so it does **not** demonstrate solid voxel
-faces or final pixel-art rendering. WebGL2 camera/meshing is V2.2, after the V2.0 and V2.1 gates.
+V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It is **not** the finished
+pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.006
+### Current change: 0.0.007
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

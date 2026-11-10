@@ -9,7 +9,7 @@ html,body{margin:0;height:100%;background:#101820;color:#e8edf0;font:14px system
 body{display:flex;flex-direction:column}header{padding:12px;background:#1d2b35;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 #build{margin-left:auto;color:#c8d7e3;font:12px ui-monospace,Consolas,monospace;white-space:nowrap}
 h1{font-size:16px;margin:0 12px 0 0}input[type=number]{width:100px;box-sizing:border-box}button,select,input{background:#334754;color:white;border:1px solid #708591;border-radius:6px;padding:10px;font:inherit}
-main{flex:1;min-height:0}canvas{width:100%;height:100%;display:block;touch-action:none}
+main{flex:1;min-height:0;position:relative}canvas{width:100%;height:100%;display:block;touch-action:none}#gpu-view{position:absolute;inset:0;pointer-events:none;image-rendering:pixelated}
 #status,#mesh-audit{font-size:12px;color:#b9d5cc;padding:7px 12px;background:#17232d}#mesh-audit{border-top:1px solid #354650}
 </style>
 </head>
@@ -18,7 +18,7 @@ main{flex:1;min-height:0}canvas{width:100%;height:100%;display:block;touch-actio
 <label for="scene">Scene</label><select id="scene"><option value="hill">Hill</option><option value="flat">Flat</option><option value="cliff">Cliff</option><option value="arch">Arch</option></select>
 <label for="chunks">Chunk</label><select id="chunks" aria-label="Voxel chunk edge"><option value="16">16³</option><option value="32">32³</option></select>
 <label for="seed">Seed</label><input id="seed" type="number" min="0" max="4294967295" step="1" value="7" inputmode="numeric" aria-label="Scene seed (unsigned 32-bit integer)"><button id="reset">Reset</button><button id="carve">Carve sphere</button><button id="mesh-audit-button">Audit 3D faces</button><button id="report">Export benchmark</button><span id="build" aria-label="Engine version and deployed commit">Build identity loading…</span></header>
-<main><canvas id="view" aria-label="V2 voxel terrain: drag to pan, pinch with two fingers or use the mouse wheel to zoom"></canvas></main>
+<main><canvas id="view" aria-label="V2 voxel terrain: drag to pan, pinch with two fingers or use the mouse wheel to zoom"></canvas><canvas id="gpu-view" aria-hidden="true" style="display:none"></canvas></main>
 <div id="status">Initializing independent V2 world…</div><div id="mesh-audit" aria-live="polite">3D geometry not yet audited. Select Audit 3D faces to check all six face directions.</div>
 <script type="module" src="./main.mjs"></script>
 </body></html>

@@ -3,12 +3,14 @@ import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
+import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
 build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 
 const canvas = document.querySelector('#view');
+const gpuCanvas = document.querySelector('#gpu-view');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
@@ -23,6 +25,26 @@ const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
+let gpuRenderer = null;
+let gpuBuildMs = null;
+let gpuError = null;
+
+function rebuildGpuMeshes() {
+  if (!gpuRenderer) return;
+  try {
+    const start = performance.now();
+    const meshes = buildExposedFaceMeshes(world);
+    gpuRenderer.setMeshes(meshes);
+    gpuBuildMs = performance.now() - start;
+    gpuError = null;
+    dirty = true;
+  } catch (error) {
+    gpuError = error.message;
+    gpuRenderer.dispose();
+    gpuRenderer = null;
+    gpuCanvas.style.display = 'none';
+  }
+}
 
 function invalidateMeshAudit() {
   lastMeshAudit = null;
@@ -32,10 +54,13 @@ function invalidateMeshAudit() {
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
   const frames = frameMetrics.summary();
-  state.textContent = `V2-only · ${world.chunkEdge}³ chunks · seed ${activeSeed} · zoom ${zoomFactor.toFixed(2)}×` +
-    ` · ${world.chunkCount} chunks · rev ${world.revision}` +
-    ` · ${visibleSurfaces} columns · p95 ${formatMs(frames.p95)}` +
-    ` · p99 ${formatMs(frames.p99)} · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
+  const rendererStatus = gpuRenderer?.ready
+    ? `WebGL2 · ${gpuRenderer.statistics.triangles} triangles · ${gpuRenderer.statistics.drawCalls} draws`
+    : `Canvas2D fallback${gpuError ? ' (' + gpuError + ')' : ''}`;
+  state.textContent = `V2-only · ${rendererStatus} · ${world.chunkEdge}³ chunks · seed ${activeSeed}` +
+    ` · zoom ${zoomFactor.toFixed(2)}× · rev ${world.revision}` +
+    ` · p95 ${formatMs(frames.p95)} · p99 ${formatMs(frames.p99)}` +
+    ` · >50ms: ${frames.hitchesOver50Ms}/${frames.count}`;
 }
 
 function project(x, y, z) {
@@ -48,6 +73,8 @@ function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   canvas.width = Math.round(canvas.clientWidth * dpr);
   canvas.height = Math.round(canvas.clientHeight * dpr);
+  gpuCanvas.width = canvas.width;
+  gpuCanvas.height = canvas.height;
   baseScale = Math.max(7, Math.min(16, canvas.width / 35));
   scale = baseScale * zoomFactor;
   dirty = true;
@@ -78,6 +105,12 @@ function pointerPosition(event) {
 function draw() {
   if (!dirty) return;
   dirty = false;
+  if (gpuRenderer?.ready && gpuRenderer.render({
+    width: gpuCanvas.width, height: gpuCanvas.height,
+    scale, panX: cameraX, panY: cameraY
+  })) {
+    return;
+  }
   ctx.fillStyle = '#101820';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   // Foundation visualizer: deliberately simple and not the future WebGL2 renderer.
@@ -102,7 +135,6 @@ function draw() {
     ctx.fill();
   }
   visibleSurfaces = surfaces.length;
-  updateStatus();
 }
 
 function tick(now) {
@@ -125,6 +157,7 @@ function chooseScene() {
   }
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
   invalidateMeshAudit();
+  rebuildGpuMeshes();
   activeScene = scenePicker.value;
   activeSeed = seed;
   frameMetrics.reset();
@@ -142,6 +175,7 @@ document.querySelector('#carve').addEventListener('click', () => {
     if (x*x + z*z + (y-3)*(y-3) < 22) world.set(x,y,z,0);
   }
   invalidateMeshAudit();
+  rebuildGpuMeshes();
   dirty = true;
 });
 
@@ -182,7 +216,10 @@ document.querySelector('#report').addEventListener('click', () => {
     frames,
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, caveat:'Canvas2D foundation visualizer; not a GPU benchmark' };
+    meshAudit:lastMeshAudit,
+    renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
+    cpuMeshAndUploadMs:gpuBuildMs, rendererError:gpuError,
+    caveat:'Flat-shaded V2 WebGL2 baseline; GPU frame timing, worker budgets and final pixel-art materials are not validated' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -217,5 +254,20 @@ canvas.addEventListener('wheel', event => {
 window.addEventListener('resize',resize);
 document.addEventListener('visibilitychange', () => { previous = null; if (document.hidden) gestures.reset(); });
 window.addEventListener('blur', () => gestures.reset());
+try {
+  gpuRenderer = new WebGLVoxelView(gpuCanvas, {
+    onAvailabilityChange(available, error) {
+      gpuCanvas.style.display = available ? 'block' : 'none';
+      gpuError = error?.message ?? null;
+      if (available) rebuildGpuMeshes();
+      dirty = true;
+    }
+  });
+  gpuCanvas.style.display = 'block';
+  rebuildGpuMeshes();
+} catch (error) {
+  gpuError = error.message;
+  gpuCanvas.style.display = 'none';
+}
 resize();
 requestAnimationFrame(tick);
