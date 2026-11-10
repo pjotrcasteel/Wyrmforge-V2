@@ -48,6 +48,9 @@ jobs:
           node --check tests/webgl-voxel-view.test.mjs
           node --check src/demo-carve.mjs
           node --check tests/demo-carve.test.mjs
+          node --check src/chunk-dirty.mjs
+          node --check tests/chunk-local-remesh.test.mjs
+          node --check tests/webgl-local-updates.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
 

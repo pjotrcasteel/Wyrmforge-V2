@@ -90,19 +90,15 @@ function createProgram(gl) {
 
 export class WebGLVoxelView {
   #gl;
-  #canvas;
   #program = null;
   #uniforms = null;
-  #gpuMeshes = [];
-  #sourceMeshes = [];
-  #gpuBytes = 0;
-  #triangles = 0;
+  #gpuMeshes = new Map();
+  #sourceMeshes = new Map();
   #lost = false;
   #losses = 0;
   #onAvailabilityChange;
 
   constructor(canvas, { onAvailabilityChange = () => {} } = {}) {
-    this.#canvas = canvas;
     this.#onAvailabilityChange = onAvailabilityChange;
     const gl = canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: true, stencil: false, preserveDrawingBuffer: false
@@ -116,15 +112,14 @@ export class WebGLVoxelView {
       this.#lost = true;
       this.#losses++;
       this.#program = null;
-      this.#gpuMeshes = [];
-      this.#gpuBytes = 0;
+      this.#gpuMeshes.clear();
       this.#onAvailabilityChange(false);
     });
     canvas.addEventListener('webglcontextrestored', () => {
       try {
         this.#lost = false;
         this.#initialize();
-        this.#uploadMeshes();
+        this.#uploadAll();
         this.#onAvailabilityChange(true);
       } catch (error) {
         this.#lost = true;
@@ -135,11 +130,16 @@ export class WebGLVoxelView {
 
   get ready() { return !this.#lost && this.#program !== null; }
   get statistics() {
+    let triangles = 0, gpuBytes = 0;
+    for (const record of this.#gpuMeshes.values()) {
+      triangles += record.triangles;
+      gpuBytes += record.bytes;
+    }
     return {
       renderer: 'WebGL2 exposed-face V2 baseline',
-      triangles: this.#triangles,
-      drawCalls: this.#gpuMeshes.length,
-      gpuBufferBytesEstimate: this.#gpuBytes,
+      triangles,
+      drawCalls: this.#gpuMeshes.size,
+      gpuBufferBytesEstimate: gpuBytes,
       contextLosses: this.#losses,
       gpuTimingMs: null
     };
@@ -157,69 +157,106 @@ export class WebGLVoxelView {
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
-    gl.disable(gl.CULL_FACE); // Explicit baseline; culling gets device-tested later.
+    gl.disable(gl.CULL_FACE);
+  }
+
+  #disposeRecord(record) {
+    if (this.#lost || this.#gl.isContextLost()) return;
+    this.#gl.deleteVertexArray(record.vao);
+    for (const buffer of record.buffers) this.#gl.deleteBuffer(buffer);
   }
 
   #discardGpuMeshes() {
-    const gl = this.#gl;
-    if (!this.#lost && !gl.isContextLost()) {
-      for (const mesh of this.#gpuMeshes) {
-        gl.deleteVertexArray(mesh.vao);
-        for (const buffer of mesh.buffers) gl.deleteBuffer(buffer);
-      }
-    }
-    this.#gpuMeshes = [];
-    this.#gpuBytes = 0;
-    this.#triangles = 0;
+    for (const record of this.#gpuMeshes.values()) this.#disposeRecord(record);
+    this.#gpuMeshes.clear();
   }
 
-  setMeshes(meshes) {
-    if (!Array.isArray(meshes)) throw new TypeError('Expected V2 chunk meshes');
-    this.#sourceMeshes = meshes;
-    if (this.ready) this.#uploadMeshes();
-  }
-
-  #uploadMeshes() {
-    this.#discardGpuMeshes();
+  #uploadOne(mesh) {
+    if (mesh.indices.length === 0) return;
     const gl = this.#gl;
+    const vao = gl.createVertexArray();
+    if (!vao) throw new Error('WebGL2 vertex array allocation failed');
+    const record = {
+      vao, origin: mesh.origin, count: mesh.indices.length,
+      triangles: mesh.triangleCount, buffers: [], bytes: 0
+    };
     try {
-      for (const mesh of this.#sourceMeshes) {
-        if (!mesh.indices.length) continue;
-        const vao = gl.createVertexArray();
-        if (!vao) throw new Error('WebGL2 vertex array allocation failed');
-        const record = { vao, origin: mesh.origin, count: mesh.indices.length, buffers: [] };
-        this.#gpuMeshes.push(record);
-        gl.bindVertexArray(vao);
-
-        const upload = (target, data) => {
-          const buffer = gl.createBuffer();
-          if (!buffer) throw new Error('WebGL2 buffer allocation failed');
-          record.buffers.push(buffer);
-          gl.bindBuffer(target, buffer);
-          gl.bufferData(target, data, gl.STATIC_DRAW);
-          this.#gpuBytes += data.byteLength;
-        };
-        upload(gl.ARRAY_BUFFER, mesh.positions);
-        gl.enableVertexAttribArray(0);
-        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-
-        upload(gl.ARRAY_BUFFER, mesh.normals);
-        gl.enableVertexAttribArray(1);
-        gl.vertexAttribPointer(1, 3, gl.BYTE, false, 0, 0);
-
-        upload(gl.ARRAY_BUFFER, mesh.materials);
-        gl.enableVertexAttribArray(2);
-        gl.vertexAttribPointer(2, 1, gl.UNSIGNED_BYTE, false, 0, 0);
-
-        upload(gl.ELEMENT_ARRAY_BUFFER, mesh.indices);
-        this.#triangles += mesh.triangleCount;
-      }
+      gl.bindVertexArray(vao);
+      const upload = (target, data) => {
+        const buffer = gl.createBuffer();
+        if (!buffer) throw new Error('WebGL2 buffer allocation failed');
+        record.buffers.push(buffer);
+        gl.bindBuffer(target, buffer);
+        gl.bufferData(target, data, gl.STATIC_DRAW);
+        record.bytes += data.byteLength;
+      };
+      upload(gl.ARRAY_BUFFER, mesh.positions);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      upload(gl.ARRAY_BUFFER, mesh.normals);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 3, gl.BYTE, false, 0, 0);
+      upload(gl.ARRAY_BUFFER, mesh.materials);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+      upload(gl.ELEMENT_ARRAY_BUFFER, mesh.indices);
+      this.#gpuMeshes.set(mesh.id, record);
     } catch (error) {
-      this.#discardGpuMeshes();
+      this.#disposeRecord(record);
       throw error;
     } finally {
       gl.bindVertexArray(null);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    }
+  }
+
+  #uploadAll() {
+    this.#discardGpuMeshes();
+    for (const mesh of this.#sourceMeshes.values()) this.#uploadOne(mesh);
+  }
+
+  // Full reset for a new scene/seed/chunk size; remove all old GPU resources.
+  setMeshes(meshes) {
+    if (!Array.isArray(meshes)) throw new TypeError('Expected V2 chunk meshes');
+    const next = new Map();
+    for (const mesh of meshes) {
+      if (!mesh || typeof mesh.id !== 'string' || next.has(mesh.id)) {
+        throw new TypeError('Invalid or duplicate V2 mesh ID');
+      }
+      next.set(mesh.id, mesh);
+    }
+    this.#sourceMeshes = next;
+    if (this.ready) this.#uploadAll();
+  }
+
+  // Replace ONLY dirty chunk meshes; an empty result deletes a removed chunk.
+  replaceMeshes(dirtyIds, meshes) {
+    if (!(dirtyIds instanceof Set) && !Array.isArray(dirtyIds)) {
+      throw new TypeError('Expected a dirty-chunk Set or array');
+    }
+    if (!Array.isArray(meshes)) throw new TypeError('Expected replacement meshes');
+    const ids = new Set(dirtyIds);
+    if (ids.size > 128 || [...ids].some(id => typeof id !== 'string')) {
+      throw new RangeError('Invalid or excessive dirty chunk IDs');
+    }
+    const replacements = new Map();
+    for (const mesh of meshes) {
+      if (!mesh || typeof mesh.id !== 'string' || !ids.has(mesh.id) ||
+          replacements.has(mesh.id)) {
+        throw new TypeError('Replacement mesh must match one unique dirty chunk ID');
+      }
+      replacements.set(mesh.id, mesh);
+    }
+    for (const id of ids) {
+      const oldGpu = this.#gpuMeshes.get(id);
+      if (oldGpu) this.#disposeRecord(oldGpu);
+      this.#gpuMeshes.delete(id);
+      this.#sourceMeshes.delete(id);
+      const replacement = replacements.get(id);
+      if (replacement) {
+        this.#sourceMeshes.set(id, replacement);
+        if (this.ready) this.#uploadOne(replacement);
+      }
     }
   }
 
@@ -234,7 +271,7 @@ export class WebGLVoxelView {
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
-    for (const mesh of this.#gpuMeshes) {
+    for (const mesh of this.#gpuMeshes.values()) {
       gl.uniform3fv(this.#uniforms.origin, mesh.origin);
       gl.bindVertexArray(mesh.vao);
       gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
@@ -247,6 +284,6 @@ export class WebGLVoxelView {
     this.#discardGpuMeshes();
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
-    this.#sourceMeshes = [];
+    this.#sourceMeshes.clear();
   }
 }

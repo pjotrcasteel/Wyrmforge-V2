@@ -30,14 +30,22 @@ let lastCarve = null;
 let gpuRenderer = null;
 let gpuBuildMs = null;
 let gpuError = null;
+let lastMeshUpdate = null;
 
-function rebuildGpuMeshes() {
+function rebuildGpuMeshes(dirtyChunks = null) {
   if (!gpuRenderer) return;
   try {
     const start = performance.now();
-    const meshes = buildExposedFaceMeshes(world);
-    gpuRenderer.setMeshes(meshes);
+    const meshes = buildExposedFaceMeshes(world, dirtyChunks === null ? {} : { chunkIds: dirtyChunks });
+    if (dirtyChunks === null) gpuRenderer.setMeshes(meshes);
+    else gpuRenderer.replaceMeshes(dirtyChunks, meshes);
     gpuBuildMs = performance.now() - start;
+    lastMeshUpdate = {
+      mode: dirtyChunks === null ? 'full' : 'localized',
+      chunksUpdated: dirtyChunks === null ? meshes.length : dirtyChunks.size,
+      worldChunks: world.chunkCount, elapsedMs: gpuBuildMs,
+      uploadedCpuMeshBytes: meshes.reduce((sum, mesh) => sum + mesh.cpuBufferBytes, 0)
+    };
     gpuError = null;
     dirty = true;
   } catch (error) {
@@ -175,13 +183,17 @@ chunkPicker.addEventListener('change', chooseScene);
 document.querySelector('#reset').addEventListener('click', chooseScene);
 document.querySelector('#carve').addEventListener('click', () => {
   const target = demoCarveTarget(activeScene);
-  const removedVoxels = carveDemoSphere(world, target);
-  lastCarve = { scene: activeScene, ...target, removedVoxels, worldRevision: world.revision };
+  const dirtyChunks = new Set();
+  const removedVoxels = carveDemoSphere(world, target, { dirtyChunks });
+  lastCarve = {
+    scene: activeScene, ...target, removedVoxels,
+    worldRevision: world.revision, dirtyChunks: [...dirtyChunks].sort()
+  };
   invalidateMeshAudit();
   // Do not upload new meshes if the demo hit only empty space.
-  if (removedVoxels > 0) rebuildGpuMeshes();
+  if (removedVoxels > 0) rebuildGpuMeshes(dirtyChunks);
   meshAuditStatus.textContent = removedVoxels > 0
-    ? `Carved ${removedVoxels} voxels at (${target.x},${target.y},${target.z}). Audit 3D faces to inspect.`
+    ? `Carved ${removedVoxels} voxels. Remeshed ${lastMeshUpdate?.chunksUpdated ?? 'n/a'}/${world.chunkCount} chunks. Audit 3D faces to inspect.`
     : 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
   dirty = true;
 });
@@ -225,7 +237,7 @@ document.querySelector('#report').addEventListener('click', () => {
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, lastCarve,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
-    cpuMeshAndUploadMs:gpuBuildMs, rendererError:gpuError,
+    cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
     caveat:'Flat-shaded V2 WebGL2 baseline; GPU frame timing, worker budgets and final pixel-art materials are not validated' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
@@ -266,7 +278,7 @@ try {
     onAvailabilityChange(available, error) {
       gpuCanvas.style.display = available ? 'block' : 'none';
       gpuError = error?.message ?? null;
-      if (available) rebuildGpuMeshes();
+      // WebGLVoxelView restores its retained chunk meshes; no duplicate full upload.
       dirty = true;
     }
   });

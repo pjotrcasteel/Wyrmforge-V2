@@ -12,7 +12,7 @@ const FACE_DEFINITIONS = Object.freeze([
 const chunkKey = (x, y, z) => [x, y, z].join(',');
 const index = (x, y, z, edge) => x + edge * (z + edge * y);
 
-export function buildExposedFaceMeshes(world, { maxFacesPerChunk = 100000 } = {}) {
+export function buildExposedFaceMeshes(world, { maxFacesPerChunk = 100000, chunkIds = null } = {}) {
   if (!world || ![16, 32].includes(world.chunkEdge) || typeof world.snapshots !== 'function') {
     throw new TypeError('Expected an independent V2 voxel world');
   }
@@ -21,8 +21,46 @@ export function buildExposedFaceMeshes(world, { maxFacesPerChunk = 100000 } = {}
   }
 
   const edge = world.chunkEdge;
-  const snapshots = world.snapshots();
-  const byId = new Map(snapshots.map(snapshot => [snapshot.id, snapshot]));
+  let snapshots;
+  let byId;
+  if (chunkIds === null) {
+    snapshots = world.snapshots();
+    byId = new Map(snapshots.map(snapshot => [snapshot.id, snapshot]));
+  } else {
+    if ((!Array.isArray(chunkIds) && !(chunkIds instanceof Set)) ||
+        typeof world.chunkSnapshot !== 'function') {
+      throw new TypeError('Expected chunk IDs and per-chunk snapshot support');
+    }
+    const uniqueIds = [...new Set(chunkIds)];
+    if (uniqueIds.length > 128) throw new RangeError('One local mesh batch may include at most 128 chunks');
+    const requested = uniqueIds.map(id => {
+      if (typeof id !== 'string' || !/^-?(0|[1-9]\d*),-?(0|[1-9]\d*),-?(0|[1-9]\d*)$/.test(id)) {
+        throw new TypeError('Expected a canonical signed chunk ID');
+      }
+      const coords = id.split(',').map(Number);
+      if (!coords.every(Number.isSafeInteger) || chunkKey(...coords) !== id) {
+        throw new TypeError('Chunk ID coordinates must be safe canonical integers');
+      }
+      return coords;
+    });
+    byId = new Map();
+    const snapshotOf = (coords) => {
+      const id = chunkKey(...coords);
+      if (!byId.has(id)) {
+        const snap = world.chunkSnapshot(...coords);
+        byId.set(id, snap);
+      }
+      return byId.get(id);
+    };
+    snapshots = [];
+    for (const coords of requested) {
+      const snap = snapshotOf(coords);
+      if (snap) snapshots.push(snap);
+      for (const face of FACE_DEFINITIONS) {
+        snapshotOf(coords.map((value, i) => value + face.normal[i]));
+      }
+    }
+  }
   const meshes = [];
 
   for (const snapshot of snapshots) {

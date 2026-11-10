@@ -173,7 +173,9 @@ Collect: commit/build SHA; seed; scene; device, OS, browser, viewport and render
 5. **Cross-platform replay:** canonical integer voxel state is the hash target; avoid promising identical floating-point actor trajectories.
 6. **Legacy contamination:** V1 modules, assets, constants and event contracts must not leak into V2. Audit imports and runtime dependencies before V2.0 acceptance; eventual compatibility is separate.
 
-**Deferred until evidence warrants:** octrees, sparse voxel DAGs, brickmaps, WebGPU compute, GPU ray marching, LOD/Transvoxel, smooth density meshing, fluid simulation, structural collapse, advanced lighting, full AI/enemies and production Hunt migration.
+**Deferred until evidence warrants:** octrees, sparse voxel DAGs, brickmaps, WebGPU compute, GPU ray marching, LOD/Transvoxel, smooth density meshing, fluid simulation, advanced lighting, full AI/enemies and production Hunt migration.
+
+**Owner-approved future direction — optional hybrid voxel gravity:** [Voxel Gravity V2 design](VOXEL-GRAVITY-V2.md). Structural collapse is now a planned post-foundation capability, **not** an active milestone or part of the V2.7 release gate. V2.3 provides bounded edit events, V2.4 provides worker/GPU budgets, and V2.5/V2.6 provide collision and typed Physics V2 integration. Only after those foundations pass will we implement support detection, falling cohesive clusters, granular cells, fracture/settlement and real-phone acceptance. Gravity must stay optional per material and must never run a global per-voxel physics loop.
 
 ## 8. Definition of done and status discipline
 

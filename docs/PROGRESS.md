@@ -124,6 +124,20 @@ A visible section of the right pillar/roof must disappear, and the message
 must show a positive removed-voxel count. Reset must restore the intact arch.
 Repeat at 16³ and optionally export the JSON.
 
+## 0.0.010 — local mesh invalidation and optional hybrid-gravity specification
+
+- Approved gravity *design* documented in [VOXEL-GRAVITY-V2.md](VOXEL-GRAVITY-V2.md). No falling voxel simulation is implemented; its later acceptance is separate from the V2 foundation gate.
+- A changed voxel marks its own chunk and only face-adjacent chunks when it lies on a signed chunk boundary.
+- New `VoxelWorld.chunkSnapshot` copies a **single** chunk; a scoped exposed-face build loads only its requested chunks and six neighbors, not every world snapshot.
+- Carve sphere collects the committed changed-cell footprint, then updates only those meshes and corresponding WebGL2 GPU buffers.
+- Removed chunks delete their old GPU resources; unaffected chunks keep their existing CPU/GPU geometry.
+- WebGL2 context recovery restores retained chunk meshes without a redundant second full upload.
+- The lab shows `Remeshed N/M chunks`, exports `lastCarve.dirtyChunks` and `lastMeshUpdate`, and keeps V1 and input controls untouched.
+- Tests compare every affected scoped chunk to a full rebuild, cover negative/positive chunk seams, empty chunk removal, GPU disposal and simulated context restoration.
+- **Not implemented:** threaded/budgeted meshing, worker cancellation, GPU upload budgeting, greedy meshing or gravity. These are later gates.
+- **Player acceptance:** on physical iPhone Safari load version 0.0.010, select Arch / seed 7 / chunk 32³, Carve sphere. Verify a visible piece of the stone pillar disappears; the status shows a **positive** removal count and a **localized remesh count smaller than the total chunks**. Reset restores the arch. Repeat once at 16³ and send one JSON export.
+- The iPhone 0.0.008 report is evidence only for that old build (p95 17 ms, p99 33 ms, 4 >33ms hitches of 590 frames). It does not prove that 0.0.010 performance is better; compare device reports before concluding.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -132,7 +146,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.009
+### Current change: 0.0.010
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

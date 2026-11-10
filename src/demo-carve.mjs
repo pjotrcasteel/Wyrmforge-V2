@@ -1,3 +1,5 @@
+import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
+
 // V2 laboratory-only deterministic edit fixture. Not yet the V2.3 ordered edit-command API.
 // Gameplay and renderer must not use this scene selector as their terrain authority.
 export function demoCarveTarget(scene) {
@@ -11,7 +13,7 @@ export function demoCarveTarget(scene) {
     : { x: 0, y: 3, z: 0, radius: 4.65 };
 }
 
-export function carveDemoSphere(world, { x, y, z, radius }) {
+export function carveDemoSphere(world, { x, y, z, radius }, { dirtyChunks = null } = {}) {
   if (!world || typeof world.get !== 'function' || typeof world.set !== 'function') {
     throw new TypeError('Expected an independent V2 voxel world');
   }
@@ -22,6 +24,9 @@ export function carveDemoSphere(world, { x, y, z, radius }) {
     throw new RangeError('Demo carve radius must be greater than 0 and at most 8 voxels');
   }
 
+  if (dirtyChunks !== null && !(dirtyChunks instanceof Set)) {
+    throw new TypeError('dirtyChunks must be a Set or null');
+  }
   let removedVoxels = 0;
   const radiusSquared = radius * radius;
   for (let zCell = Math.floor(z - radius); zCell <= Math.ceil(z + radius); zCell++) {
@@ -29,7 +34,10 @@ export function carveDemoSphere(world, { x, y, z, radius }) {
       for (let xCell = Math.floor(x - radius); xCell <= Math.ceil(x + radius); xCell++) {
         const dx = xCell - x, dy = yCell - y, dz = zCell - z;
         if (dx * dx + dy * dy + dz * dz >= radiusSquared) continue;
-        if (world.set(xCell, yCell, zCell, 0)) removedVoxels++;
+        if (world.set(xCell, yCell, zCell, 0)) {
+          removedVoxels++;
+          if (dirtyChunks) markDirtyForEditedVoxel(dirtyChunks, world.chunkEdge, xCell, yCell, zCell);
+        }
       }
     }
   }
