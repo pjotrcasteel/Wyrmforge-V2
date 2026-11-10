@@ -38,6 +38,7 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 #actor-dpad [data-actor-dir=left]{grid-column:1;grid-row:2}
 #actor-dpad [data-actor-dir=back]{grid-column:2;grid-row:2}
 #actor-dpad [data-actor-dir=right]{grid-column:3;grid-row:2}
+#actor-jump{grid-column:3;grid-row:1;font-size:12px!important}
 #actor-dpad[hidden],#actor-reset[hidden]{display:none}
 #status,#mesh-audit{font-size:12px;line-height:1.35;color:#b9d5cc;padding:7px 12px;background:#17232d;box-sizing:border-box;height:52px;flex:0 0 52px;overflow-y:auto;overscroll-behavior:contain}
 #mesh-audit{border-top:1px solid #354650}
@@ -87,7 +88,7 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
       <button data-actor-dir="forward" aria-label="Walk forward">↑</button>
       <button data-actor-dir="left" aria-label="Walk left">←</button>
       <button data-actor-dir="back" aria-label="Walk backward">↓</button>
-      <button data-actor-dir="right" aria-label="Walk right">→</button>
+      <button data-actor-dir="right" aria-label="Walk right">→</button><button id="actor-jump" type="button" aria-label="Jump">Jump</button>
     </div>
   </div>
 </main>

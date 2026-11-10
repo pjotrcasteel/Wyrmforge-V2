@@ -938,6 +938,49 @@ if lower terrain catches it. Export the benchmark; inspect
 for a genuine worker-pending case, too. Reset should restore the cliff.
 No V1 import, no structural terrain-body physics implied.
 
+## 0.0.028 — V2.5 moving collision, jumping and overhead rock
+
+**Objective:** finish another bounded, reusable V2.5 actor-physics slice after
+the owner's successful iPhone excavation/fall screenshot on **0.0.027**.
+This is *character* gravity and dynamic collision, NOT falling structural
+terrain (required V2.9). Wyrmforge V1 and the separate Character Visibility
+system are not changed.
+
+- [x] Give the V2 swept-box actor a limited upward jump impulse with gravity
+  and terminal fall speed; only grounded, supported actors can initiate it.
+  Jump requests do not trigger again while airborne.
+- [x] Use existing **authoritative integer-plane voxel sweeps** for upward
+  and downward travel. On overhead contact, stop ascending,
+  report `ceilingContact:true` but **never mark the ceiling as ground**.
+- [x] While jumping, do not auto-step up walls: true suspended traversal
+  collides with solid walls, can jump over a low voxel obstacle, and
+  cannot pass through a tall wall.
+- [x] Test removing a wall while walking: the very next physics simulation
+  responds to the newly destroyed authoritative voxels without waiting
+  for the WebGL2 mesh/worker.
+- [x] Test destruction of an elevated platform while the actor is airborne:
+  it must descend through the *removed* platform and land on lower solid
+  voxels without ghost collisions.
+- [x] Keep iPhone landscape readable: add a **Jump** button in the existing
+  otherwise unused upper-right D-pad cell. Desktop supports **Space**;
+  existing WASD, pan, pinch, Target spell and underfoot excavation remain.
+- [x] Extend benchmark `actorPilot` counters with `jumps` and
+  `ceilingHits`. The marker is still a basic diagnostic Canvas2D overlay.
+- [ ] Physical iPhone Safari / Android Chrome acceptance, repeated
+  jumping and excavation under real input loads, final 3D capsule/controller
+  decisions, V2.8 game integration and 10-minute performance tests remain.
+- [ ] Character Visibility V2 (pixel-accurate partial occlusion/emissive
+  outline) belongs to the future dedicated visibility/render system, **not**
+  the voxel engine. Do not add it to this module.
+
+**Device check:** load Flat/Hill with v0.0.028, enable Actor pilot,
+tap Jump and observe a short up-and-down arc with no hovering. Move and
+jump over a one-voxel ridge; Cliff/Arch overhangs should block the
+character's head. Run **Excavate under actor** and observe fall/landing.
+Export benchmark and verify `actorPilot.jumps`, `ceilingHits`,
+`error:null` and frame-time/hitch counts. The first validation is a
+small physically tested slice, not full V2.5 acceptance.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -946,7 +989,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.027
+### Current change: 0.0.028
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

@@ -11,6 +11,7 @@ export const ACTOR_STEP_HEIGHT = 1.05;
 export const ACTOR_MOVE_SPEED = 4.4;
 export const ACTOR_GRAVITY = 22;
 export const ACTOR_MAX_FALL_SPEED = 22;
+export const ACTOR_JUMP_SPEED = 7;
 
 const AXES = ['x', 'y', 'z'];
 const SKIN = 1e-5;
@@ -170,11 +171,12 @@ export function spawnTerrainActor(world,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,dt=1/60
+  moveX=0,moveZ=0,jump=false,dt=1/60
 }={}) {
   validateWorld(world);
   validatePosition(actor);
-  if (!Number.isFinite(dt) || dt<=0 || dt>1/20 ||
+  if (!Number.isFinite(dt) || dt<=0 || dt>1/20 || typeof jump !== 'boolean' ||
+      !Number.isFinite(actor.vy) ||
       ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1)) {
     throw new RangeError('Actor inputs or fixed-step delta outside supported bounds');
   }
@@ -187,19 +189,29 @@ export function simulateTerrainActor(world,actor,{
   const dx=moveX/divisor*ACTOR_MOVE_SPEED*dt;
   const dz=moveZ/divisor*ACTOR_MOVE_SPEED*dt;
   const initialSupport=groundProbe(world,actor);
-  const xMotion=moveHorizontal(world,actor,'x',dx,initialSupport);
-  const zMotion=moveHorizontal(world,xMotion.position,'z',dz,initialSupport);
+  const jumping = jump && initialSupport;
+  // Step-up only makes sense when feet are walking on supported terrain.
+  // In a jump the X/Z sweeps must instead collide with the real wall.
+  const xMotion=moveHorizontal(world,actor,'x',dx,initialSupport && !jumping);
+  const zMotion=moveHorizontal(world,xMotion.position,'z',dz,initialSupport && !jumping);
   let position=zMotion.position;
-  const vy=Math.max(-ACTOR_MAX_FALL_SPEED,Math.min(0,actor.vy)-ACTOR_GRAVITY*dt);
+  const initialVy=jumping ? ACTOR_JUMP_SPEED : actor.vy;
+  const vy=Math.max(-ACTOR_MAX_FALL_SPEED,
+    Math.min(ACTOR_JUMP_SPEED,initialVy-ACTOR_GRAVITY*dt));
+  // Sweep both ascending AND descending travel. The first hit on an upward
+  // sweep is a ceiling; it must stop ascent, not count as grounded.
   const vertical=sweepActorAxis(world,position,'y',vy*dt);
   position={...position,y:vertical.position};
+  const ceilingContact=vertical.collided && vy>0;
+  const grounded=vertical.collided && vy<0;
   return {
     schema:ACTOR_PHYSICS_SCHEMA,...position,
     vy:vertical.collided ? 0 : vy,
-    grounded:vertical.collided,
+    grounded,
     wallContact:xMotion.blocked || zMotion.blocked,
-    ceilingContact:false,
+    ceilingContact,
     stepUp:xMotion.stepped || zMotion.stepped,
+    jumped:jumping,
     worldRevision:world.revision,
     error:null
   };

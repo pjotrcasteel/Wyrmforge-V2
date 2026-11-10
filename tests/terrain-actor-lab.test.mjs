@@ -48,3 +48,17 @@ test('underfoot test is opt-in and records fall before asynchronous mesh complet
   assert.match(main,/actorExcavate\.disabled = false/);
   assert.match(main,/actorExcavate\.disabled = true/);
 });
+
+test('V2.5 jump uses native touch/keyboard input and records ceiling contacts', () => {
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
+  assert.match(html, /id="actor-jump"[^>]*type="button"[^>]*aria-label="Jump"/);
+  assert.match(html, /#actor-jump\{grid-column:3;grid-row:1/);
+  assert.match(main, /actorJumpButton\.addEventListener\('click'/);
+  assert.match(main, /jump:jumpQueued,dt:1\/60/);
+  assert.match(main, /jumpQueued = false; \/\/ One press generates at most one jump impulse/);
+  assert.match(main, /event\.code === 'Space'/);
+  assert.match(main, /if \(!event\.repeat\) jumpQueued = true/);
+  assert.match(main, /if \(current\.ceilingContact && !actor\.ceilingContact\)/);
+  assert.match(main, /jumps:actorJumps,ceilingHits:actorCeilingHits/);
+});
