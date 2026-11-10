@@ -687,6 +687,57 @@ Avoid new save/cloud/checkpoint features until required by those goals.
 Continue keeping V1 untouched; do not promote Baseline/Background pilot
 based on short samples alone.
 
+## 0.0.024 — roadmap V2.3/V2.5 foundation: Hunt terrain spell targeting
+
+**Purpose:** Keep the V2 engine independent while building exactly the
+capabilities required by Wyrmforge Hunt gameplay: spell impact -> real
+authoritative voxel -> material damage -> bounded remesh. This is a small
+V2.3 destruction and V2.5 aiming/query foundation, **not** a complete
+V2.5 collision milestone or proof of finished Wyrmforge integration.
+
+- [x] Pure V2 3D DDA terrain-ray query with 256-voxel maximum ray distance,
+  signed negative coordinates, nearest solid voxel and face-entry normal.
+  Queries the committed VoxelWorld, never the generated GPU mesh.
+- [x] Invert the existing Hunt-style and voxel inspection camera bases to
+  turn touch coordinates into orthographic voxel rays. World X/Z remain the
+  terrain plane and Y remains elevation. No camera renderer changed.
+- [x] Implement `applyTerrainSpellHit` V2 interface: accepts a ray or an
+  already resolved hit, rejects stale world-revision/material hits, applies
+  a bounded material-aware `damage-sphere` command via TerrainEditLedger,
+  and returns exact voxel impact, material, removed/partially damaged cell
+  counts, and dirty chunk IDs.
+- [x] Add opt-in `Touch: Target spell` lab mode. **Pan terrain** remains
+  the default. One short stationary tap attempts a spell; drag pans,
+  pinch zooms, long presses and pointer cancellations do not fire spells.
+- [x] Targeted hits use the existing warm-worker/localized GPU update;
+  partial-only damage never forces a geometry rebuild.
+- [x] Include `lastTargetedImpact` and `terrainInteractionMode` in
+  benchmark exports. Existing demo Carve/Damage/Burst/replay tools unchanged.
+- [x] Tests for camera-to-voxel inverse targeting, cave and closest-wall
+  ray hits, signed chunk seams, material resistance, stale hit checks,
+  bedrock, misses, and touch cancellation.
+- [ ] **Not yet:** actual Wyrmforge Hunt migration, projectile movement
+  physics, swept player collision, mass-production terrain scenes, full
+  projectile contacts, pixel-art material atlas and mobile acceptance.
+- [ ] Do not mark V2.3, V2.4 or V2.5 gates as completed on this pilot.
+
+**Mobile check:** v0.0.024 on iPhone Safari, Hill / Hunt-style /
+seed 7 / chunk 32³. Choose **Touch: Target spell**, select Background
+pilot and allow worker prewarm. Tap the visible hill repeatedly in the
+same location. The tap should damage the actual touched voxel, with
+material-aware repeated hits and a localized crater; dragging/pinching
+must pan/zoom without firing. Check a Cliff or Arch surface with the
+inspection camera as a second test. Export JSON containing
+`lastTargetedImpact` with a non-null `hit.cell`, authoritative voxel
+material, and correct worker/dirty-chunk data. Re-enter **Pan terrain**
+and ensure a tap no longer carves.
+
+**Wyrmforge integration boundary:** `raycastTerrain(world,ray)` and
+`applyTerrainSpellHit(world,ledger,impact)` are engine-side pure V2
+functions; the future V2 Hunt gameplay adapter owns projectile spawning,
+hit origin/direction, game balance, visuals and effects. Wyrmforge V1
+repo and assets remain untouched.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -695,7 +746,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.023
+### Current change: 0.0.024
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

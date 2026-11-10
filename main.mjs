@@ -13,6 +13,9 @@ import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledge
 import { applyDemoBurst } from './src/demo-burst.mjs';
 import { createReplayCheckpoint, restoreReplayCheckpoint } from './src/replay-checkpoint.mjs';
 import { createReplayFile, parseReplayFile, MAX_REPLAY_FILE_BYTES } from './src/replay-file.mjs';
+import { terrainRayFromScreen } from './src/terrain-raycast.mjs';
+import { applyTerrainSpellHit } from './src/hunt-terrain-impact.mjs';
+import { TerrainTapRecognizer } from './src/terrain-tap-recognizer.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -32,6 +35,7 @@ const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
 const cameraPicker = document.querySelector('#camera');
+const terrainTargetMode = document.querySelector('#terrain-target-mode');
 let activeCamera = getCameraPreset(cameraPicker.value).id;
 let activeSeed = 7;
 let activeScene = 'hill';
@@ -40,6 +44,7 @@ let terrainEdits = new TerrainEditLedger(world);
 let nextTerrainEditId = 0, nextDamageId = 0;
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
+const terrainTaps = new TerrainTapRecognizer();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
 const frameMetrics = new FrameMetrics();
 let lastMeshAudit = null;
@@ -49,6 +54,7 @@ let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
 let lastBurst = null, nextBurstId = 0;
 let lastDamage = null;
+let lastTargetedImpact = null;
 let replayCheckpoint = null, replayCounters = null, lastReplay = null;
 
 function cancelMeshWorker() {
@@ -371,6 +377,12 @@ function chooseScene() {
 scenePicker.addEventListener('change', chooseScene);
 seedPicker.addEventListener('change', chooseScene);
 chunkPicker.addEventListener('change', chooseScene);
+terrainTargetMode.addEventListener('change', () => {
+  terrainTaps.cancel();
+  meshAuditStatus.textContent = terrainTargetMode.value === 'spell'
+    ? 'Hunt targeting: tap terrain to apply a power-1 spell. Drag pans; pinch zooms.'
+    : 'Terrain pan mode active. Select Target spell to test Wyrmforge projectile hits.';
+});
 cameraPicker.addEventListener('change', () => {
   activeCamera = getCameraPreset(cameraPicker.value).id;
   dirty = true;
@@ -768,7 +780,8 @@ document.querySelector('#report').addEventListener('click', () => {
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
-    lastDamage, lastReplay, replayPointAvailable:replayCheckpoint !== null,
+    lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
+    lastReplay, replayPointAvailable:replayCheckpoint !== null,
     damageLedger:{ editRevision:terrainEdits.editRevision,
       pendingDamageCells:terrainEdits.pendingDamageCells,
       resistanceByMaterial:MATERIAL_RESISTANCE },
@@ -782,15 +795,68 @@ document.querySelector('#report').addEventListener('click', () => {
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
+function applyHuntSpellTap(tap) {
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const start = performance.now();
+  try {
+    const ray = terrainRayFromScreen({
+      x:tap.x*canvas.width/rect.width,
+      y:tap.y*canvas.height/rect.height,
+      width:canvas.width,height:canvas.height,scale,
+      panX:cameraX,panY:cameraY,camera:activeCamera
+    });
+    const impact = applyTerrainSpellHit(world, terrainEdits, {
+      id:`lab-damage-${++nextDamageId}`,
+      ray, radius:2.5, power:1
+    });
+    lastTargetedImpact = {
+      ...impact, screenCss:tap, editCpuMs:performance.now()-start
+    };
+    lastCarve = null;
+    lastBurst = null;
+    lastDamage = null;
+    if (impact.status === 'miss') {
+      meshAuditStatus.textContent = 'Spell missed solid terrain. Try tapping a visible hill or cliff.';
+      return;
+    }
+    if (!impact.dirtyChunks.length) {
+      meshAuditStatus.textContent = 'Spell hit voxel (' +
+        [impact.hit.cell.x,impact.hit.cell.y,impact.hit.cell.z].join(',') +
+        '): ' + impact.damagedVoxels + ' partially damaged, no geometry removed yet.';
+      return;
+    }
+    cancelTerrainWorker();
+    invalidateMeshAudit();
+    for (const chunkId of impact.dirtyChunks) pendingTerrainDirty.add(chunkId);
+    updateTerrainMeshes();
+    meshAuditStatus.textContent = 'Targeted spell removed ' +
+      impact.removedVoxels + ' voxels at (' +
+      [impact.hit.cell.x,impact.hit.cell.y,impact.hit.cell.z].join(',') +
+      '), ' + impact.dirtyChunks.length + ' dirty chunks.';
+    dirty = true;
+  } catch (error) {
+    meshAuditStatus.textContent = 'Terrain spell targeting failed: ' + error.message;
+  }
+}
+
 canvas.addEventListener('pointerdown', event => {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   const point = pointerPosition(event);
   if (gestures.begin(event.pointerId, point.x, point.y)) {
+    if (terrainTargetMode.value === 'spell') {
+      if (gestures.activeCount === 1) {
+        terrainTaps.begin(event.pointerId,point.x,point.y,performance.now());
+      } else {
+        terrainTaps.cancel(); // Never target with a finger while pinching.
+      }
+    }
     canvas.setPointerCapture(event.pointerId);
   }
 });
 canvas.addEventListener('pointermove', event => {
   const point = pointerPosition(event);
+  terrainTaps.move(event.pointerId,point.x,point.y);
   const delta = gestures.move(event.pointerId, point.x, point.y);
   if (!delta) return;
   const rect = canvas.getBoundingClientRect();
@@ -800,9 +866,22 @@ canvas.addEventListener('pointermove', event => {
   zoomAt(delta.centerX, delta.centerY, delta.zoomRatio);
   dirty = true;
 });
-canvas.addEventListener('pointerup', event => gestures.end(event.pointerId));
-canvas.addEventListener('pointercancel', event => gestures.end(event.pointerId));
-canvas.addEventListener('lostpointercapture', event => gestures.end(event.pointerId));
+canvas.addEventListener('pointerup', event => {
+  const point = pointerPosition(event);
+  const tap = terrainTargetMode.value === 'spell'
+    ? terrainTaps.end(event.pointerId,point.x,point.y,performance.now())
+    : null;
+  gestures.end(event.pointerId);
+  if (tap) applyHuntSpellTap(tap);
+});
+canvas.addEventListener('pointercancel', event => {
+  terrainTaps.cancel();
+  gestures.end(event.pointerId);
+});
+canvas.addEventListener('lostpointercapture', event => {
+  terrainTaps.cancel();
+  gestures.end(event.pointerId);
+});
 canvas.addEventListener('wheel', event => {
   if (event.cancelable) event.preventDefault();
   const point = pointerPosition(event);
@@ -810,8 +889,8 @@ canvas.addEventListener('wheel', event => {
   zoomAt(point.x, point.y, Math.exp(-event.deltaY * unit));
 }, { passive: false });
 window.addEventListener('resize',resize);
-document.addEventListener('visibilitychange', () => { previous = null; if (document.hidden) gestures.reset(); });
-window.addEventListener('blur', () => gestures.reset());
+document.addEventListener('visibilitychange', () => { previous = null; if (document.hidden) { gestures.reset(); terrainTaps.cancel(); } });
+window.addEventListener('blur', () => { gestures.reset(); terrainTaps.cancel(); });
 try {
   gpuRenderer = new WebGLVoxelView(gpuCanvas, {
     onAvailabilityChange(available, error) {
