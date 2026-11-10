@@ -8,7 +8,9 @@ import { pathToFileURL } from 'node:url';
 const CODE_EXTENSIONS=new Set(['.mjs','.js']);
 const SCAN_DIRS=['src','tests','scripts'];
 const ENTRY_FILES=['main.mjs'];
-const IMPORT_PATTERN=/(?:\b(?:import|export)\s+(?:[^'"]*?\s+from\s*)?|\bimport\s*\()\s*['"]([^'"]+)['"]/g;
+// Match import/export declarations at the beginning of a source line; do not
+// interpret fixture strings or regex literals as executable imports.
+const IMPORT_PATTERN=/^[ \\t]*(?:import[ \\t]+(?:[^'"\\r\\n]*?[ \\t]+from[ \\t]*)?|export[ \\t]+[^'"\\r\\n]*?[ \\t]+from[ \\t]*)['"]([^'"\\r\\n]+)['"]/gm;
 const ASSET_PATTERN=/(?:\b(?:src|href)\s*=\s*|\bnew\s+URL\s*\(\s*)['"]([^'"]+)['"]/g;
 const FORBIDDEN=/(?:^|[\\/])(?:Wyrmforge\.Presentation|experimental|legacy|v1)(?:[\\/]|$)/i;
 function within(root,file) {
