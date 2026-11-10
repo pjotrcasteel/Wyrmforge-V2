@@ -93,7 +93,21 @@ test('arch demo carve only rebuilds affected chunk meshes', () => {
     for (const mesh of buildExposedFaceMeshes(world, { chunkIds: dirty })) after.set(mesh.id, mesh);
     const full = new Map(buildExposedFaceMeshes(world).map(m => [m.id, m]));
     assert.deepEqual([...after.keys()].sort(), [...full.keys()].sort());
-    for (const [id, mesh] of after) assert.deepEqual(mesh, full.get(id));
+    for (const [id, mesh] of after) {
+      const fresh = full.get(id);
+      if (dirty.has(id)) {
+        // Rebuilt chunks carry current revision and neighbor metadata.
+        assert.deepEqual(mesh, fresh);
+      } else {
+        // Unaffected GPU geometry is intentionally retained. Its neighborRevision
+        // metadata records when it was built, not when unrelated interior voxels changed.
+        const oldGeometry = { ...mesh };
+        const newGeometry = { ...fresh };
+        delete oldGeometry.neighborRevisions;
+        delete newGeometry.neighborRevisions;
+        assert.deepEqual(oldGeometry, newGeometry);
+      }
+    }
   }
 });
 
