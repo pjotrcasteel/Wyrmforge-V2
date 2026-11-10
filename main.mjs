@@ -12,6 +12,7 @@ import { demoCarveTarget } from './src/demo-carve.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
 import { createReplayCheckpoint, restoreReplayCheckpoint } from './src/replay-checkpoint.mjs';
+import { createReplayFile, parseReplayFile, MAX_REPLAY_FILE_BYTES } from './src/replay-file.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -25,6 +26,8 @@ const meshAuditStatus = document.querySelector('#mesh-audit');
 const meshCompareButton = document.querySelector('#mesh-compare-button');
 const terrainMeshMode = document.querySelector('#terrain-mesh-mode');
 const restoreReplayButton = document.querySelector('#checkpoint-restore');
+const replayFileAction = document.querySelector('#replay-file-action');
+const replayImportFile = document.querySelector('#replay-import-file');
 const scenePicker = document.querySelector('#scene');
 const seedPicker = document.querySelector('#seed');
 const chunkPicker = document.querySelector('#chunks');
@@ -535,18 +538,10 @@ document.querySelector('#checkpoint-save').addEventListener('click', () => {
   }
 });
 
-restoreReplayButton.addEventListener('click', () => {
-  if (!replayCheckpoint) return;
-  const startedAt = performance.now();
-  let restored;
-  try {
-    // Fail closed without changing the current world, ledger, or live buffers.
-    restored = restoreReplayCheckpoint(replayCheckpoint);
-  } catch (error) {
-    lastReplay = {status:'error',operation:'restore',message:error.message};
-    meshAuditStatus.textContent = 'Replay restore rejected: ' + error.message;
-    return;
-  }
+// Only install a checkpoint after full generator + journal + geometry + partial
+// damage verification. Both in-tab restore and portable-file import share this
+// authority transition, so neither can apply an old worker result or GPU mesh.
+function installVerifiedReplay(checkpoint, restored, counters, operation, startedAt, bytes = null) {
   cancelTerrainWorker();
   pendingTerrainDirty.clear();
   world = restored.world;
@@ -556,9 +551,12 @@ restoreReplayButton.addEventListener('click', () => {
   scenePicker.value = activeScene;
   seedPicker.value = String(activeSeed);
   chunkPicker.value = String(restored.source.chunkEdge);
-  nextTerrainEditId = replayCounters.nextTerrainEditId;
-  nextDamageId = replayCounters.nextDamageId;
-  nextBurstId = replayCounters.nextBurstId;
+  nextTerrainEditId = counters.nextTerrainEditId;
+  nextDamageId = counters.nextDamageId;
+  nextBurstId = counters.nextBurstId;
+  replayCheckpoint = checkpoint;
+  replayCounters = { ...counters };
+  restoreReplayButton.disabled = false;
   lastCarve = null;
   lastBurst = null;
   lastDamage = null;
@@ -577,18 +575,96 @@ restoreReplayButton.addEventListener('click', () => {
     }
   }
   lastReplay = {
-    status:'restored',
-    schema:replayCheckpoint.schema,
-    commands:replayCheckpoint.journal.commands.length,
-    pendingDamageCells:replayCheckpoint.pendingDamageCells,
-    worldChecksum:replayCheckpoint.checksums.world,
-    damageChecksum:replayCheckpoint.checksums.damage,
-    elapsedMs:performance.now()-startedAt
+    status: operation,
+    schema: checkpoint.schema,
+    commands: checkpoint.journal.commands.length,
+    pendingDamageCells: checkpoint.pendingDamageCells,
+    worldChecksum: checkpoint.checksums.world,
+    damageChecksum: checkpoint.checksums.damage,
+    elapsedMs: performance.now() - startedAt,
+    ...(bytes === null ? {} : { portableFileBytes: bytes })
   };
-  meshAuditStatus.textContent = 'Verified replay restored: ' +
-    lastReplay.commands + ' edits and ' + lastReplay.pendingDamageCells +
-    ' partial-damage cells. No stale GPU meshes were reused.';
+  meshAuditStatus.textContent = 'Verified ' +
+    (operation === 'file-imported' ? 'portable file imported' : 'replay restored') +
+    ': ' + lastReplay.commands + ' edits and ' +
+    lastReplay.pendingDamageCells + ' partial-damage cells. Terrain rebuilt.';
   dirty = true;
+}
+
+restoreReplayButton.addEventListener('click', () => {
+  if (!replayCheckpoint) return;
+  const startedAt = performance.now();
+  let restored;
+  try {
+    // Fail closed without changing current world or live buffers.
+    restored = restoreReplayCheckpoint(replayCheckpoint);
+  } catch (error) {
+    lastReplay = {status:'error', operation:'restore', message:error.message};
+    meshAuditStatus.textContent = 'Replay restore rejected: ' + error.message;
+    return;
+  }
+  installVerifiedReplay(replayCheckpoint, restored, replayCounters, 'restored', startedAt);
+});
+
+replayFileAction.addEventListener('change', () => {
+  const option = replayFileAction.value;
+  replayFileAction.value = '';
+  if (option === 'import') {
+    // Must be triggered directly by the user's selection for iPhone Safari.
+    replayImportFile.click();
+    return;
+  }
+  if (option !== 'export') return;
+  const startedAt = performance.now();
+  try {
+    const text = createReplayFile({
+      scene:activeScene, seed:activeSeed, world, ledger:terrainEdits
+    });
+    const bytes = new TextEncoder().encode(text).byteLength;
+    const url = URL.createObjectURL(new Blob([text],{type:'application/json'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `voxel-v2-${activeScene}-s${activeSeed}-c${world.chunkEdge}-replay.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    lastReplay = {
+      status:'file-exported', commands:terrainEdits.recordedEdits,
+      pendingDamageCells:terrainEdits.pendingDamageCells,
+      portableFileBytes:bytes, elapsedMs:performance.now()-startedAt
+    };
+    meshAuditStatus.textContent = 'Portable replay exported: ' +
+      lastReplay.commands + ' edits / ' + bytes + ' bytes. Keep the JSON file.';
+  } catch (error) {
+    lastReplay = {status:'file-error',operation:'export',message:error.message};
+    meshAuditStatus.textContent = 'Replay export rejected: ' + error.message;
+  }
+});
+
+replayImportFile.addEventListener('change', async () => {
+  const file = replayImportFile.files?.[0];
+  if (!file) return;
+  const startedAt = performance.now();
+  replayFileAction.disabled = true;
+  try {
+    if (!file.size || file.size > MAX_REPLAY_FILE_BYTES) {
+      throw new RangeError('Replay file must be 1–256 KiB');
+    }
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder('utf-8', {fatal:true}).decode(buffer);
+    // parseReplayFile verifies schema, limits, journal fingerprints, voxel
+    // geometry and pending damage, creating a separate fresh V2 world.
+    const parsed = parseReplayFile(text);
+    installVerifiedReplay(parsed.checkpoint, parsed.restored, parsed.counters,
+      'file-imported', startedAt, parsed.bytes);
+  } catch (error) {
+    // No live authority, renderer or last-good replay point is changed.
+    lastReplay = {status:'file-error',operation:'import',message:error.message};
+    meshAuditStatus.textContent = 'Replay import rejected: ' + error.message +
+      '. Current terrain was retained.';
+  } finally {
+    replayFileAction.disabled = false;
+    replayImportFile.value = ''; // Allow reselecting the same file.
+  }
 });
 
 document.querySelector('#mesh-audit-button').addEventListener('click', () => {
@@ -706,7 +782,7 @@ document.querySelector('#report').addEventListener('click', () => {
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
-    caveat:'Replay points are session-local, regenerate V2 fixture + journal and verify terrain/damage checksums; not yet durable file persistence. Live GPU uploads remain synchronous.' };
+    caveat:'Portable replay files can be exported/imported, but require manual file storage. Imports are bounded and checksum-verified, not cryptographically authenticated. Live GPU uploads remain synchronous.' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);

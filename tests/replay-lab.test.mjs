@@ -14,3 +14,22 @@ test('lab checkpoint actions are interactive and include replay diagnostics in J
   assert.match(main, /cancelTerrainWorker\(\);[\s\S]*pendingTerrainDirty\.clear\(\);[\s\S]*world = restored\.world/);
   assert.match(main, /lastReplay, replayPointAvailable:replayCheckpoint !== null/);
 });
+
+test('portable replay UI remains compact and never trusts file JSON before restoring', () => {
+  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+  const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
+  assert.match(html, /id="replay-file-action"/);
+  assert.match(html, /value="export">Export JSON/);
+  assert.match(html, /value="import">Import JSON/);
+  assert.match(html, /id="replay-import-file" type="file"/);
+  assert.match(html, /id="replay-import-file"[^>]* hidden/);
+  assert.match(main, /const parsed = parseReplayFile\(text\)/);
+  assert.match(main, /installVerifiedReplay\(parsed\.checkpoint, parsed\.restored, parsed\.counters/);
+  assert.match(main, /const text = createReplayFile\(/);
+  assert.match(main, /file\.size > MAX_REPLAY_FILE_BYTES/);
+  assert.match(main, /new TextDecoder\('utf-8', \{fatal:true\}\)/);
+  assert.match(main, /'file-imported'/);
+  assert.match(main, /'file-exported'/);
+  assert.match(main, /replayImportFile\.value = ''/);
+  assert.match(main, /cancelTerrainWorker\(\);[\s\S]*pendingTerrainDirty\.clear\(\);[\s\S]*world = restored\.world/);
+});
