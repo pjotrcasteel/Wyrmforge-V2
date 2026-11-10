@@ -92,6 +92,9 @@ export class WebGLVoxelView {
   #queuedUploads = new Map();
   #uploadQueuePeak = 0;
   #uploadQueueBytes = 0;
+  #recoveryQueue = new Map();
+  #recoveryBytes = 0;
+  #recovering = false;
   #lost = false;
   #losses = 0;
   #onAvailabilityChange;
@@ -111,13 +114,21 @@ export class WebGLVoxelView {
       this.#losses++;
       this.#program = null;
       this.#gpuMeshes.clear();
+      this.#recoveryQueue.clear();
+      this.#recoveryBytes = 0;
+      this.#recovering = false;
       this.#onAvailabilityChange(false);
     });
     canvas.addEventListener('webglcontextrestored', () => {
       try {
         this.#lost = false;
         this.#initialize();
-        this.#uploadAll();
+        // Restore incrementally: a context restoration must not synchronously
+        // re-upload the entire scene on the main thread.
+        this.#recoveryQueue = new Map(this.#sourceMeshes);
+        this.#recoveryBytes = [...this.#recoveryQueue.values()].reduce((sum, mesh) =>
+          sum + this.#meshBytes(mesh), 0);
+        this.#recovering = this.#recoveryQueue.size > 0;
         this.#onAvailabilityChange(true);
       } catch (error) {
         this.#lost = true;
@@ -127,10 +138,17 @@ export class WebGLVoxelView {
   }
 
   get ready() { return !this.#lost && this.#program !== null; }
-  get pendingUploads() { return this.#queuedUploads.size; }
+  get pendingUploads() { return this.#queuedUploads.size + this.#recoveryQueue.size; }
+  get recovering() { return this.#recovering; }
+  #meshBytes(mesh) {
+    return mesh.positions.byteLength + mesh.normals.byteLength +
+      mesh.materials.byteLength + mesh.indices.byteLength;
+  }
   get uploadQueueStatistics() {
     return { pendingChunks: this.#queuedUploads.size,
-      pendingBytes: this.#uploadQueueBytes, peakChunks: this.#uploadQueuePeak };
+      pendingBytes: this.#uploadQueueBytes + this.#recoveryBytes,
+      recoveryChunks: this.#recoveryQueue.size,
+      peakChunks: this.#uploadQueuePeak };
   }
 
   // V2.4: stage a bounded batch; caller invalidates it on new edits/reset.
@@ -151,8 +169,7 @@ export class WebGLVoxelView {
     }
     let additionalBytes = 0;
     for (const mesh of replacements.values()) {
-      additionalBytes += mesh.positions.byteLength + mesh.normals.byteLength +
-        mesh.materials.byteLength + mesh.indices.byteLength;
+      additionalBytes += this.#meshBytes(mesh);
     }
     if (this.#uploadQueueBytes + additionalBytes > 16 * 1024 * 1024) {
       throw new RangeError('GPU upload queue byte capacity exceeded');
@@ -160,8 +177,7 @@ export class WebGLVoxelView {
     for (const id of ids) {
       const mesh = replacements.get(id) ?? null;
       this.#queuedUploads.set(id, mesh);
-      if (mesh) this.#uploadQueueBytes += mesh.positions.byteLength +
-        mesh.normals.byteLength + mesh.materials.byteLength + mesh.indices.byteLength;
+      if (mesh) this.#uploadQueueBytes += this.#meshBytes(mesh);
     }
     this.#uploadQueuePeak = Math.max(this.#uploadQueuePeak, this.#queuedUploads.size);
   }
@@ -176,18 +192,25 @@ export class WebGLVoxelView {
     if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
       throw new RangeError('Invalid GPU upload frame budget');
     }
-    if (!this.ready || !this.#queuedUploads.size) return { chunks: 0, elapsedMs: 0 };
+    if (!this.ready || !this.pendingUploads) return { chunks: 0, elapsedMs: 0 };
     const start = now();
     let chunks = 0;
-    while (this.#queuedUploads.size && (chunks === 0 || now() - start < budgetMs)) {
-      const [id, mesh] = this.#queuedUploads.entries().next().value;
-      this.#queuedUploads.delete(id);
-      const bytes = mesh ? mesh.positions.byteLength + mesh.normals.byteLength +
-        mesh.materials.byteLength + mesh.indices.byteLength : 0;
-      this.#uploadQueueBytes -= bytes;
-      this.replaceMeshes(new Set([id]), mesh ? [mesh] : []);
+    while (this.pendingUploads && (chunks === 0 || now() - start < budgetMs)) {
+      if (this.#queuedUploads.size) {
+        const [id, mesh] = this.#queuedUploads.entries().next().value;
+        this.#queuedUploads.delete(id);
+        this.#uploadQueueBytes -= mesh ? this.#meshBytes(mesh) : 0;
+        this.replaceMeshes(new Set([id]), mesh ? [mesh] : []);
+      } else {
+        const [id, mesh] = this.#recoveryQueue.entries().next().value;
+        this.#recoveryQueue.delete(id);
+        this.#recoveryBytes -= this.#meshBytes(mesh);
+        // Source mesh may have changed during recovery; never resurrect it.
+        if (this.#sourceMeshes.get(id) === mesh) this.#uploadOne(mesh);
+      }
       chunks++;
     }
+    if (!this.#recoveryQueue.size) this.#recovering = false;
     return { chunks, elapsedMs: now() - start };
   }
   get statistics() {
@@ -276,6 +299,9 @@ export class WebGLVoxelView {
   }
 
   #uploadAll() {
+    this.#recoveryQueue.clear();
+    this.#recoveryBytes = 0;
+    this.#recovering = false;
     this.#discardGpuMeshes();
     for (const mesh of this.#sourceMeshes.values()) this.#uploadOne(mesh);
   }
@@ -314,6 +340,9 @@ export class WebGLVoxelView {
       replacements.set(mesh.id, mesh);
     }
     for (const id of ids) {
+      const recoveryMesh = this.#recoveryQueue.get(id);
+      if (recoveryMesh) this.#recoveryBytes -= this.#meshBytes(recoveryMesh);
+      this.#recoveryQueue.delete(id);
       const oldGpu = this.#gpuMeshes.get(id);
       if (oldGpu) this.#disposeRecord(oldGpu);
       this.#gpuMeshes.delete(id);
@@ -352,6 +381,9 @@ export class WebGLVoxelView {
 
   dispose() {
     this.cancelQueuedUploads();
+    this.#recoveryQueue.clear();
+    this.#recoveryBytes = 0;
+    this.#recovering = false;
     this.#discardGpuMeshes();
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;

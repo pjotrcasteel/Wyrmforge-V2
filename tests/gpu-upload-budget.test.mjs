@@ -16,7 +16,9 @@ function fakeCanvas() {
     enableVertexAttribArray(){}, vertexAttribPointer(){}, deleteVertexArray(){},
     deleteBuffer(){}, isContextLost:()=>false, deleteProgram(){}
   };
-  return { canvas:{getContext:()=>gl,addEventListener(){}}, now:()=>clock };
+  const listeners = new Map();
+  return { canvas:{getContext:()=>gl,addEventListener:(type,fn)=>listeners.set(type,fn)},
+    now:()=>clock, emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
 }
 function mesh(id) {
   return { id, origin:[0,0,0], positions:new Float32Array(9),
@@ -55,5 +57,39 @@ test('cancel and full scene replacement invalidate stale pending geometry', () =
   assert.equal(view.pendingUploads,0);
   assert.equal(view.statistics.drawCalls,1);
   assert.throws(()=>view.queueReplacementMeshes(Array.from({length:129},(_,i)=>String(i)),[]),RangeError);
+  view.dispose();
+});
+
+test('context restoration reuploads across frames instead of blocking restore event', () => {
+  const {canvas,now,emit}=fakeCanvas();
+  const view=new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  assert.equal(view.statistics.drawCalls,3);
+  emit('webglcontextlost');
+  assert.equal(view.ready,false);
+  emit('webglcontextrestored');
+  assert.equal(view.ready,true);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,3);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,2);
+  view.replaceMeshes(new Set(['b']),[mesh('b')]);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,1);
+  view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.statistics.drawCalls,3);
+  assert.equal(view.recovering,false);
+  view.dispose();
+});
+test('reset during context recovery discards old-world uploads', () => {
+  const {canvas,now,emit}=fakeCanvas();
+  const view=new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('old-a'),mesh('old-b')]);
+  emit('webglcontextlost');
+  emit('webglcontextrestored');
+  view.setMeshes([mesh('new')]);
+  assert.equal(view.pendingUploads,0);
+  assert.equal(view.flushQueuedUploads({now}).chunks,0);
+  assert.equal(view.statistics.drawCalls,1);
   view.dispose();
 });

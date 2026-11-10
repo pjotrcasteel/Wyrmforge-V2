@@ -1312,3 +1312,10 @@ Chunk size 16 is experimental, not a final optimized choice.
 - Export reports pending upload chunks/CPU mesh bytes and queue peak; completed worker updates record edit-to-visible CPU-side completion latency.
 - Node tests cover frame-budget draining, negative chunk IDs, cancel/reset and queue cap.
 - **Not accepted yet:** physical iPhone/Android sustained tests, WebGL context-loss during partial uploads, GPU driver timing and complete V2.4/V2.7 gates. Baseline synchronous mode remains intentionally unchanged.
+
+## V2 0.0.034 — incremental WebGL2 context recovery (V2.4)
+
+- On WebGL context restoration, retain authoritative CPU mesh sources but re-upload them incrementally through the existing 2 ms/frame scheduling path rather than synchronously uploading the entire scene.
+- Dirty chunk replacement removes corresponding pending recovery entries to prevent stale geometry resurfacing; full scene reset clears recovery work.
+- Report recovery queue chunks and pending bytes. Regression tests simulate loss/restore, dirty replacement during restore, and scene reset during restore.
+- Still open: device-level context-loss test, measured p95/p99 burst edit latency, sustained memory trend and remaining V2.4 gate evidence.
