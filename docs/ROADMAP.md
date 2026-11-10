@@ -1,9 +1,12 @@
 # Wyrmforge — Voxel Engine V2 roadmap
 
-**Status:** approved research direction; engineering and device acceptance remain open.  
-**Scope:** isolated mobile-first voxel laboratory, not an automatic production Hunt replacement.  
-**Branch:** `experiment/voxel-v2`  
-**References:** [75-source research ledger](RESEARCH.md) · [Architecture decisions](ARCHITECTURE-DECISIONS.md) · [Live implementation status](PROGRESS.md) · [Canonical Wyrmforge roadmap](../../../../../docs/canon/roadmap.md) (repository-root relative link; consult canonical documents directly if this link does not resolve).
+**Authoritative plan:** the November 9 **Work-authored Wyrmforge Voxel v2 Implementation Handover**, expanded by independent research and engineering verification in this **single roadmap**. Original V2.0–V2.7 milestone definitions and acceptance intent are preserved.
+**Delivery objective:** a clean-room, mobile-first **voxel engine actually used in Wyrmforge Hunt**, with full 3D destruction, measured mobile performance, and bounded hybrid structural gravity.
+**Repository:** `pjotrcasteel/Wyrmforge-V2` (`main`); the original Wyrmforge repository remains unaffected until a separate V2 game cutover.
+**Status:** capabilities have been implemented incrementally through laboratory build **0.0.024**, but individual original V2.0–V2.7 acceptance gates are **not** all passed. No current Wyrmforge Hunt runtime integration or structural gravity is implemented.
+**References:** [Research evidence](RESEARCH.md) · [Architecture decisions](ARCHITECTURE-DECISIONS.md) · [Implementation evidence](PROGRESS.md) · [Hybrid gravity design](VOXEL-GRAVITY-V2.md).
+
+**Roadmap identity:** `0.0.024` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
 
 ## 0. Clean-room V2 mandate — owner decision (2026-11-09)
 
@@ -114,6 +117,88 @@ Future V2 ecosystem: independent authoritative gameplay -> new V2 contracts -> v
 
 **Gate:** ten-minute physical iPhone Safari **and** Android Chrome runs, including p50/p95/p99, hitch counts, input/edit latency, worker queue peak, CPU/GPU estimated memory and device/browser/resolution. No progressive slowdown, state corruption, unexpected GPU resource growth or loss of production routes. Establish explicit target thresholds from V2.0 baseline and owner-approved device classes before claiming “buttery smooth”; **do not invent universal FPS guarantees**.
 
+## 3A. Required follow-on milestones — completing Wyrmforge, not just the lab
+
+**Owner delivery direction (2026-11-10):** the V2.0–V2.7 foundation is a
+**necessary intermediate release**, not the end product. The Work handover
+intentionally deferred full-game integration and structural collapse from its
+*first simple release*. Those features are now explicitly required **after**
+that foundation, without rewriting or changing its original milestones.
+
+### V2.8 — First playable Wyrmforge Hunt integration (gravity may be off)
+
+**Deliver:** use the *new independent* V2 voxel terrain engine inside a
+guarded V2 Hunt gameplay route or isolated switch, without converting the
+engine into a wrapper around V1. Connect a V2-native world-generation
+entrypoint, terrain rendering/camera, player grounding/collision, true
+projectile/spell impact coordinates, ordered destruction, and region-change
+notifications to gameplay consumers. Preserve the existing playable V1
+game, routes and assets until V2 acceptance. A game-side V2 adapter is
+allowed; **the clean-room engine must not import V1 systems**.
+
+**Acceptance:** a player can enter a Wyrmforge Hunt scene using the V2
+terrain, walk over a hill and cliff, collide with walls/overhangs, destroy
+underfoot terrain and fall, open a tunnel, and trigger localized effects
+through newly authored V2 contracts. No old terrain renderer or collider
+may remain an independent authority over that V2 scene. Verify mobile
+camera/player/spell experience *in the game* (not just a lab link).
+
+### V2.9 — Hybrid gravity, structural integrity and settling (REQUIRED)
+
+**Deliver:** implement the separately documented
+[hybrid gravity design](VOXEL-GRAVITY-V2.md), first under bounded
+standalone test fixtures and then in the guarded Wyrmforge V2 Hunt scene:
+anchored/supporting material, six-connected cohesive-component discovery
+near deleted supports, bounded falling cluster bodies, collision and safe
+atomic settlement, granular loose material behavior, optional fracture,
+and authoritative terrain-change propagation to renderer, Physics V2,
+Lighting V2, VFX V2, Audio V2 and navigation. Keep gravity **configurable
+by material and scene**, but delivering and testing it is **not optional**.
+No per-voxel rigid body and no full-world support scan per frame.
+
+**Acceptance:** cut an arch pillar and observe the unsupported rock fall
+and settle or fracture, while anchored terrain stays fixed; quarry a
+cliff and correctly resolve support; remove the ground under the player
+without ghost colliders; support negative chunk seams and reset mid-fall;
+prove no duplicate static+dynamic collision authority; verify deterministic
+committed settlement, bounded active bodies, worker tasks and memory.
+Prove mobile quality without disabling gameplay destruction to mask lag.
+
+### V2.10 — Wyrmforge production readiness and controlled cutover
+
+**Deliver:** integrated Hunt gameplay, appropriate mobile pixel-art
+terrain/materials, V2 lighting and effects hooks, authored world maps and
+transitions, collision/nav behavior, quality tiers and independent
+10-minute or longer stress/thermal sessions with normal Hunt enemy and
+spell loads **including ambush-like bursts** and gravity events. Compare
+actual game performance and correctness to the initial Work targets.
+Add a reversible deployment/cutover path that preserves the current
+game until the new engine passes all gates.
+
+**Acceptance:** zero unexplained terrain-texture movement, stale craters,
+ghost/invisible colliders, falling-mesh desynchronization, unexpected
+world resets, or material desync; consistent player/spell/physics
+interactions and no sustained GPU/CPU memory growth. Record physical
+iPhone Safari and Android Chrome measurements for the full scene.
+**Only then** switch the game to V2 terrain as the accepted default.
+
+### Original Work performance targets (provisional, not achieved guarantees)
+
+| Measure | Work handover initial target | Acceptance rule |
+| --- | --- | --- |
+| Whole-game frame timing | 60 FPS supported baseline; p95 <= 16.7 ms | Measure actual Hunt workload on named iPhone and Android devices |
+| Main-thread terrain budget | Around 2 ms/frame p95 | Include worker dispatch and uploads |
+| Typical edit-to-visible | <= 100 ms | Separate committed-state latency and visible latency |
+| Slower devices | Explicit 30 FPS quality fallback | Adapt visual quality, never discard committed edits |
+| Tail latency | p99; counts above 33/50 ms | Include ambush-like bursts, cliff collapses and high fragmentation |
+| Sustained operation | >= 10 minutes per baseline device | Memory/thermal/regression trend, not a brief successful demo |
+| Work queues | Bounded bytes/jobs and revision lag | Overload must be visible and deterministic |
+
+These are design **targets**, not a promise of perfect performance on
+every device. Choose quality tiers and exact supported hardware from
+measurements. Preserve frame-time headroom for Wyrmforge's enemies,
+VFX, Audio, Lighting and HUD.
+
 ## 4. Execution order and dependencies
 
 ```text
@@ -125,8 +210,10 @@ V2.0 deployment ownership + instrumentation     [ACTIVE — BLOCKED on deploymen
     -> V2.4 bounded workers and GPU uploads
     -> V2.5 collision and projectiles
     -> V2.6 typed adapters
-    -> V2.7 replay + sustained device acceptance
-    -> separate owner-approved production integration proposal
+    -> V2.7 replay + sustained device acceptance (first foundation release)
+    -> V2.8 first playable Wyrmforge Hunt V2 terrain integration
+    -> V2.9 supported hybrid structural gravity and settling
+    -> V2.10 integrated Wyrmforge release / sustained device acceptance
 ```
 
 Maintain a working vertical slice after every milestone. Small remote commits, isolated tests and preview builds are preferred over 20-minute full production builds. Do not mark milestones complete based on code presence, green CI alone or a GitHub deployment status without route/device verification.
@@ -175,10 +262,10 @@ Collect: commit/build SHA; seed; scene; device, OS, browser, viewport and render
 
 **Deferred until evidence warrants:** octrees, sparse voxel DAGs, brickmaps, WebGPU compute, GPU ray marching, LOD/Transvoxel, smooth density meshing, fluid simulation, advanced lighting, full AI/enemies and production Hunt migration.
 
-**Owner-approved future direction — optional hybrid voxel gravity:** [Voxel Gravity V2 design](VOXEL-GRAVITY-V2.md). Structural collapse is now a planned post-foundation capability, **not** an active milestone or part of the V2.7 release gate. V2.3 provides bounded edit events, V2.4 provides worker/GPU budgets, and V2.5/V2.6 provide collision and typed Physics V2 integration. Only after those foundations pass will we implement support detection, falling cohesive clusters, granular cells, fracture/settlement and real-phone acceptance. Gravity must stay optional per material and must never run a global per-voxel physics loop.
+**Required post-foundation gravity milestone — V2.9:** [Hybrid Gravity V2 design](VOXEL-GRAVITY-V2.md). The Work foundation's V2.7 release gate does not require falling terrain, but the **finished Wyrmforge V2 program does**. V2.3 edit notifications, V2.4 work budgets and V2.5/V2.6 collision/contracts are prerequisites. Gravity may be disabled for a particular material/scene, never for the final acceptance scenario. No full-world or per-voxel rigid-body loop.
 
 ## 8. Definition of done and status discipline
 
 Each milestone requires: merged or remotely checkpointed code on the intended branch, focused automated tests, a reproducible demo scenario, measured acceptance evidence, a current `PROGRESS.md` update, and a known-limitations note. Only mark **ACCEPTED** when all milestone-specific gates pass; otherwise mark **IN PROGRESS**, **BLOCKED** or **READY FOR DEVICE TEST**. Document both successes and failures.
 
-**Current verified state:** the 75-document ledger and architecture synthesis exist; an experimental prototype exists but has **not yet passed the clean-room audit**; V2.0 is not accepted; no real-device measurements or verified safe live deployment have been recorded. The immediate implementation task is to remove the dual-deployer Pages risk, then finish V2.0 instrumentation and validate the live routes and phones.
+**Current status (2026-11-10):** the standalone independent V2 repository has implemented/tested incrementally through **lab v0.0.024**, and the user has confirmed basic iPhone spell-targeted terrain destruction works. Earlier physical iPhone JSON reports provide measured worker/replay cases, but **Android Chrome, integrated Hunt workload, complete original V2.0–V2.7 gates, structural gravity, and production Wyrmforge integration remain unverified/not implemented**. The next work is to close the *oldest blocking core milestone gaps*—especially pixel-readable materials, cliff/overhang destruction beyond the demo, proper player grounding and swept collision, frame-budgeted worker/GPU work and sustained device tests—rather than more replay-file UI. Record exact gap and acceptance proof in PROGRESS.md before claiming completion.
