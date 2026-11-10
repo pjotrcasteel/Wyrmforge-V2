@@ -53,8 +53,14 @@ jobs:
           node --check tests/webgl-local-updates.test.mjs
           node --check src/camera-presets.mjs
           node --check tests/camera-presets.test.mjs
+          node --check src/greedy-mesher.mjs
+          node --check tests/greedy-mesher.test.mjs
+          node --check src/meshing-comparison.mjs
+          node --check scripts/benchmark-meshes.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
+      - name: Compare greedy and exposed meshing on V2 fixtures
+        run: node scripts/benchmark-meshes.mjs > mesh-comparison.json
 
   deploy:
     if: github.event_name != 'pull_request'
