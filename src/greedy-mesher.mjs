@@ -33,7 +33,7 @@ function snapshotSelection(world, chunkIds) {
   };
   const chunks = [];
   for (const id of ids) {
-    if (typeof id !== 'string' || !/^-?(0|[1-9]\\d*),-?(0|[1-9]\\d*),-?(0|[1-9]\\d*)$/.test(id)) {
+    if (typeof id !== 'string' || !/^-?(0|[1-9]\d*),-?(0|[1-9]\d*),-?(0|[1-9]\d*)$/.test(id)) {
       throw new TypeError('Invalid canonical chunk ID');
     }
     const coords = id.split(',').map(Number);
