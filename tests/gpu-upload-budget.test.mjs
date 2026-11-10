@@ -17,10 +17,12 @@ function fakeCanvas() {
     deleteBuffer(){}, isContextLost:()=>false, deleteProgram(){}
   };
   const listeners = new Map();
-  gl.getExtension = name => name === 'WEBGL_lose_context' ? {
-    loseContext: () => listeners.get('webglcontextlost')?.({preventDefault(){}}),
-    restoreContext: () => listeners.get('webglcontextrestored')?.({preventDefault(){}})
+  let contextLost = false;
+  gl.getExtension = name => name === 'WEBGL_lose_context' && !contextLost ? {
+    loseContext: () => { contextLost = true; listeners.get('webglcontextlost')?.({preventDefault(){}}); },
+    restoreContext: () => { contextLost = false; listeners.get('webglcontextrestored')?.({preventDefault(){}}); }
   } : null;
+  gl.isContextLost = () => contextLost;
   return { canvas:{getContext:()=>gl,addEventListener:(type,fn)=>listeners.set(type,fn)},
     now:()=>clock, emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
 }
