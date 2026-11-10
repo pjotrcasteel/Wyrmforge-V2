@@ -82,8 +82,8 @@ Physical-device acceptance is still open.
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
 guide all decisions. Its evidence is not a measured guarantee of mobile performance.
-This version still uses a top-only Canvas2D diagnostic shell, so it does **not** demonstrate solid voxel
-faces or final pixel-art rendering. WebGL2 camera/meshing is V2.2, after the V2.0 and V2.1 gates.
+V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It is **not** the finished
+pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
 ### Current change: 0.0.007
