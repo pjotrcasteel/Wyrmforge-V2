@@ -87,7 +87,8 @@ jobs:
           node --check tests/terrain-actor-lab.test.mjs
           node --check src/actor-support-excavation.mjs
           node --check tests/actor-support-excavation.test.mjs
-          node --check tests/terrain-actor-jump.test.mjs
+          node --check tests/terrain-actor-motion.test.mjs
+          node --check tests/terrain-arch-collision.test.mjs
           node --check scripts/create-versioned-lab.mjs
           node --check tests/versioned-lab.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
