@@ -85,6 +85,26 @@ export class TerrainEditLedger {
   get pendingDamageCells() { return this.#damage.size; }
   get editRevision() { return this.#editRevision; }
 
+  // JSON-friendly bounded journal. Commands retain their original expected
+  // revisions so a replay can reject reordering instead of silently accepting it.
+  exportJournal() {
+    return {
+      schema: 'voxel-v2.terrain-journal.v1',
+      editRevision: this.#editRevision,
+      commands: [...this.#history.values()].map(record => ({ ...record.command }))
+    };
+  }
+
+  // Partial-only damage is authoritative even when the voxel geometry has
+  // not changed. Include it in the checkpoint digest and replay acceptance.
+  exportDamage() {
+    return [...this.#damage.entries()]
+      .map(([position, value]) => ({
+        position, material: value.material, amount: value.amount
+      }))
+      .sort((a,b) => a.position.localeCompare(b.position));
+  }
+
   damageAt(x, y, z) {
     if (![x,y,z].every(Number.isSafeInteger)) {
       throw new TypeError('Damage query requires safe integer coordinates');
@@ -191,7 +211,16 @@ export class TerrainEditLedger {
       changedBounds: resultBounds(min, max), worldRevision: this.#world.revision,
       editRevision: this.#editRevision, pendingDamageCells: this.#damage.size
     });
-    this.#history.set(edit.id, { signature, result });
+    const command = {
+      id: edit.id, type: edit.type,
+      x: edit.x, y: edit.y, z: edit.z, radius: edit.radius
+    };
+    if (edit.power !== null) command.power = edit.power;
+    if (edit.expectedRevision !== undefined) command.expectedRevision = edit.expectedRevision;
+    if (edit.expectedEditRevision !== undefined) {
+      command.expectedEditRevision = edit.expectedEditRevision;
+    }
+    this.#history.set(edit.id, { signature, result, command });
     return result;
   }
 }
