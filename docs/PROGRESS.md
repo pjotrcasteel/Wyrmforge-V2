@@ -196,6 +196,33 @@ changes, renderer still shows WebGL2 and both algorithms report matching unit fa
 Compare triangle, memory and build-time differences rather than assuming greedy wins.
 No visual change should occur when the button is pressed.
 
+## 0.0.013 — fixed benchmark-panel geometry and iPhone evidence
+
+- User observed the Hunt-style Hill move slightly on pressing **Compare meshes**.
+  Both 0.0.012 iPhone screenshots show the same terrain width, but the longer
+  comparison text adds lines below the flexible canvas and shifts its midpoint.
+- Reserve fixed, non-shrinking heights for BOTH telemetry panels, with internal
+  scrolling if a narrow device needs more room. Changing text alone no longer
+  changes the main viewport height. Voxel geometry, camera, meshes and GPU
+  buffers are not touched by this UI-only adjustment.
+- Tests assert fixed status-panel layout and that a comparison leaves the
+  authoritative world snapshots/revision unchanged for both chunk sizes.
+- The owner's 0.0.012 iPhone benchmark (Arch, 32³, seed 7, Hunt-style camera)
+  shows 3,460 exposed triangles (152,240 bytes, 15 ms CPU) versus 156
+  greedy triangles (6,864 bytes, 109 ms CPU); both cover 1,730 unit faces.
+  Greedy saves ~95.5% geometry but costs ~7.3x CPU in that one measurement.
+  The report also recorded one >100 ms hitch in 1,018 samples. The screenshots
+  are from a Hill scene and must not be presented as Arch screenshot evidence.
+- **Not accepted:** greedy as the default live renderer. This is a layout
+  regression fix only; the next engine task is lowering greedy CPU cost and
+  budgeting CPU/GPU work before promotion.
+
+**Player acceptance:** on physical iPhone Safari open 0.0.013, select
+Hill / Hunt-style / seed 7 / 32³, and compare before/after pressing
+**Compare meshes**. The world must remain at the same scale and screen
+position. Press **Carve sphere** then compare again: the hole must remain
+identical and Reset must restore it. The live renderer is still exposed-face.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -204,7 +231,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.012
+### Current change: 0.0.013
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
