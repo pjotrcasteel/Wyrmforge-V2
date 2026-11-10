@@ -597,6 +597,68 @@ continue the original progression rather than start over. Export a second
 benchmark with `lastReplay.status:restored`. Confirm worker state and
 `rendererError` remain healthy. No V1 code or assets are imported.
 
+## 0.0.022 — portable replay JSON export/import across browser sessions
+
+**Physical iPhone Safari v0.0.021 evidence** (build `ab54c3e`,
+Hill/Hunt-style, chunk 32³, seed 7):
+- The session checkpoint restored successfully after one accepted damage pulse.
+- Replayed **one command** and preserved **312 partially damaged voxels**,
+  with `editRevision:1`, accepted edit count 1, and matching checksums:
+  world `42565cf29cb2b4ce`, damage `efffaf035cde47b7`.
+- Reported restore **27 ms** and full eight-chunk CPU mesh rebuild **14 ms**;
+  p95/p99 frame intervals **17/30 ms**, no >33 ms samples across 78 frames,
+  no WebGL context loss or renderer error.
+- It does **not** independently prove continued damage after a restore or
+  sustained performance. Browser-internal state was lost on page refresh.
+
+**New portable V2-only file layer:**
+- [x] Versioned wrapper `voxel-v2.replay-file.v1` around the established
+  `voxel-v2.replay-checkpoint.v1` schema. Includes deterministic fixture
+  identity, ordered IDs, world/edit revisions and all three fingerprints.
+- [x] On-demand **Replay files… → Export JSON** saves the **current** world,
+  not a potentially older session Save replay point. The file is verified
+  by independent generator replay before being offered for download.
+- [x] **Replay files… → Import JSON** opens iPhone Safari's file chooser.
+  The selected file is read strictly as UTF-8 and validated fully
+  **before** replacing the live world, damage ledger or GPU buffers.
+- [x] Strict limit **256 KiB per JSON file** and **128 edit commands** for
+  this first portable, main-thread import experiment; oversize/malformed
+  imports are rejected with explicit feedback. The in-memory ledger's
+  1,024-ID limit is unchanged.
+- [x] Reject wrong wrapper/checkpoint/generator, corrupt JSON, invalid
+  commands and mismatched voxel/damage/journal fingerprints.
+  Fingerprints are **not cryptographic or an authenticity guarantee**.
+- [x] Reconstruct the highest `lab-hit-N`, `lab-damage-N` and
+  `lab-burst-N-hit-K` counters from imported IDs so future lab commands
+  remain unique after a fresh browser session.
+- [x] Share the proven session restore transition: cancel workers, discard
+  pending dirty geometry, install verified fresh V2 world/ledger, rebuild
+  all WebGL2 meshes and resume optional background worker.
+- [x] Preserve the current world when invalid files are rejected; status
+  and JSON benchmark report `file-imported`, `file-exported`,
+  `portableFileBytes` or the explicit rejection.
+- [x] Pure Node tests for portable JSON round-trips (four scenes, both
+  chunk sizes, partially damaged state), ID counter recovery, tamper
+  rejection, invalid/oversize inputs and the compact mobile controls.
+- [ ] **Manual file management only:** no localStorage, IndexedDB, cloud
+  synchronization, cross-version migrations, auto-save, or direct arbitrary
+  voxel chunk snapshots.
+- [ ] Main-thread replay remains synchronous; sustained/device stress tests
+  and larger journal formats remain a future milestone.
+
+**Physical iPhone 0.0.022 acceptance:** Hill/Hunt-style/seed7/32³,
+Background pilot. Press **Damage pulse** once; then
+**Replay files… → Export JSON** and save the file into Files.
+Refresh the lab (fresh in-memory session). Select
+**Replay files… → Import JSON**, choose that same file; verify one edit and
+312 partial-damage cells are restored with no renderer error.
+Press **Damage pulse** twice more: subsequent dirt/stone destruction should
+continue from the imported state rather than restart at zero.
+Export benchmark; check `lastReplay.status:file-imported` immediately
+after import and `damageLedger.editRevision` after follow-up pulses.
+Also try importing the normal benchmark JSON: it must be rejected without
+changing the visible terrain. No V1 assets, schemas or source reused.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -605,7 +667,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.021
+### Current change: 0.0.022
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
