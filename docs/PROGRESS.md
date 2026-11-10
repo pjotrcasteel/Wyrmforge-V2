@@ -1234,6 +1234,46 @@ Export benchmark: `lastTunnel.removedVoxels>0`,
 all six consumer counters advance together, and `rendererError`
 remains null. This is the first small V2.3 tunnel acceptance slice.
 
+## World-first Wyrmforge Hunt product alignment — 2026-11-10
+
+**Owner product clarification:** the clean-room V2 voxel engine serves
+Wyrmforge (mobile-first gothic 2.5D action roguelite), **not** an
+ever-growing test laboratory. Every real Hunt arena must be generated
+from a deterministic seed but visibly and physically themed to its
+chosen **world-map location**: organic forests, wetland trails,
+mountain passes, cliffs, monastery entrances, burned approaches,
+Wyrm lairs and boss spaces. Local variety must preserve the
+site's entry/exit ports, landmark identity, legal routes and
+encounter objectives.
+
+Both the player and enemies/Wyrms can use magic to damage
+**material voxels and physical objects** (trees, destructible props,
+cover, structures). Damage must be authoritative: stable target IDs,
+real material/health rules, committed occupancy changes,
+collision/LOS/navigation invalidation, deterministic replay and
+localized VFX/lighting, not an overlay illusion or duplicated
+simulation authority. Required routes/spawns/objectives may be
+explicitly protected or revalidated; do not trap the player.
+
+**Evidence:** inspected Wyrmforge's current canonical 2.5D vision
+and the C# geography, site-landscape, arena terrain, prop and
+player/enemy impact code as product requirements. The existing C#
+game is **not** an implementation template or imported V2
+dependency. V2 starts independently with new contracts, selected
+material pitch and world-seeded generation.
+
+**Roadmap correction:** V2.0–V2.7 remain the foundation,
+V2.8 must demonstrate **real map location → generated themed
+arena → player/enemy combat destruction** in actual guarded Hunt,
+V2.9 remains mandatory structural gravity **later**, V2.10
+full-game mobile acceptance. See
+[the integration acceptance target](WYRMFORGE-HUNT-WORLD-TARGET.md)
+and [the single roadmap](ROADMAP.md). The next substantive
+implementation should be a new site recipe + location-appropriate
+generation foundation, not another laboratory-only destruction button.
+
+**No software capability marked complete by this documentation update.**
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
