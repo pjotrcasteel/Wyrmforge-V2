@@ -134,7 +134,9 @@ test('damage pulses across negative and positive chunk seams match direct V2 mes
     assert.equal(world.revision,beforeRevision);
     const second=ledger.apply(pulse('two',c,1));
     assert.equal(second.removedVoxels,2);
-    assert.deepEqual([...second.dirtyChunks].sort(),['-1,0,0','0,0,0']);
+    assert.deepEqual([...second.dirtyChunks].sort(),[
+      '-1,-1,0','-1,0,-1','-1,0,0','0,-1,0','0,0,-1','0,0,0'
+    ]);
     assert.equal(buildExposedFaceMeshes(world).length,0);
   }
 });
