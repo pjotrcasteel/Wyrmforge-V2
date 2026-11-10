@@ -347,6 +347,59 @@ Reset must restore the hill. Run again with **Baseline** and compare frames
 and visible correctness; send both reports. Also try Carve twice quickly,
 then Reset, checking old geometry never reappears.
 
+## 0.0.017 — worker prewarming and reuse (opt-in, not default)
+
+**0.0.016 real iPhone Safari evidence, user supplied two JSON exports:**
+
+| Metric | Baseline | Background pilot |
+| --- | ---: | ---: |
+| Synchronous CPU mesh + upload operation | 18 ms | n/a |
+| Worker CPU mesh generation | n/a | 18 ms |
+| Worker GPU upload operation | n/a | 1 ms |
+| Worker request end-to-end | n/a | 258 ms |
+| Frame p95 / p99 | 18 / 41 ms (273 frames) | 19 / 24 ms (1,581 frames) |
+| Frames over 50 ms | 0 | 0 |
+
+Both builds removed 378 voxels from Hill, 32³, seed 7, touched 8/8 chunks,
+rendered 3,868 triangles, and reported no GPU context loss or renderer error.
+The baseline update time is **not** an end-to-end button-to-image time. The
+different frame sampling windows prevent a controlled claim that one renders
+smoother. The worker's 258 ms latency includes startup/dispatch/snapshot work;
+the 239 ms outside CPU meshing and GPU upload is unexplained until segmented
+measurements are collected.
+
+**New small experiment:**
+
+- [x] Maintain a single V2 module worker across successful carve jobs instead of
+  terminating it after every response.
+- [x] When selecting Background pilot, create the worker and wait for a small
+  `warmup` / `warm` handshake. Selecting Baseline disposes the worker.
+- [x] One active job maximum, no backlog; cancel/terminate a busy worker on
+  a newer edit or scene reset, then prewarm its replacement.
+- [x] Preserve V2 world identity, job ID, revision, and dirty-chunk checks;
+  stale work may never update WebGL2.
+- [x] Keep Baseline as the default and fall back to it on worker faults.
+- [x] Report `terrainWorkerWarmupMs` and per-carve
+  `wasWarmAtSubmission`, `snapshotPrepareMs`, `waitForReadyMs`,
+  `workerRoundTripMs`, `workerCpuMs`, `gpuUploadMs`, and
+  `endToEndMs` in exported JSON.
+- [x] Unit-test warm reuse, cold submission, sequential jobs, cancellation,
+  stale responses and simulated worker errors.
+- [ ] Verify **actual cold vs warm latency** on physical iPhone Safari.
+- [ ] Verify Android Chrome and sustained repeated-edit behavior.
+- [ ] Frame-budgeted GPU uploads remain a future separate step; 1 ms in
+  this particular sample is not evidence that they are always cheap.
+
+**0.0.017 mobile test:** Hill / Hunt-style / seed 7 / 32³.
+Select Background pilot and wait for `Background terrain worker ready`.
+Press Carve sphere and export JSON after completion. Check
+`wasWarmAtSubmission: true` and recorded warmup/round-trip times.
+Reset (the worker stays hot if idle), press Carve sphere again, export a second
+JSON. Confirm crater and triangle counts match and that the second warm edit
+doesn't require another worker startup. Also try rapid carve then Reset:
+the intact hill must remain visible; no stale geometry may reappear.
+This gate concerns user-perceived latency, not total FPS or final 2.5D art.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -355,7 +408,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.016
+### Current change: 0.0.017
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
