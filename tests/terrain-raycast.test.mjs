@@ -94,13 +94,13 @@ test('Hunt spell impact queries terrain, respects material resistance and return
   world.set(0,-1,0,3);
   const ledger=new TerrainEditLedger(world);
   const ray={origin:[0.5,2,0.5],direction:[0,-1,0],maxDistance:8};
-  const first=applyTerrainSpellHit(world,ledger,{id:'fire-1',ray,radius:1.1});
+  const first=applyTerrainSpellHit(world,ledger,{id:'fire-1',ray,radius:0.6});
   assert.equal(first.status,'accepted');
   assert.deepEqual(first.hit.cell,{x:0,y:0,z:0});
   assert.equal(first.removedVoxels,0);
   assert.equal(first.damagedVoxels,1);
   assert.deepEqual(first.dirtyChunks,[]);
-  const second=applyTerrainSpellHit(world,ledger,{id:'fire-2',ray,radius:1.1});
+  const second=applyTerrainSpellHit(world,ledger,{id:'fire-2',ray,radius:0.6});
   assert.equal(second.removedVoxels,1);
   assert.ok(second.dirtyChunks.length>0);
   assert.equal(world.get(0,0,0),0);
