@@ -622,7 +622,7 @@ function tick(now) {
   updateActorPhysics(now);
   draw();
   drawActorOverlay();
-  if (!document.hidden) {
+  if (!document.hidden && sustainedTelemetry.due(now)) {
     sustainedTelemetry.record(now, {
       frames: frameMetrics.summary(),
       queue: gpuRenderer?.uploadQueueStatistics ?? null,
