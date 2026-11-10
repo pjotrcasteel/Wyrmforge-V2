@@ -6,15 +6,32 @@
 <title>Wyrmforge V2 — Independent Voxel Lab</title>
 <style>
 html,body{margin:0;height:100%;background:#101820;color:#e8edf0;font:14px system-ui}
-body{display:flex;flex-direction:column}header{padding:12px;background:#1d2b35;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-#build{margin-left:auto;color:#c8d7e3;font:12px ui-monospace,Consolas,monospace;white-space:nowrap}
-h1{font-size:16px;margin:0 12px 0 0}input[type=number]{width:100px;box-sizing:border-box}button,select,input{background:#334754;color:white;border:1px solid #708591;border-radius:6px;padding:10px;font:inherit}
-#replay-import-file{width:135px;max-width:35vw;padding:8px 4px;font-size:12px;box-sizing:border-box}#replay-import-file::file-selector-button{background:#334754;color:white;border:1px solid #708591;border-radius:5px;padding:4px 6px;margin-right:4px}
-main{flex:1;min-height:0;position:relative}canvas{width:100%;height:100%;display:block;touch-action:none}#gpu-view{position:absolute;inset:0;pointer-events:none;image-rendering:pixelated}
+body{display:flex;flex-direction:column;height:100dvh;min-height:0}
+button,select,input{background:#334754;color:white;border:1px solid #708591;border-radius:6px;padding:9px;font:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #f3d48d;outline-offset:2px}
+#lab-header{position:relative;z-index:10;flex:none;padding:6px 10px;background:#1d2b35}
+#lab-topbar{display:flex;align-items:center;gap:9px;min-height:42px}
+#lab-topbar h1{font-size:15px;margin:0;white-space:nowrap}
+#build{margin-left:auto;min-width:0;color:#c8d7e3;font:11px ui-monospace,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#lab-controls-toggle{flex:none;font-size:13px;min-height:36px;padding:6px 10px}
+#lab-controls{position:absolute;top:100%;left:0;right:0;z-index:20;padding:8px 12px 14px;background:#1b2b36;max-height:min(72dvh,540px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 10px 22px #0009;border-top:1px solid #526d7b}
+#lab-controls[hidden]{display:none}
+#lab-controls section{padding:8px 0;border-bottom:1px solid #405461}
+#lab-controls h2{font-size:12px;font-weight:700;color:#c6dce9;margin:0 0 8px}
+.lab-fields{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px}
+.lab-field{display:flex;flex-direction:column;gap:4px}
+.lab-field label{font-size:12px;color:#dce7ee}
+#seed{width:105px;box-sizing:border-box}
+#replay-import-file{width:155px;max-width:80vw;padding:8px 4px;font-size:12px;box-sizing:border-box}
+#replay-import-file::file-selector-button{background:#334754;color:white;border:1px solid #708591;border-radius:5px;padding:4px 6px;margin-right:4px}
+main{flex:1;min-height:0;position:relative}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+#gpu-view{position:absolute;inset:0;pointer-events:none;image-rendering:pixelated}
 #actor-view{position:absolute;inset:0;pointer-events:none;image-rendering:pixelated;z-index:2}
 #actor-ui{position:absolute;left:8px;bottom:8px;z-index:3;display:flex;flex-direction:column;align-items:flex-start;gap:6px;user-select:none;-webkit-user-select:none}
 #actor-ui button{background:#243a48e6;border:1px solid #aac4d3;color:#f3f8ff;font-weight:700;touch-action:none}
-#actor-toggle{font-size:12px;padding:7px 10px}#actor-reset{font-size:11px;padding:7px 9px}
+#actor-toggle{font-size:12px;padding:7px 10px}
+#actor-reset{font-size:11px;padding:7px 9px}
 #actor-dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
 #actor-dpad button{padding:0;font-size:19px;border-radius:9px}
 #actor-dpad [data-actor-dir=forward]{grid-column:2;grid-row:1}
@@ -22,16 +39,60 @@ main{flex:1;min-height:0;position:relative}canvas{width:100%;height:100%;display
 #actor-dpad [data-actor-dir=back]{grid-column:2;grid-row:2}
 #actor-dpad [data-actor-dir=right]{grid-column:3;grid-row:2}
 #actor-dpad[hidden],#actor-reset[hidden]{display:none}
-#status,#mesh-audit{font-size:12px;line-height:1.35;color:#b9d5cc;padding:7px 12px;background:#17232d;box-sizing:border-box;height:52px;flex:0 0 52px;overflow-y:auto;overscroll-behavior:contain}#mesh-audit{border-top:1px solid #354650}
+#status,#mesh-audit{font-size:12px;line-height:1.35;color:#b9d5cc;padding:7px 12px;background:#17232d;box-sizing:border-box;height:52px;flex:0 0 52px;overflow-y:auto;overscroll-behavior:contain}
+#mesh-audit{border-top:1px solid #354650}
 </style>
 </head>
 <body>
-<header><h1>Wyrmforge V2 · Clean-room voxel lab</h1>
-<label for="scene">Scene</label><select id="scene"><option value="hill">Hill</option><option value="flat">Flat</option><option value="cliff">Cliff</option><option value="arch">Arch</option></select>
-<label for="camera">Camera</label><select id="camera" aria-label="2.5D camera preset"><option value="hunt" selected>Hunt-style</option><option value="inspection">Voxel inspection</option></select><label for="terrain-target-mode">Touch</label><select id="terrain-target-mode" aria-label="Terrain interaction mode"><option value="pan" selected>Pan terrain</option><option value="spell">Target spell</option></select>
-<label for="chunks">Chunk</label><select id="chunks" aria-label="Voxel chunk edge"><option value="16">16³</option><option value="32">32³</option></select>
-<label for="seed">Seed</label><input id="seed" type="number" min="0" max="4294967295" step="1" value="7" inputmode="numeric" aria-label="Scene seed (unsigned 32-bit integer)"><label for="terrain-mesh-mode">Carve meshing</label><select id="terrain-mesh-mode" aria-label="Terrain meshing path"><option value="sync" selected>Baseline</option><option value="worker">Background pilot</option></select><button id="reset">Reset</button><button id="carve">Carve sphere</button><button id="damage">Damage pulse</button><button id="burst">3-hit burst</button><button id="checkpoint-save">Save replay point</button><button id="checkpoint-restore" disabled>Restore replay point</button><button id="replay-export" type="button">Export replay</button><input id="replay-import-file" type="file" accept=".json,application/json" aria-label="Import replay JSON file" title="Import a V2 replay JSON file"><button id="mesh-audit-button">Audit 3D faces</button><button id="mesh-compare-button">Compare meshes</button><button id="report">Export benchmark</button><span id="build" aria-label="Engine version and deployed commit">Build identity loading…</span></header>
-<main><canvas id="view" aria-label="V2 voxel terrain: drag to pan, pinch with two fingers or use the mouse wheel to zoom"></canvas><canvas id="gpu-view" aria-hidden="true" style="display:none"></canvas><canvas id="actor-view" aria-hidden="true"></canvas><div id="actor-ui"><button id="actor-toggle" type="button" aria-pressed="false">Actor pilot: Off</button><button id="actor-reset" type="button" hidden>Respawn actor</button><div id="actor-dpad" hidden><button data-actor-dir="forward" aria-label="Walk forward">↑</button><button data-actor-dir="left" aria-label="Walk left">←</button><button data-actor-dir="back" aria-label="Walk backward">↓</button><button data-actor-dir="right" aria-label="Walk right">→</button></div></div></main>
-<div id="status">Initializing independent V2 world…</div><div id="mesh-audit" aria-live="polite">3D geometry not yet audited. Select Audit 3D faces to check all six face directions.</div>
+<header id="lab-header">
+<div id="lab-topbar">
+  <h1>Wyrmforge V2</h1>
+  <span id="build" aria-label="Engine version and deployed commit">Build identity loading…</span>
+  <button id="lab-controls-toggle" type="button" aria-controls="lab-controls" aria-expanded="false">Controls ▾</button>
+</div>
+<div id="lab-controls" hidden>
+  <section aria-label="World and camera settings"><h2>WORLD & CAMERA</h2><div class="lab-fields">
+    <div class="lab-field"><label for="scene">Scene</label><select id="scene"><option value="hill">Hill</option><option value="flat">Flat</option><option value="cliff">Cliff</option><option value="arch">Arch</option></select></div>
+    <div class="lab-field"><label for="camera">Camera</label><select id="camera" aria-label="2.5D camera preset"><option value="hunt" selected>Hunt-style</option><option value="inspection">Voxel inspection</option></select></div>
+    <div class="lab-field"><label for="terrain-target-mode">Touch</label><select id="terrain-target-mode" aria-label="Terrain interaction mode"><option value="pan" selected>Pan terrain</option><option value="spell">Target spell</option></select></div>
+    <div class="lab-field"><label for="chunks">Chunk</label><select id="chunks" aria-label="Voxel chunk edge"><option value="16">16³</option><option value="32">32³</option></select></div>
+    <div class="lab-field"><label for="seed">Seed</label><input id="seed" type="number" min="0" max="4294967295" step="1" value="7" inputmode="numeric" aria-label="Scene seed (unsigned 32-bit integer)"></div>
+    <div class="lab-field"><label for="terrain-mesh-mode">Carve meshing</label><select id="terrain-mesh-mode" aria-label="Terrain meshing path"><option value="sync" selected>Baseline</option><option value="worker">Background pilot</option></select></div>
+    <button id="reset">Reset</button>
+  </div></section>
+  <section aria-label="Destruction testing"><h2>DESTRUCTION</h2><div class="lab-fields">
+    <button id="carve">Carve sphere</button><button id="damage">Damage pulse</button><button id="burst">3-hit burst</button>
+  </div></section>
+  <section aria-label="Diagnostics"><h2>DIAGNOSTICS</h2><div class="lab-fields">
+    <button id="mesh-audit-button">Audit 3D faces</button>
+    <button id="mesh-compare-button">Compare meshes</button>
+    <button id="report">Export benchmark</button>
+  </div></section>
+  <section aria-label="Replay tools"><h2>REPLAY (EXPERIMENTAL)</h2><div class="lab-fields">
+    <button id="checkpoint-save">Save replay point</button>
+    <button id="checkpoint-restore" disabled>Restore replay point</button>
+    <button id="replay-export" type="button">Export replay</button>
+    <input id="replay-import-file" type="file" accept=".json,application/json" aria-label="Import replay JSON file" title="Import a V2 replay JSON file">
+  </div></section>
+</div>
+</header>
+<main>
+  <canvas id="view" aria-label="V2 voxel terrain: drag to pan, pinch with two fingers or use the mouse wheel to zoom"></canvas>
+  <canvas id="gpu-view" aria-hidden="true" style="display:none"></canvas>
+  <canvas id="actor-view" aria-hidden="true"></canvas>
+  <div id="actor-ui">
+    <button id="actor-toggle" type="button" aria-pressed="false">Actor pilot: Off</button>
+    <button id="actor-reset" type="button" hidden>Respawn actor</button>
+    <div id="actor-dpad" hidden>
+      <button data-actor-dir="forward" aria-label="Walk forward">↑</button>
+      <button data-actor-dir="left" aria-label="Walk left">←</button>
+      <button data-actor-dir="back" aria-label="Walk backward">↓</button>
+      <button data-actor-dir="right" aria-label="Walk right">→</button>
+    </div>
+  </div>
+</main>
+<div id="status">Initializing independent V2 world…</div>
+<div id="mesh-audit" aria-live="polite">3D geometry not yet audited. Select Audit 3D faces to check all six face directions.</div>
 <script type="module" src="./main.mjs"></script>
-</body></html>
+</body>
+</html>
