@@ -29,13 +29,7 @@ overlay if spells and movement are expected to affect it; neither
 can a cliff be merely a dark backdrop. Mandatory spawn/exit/objective
 reachability needs an explicit physical safety policy.
 
-**Execution discipline:** finish the remaining V2.0–V2.7 foundation
-gates, but evaluate any new feature against that playable Hunt target.
-Prioritize a new, independent **site-seeded V2 generator input/output
-contract and forest/mountain fixtures**, plus physical object
-destruction and game-side integration; stop adding laboratory UI
-utilities unless they close a specific production gate. V2.8 must
-verify the **actual selected world-map site in actual Hunt gameplay**.
+**Execution discipline (owner clarification, 2026-11-10):** complete and verify **all V2.0–V2.7 foundation acceptance gates first**, using the independent lab for milestone-driven implementation and validation. In particular, finish bounded worker/GPU uploads, destruction and collision correctness, renderer recovery, replay and sustained device evidence before beginning site generation. A `carve-tunnel` command is only a bounded destruction/replay engineering fixture, **not a Wyrmforge gameplay mechanic**. Site-seeded V2 generation, physical object destruction and genuine Hunt integration follow under V2.8; do not promote them ahead of incomplete foundation gates. V2.8 must verify the **actual selected world-map site in actual Hunt gameplay**.
 V2.9 structural gravity remains required but later; the owner
 explicitly deferred implementing gravity ahead of the roadmap.
 
