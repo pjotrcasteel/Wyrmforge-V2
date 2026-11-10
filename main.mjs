@@ -9,7 +9,7 @@ import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
-import { TerrainEditLedger } from './src/terrain-edit-ledger.mjs';
+import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
 
 const build = document.querySelector('#build');
@@ -32,7 +32,7 @@ let activeSeed = 7;
 let activeScene = 'hill';
 let world = createScene(activeScene, activeSeed, { chunkEdge: Number(chunkPicker.value) });
 let terrainEdits = new TerrainEditLedger(world);
-let nextTerrainEditId = 0;
+let nextTerrainEditId = 0, nextDamageId = 0;
 let cameraX = 0, cameraY = 0, baseScale = 11, scale = 11, zoomFactor = 1;
 const gestures = new PointerGestures();
 let dirty = true, previous = null, lastStatusAt = 0, visibleSurfaces = 0;
@@ -43,6 +43,7 @@ let lastMeshWorker = null;
 let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
 let lastBurst = null, nextBurstId = 0;
+let lastDamage = null;
 
 function cancelMeshWorker() {
   compareJobId++;
@@ -336,9 +337,11 @@ function chooseScene() {
   world = createScene(scenePicker.value, seed, { chunkEdge: Number(chunkPicker.value) });
   terrainEdits = new TerrainEditLedger(world);
   nextTerrainEditId = 0;
+  nextDamageId = 0;
   nextBurstId = 0;
   lastCarve = null;
   lastBurst = null;
+  lastDamage = null;
   invalidateMeshAudit();
   rebuildGpuMeshes();
   activeScene = scenePicker.value;
@@ -393,6 +396,7 @@ document.querySelector('#carve').addEventListener('click', () => {
     expectedRevision: world.revision
   });
   const { removedVoxels } = edit;
+  lastDamage = null;
   const dirtyChunks = new Set(edit.dirtyChunks);
   lastCarve = {
     scene: activeScene, ...target, removedVoxels,
@@ -411,6 +415,48 @@ document.querySelector('#carve').addEventListener('click', () => {
     meshAuditStatus.textContent = 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
   } else if (lastTerrainWorker?.status === 'fallback' && terrainMeshMode.value === 'sync') {
     meshAuditStatus.textContent = `Carved ${removedVoxels} voxels. Remeshed ${dirtyChunks.size}/${world.chunkCount} chunks (baseline).`;
+  }
+  dirty = true;
+});
+
+document.querySelector('#damage').addEventListener('click', () => {
+  const target = demoCarveTarget(activeScene);
+  const startedAt = performance.now();
+  let damage;
+  try {
+    damage = terrainEdits.apply({
+      id: `lab-damage-${++nextDamageId}`, type: 'damage-sphere',
+      ...target, power: 1,
+      expectedRevision: world.revision,
+      expectedEditRevision: terrainEdits.editRevision
+    });
+  } catch (error) {
+    meshAuditStatus.textContent = 'Damage pulse rejected: ' + error.message;
+    return;
+  }
+  lastDamage = { ...target, power: 1, ...damage,
+    editCpuMs: performance.now() - startedAt };
+  lastCarve = null;
+  lastBurst = null;
+
+  // Partial damage is authoritative ledger state but changes no voxel geometry.
+  // Do not cancel a valid in-flight mesh job just because damage was accumulated.
+  if (!damage.dirtyChunks.length) {
+    meshAuditStatus.textContent = 'Damage pulse: ' + damage.damagedVoxels +
+      ' voxels weakened, none destroyed; ' + damage.pendingDamageCells +
+      ' partial-damage cells retained. Press again.';
+    return;
+  }
+  cancelTerrainWorker();
+  invalidateMeshAudit();
+  for (const id of damage.dirtyChunks) pendingTerrainDirty.add(id);
+  updateTerrainMeshes();
+  if (activeTerrainJob) {
+    meshAuditStatus.textContent = 'Damage pulse destroyed ' + damage.removedVoxels +
+      ' voxels, weakened ' + damage.damagedVoxels + '. Background mesh pending…';
+  } else if (terrainMeshMode.value === 'sync') {
+    meshAuditStatus.textContent = 'Damage pulse destroyed ' + damage.removedVoxels +
+      ' voxels and updated ' + damage.dirtyChunks.length + ' chunks.';
   }
   dirty = true;
 });
@@ -436,6 +482,7 @@ document.querySelector('#burst').addEventListener('click', () => {
   const editCpuMs = performance.now() - startedAt;
   lastBurst = { ...result, editCpuMs };
   lastCarve = null;
+  lastDamage = null;
   invalidateMeshAudit();
   // Exactly one mesh-update request for the union of three distinct impacts.
   // Merge with any dirty chunks carried over from canceled worker work.
@@ -559,6 +606,9 @@ document.querySelector('#report').addEventListener('click', () => {
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
+    lastDamage, damageLedger:{ editRevision:terrainEdits.editRevision,
+      pendingDamageCells:terrainEdits.pendingDamageCells,
+      resistanceByMaterial:MATERIAL_RESISTANCE },
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
     terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
