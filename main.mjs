@@ -11,6 +11,7 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
+import { runCollisionProbe } from './src/collision-benchmark.mjs';
 import { demoTunnelTarget } from './src/demo-tunnel.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
@@ -597,6 +598,7 @@ function draw() {
 
 
 const presetRunButton = document.querySelector('#preset-run');
+const collisionPresetRunButton = document.querySelector('#collision-preset-run');
 const presetStopButton = document.querySelector('#preset-stop');
 const presetProgress = document.querySelector('#preset-progress');
 let preset = null;
@@ -680,6 +682,31 @@ presetRunButton.addEventListener('click', () => {
   presetProgress.textContent = 'Running · 0/180 s';
 });
 presetStopButton.addEventListener('click', () => stopPreset('Stopped manually'));
+collisionPresetRunButton.addEventListener('click', () => {
+  if (preset) {
+    presetProgress.textContent = 'Stop the destruction preset before collision checks';
+    return;
+  }
+  // Reuse a fresh deterministic Hill fixture and authoritative collision world.
+  scenePicker.value = 'hill';
+  seedPicker.value = '7';
+  chunkPicker.value = '32';
+  cameraPicker.value = 'hunt';
+  terrainMeshMode.value = 'worker';
+  chooseScene();
+  cameraPicker.dispatchEvent(new Event('change'));
+  const startedAt = performance.now();
+  const report = runCollisionProbe(world);
+  lastPresetReport = {
+    schema:'voxel-v2.collision-preset.v1',
+    status:'complete',scene:'hill',seed:7,meshing:terrainMeshMode.value,
+    durationMs:Math.round(performance.now()-startedAt),...report
+  };
+  presetProgress.textContent = 'Collision checks: ' + report.verdict +
+    ' · ' + (report.steps ?? 0) + ' fixed steps · ' +
+    (report.overlaps ?? 0) + ' overlaps';
+  document.querySelector('#report').click();
+});
 
 function tick(now) {
   advancePreset(now);
