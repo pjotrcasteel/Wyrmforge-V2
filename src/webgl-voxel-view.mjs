@@ -369,7 +369,13 @@ export class WebGLVoxelView {
       const replacement = replacements.get(id);
       if (replacement) {
         this.#sourceMeshes.set(id, replacement);
-        if (this.ready) this.#uploadOne(replacement);
+        if (this.ready && this.#recovering) {
+          // Recovery must stay frame-budgeted even when edits arrive mid-restore.
+          this.#recoveryQueue.set(id, replacement);
+          this.#recoveryBytes += this.#meshBytes(replacement);
+        } else if (this.ready) {
+          this.#uploadOne(replacement);
+        }
       }
     }
   }
