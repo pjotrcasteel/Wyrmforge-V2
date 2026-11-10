@@ -845,7 +845,11 @@ canvas.addEventListener('pointerdown', event => {
   const point = pointerPosition(event);
   if (gestures.begin(event.pointerId, point.x, point.y)) {
     if (terrainTargetMode.value === 'spell') {
-      terrainTaps.begin(event.pointerId,point.x,point.y,performance.now());
+      if (gestures.activeCount === 1) {
+        terrainTaps.begin(event.pointerId,point.x,point.y,performance.now());
+      } else {
+        terrainTaps.cancel(); // Never target with a finger while pinching.
+      }
     }
     canvas.setPointerCapture(event.pointerId);
   }
