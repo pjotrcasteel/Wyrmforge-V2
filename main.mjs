@@ -34,6 +34,35 @@ const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
 const meshAuditStatus = document.querySelector('#mesh-audit');
 const meshCompareButton = document.querySelector('#mesh-compare-button');
+const controlsToggle = document.querySelector('#lab-controls-toggle');
+const controlsPanel = document.querySelector('#lab-controls');
+
+function setLabControlsOpen(open) {
+  controlsPanel.hidden = !open;
+  controlsToggle.setAttribute('aria-expanded',String(open));
+  controlsToggle.textContent = open ? 'Close ✕' : 'Controls ▾';
+}
+
+controlsToggle.addEventListener('click', () => {
+  setLabControlsOpen(controlsPanel.hidden);
+});
+controlsPanel.addEventListener('click', event => {
+  // Keep configuration selects open for multi-step test setup; dismiss the
+  // overlay after buttons so the terrain is visible immediately.
+  if (event.target.closest('button')) setLabControlsOpen(false);
+});
+document.addEventListener('pointerdown', event => {
+  if (!controlsPanel.hidden && !controlsPanel.contains(event.target) &&
+      !controlsToggle.contains(event.target)) {
+    setLabControlsOpen(false);
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !controlsPanel.hidden) {
+    setLabControlsOpen(false);
+    controlsToggle.focus();
+  }
+});
 const terrainMeshMode = document.querySelector('#terrain-mesh-mode');
 const restoreReplayButton = document.querySelector('#checkpoint-restore');
 const replayExportButton = document.querySelector('#replay-export');
@@ -919,6 +948,7 @@ document.querySelector('#report').addEventListener('click', () => {
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastBurst,
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
+    labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
       actor,fallen:actorFallen,simulatedSteps:actorSteps,
       catchUpOverflowFrames:actorOverflowFrames,

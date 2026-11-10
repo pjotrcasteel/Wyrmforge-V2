@@ -30,3 +30,36 @@ test('running comparison never changes authoritative terrain or revision', () =>
     assert.equal(result.exposed.unitFaces, result.greedy.unitFaces);
   }
 });
+
+test('mobile lab defaults to an accessible collapsed control drawer over the terrain', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  assert.match(html, /<div id="lab-controls" hidden>/);
+  assert.match(html, /id="lab-controls-toggle"[^>]*aria-controls="lab-controls"[^>]*aria-expanded="false"/);
+  assert.match(html, /#lab-controls\{[^}]*position:absolute;[^}]*overflow-y:auto/);
+  assert.match(html, /#lab-controls\[hidden\]\{display:none\}/);
+  assert.match(html, /#lab-topbar\{[^}]*min-height:42px/);
+  assert.match(html, /id="build" aria-label="Engine version and deployed commit"/);
+  assert.match(html, /id="actor-ui"/);
+  assert.match(html, /id="terrain-target-mode"/);
+  assert.match(html, /id="report"/);
+  assert.match(main, /controlsToggle\.addEventListener\('click'/);
+  assert.match(main, /controlsPanel\.hidden = !open/);
+  assert.match(main, /controlsToggle\.setAttribute\('aria-expanded',String\(open\)\)/);
+  assert.match(main, /if \(event\.target\.closest\('button'\)\) setLabControlsOpen\(false\)/);
+  assert.match(main, /labControlsOpen: !controlsPanel\.hidden/);
+});
+
+test('all existing lab controls retain unique IDs in the collapsed mobile drawer', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(new Set(ids).size, ids.length);
+  for(const id of [
+    'scene','camera','terrain-target-mode','chunks','seed','terrain-mesh-mode',
+    'reset','carve','damage','burst','checkpoint-save','checkpoint-restore',
+    'replay-export','replay-import-file','mesh-audit-button',
+    'mesh-compare-button','report','actor-toggle','actor-reset','actor-dpad'
+  ]) {
+    assert.ok(ids.includes(id), `Preserve existing lab control ${id}`);
+  }
+});
