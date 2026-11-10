@@ -169,3 +169,27 @@ test('unsupported or invalid chunk sizes are rejected', () => {
     assert.throws(() => new VoxelWorld({ chunkEdge }), RangeError);
   }
 });
+
+test('Arch is a freestanding solid span with an actual see-through opening', () => {
+  for (const chunkEdge of CHUNK_EDGE_CANDIDATES) {
+    const world = createScene('arch', 7, { chunkEdge });
+    for (const z of [0, 1, 2, 3, 4]) {
+      assert.equal(world.get(0, 1, z), 1, 'ground remains solid under and around arch');
+      assert.equal(world.get(0, 3, z), 0, 'passage is unobstructed along its depth');
+    }
+    for (const z of [1, 2, 3]) {
+      assert.equal(world.get(-5, 3, z), 3, 'left pillar is solid stone');
+      assert.equal(world.get(5, 3, z), 3, 'right pillar is solid stone');
+      assert.equal(world.get(0, 8, z), 3, 'stone roof bridges open air');
+      assert.equal(world.get(0, 7, z), 0, 'the roof has an exposed underside');
+      assert.equal(world.get(4, 4, z), 0, 'lower shoulder is open');
+      assert.equal(world.get(4, 5, z), 3, 'upper shoulder is solid');
+      assert.equal(world.get(3, 6, z), 0, 'upper opening tapers');
+      assert.equal(world.get(3, 7, z), 3, 'stepped arch remains connected');
+    }
+    assert.equal(world.get(0, 8, 0), 0, 'roof does not fill the approach');
+    assert.equal(world.get(0, 8, 4), 0, 'roof does not fill the exit');
+    assert.deepEqual(world.snapshots(),
+      createScene('arch', 7, { chunkEdge }).snapshots(), 'the fixture is deterministic');
+  }
+});
