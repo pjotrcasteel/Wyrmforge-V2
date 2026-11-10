@@ -205,6 +205,10 @@ test('port rejects invalid constructor shape and async consumer safely', () => {
   assert.throws(()=>new V2TerrainPort(null,ledger),TypeError);
   assert.throws(()=>new V2TerrainPort(world,null),TypeError);
   assert.throws(()=>new V2TerrainPort(world,ledger,{epoch:0}),TypeError);
+  const unrelatedWorld=createScene('arch',7,{chunkEdge:world.chunkEdge});
+  assert.equal(unrelatedWorld.revision,world.revision);
+  assert.throws(()=>new V2TerrainPort(unrelatedWorld,ledger),TypeError,
+    'matching revision is not enough: ledger must be bound to the same world object');
   port.subscribe('audio',async()=>{throw Error('async unsupported')});
   const event=port.apply({id:'tiny',type:'carve-sphere',x:0,y:1,z:0,radius:.6});
   assert.equal(event.status,'accepted');
