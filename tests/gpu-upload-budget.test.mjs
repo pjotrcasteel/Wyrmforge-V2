@@ -166,3 +166,27 @@ test('scene reset during lost context does not restore old-world meshes', () => 
   assert.equal(view.uploadQueueStatistics.recoveryChunks, 0);
   view.dispose();
 });
+
+test('dirty replacements during context recovery remain frame-budgeted', () => {
+  const {canvas,now,emit}=fakeCanvas();
+  const view=new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  emit('webglcontextlost');
+  emit('webglcontextrestored');
+  assert.equal(view.statistics.drawCalls,0);
+
+  // A new authoritative edit must not bypass the incremental recovery budget.
+  view.replaceMeshes(new Set(['b']),[mesh('b')]);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,3);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,180);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  assert.equal(view.statistics.drawCalls,1);
+
+  // Removing a not-yet-recovered chunk must not resurrect stale geometry.
+  view.replaceMeshes(new Set(['c']),[]);
+  while (view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.statistics.drawCalls,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
