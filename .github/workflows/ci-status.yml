@@ -58,7 +58,7 @@ jobs:
               '',
               'Immutable build URL (only if deployment succeeded):',
               'https://' + owner + '.github.io/' + repo + '/builds/' + run.head_sha + '/'
-            ].join('\\n');
+            ].join('\n');
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner, repo, state: 'all', per_page: 100
             });
