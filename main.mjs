@@ -193,7 +193,7 @@ document.querySelector('#carve').addEventListener('click', () => {
   // Do not upload new meshes if the demo hit only empty space.
   if (removedVoxels > 0) rebuildGpuMeshes(dirtyChunks);
   meshAuditStatus.textContent = removedVoxels > 0
-    ? `Carved ${removedVoxels} voxels at (${target.x},${target.y},${target.z}). Audit 3D faces to inspect.`
+    ? `Carved ${removedVoxels} voxels. Remeshed ${lastMeshUpdate?.chunksUpdated ?? 'n/a'}/${world.chunkCount} chunks. Audit 3D faces to inspect.`
     : 'No solid voxels remain in that demo impact area; select Reset to restore terrain.';
   dirty = true;
 });
