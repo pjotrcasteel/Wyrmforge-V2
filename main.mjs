@@ -109,7 +109,6 @@ function draw() {
     width: gpuCanvas.width, height: gpuCanvas.height,
     scale, panX: cameraX, panY: cameraY
   })) {
-    updateStatus();
     return;
   }
   ctx.fillStyle = '#101820';
@@ -136,7 +135,6 @@ function draw() {
     ctx.fill();
   }
   visibleSurfaces = surfaces.length;
-  updateStatus();
 }
 
 function tick(now) {
