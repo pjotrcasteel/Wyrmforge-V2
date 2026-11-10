@@ -1074,6 +1074,43 @@ actorReset.addEventListener('click', () => {
   resetActorPilot();
   drawActorOverlay();
 });
+actorExcavate.addEventListener('click', () => {
+  if (!actorEnabled || !actor || actorFallen || !actor.grounded) {
+    meshAuditStatus.textContent = 'Excavation requires a grounded actor. Respawn first.';
+    return;
+  }
+  const startedAt = performance.now();
+  let changedSupport;
+  try {
+    // Use an existing journal ID family so saves/restores preserve uniqueness.
+    changedSupport = excavateActorSupport(world,terrainEdits,actor,
+      `lab-hit-${++nextTerrainEditId}`);
+  } catch (error) {
+    meshAuditStatus.textContent = 'Cannot excavate actor support: ' + error.message;
+    return;
+  }
+  actorSupportTest = {
+    ...changedSupport,
+    status:changedSupport.status === 'accepted' && changedSupport.supportAfter === 0
+      ? 'committed' : changedSupport.status,
+    committedAtMs:performance.now(),
+    editCpuMs:performance.now()-startedAt,
+    stepsAtCommit:actorSteps
+  };
+  if (changedSupport.dirtyChunks.length) {
+    cancelTerrainWorker();
+    invalidateMeshAudit();
+    for (const id of changedSupport.dirtyChunks) pendingTerrainDirty.add(id);
+    updateTerrainMeshes();
+  }
+  meshAuditStatus.textContent = changedSupport.supportAfter === 0
+    ? 'Removed ' + changedSupport.removedVoxels +
+      ' voxels beneath the actor; next physics step must lose support.'
+    : 'Excavation committed, but the actor still has ' +
+      changedSupport.supportAfter + ' supporting cells.';
+  dirty=true;
+});
+
 for(const button of actorDpad.querySelectorAll('[data-actor-dir]')) {
   const dir=button.dataset.actorDir;
   button.addEventListener('pointerdown',event => {
