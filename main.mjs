@@ -149,11 +149,40 @@ function updateActorPhysics(now) {
         current.error + '. Press Respawn actor.';
       break;
     }
-    actor=current;
+    const wasGrounded = actor.grounded;
+    actor = current;
     actorSteps++;
+    if (current.stepUp) actorStepUps++;
+    if (actorSupportTest?.status === 'committed') {
+      if (!current.grounded) {
+        actorSupportTest.status = 'falling';
+        actorSupportTest.firstAirborneStep = actorSteps;
+        actorSupportTest.physicsStepsUntilFall = actorSteps -
+          actorSupportTest.stepsAtCommit;
+        actorSupportTest.fallStartLatencyMs = Math.max(0, now -
+          actorSupportTest.committedAtMs);
+        actorSupportTest.meshPendingWhenFell = activeTerrainJob !== null;
+      } else if (actorSteps - actorSupportTest.stepsAtCommit >= 4) {
+        actorSupportTest.status = 'still-grounded';
+      }
+    }
+    if (actorSupportTest?.status === 'falling' && !wasGrounded && current.grounded) {
+      actorSupportTest.status = 'landed';
+      actorSupportTest.landingY = current.y;
+      actorSupportTest.fallDistance = Math.max(0,
+        actorSupportTest.actorPosition.y - current.y);
+      actorSupportTest.stepsUntilLanding = actorSteps - actorSupportTest.stepsAtCommit;
+      actorSupportTest.landedWorldRevision = world.revision;
+      meshAuditStatus.textContent = 'Actor landed after a ' +
+        actorSupportTest.fallDistance.toFixed(2) + '-voxel fall on committed terrain.';
+    }
     actorAccumulator-=1/60;
     steps++;
     if (actor.y < -12) {
+      if (actorSupportTest?.status === 'falling') {
+        actorSupportTest.status = 'fell-out';
+        actorSupportTest.fallDistance = actorSupportTest.actorPosition.y-actor.y;
+      }
       actorFallen=true;
       meshAuditStatus.textContent = 'Actor fell below the test world. ' +
         'Collision followed committed terrain; press Respawn actor.';
