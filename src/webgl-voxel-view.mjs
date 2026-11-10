@@ -149,12 +149,19 @@ export class WebGLVoxelView {
     if (this.#queuedUploads.size + ids.size > 128) {
       throw new RangeError('GPU upload queue capacity exceeded');
     }
+    let additionalBytes = 0;
+    for (const mesh of replacements.values()) {
+      additionalBytes += mesh.positions.byteLength + mesh.normals.byteLength +
+        mesh.materials.byteLength + mesh.indices.byteLength;
+    }
+    if (this.#uploadQueueBytes + additionalBytes > 16 * 1024 * 1024) {
+      throw new RangeError('GPU upload queue byte capacity exceeded');
+    }
     for (const id of ids) {
       const mesh = replacements.get(id) ?? null;
       this.#queuedUploads.set(id, mesh);
-      if (mesh) this.#uploadQueueBytes += mesh.cpuBufferBytes ??
-        (mesh.positions.byteLength + mesh.normals.byteLength +
-         mesh.materials.byteLength + mesh.indices.byteLength);
+      if (mesh) this.#uploadQueueBytes += mesh.positions.byteLength +
+        mesh.normals.byteLength + mesh.materials.byteLength + mesh.indices.byteLength;
     }
     this.#uploadQueuePeak = Math.max(this.#uploadQueuePeak, this.#queuedUploads.size);
   }
@@ -175,9 +182,8 @@ export class WebGLVoxelView {
     while (this.#queuedUploads.size && (chunks === 0 || now() - start < budgetMs)) {
       const [id, mesh] = this.#queuedUploads.entries().next().value;
       this.#queuedUploads.delete(id);
-      const bytes = mesh ? (mesh.cpuBufferBytes ??
-        (mesh.positions.byteLength + mesh.normals.byteLength +
-         mesh.materials.byteLength + mesh.indices.byteLength)) : 0;
+      const bytes = mesh ? mesh.positions.byteLength + mesh.normals.byteLength +
+        mesh.materials.byteLength + mesh.indices.byteLength : 0;
       this.#uploadQueueBytes -= bytes;
       this.replaceMeshes(new Set([id]), mesh ? [mesh] : []);
       chunks++;
