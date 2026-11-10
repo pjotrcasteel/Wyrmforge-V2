@@ -599,8 +599,13 @@ function tick(now) {
       if (upload.chunks) dirty = true;
       if (!gpuRenderer.pendingUploads && lastTerrainWorker?.status === 'upload-queued') {
         const visibleMs = queuedUploadStartedAt === null ? null : performance.now() - queuedUploadStartedAt;
-        lastTerrainWorker = { ...lastTerrainWorker, status:'complete', editToVisibleMs:visibleMs,
+        lastTerrainWorker = { ...lastTerrainWorker, status:'complete',
+          editToVisibleMs:visibleMs, endToEndMs:visibleMs,
           uploadQueuePeak:gpuRenderer.uploadQueueStatistics.peakChunks };
+        lastMeshUpdate = { ...lastMeshUpdate, elapsedMs:visibleMs };
+        meshAuditStatus.textContent = 'Background terrain uploaded · ' +
+          lastTerrainWorker.chunksUpdated + ' chunks · edit-to-visible ' +
+          (visibleMs === null ? 'unavailable' : visibleMs.toFixed(1) + 'ms');
         queuedUploadStartedAt = null;
       }
     } catch (error) {
