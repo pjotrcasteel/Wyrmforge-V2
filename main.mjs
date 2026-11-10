@@ -595,6 +595,8 @@ function draw() {
 }
 
 function tick(now) {
+  // Observe before the upload drain; otherwise short-lived queues disappear from telemetry.
+  if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
   if (gpuRenderer?.pendingUploads) {
     try {
       const upload = gpuRenderer.flushQueuedUploads({budgetMs:2});

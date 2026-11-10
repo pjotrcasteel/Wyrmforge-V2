@@ -18,7 +18,7 @@ export class SustainedTelemetry {
   observeQueue(queue) {
     if (!queue) return;
     this.#peakPendingBytes = Math.max(this.#peakPendingBytes, queue.pendingBytes ?? 0);
-    this.#peakPendingChunks = Math.max(this.#peakPendingChunks, queue.pendingChunks ?? 0);
+    this.#peakPendingChunks = Math.max(this.#peakPendingChunks, queue.pendingChunks ?? 0, queue.peakChunks ?? 0);
     this.#peakRecoveryChunks = Math.max(this.#peakRecoveryChunks, queue.recoveryChunks ?? 0);
   }
   due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
