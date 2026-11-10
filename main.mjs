@@ -61,11 +61,11 @@ function cancelTerrainWorker() {
 
 function updateTerrainMeshes() {
   if (!pendingTerrainDirty.size) return;
-  const dirty = new Set(pendingTerrainDirty);
+  const affectedChunks = new Set(pendingTerrainDirty);
   const syncFallback = reason => {
-    rebuildGpuMeshes(dirty);
+    rebuildGpuMeshes(affectedChunks);
     pendingTerrainDirty.clear();
-    lastTerrainWorker = { status:'fallback', reason, chunksUpdated:dirty.size };
+    lastTerrainWorker = { status:'fallback', reason, chunksUpdated:affectedChunks.size };
     meshAuditStatus.textContent = 'Background unavailable (' + reason +
       '); restored safe synchronous terrain meshing.';
   };
@@ -76,7 +76,7 @@ function updateTerrainMeshes() {
   }
   let worker;
   try {
-    const job = createTerrainMeshJob(world, dirty, ++terrainJobId);
+    const job = createTerrainMeshJob(world, affectedChunks, ++terrainJobId);
     const originWorld = world;
     const start = performance.now();
     worker = new Worker(new URL('./src/terrain-mesh.worker.mjs', import.meta.url),{type:'module'});
