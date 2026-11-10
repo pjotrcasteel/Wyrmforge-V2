@@ -72,3 +72,17 @@ test('Wyrmforge actor has no jump control or player jump simulation input', () =
   assert.match(physics,/const canStep=initialSupport/);
   assert.match(physics,/ACTOR_MAX_UPWARD_SPEED/);
 });
+
+test('the diagnostic actor can never draw a head above its actual collision volume', () => {
+  const main=readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
+  const proxy=readFileSync(
+    new URL('../src/diagnostics/actor-proxy.mjs',import.meta.url),'utf8');
+  assert.match(main,/projectActorDiagnostic\(pos/);
+  assert.match(main,/actorHeadClearance\(world,actor\)/);
+  assert.match(main,/headClearance:actorEnabled && actor/);
+  assert.match(main,/proxy\.boxEdges/);
+  assert.match(proxy,/const height=foot\.y-top\.y/);
+  assert.doesNotMatch(main,/Math\.max\(15\*dpr,foot\.y-top\.y\)/);
+  assert.doesNotMatch(main,/foot\.y-height-radius\*0\.7/);
+  assert.doesNotMatch(proxy,/canvas\.getContext|WebGL|document\./);
+});
