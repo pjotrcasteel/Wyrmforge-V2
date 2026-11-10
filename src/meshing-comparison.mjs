@@ -41,6 +41,6 @@ export function compareMeshing(world, now = () => performance.now()) {
     worldRevision: revision,
     exposed: { ...exposedSummary, cpuBuildMs: exposedMs },
     greedy: { ...greedySummary, cpuBuildMs: greedyMs },
-    note: 'One synchronous CPU build each, not a statistically stable GPU or mobile performance claim'
+    note: 'One CPU build per algorithm; timing excludes worker dispatch, snapshot transfer and GPU rendering'
   };
 }
