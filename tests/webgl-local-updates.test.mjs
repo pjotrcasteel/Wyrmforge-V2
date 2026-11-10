@@ -7,7 +7,7 @@ import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
 
 function fakeCanvas() {
   let nextId = 0;
-  const stats = { createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [] };
+  const stats = { createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
   const events = new Map();
   const gl = {
     VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
@@ -35,7 +35,10 @@ function fakeCanvas() {
     deleteBuffer: buffer => stats.deletedBuffers.push(buffer),
     bindBuffer() {}, bufferData() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     isContextLost: () => false, viewport() {}, clearColor() {}, clearDepth() {}, clear() {},
-    useProgram() {}, uniform2f() {}, uniform1f() {}, uniform3fv() {},
+    useProgram() {}, uniform2f() {}, uniform1f() {},
+    uniform3fv: (location, value) => {
+      if (location.startsWith('uCamera')) stats.cameraUniforms.push({ location, value: [...value] });
+    },
     drawElements: (...args) => stats.draws.push(args)
   };
   const canvas = {
@@ -110,5 +113,32 @@ test('GPU partial replacement rejects results for unrelated chunks', () => {
   const [mesh] = buildExposedFaceMeshes(world);
   assert.throws(() => view.replaceMeshes(['1,0,0'], [mesh]), TypeError);
   assert.throws(() => view.replaceMeshes(null, []), TypeError);
+  view.dispose();
+});
+
+test('switching camera uniforms does not reallocate or replace GPU chunk buffers', () => {
+  const { canvas, stats } = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 3);
+  view.setMeshes(buildExposedFaceMeshes(world));
+  const initial = view.statistics;
+  const createdBuffers = stats.createdBuffers.length;
+  const createdArrays = stats.createdArrays.length;
+
+  for (const camera of ['inspection', 'hunt', 'inspection']) {
+    view.render({ width: 400, height: 800, scale: 10, panX: 0, panY: 0, camera });
+  }
+
+  assert.deepEqual(view.statistics, initial);
+  assert.equal(stats.createdBuffers.length, createdBuffers);
+  assert.equal(stats.createdArrays.length, createdArrays);
+  assert.equal(stats.deletedBuffers.length, 0);
+  assert.equal(stats.draws.length, 3);
+
+  const rightBases = stats.cameraUniforms
+    .filter(item => item.location === 'uCameraRight')
+    .map(item => item.value);
+  assert.deepEqual(rightBases, [[0.75, 0, -0.75], [1, 0, 0], [0.75, 0, -0.75]]);
   view.dispose();
 });
