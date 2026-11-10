@@ -114,6 +114,19 @@ export function sweepActorAxis(world,position,axis,distance) {
   return {position:position[axis]+distance,collided:false};
 }
 
+// Physical vertical head clearance over the actor's *entire footprint*.
+// This is a collision query, not a pixel visibility/occlusion test.
+export function actorHeadClearance(world, position, maxDistance=16) {
+  if (!Number.isFinite(maxDistance) || maxDistance<=0 || maxDistance>32) {
+    throw new RangeError('Head-clearance test must be within (0,32] voxels');
+  }
+  const sweep=sweepActorAxis(world,position,'y',maxDistance);
+  return {
+    blocked:sweep.collided,
+    distance:Math.max(0,sweep.position-position.y)
+  };
+}
+
 function groundProbe(world,position) {
   return sweepActorAxis(world,position,'y',-0.06).collided;
 }

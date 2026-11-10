@@ -1058,6 +1058,58 @@ difference. Export the benchmark with `actorPilot.wallContactSteps`
 and `actorPilot.actor`. No jump button is shown. Do not claim
 complete V2.5 collision or visibility acceptance from this pilot.
 
+## 0.0.030 — iPhone arch-head visual/collider mismatch (V2.5 diagnostic correction)
+
+**Physical iPhone Safari 0.0.029 evidence:** the user supplied screenshots
+of the actor approaching both real arch pillars and moving around the
+arch at Z≈3.67–4.48. The UI confirms true pillar contacts
+(`x=+4.72` and `x=-3.72`, `z=2.50`) and no >50 ms frames in the
+short recorded captures. However the *drawn head* appears to enter the
+stone span even in visually overlapping but physically disjoint positions.
+
+**Root cause found in source, not a speculative collider regression:**
+- Physics V2 uses a correctly bounded AABB at actor feet Y=2, real
+  collider height 1.6 voxels, with head/top at Y=3.6.
+- At normal iPhone Hunt camera zoom, this height projects to
+  `0.48 × 16 × 1.6 = 12.288` backing-canvas pixels; the old Canvas2D
+  debug overlay forcibly drew a **30-pixel torso**, then appended a
+  head *above* it. Thus the illustrated head was substantially outside
+  the collider itself.
+- At the pillar, the next shoulder stone begins at Y=5, leaving
+  approximately **1.4 voxels of real overhead clearance**. At Z=4.33
+  there is no arch stone in the actor's Z footprint at all, even if
+  the 2.5D projection makes stone and actor artwork overlap.
+
+**Fix:**
+- [x] Draw lab actor head and torso from the **actual projected 1.6-voxel
+  collider height**, without minimum-pixel sprite inflation. All visible
+  body/head positions remain inside the exact physical vertical span.
+- [x] Draw a low-opacity dashed, **3D collision-box debug prism only in
+  the Arch lab scene**, from the physical x/y/z half-width and height.
+  This is not pixel occlusion, an emissive outline or production character
+  art. A subtle foot locator keeps the true-scale proxy discoverable.
+- [x] Add a bounded authoritative upward voxel query
+  `actorHeadClearance`, showing real overhead clearance (or the 16-voxel
+  probe bound) in Arch status and benchmark JSON.
+- [x] Pure tests verify projected diagnostic head never extends beyond
+  the collider for both mobile cameras, multiple zoom levels and 16³/32³;
+  reproduce pillar headroom ~1.4 and screen-overlap without 3D collision;
+  verify that removing stone changes headroom immediately.
+- [ ] Pixel-accurate visible/hidden character compositing and the thin
+  selective emissive outline belong to **Character Visibility V2**,
+  a separate future renderer and integration contract, NOT Voxel V2.
+- [ ] True gameplay asset dimensions/eye/head collision profiles need
+  confirmation during V2.8 Wyrmforge Hunt integration; this is only a
+  lab diagnostic shape and first V2.5 physical bounding box.
+
+**iPhone check:** use v0.0.030 commit-specific Pages link and select
+Arch / Hunt-style / chunk32³ / seed7. Walk to X≈4.72 or X≈-3.72 with
+Z=2.50; the dashed *world-space* box stops at the pillar and the
+body/head stays inside the box. The status shows physical headroom
+~1.40 voxels. Move out along Z beyond 3: the actor can legitimately
+pass around the pillar, even though projected art overlaps the arch.
+No production Character Visibility implementation is implied.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -1066,7 +1118,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.029
+### Current change: 0.0.030
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
