@@ -3,6 +3,10 @@ import { processTerrainMeshJob, terrainMeshTransfers } from './terrain-mesh-prot
 
 self.addEventListener('message', ({ data }) => {
   try {
+    if (data?.schema === 'voxel-v2.terrain-mesh-job.v1' && data.type === 'warmup') {
+      self.postMessage({ schema: data.schema, type: 'warm', id: data.id });
+      return;
+    }
     const reply = processTerrainMeshJob(data);
     self.postMessage(reply, terrainMeshTransfers(reply));
   } catch (error) {
