@@ -223,6 +223,30 @@ Hill / Hunt-style / seed 7 / 32³, and compare before/after pressing
 position. Press **Carve sphere** then compare again: the hole must remain
 identical and Reset must restore it. The live renderer is still exposed-face.
 
+## 0.0.014 — sparse-region greedy meshing optimization
+
+- [x] User verified the **0.0.013 fixed viewport** on iPhone Safari; the comparison message no longer changes terrain framing.
+- [x] Replace six full-chunk greedy material scans with one occupied-bounds pass followed by bounded scans of occupied source ranges per face direction.
+- [x] Reuse one typed face mask per chunk, and avoid allocating per-voxel coordinate arrays during face-neighbor checks.
+- [x] Preserve all six face normals, material boundaries, chunk-local mesh ownership, exact visible face coverage and 16³/32³ signed seam behavior.
+- [x] Preserve the proven exposed-face WebGL2 renderer; greedy is still **diagnostic only**, never active in the live draw path.
+- [x] Export `meshComparison.greedy.candidateCellsVisited` and `fullChunkCandidateCells` so the candidate-region optimization is directly measurable.
+- [x] Add regression tests for single-voxel sparse chunks and damaged/mixed-material seam cases.
+- [ ] Physical iPhone Safari CPU measurements of greedy before and after carving in 0.0.014.
+- [ ] Android Chrome and sustained repeated-edit measurements.
+- [ ] Worker-based background meshing and stale-revision rejection (later milestone).
+
+**Why:** On an iPhone in 0.0.012, CPU greedy builds took roughly 100–139 ms while
+exposed-face builds were 14–16 ms. Greedy dramatically reduced triangles, but its
+main-thread cost was unacceptable. Reducing candidate scans is a CPU optimization,
+not proof of stable phone performance; real-device timings must decide.
+
+**Player validation:** load version 0.0.014, Hill / Hunt-style / 32³ / seed 7.
+Press Compare meshes, export benchmark; Carve sphere and repeat Compare meshes,
+then export again. The terrain must not change on Compare meshes; only Carve changes
+it. Check `candidateCellsVisited`, greedy CPU ms, and unchanged live WebGL2 renderer.
+No requirement that any one timing result reaches a fixed performance target.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -231,7 +255,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.013
+### Current change: 0.0.014
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

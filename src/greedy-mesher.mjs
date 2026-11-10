@@ -14,6 +14,29 @@ const key = (x,y,z) => `${x},${y},${z}`;
 const offset = (x,y,z,edge) => x + edge * (z + edge * y);
 const axisOf = vector => vector.findIndex(value => value !== 0);
 
+// Compute a chunk's occupied axis-aligned bounds once rather than visiting all
+// 16³/32³ cells for every face direction. Neighbor culling still uses the original
+// authoritative snapshots; clipping the mask never changes actual visible faces.
+function occupiedBounds(data, edge) {
+  const min = [edge, edge, edge];
+  const max = [-1, -1, -1];
+  for (let y = 0; y < edge; y++) {
+    for (let z = 0; z < edge; z++) {
+      const start = edge * (z + edge * y);
+      for (let x = 0; x < edge; x++) {
+        if (!data[start + x]) continue;
+        if (x < min[0]) min[0] = x;
+        if (y < min[1]) min[1] = y;
+        if (z < min[2]) min[2] = z;
+        if (x > max[0]) max[0] = x;
+        if (y > max[1]) max[1] = y;
+        if (z > max[2]) max[2] = z;
+      }
+    }
+  }
+  return { min, max };
+}
+
 function snapshotSelection(world, chunkIds) {
   if (chunkIds === null) {
     const chunks = world.snapshots();
@@ -78,48 +101,62 @@ export function buildGreedyFaceMeshes(world, { chunkIds = null, maxQuadsPerChunk
     const positions = [], normals = [], materials = [], indices = [];
     let quadCount = 0, coveredFaces = 0;
 
+    // Reuse a single typed mask instead of allocating one for every normal.
+    const mask = new Uint8Array(edge * edge);
+    const strides = [1, edge * edge, edge];
+    const { min, max } = occupiedBounds(chunk.data, edge);
+    let faceCandidateCells = 0;
+
     for (const face of FACES) {
       const primaryAxis = axisOf(face.n);
       const stepU = face.corners[1].map((n,i) => n - face.corners[0][i]);
       const stepV = face.corners[3].map((n,i) => n - face.corners[0][i]);
       const axisU = axisOf(stepU), axisV = axisOf(stepV);
       const faceNeighbor = neighbors.get(key(cx+face.n[0],cy+face.n[1],cz+face.n[2]))?.data;
-      const mask = new Uint8Array(edge * edge);
+      const direction = face.n[primaryAxis];
+      const stride = strides[primaryAxis];
+      const uMin = min[axisU], uMax = max[axisU];
+      const vMin = min[axisV], vMax = max[axisV];
 
-      for (let slice = 0; slice < edge; slice++) {
+      // Empty slices cannot emit exposed faces. Loop only occupied source
+      // coordinates; the neighbor can cull faces, never create new source faces.
+      for (let slice = min[primaryAxis]; slice <= max[primaryAxis]; slice++) {
         mask.fill(0);
-        for (let v = 0; v < edge; v++) {
-          for (let u = 0; u < edge; u++) {
-            const coords = [0,0,0];
-            coords[primaryAxis] = slice;
-            coords[axisU] = u;
-            coords[axisV] = v;
-            const material = chunk.data[offset(...coords, edge)];
+        for (let v = vMin; v <= vMax; v++) {
+          for (let u = uMin; u <= uMax; u++) {
+            faceCandidateCells++;
+            // Scalar indexing avoids allocating two coordinate arrays and
+            // several spreads per inspected candidate voxel.
+            const x = primaryAxis === 0 ? slice : axisU === 0 ? u : v;
+            const y = primaryAxis === 1 ? slice : axisU === 1 ? u : v;
+            const z = primaryAxis === 2 ? slice : axisU === 2 ? u : v;
+            const cellIndex = x + edge * (z + edge * y);
+            const material = chunk.data[cellIndex];
             if (!material) continue;
-            const adj = coords.slice();
-            adj[primaryAxis] += face.n[primaryAxis];
-            let other = 0;
-            if (adj[primaryAxis] >= 0 && adj[primaryAxis] < edge) {
-              other = chunk.data[offset(...adj, edge)];
-            } else if (faceNeighbor) {
-              adj[primaryAxis] = (adj[primaryAxis] + edge) % edge;
-              other = faceNeighbor[offset(...adj, edge)];
-            }
+
+            const adjacentSlice = slice + direction;
+            const neighborIndex = adjacentSlice >= 0 && adjacentSlice < edge
+              ? cellIndex + direction * stride
+              : cellIndex - direction * (edge - 1) * stride;
+            const other = adjacentSlice >= 0 && adjacentSlice < edge
+              ? chunk.data[neighborIndex]
+              : faceNeighbor?.[neighborIndex] ?? 0;
             if (!other) mask[u + edge*v] = material;
           }
         }
 
-        // Greedy rectangle merging never crosses a material or normal boundary.
-        for (let v = 0; v < edge; v++) {
-          for (let u = 0; u < edge; u++) {
+        // Keep all material seams and face-normal boundaries. We deliberately
+        // do not cross chunk edges; neighboring chunks are independent meshes.
+        for (let v = vMin; v <= vMax; v++) {
+          for (let u = uMin; u <= uMax; u++) {
             const material = mask[u + edge*v];
             if (!material) continue;
             let width = 1;
-            while (u+width < edge && mask[u+width + edge*v] === material) width++;
+            while (u + width <= uMax && mask[u + width + edge*v] === material) width++;
             let height = 1;
-            heightLoop: while (v+height < edge) {
+            heightLoop: while (v + height <= vMax) {
               for (let dx = 0; dx < width; dx++) {
-                if (mask[u+dx + edge*(v+height)] !== material) break heightLoop;
+                if (mask[u + dx + edge*(v + height)] !== material) break heightLoop;
               }
               height++;
             }
@@ -167,6 +204,7 @@ export function buildGreedyFaceMeshes(world, { chunkIds = null, maxQuadsPerChunk
       faceCounts, unitFaceCounts,
       faceCount: quadCount,
       unitFaceCount: coveredFaces,
+      faceCandidateCells,
       triangleCount: quadCount*2,
       vertexCount: quadCount*4,
       positions: packedPositions,

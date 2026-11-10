@@ -159,3 +159,37 @@ test('invalid budgets and scoped IDs fail before geometry is committed', () => {
   }
   assert.deepEqual(buildGreedyFaceMeshes(world,{chunkIds:['2,0,0']}),[]);
 });
+
+test('sparse chunks skip empty 3D regions without changing any exposed faces', () => {
+  for (const chunkEdge of [16, 32]) {
+    const world = new VoxelWorld({ chunkEdge });
+    world.set(8, 8, 8, 1);
+    const { greedy } = compare(world);
+    assert.equal(greedy[0].faceCandidateCells, 6,
+      'a single inner voxel needs one candidate per outward direction');
+    assert.ok(greedy[0].faceCandidateCells < chunkEdge ** 3,
+      'most empty candidate cells should be skipped');
+    world.set(9, 8, 8, 2);
+    const adjacent = compare(world).greedy[0];
+    assert.equal(adjacent.faceCandidateCells, 12,
+      'two adjacent voxels should scan just their occupied bounding box');
+    assert.equal(adjacent.unitFaceCount, 10);
+  }
+});
+
+test('sparse damaged terrain at signed chunk edges retains identical visible faces', () => {
+  for (const chunkEdge of [16, 32]) {
+    const world = new VoxelWorld({ chunkEdge });
+    const cells = [
+      [-1,-1,-1,1], [0,0,0,2], [chunkEdge-1,0,0,3],
+      [chunkEdge,0,0,3], [-chunkEdge,1,1,1], [-chunkEdge-1,1,1,2],
+      [7,7,7,3], [8,7,7,1], [8,8,7,2], [9,8,7,1]
+    ];
+    for (const [x,y,z,material] of cells) world.set(x,y,z,material);
+    compare(world);
+    for (const [x,y,z] of [[0,0,0],[8,7,7],[-chunkEdge,1,1]]) {
+      world.set(x,y,z,0);
+      compare(world);
+    }
+  }
+});
