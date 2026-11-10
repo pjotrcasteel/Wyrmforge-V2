@@ -1006,6 +1006,58 @@ build directory by the next deployment, not an archival hosting policy.
 No engine code, voxel collision, save/replay format, Wyrmforge V1,
 or Character Visibility system changes in this deployment correction.
 
+## 0.0.029 — V2.5 Arch collision lane and Wyrmforge walking-only actor
+
+**iPhone evidence (2026-11-10, lab v0.0.028 · ba5a431):**
+Two physical iPhone screenshots show the actor in apparent screen overlap
+with the Arch span, at ground level `y=2.00`; user reports that
+Arch collision appears not to work, and confirms **no player jump is
+needed in Wyrmforge**. These images do **not** include a world-coordinate
+X/Z trace or a collision-error report, so they cannot alone prove that
+authoritative AABB collision is broken.
+
+**Reproduced geometry/test setup mismatch:**
+- The deterministic V2 Arch pillars occupy `X=-5/+5`, `Z=1..3`,
+  `Y=2..8`; roof/lintel at `Y=8` with open interior.
+- Prior diagnostic actor spawn used `x=-7.5,z=-5.5` for every scene.
+  At `Z=-5.5` the character may overlap the arch **on the Hunt
+  camera projection** but is physically outside its 3D occupied region:
+  walking sideways cannot hit the actual pillars.
+- New Arch-specific test spawn uses `x=0.5,z=2.5,searchTopY=6`
+  to start **inside the real opening below the roof**, supported by
+  the floor at `Y=1`. Other scenes retain the previous spawn.
+  X movement toward either pillar must stop with `wallContact=true`.
+  Moving through the open depth axis remains a valid route.
+- [x] Add a signed 16³/32³ real-scene test on both pillars, arch
+  roof, safe supported spawn, wall-blocked movement, and the old
+  off-lane crossing case. Tests run at several seeds.
+- [x] Actor HUD/benchmark now exposes X/Y/Z world positions,
+  `wallContactSteps` and an Arch-specific corridor label.
+  On first Arch pillar hit, show explicit collision diagnostic.
+- [x] Remove **Jump** button, Space shortcut and gameplay jump
+  impulse from the Wyrmforge actor pilot and controller; short
+  one-voxel automatic stepping, normal falling and swept walls remain.
+  General upward voxel sweeps remain available for bounded *external*
+  Physics V2 impulses (e.g. knockback), not a player jump action.
+- [x] Replace jump-specific tests with walking-only behavior,
+  automatic steps, tall walls, external ceiling impulses,
+  edits while walking and platform removal during external movement.
+- [ ] The existing Canvas2D actor overlay still renders over the terrain
+  on screen. True pixel-accurate partial occlusion / emissive silhouette
+  belongs to future **Character Visibility V2**, never to this voxel engine.
+- [ ] Await physical iPhone Arch corridor acceptance: enable actor, hold
+  LEFT then RIGHT, check `WALL` and X/Z position, verify it cannot pass
+  the pillars at Z=2.5. Android and sustained performance remain open.
+
+**Test:** open the new commit-specific V2 lab URL, choose Arch, 32³,
+Hunt-style, enable actor, hold right arrow until it stops near
+`x=4.72` at `z=2.50`. Move left through the opening and confirm
+the negative pillar blocks at `x=-4.72`. Moving up/down along
+Z legitimately exits the arch corridor; the status now exposes this
+difference. Export the benchmark with `actorPilot.wallContactSteps`
+and `actorPilot.actor`. No jump button is shown. Do not claim
+complete V2.5 collision or visibility acceptance from this pilot.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -1014,7 +1066,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.028
+### Current change: 0.0.029
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.
