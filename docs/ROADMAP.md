@@ -260,7 +260,7 @@ Collect: commit/build SHA; seed; scene; device, OS, browser, viewport and render
 5. **Cross-platform replay:** canonical integer voxel state is the hash target; avoid promising identical floating-point actor trajectories.
 6. **Legacy contamination:** V1 modules, assets, constants and event contracts must not leak into V2. Audit imports and runtime dependencies before V2.0 acceptance; eventual compatibility is separate.
 
-**Deferred until evidence warrants:** octrees, sparse voxel DAGs, brickmaps, WebGPU compute, GPU ray marching, LOD/Transvoxel, smooth density meshing, fluid simulation, advanced lighting, full AI/enemies and production Hunt migration.
+**Deferred beyond the first V2.0–V2.7 foundation:** octrees, sparse voxel DAGs, brickmaps, WebGPU compute, GPU ray marching, LOD/Transvoxel, smooth density meshing and fluid simulation until evidence warrants. Full V2 Hunt integration is explicitly **required at V2.8**, bounded hybrid gravity at **V2.9**, and the integrated release at **V2.10**. Advanced lighting/enemies remain owned by their own V2 systems, connected through V2.6 contracts.
 
 **Required post-foundation gravity milestone — V2.9:** [Hybrid Gravity V2 design](VOXEL-GRAVITY-V2.md). The Work foundation's V2.7 release gate does not require falling terrain, but the **finished Wyrmforge V2 program does**. V2.3 edit notifications, V2.4 work budgets and V2.5/V2.6 collision/contracts are prerequisites. Gravity may be disabled for a particular material/scene, never for the final acceptance scenario. No full-world or per-voxel rigid-body loop.
 
