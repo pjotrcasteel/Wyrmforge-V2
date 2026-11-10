@@ -78,6 +78,24 @@ Export benchmark JSON with `renderer` and `cpuMeshAndUploadMs`.
 If `Canvas2D fallback` is shown, report it; do not count it as passing WebGL2.
 Physical-device acceptance is still open.
 
+## V2 0.0.008 — visible overhang / arch fixture
+
+**Reason:** Physical iPhone screenshots of deployed `v0.0.007 · d203a3c` show a working
+WebGL2 2.5D solid Hill and Cliff, layered Flat, and carved crater. The original Arch looked
+like Flat because the passage was a closed subterranean void and could not be visually inspected.
+The screenshots are visual evidence, not sustained mobile performance acceptance.
+
+**Scope:** replace only the V2 Arch fixture with a freestanding stone span on solid terrain.
+The aperture is open through the visible front and rear; the top is supported by stepped pillars.
+Tests verify the stone roof, exposed underside, clear passage, and deterministic 16³/32³ occupancy.
+The scene schema is now `v2.scene.v2` to distinguish benchmark evidence from the old Arch fixture.
+The WebGL2 renderer, mobile input, and V1 remain unchanged.
+
+**Player validation:** open Arch at version 0.0.008. Verify visible stone supports and an open
+gap beneath the stone roof, including when panning. At 16³ and 32³ it should look the same.
+Carve sphere and Reset must work; send one Arch screenshot and optionally a benchmark report.
+No visual bug fix is considered accepted until checked on physical iPhone Safari.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -86,7 +104,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.007
+### Current change: 0.0.008
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

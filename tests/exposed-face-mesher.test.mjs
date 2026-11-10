@@ -88,10 +88,10 @@ test('a carved interior void produces six real internal cavity faces', () => {
   assert.equal(totals(buildExposedFaceMeshes(world)).faces, 60);
 });
 
-test('an overhang in the arch fixture has a downward-facing underside', () => {
+test('visible arch fixture generates a downward-facing roof above open space', () => {
   const world = createScene('arch', 7);
-  assert.equal(world.get(0, 3, 0), 1);
-  assert.equal(world.get(0, 2, 0), 0);
+  assert.equal(world.get(0, 8, 2), 3);
+  assert.equal(world.get(0, 7, 2), 0);
   const mesh = buildExposedFaceMeshes(world).find(part => part.id === '0,0,0');
   let underside = false;
   for (let i = 0; i < mesh.faceCount; i++) {
@@ -101,8 +101,8 @@ test('an overhang in the arch fixture has a downward-facing underside', () => {
     const ys = [positions[1],positions[4],positions[7],positions[10]];
     const zs = [positions[2],positions[5],positions[8],positions[11]];
     if (Math.min(...xs) === 0 && Math.max(...xs) === 1 &&
-        ys.every(y => y === 3) &&
-        Math.min(...zs) === 0 && Math.max(...zs) === 1 &&
+        ys.every(y => y === 8) &&
+        Math.min(...zs) === 2 && Math.max(...zs) === 3 &&
         mesh.normals[begin + 1] === -1) {
       underside = true;
       break;
