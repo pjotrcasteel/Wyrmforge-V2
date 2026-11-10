@@ -33,3 +33,18 @@ test('telemetry snapshot is immutable and handles missing GPU metrics', () => {
   assert.equal(telemetry.report().samples[0].edits,0);
   assert.throws(()=>new SustainedTelemetry({capacity:0}),RangeError);
 });
+
+test('subsecond upload peaks survive the next one-second sample', () => {
+  const telemetry = new SustainedTelemetry();
+  telemetry.record(0,input(0));
+  telemetry.observeQueue({pendingChunks:8,pendingBytes:32768,recoveryChunks:3});
+  telemetry.observeQueue({pendingChunks:0,pendingBytes:0,recoveryChunks:0});
+  telemetry.record(1000,input(0));
+  const report=telemetry.report();
+  assert.equal(report.samples[1].pendingBytes,0);
+  assert.equal(report.peakPendingBytes,32768);
+  assert.equal(report.peakPendingChunks,8);
+  assert.equal(report.peakRecoveryChunks,3);
+  telemetry.reset();
+  assert.equal(telemetry.report().peakPendingBytes,0);
+});
