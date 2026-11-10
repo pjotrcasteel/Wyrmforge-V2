@@ -3,10 +3,47 @@
 **Authoritative plan:** the November 9 **Work-authored Wyrmforge Voxel v2 Implementation Handover**, expanded by independent research and engineering verification in this **single roadmap**. Original V2.0–V2.7 milestone definitions and acceptance intent are preserved.
 **Delivery objective:** a clean-room, mobile-first **voxel engine actually used in Wyrmforge Hunt**, with full 3D destruction, measured mobile performance, and bounded hybrid structural gravity.
 **Repository:** `pjotrcasteel/Wyrmforge-V2` (`main`); the original Wyrmforge repository remains unaffected until a separate V2 game cutover.
-**Status:** capabilities have been implemented incrementally through laboratory build **0.0.031**, but individual original V2.0–V2.7 acceptance gates are **not** all passed. No current Wyrmforge Hunt runtime integration or structural gravity is implemented.
-**References:** [Research evidence](RESEARCH.md) · [Architecture decisions](ARCHITECTURE-DECISIONS.md) · [Implementation evidence](PROGRESS.md) · [Hybrid gravity design](VOXEL-GRAVITY-V2.md).
+**Status:** capabilities have been implemented incrementally through laboratory build **0.0.032**, but individual original V2.0–V2.7 acceptance gates are **not** all passed. No current Wyrmforge Hunt runtime integration or structural gravity is implemented.
+**References:** [Research evidence](RESEARCH.md) · [Architecture decisions](ARCHITECTURE-DECISIONS.md) · [Implementation evidence](PROGRESS.md) · [Hybrid gravity design](VOXEL-GRAVITY-V2.md) · [Wyrmforge Hunt generation/destruction target](WYRMFORGE-HUNT-WORLD-TARGET.md).
 
-**Roadmap identity:** `0.0.031` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
+**Roadmap identity:** `0.0.032` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
+
+## World-led procedural Hunt target — owner clarification (2026-11-10)
+
+**The lab is not the game.** Wyrmforge is a fixed-camera, pixel-first
+2.5D dark-fantasy action roguelite. Actual **Hunt arenas must be
+randomly generated from deterministic seeds**, but their biome,
+topography, route topology, key landmarks, encounter purpose and Wyrm
+influence are constrained by the **chosen location on the world map**.
+The game, not a lab scene picker or a terrain renderer, decides the
+location. Forests need organic woodland and traversable trails;
+mountains need real elevation, rock cliffs and valid passes;
+approaches and lairs need corresponding geology and boss spaces.
+
+**Both the player and enemies/Wyrms must be able to damage the actual
+terrain AND eligible physical objects with magic.** One committed
+gameplay/impact resolution must update terrain voxels, damageable
+object entities with stable IDs, collision/LOS/navigation and
+incremental renderer/lighting/effects. A tree cannot be just an art
+overlay if spells and movement are expected to affect it; neither
+can a cliff be merely a dark backdrop. Mandatory spawn/exit/objective
+reachability needs an explicit physical safety policy.
+
+**Execution discipline:** finish the remaining V2.0–V2.7 foundation
+gates, but evaluate any new feature against that playable Hunt target.
+Prioritize a new, independent **site-seeded V2 generator input/output
+contract and forest/mountain fixtures**, plus physical object
+destruction and game-side integration; stop adding laboratory UI
+utilities unless they close a specific production gate. V2.8 must
+verify the **actual selected world-map site in actual Hunt gameplay**.
+V2.9 structural gravity remains required but later; the owner
+explicitly deferred implementing gravity ahead of the roadmap.
+
+The full acceptance/integration boundary is recorded in
+[Wyrmforge Hunt World Target](WYRMFORGE-HUNT-WORLD-TARGET.md).
+The original Wyrmforge codebase was read to understand **product
+requirements only**. No V1 source, physics, grid sizes, constants,
+assets or interfaces may be imported or copied into the V2 engine.
 
 ## 0. Clean-room V2 mandate — owner decision (2026-11-09)
 
@@ -129,19 +166,31 @@ that foundation, without rewriting or changing its original milestones.
 
 **Deliver:** use the *new independent* V2 voxel terrain engine inside a
 guarded V2 Hunt gameplay route or isolated switch, without converting the
-engine into a wrapper around V1. Connect a V2-native world-generation
-entrypoint, terrain rendering/camera, player grounding/collision, true
-projectile/spell impact coordinates, ordered destruction, and region-change
-notifications to gameplay consumers. Preserve the existing playable V1
-game, routes and assets until V2 acceptance. A game-side V2 adapter is
-allowed; **the clean-room engine must not import V1 systems**.
+engine into a wrapper around V1. A selected world-map location must supply
+a versioned V2-native site recipe (stable ID, biome/landform, required
+landmark, permitted entrances/exits, seed, threat/Wyrm influence);
+World Generation V2 builds a reproducible, varied forest/mountain/other
+location-appropriate 3D site with clearings, safe spawns, actual paths
+and real blocking geometry. Connect terrain rendering/camera, player
+grounding/collision, true **player and enemy** projectile/spell impact
+coordinates, destruction of eligible material voxels **and stable-ID
+physical objects**, ordered change notifications and navigation/LOS
+invalidations. Preserve the existing playable V1 game, routes and
+assets until V2 acceptance. A game-side V2 adapter is allowed;
+**the clean-room engine must not import V1 systems**.
 
-**Acceptance:** a player can enter a Wyrmforge Hunt scene using the V2
-terrain, walk over a hill and cliff, collide with walls/overhangs, destroy
-underfoot terrain and fall, open a tunnel, and trigger localized effects
-through newly authored V2 contracts. No old terrain renderer or collider
-may remain an independent authority over that V2 scene. Verify mobile
-camera/player/spell experience *in the game* (not just a lab link).
+**Acceptance:** select a real world-map forest or mountain node and
+enter a **seed-generated** V2 Hunt arena that visibly matches its biome,
+includes its promised routes/landmarks and has a reachable objective and
+exit. Different seeds vary the local geography without changing the
+site's promised identity. Player and enemy magic can break appropriate
+terrain and objects, opening/altering traversable space, with one
+authoritative collision and destruction record. Test genuine hills,
+cliffs, walls, overhangs, pits, tunnels and no trapped actors.
+No old terrain renderer or collider may remain an independent
+authority over that V2 scene. Verify the real mobile Hunt camera,
+player/enemy spell experience, navigation, props, art and performance
+*in the game* (not just a lab link).
 
 ### V2.9 — Hybrid gravity, structural integrity and settling (REQUIRED)
 
