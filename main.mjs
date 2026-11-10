@@ -18,6 +18,7 @@ import { applyTerrainSpellHit } from './src/hunt-terrain-impact.mjs';
 import { TerrainTapRecognizer } from './src/terrain-tap-recognizer.mjs';
 import { spawnTerrainActor, simulateTerrainActor, ACTOR_HEIGHT,
   ACTOR_PHYSICS_SCHEMA } from './src/terrain-actor.mjs';
+import { excavateActorSupport } from './src/actor-support-excavation.mjs';
 
 const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
@@ -29,6 +30,7 @@ const actorCanvas = document.querySelector('#actor-view');
 const actorCtx = actorCanvas.getContext('2d');
 const actorToggle = document.querySelector('#actor-toggle');
 const actorReset = document.querySelector('#actor-reset');
+const actorExcavate = document.querySelector('#actor-excavate');
 const actorDpad = document.querySelector('#actor-dpad');
 const ctx = canvas.getContext('2d', { alpha: false });
 const state = document.querySelector('#status');
@@ -83,6 +85,7 @@ const gestures = new PointerGestures();
 const terrainTaps = new TerrainTapRecognizer();
 let actorEnabled = false, actor = null, actorFallen = false;
 let actorPrevious = null, actorAccumulator = 0, actorSteps = 0, actorOverflowFrames = 0;
+let actorStepUps = 0, actorSupportTest = null;
 let actorOverlayKey = null;
 const heldActorKeys = new Set();
 const heldActorButtons = new Set();
@@ -100,6 +103,8 @@ function resetActorPilot() {
   actorAccumulator = 0;
   actorFallen = false;
   actorOverlayKey = null;
+  actorSupportTest = null;
+  actorStepUps = 0;
   heldActorKeys.clear();
   heldActorButtons.clear();
   actor = spawnTerrainActor(world, { x:-7.5,z:-5.5 });
@@ -109,6 +114,7 @@ function resetActorPilot() {
     actorToggle.setAttribute('aria-pressed','false');
     actorReset.hidden = true;
     actorDpad.hidden = true;
+    actorExcavate.disabled = true;
     meshAuditStatus.textContent = 'Actor pilot: no supported spawn found in this terrain.';
     return;
   }
@@ -116,6 +122,7 @@ function resetActorPilot() {
   actorToggle.setAttribute('aria-pressed','true');
   actorReset.hidden = false;
   actorDpad.hidden = false;
+  actorExcavate.disabled = false;
   meshAuditStatus.textContent = 'Actor pilot active: move with touch arrows or WASD. ' +
     'Excavate underneath to test falling.';
 }
@@ -950,7 +957,8 @@ document.querySelector('#report').addEventListener('click', () => {
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
     labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
-      actor,fallen:actorFallen,simulatedSteps:actorSteps,
+      actor,fallen:actorFallen,simulatedSteps:actorSteps,stepUps:actorStepUps,
+      supportExcavation:actorSupportTest,
       catchUpOverflowFrames:actorOverflowFrames,
       input:actorInput(), model:'bounded swept AABB / fixed 60Hz',
       overlay:'diagnostic Canvas2D, not final actor art'},
@@ -1026,6 +1034,8 @@ actorToggle.addEventListener('click', () => {
     actorToggle.setAttribute('aria-pressed','false');
     actorReset.hidden = true;
     actorDpad.hidden = true;
+    actorExcavate.disabled = true;
+    actorSupportTest = null;
     actorOverlayKey = null;
   }
   drawActorOverlay();
