@@ -73,6 +73,14 @@ export class VoxelWorld {
     return true;
   }
 
+  // A single immutable-by-copy snapshot avoids copying unrelated chunks for local remeshing.
+  chunkSnapshot(cx, cy, cz) {
+    this.#validate(cx, cy, cz);
+    const id = key(cx, cy, cz);
+    const data = this.#chunks.get(id);
+    return data ? { id, revision: this.#chunkRevisions.get(id), data: data.slice() } : null;
+  }
+
   // Consumer receives copies: no mutable access to the authoritative store.
   snapshots() {
     return [...this.#chunks.entries()].sort(([a], [b]) => a.localeCompare(b))
