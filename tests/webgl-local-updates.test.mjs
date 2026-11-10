@@ -100,8 +100,13 @@ test('a seam edit replaces both touched meshes, and context recovery uploads ret
   assert.equal(view.ready, false);
   events.get('webglcontextrestored')();
   assert.equal(view.ready, true);
+  // V2.4 now restores incrementally; GPU resources are not ready immediately.
+  assert.equal(view.statistics.drawCalls, 0);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks, 1);
+  view.flushQueuedUploads({ budgetMs: 2 });
   assert.equal(view.statistics.triangles, 12);
   assert.equal(view.statistics.drawCalls, 1);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks, 0);
   view.dispose();
 });
 
