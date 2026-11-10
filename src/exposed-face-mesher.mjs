@@ -34,7 +34,7 @@ export function buildExposedFaceMeshes(world, { maxFacesPerChunk = 100000, chunk
     const uniqueIds = [...new Set(chunkIds)];
     if (uniqueIds.length > 128) throw new RangeError('One local mesh batch may include at most 128 chunks');
     const requested = uniqueIds.map(id => {
-      if (typeof id !== 'string' || !/^-?(0|[1-9]\\d*),-?(0|[1-9]\\d*),-?(0|[1-9]\\d*)$/.test(id)) {
+      if (typeof id !== 'string' || !/^-?(0|[1-9]\d*),-?(0|[1-9]\d*),-?(0|[1-9]\d*)$/.test(id)) {
         throw new TypeError('Expected a canonical signed chunk ID');
       }
       const coords = id.split(',').map(Number);
