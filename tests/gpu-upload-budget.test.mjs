@@ -81,7 +81,9 @@ test('context restoration reuploads across frames instead of blocking restore ev
   assert.equal(view.statistics.drawCalls,1);
   assert.equal(view.uploadQueueStatistics.recoveryChunks,2);
   view.replaceMeshes(new Set(['b']),[mesh('b')]);
-  assert.equal(view.uploadQueueStatistics.recoveryChunks,1);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,2);
+  view.flushQueuedUploads({budgetMs:2,now});
+  assert.equal(view.statistics.drawCalls,2);
   view.flushQueuedUploads({budgetMs:2,now});
   assert.equal(view.statistics.drawCalls,3);
   assert.equal(view.recovering,false);
