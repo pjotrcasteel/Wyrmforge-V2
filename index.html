@@ -16,6 +16,7 @@ main{flex:1;min-height:0;position:relative}canvas{width:100%;height:100%;display
 <body>
 <header><h1>Wyrmforge V2 · Clean-room voxel lab</h1>
 <label for="scene">Scene</label><select id="scene"><option value="hill">Hill</option><option value="flat">Flat</option><option value="cliff">Cliff</option><option value="arch">Arch</option></select>
+<label for="camera">Camera</label><select id="camera" aria-label="2.5D camera preset"><option value="hunt" selected>Hunt-style</option><option value="inspection">Voxel inspection</option></select>
 <label for="chunks">Chunk</label><select id="chunks" aria-label="Voxel chunk edge"><option value="16">16³</option><option value="32">32³</option></select>
 <label for="seed">Seed</label><input id="seed" type="number" min="0" max="4294967295" step="1" value="7" inputmode="numeric" aria-label="Scene seed (unsigned 32-bit integer)"><button id="reset">Reset</button><button id="carve">Carve sphere</button><button id="mesh-audit-button">Audit 3D faces</button><button id="report">Export benchmark</button><span id="build" aria-label="Engine version and deployed commit">Build identity loading…</span></header>
 <main><canvas id="view" aria-label="V2 voxel terrain: drag to pan, pinch with two fingers or use the mouse wheel to zoom"></canvas><canvas id="gpu-view" aria-hidden="true" style="display:none"></canvas></main>
