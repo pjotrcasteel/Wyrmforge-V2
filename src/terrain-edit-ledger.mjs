@@ -11,11 +11,16 @@ export const MAX_RECORDED_EDITS = 1024;
 export const MAX_PENDING_DAMAGE_CELLS = 8192;
 export const MATERIAL_RESISTANCE = Object.freeze({ 1: 1, 2: 2, 3: 3 });
 export const MAX_DAMAGE_POWER = 8;
+// A first Wyrmforge-ready tunnel command sweeps a radius along a bounded
+// line segment. This is ONE committed edit, not a series of sphere edits.
+export const MAX_TUNNEL_LENGTH = 16;
+export const MAX_TUNNEL_RADIUS = 3.5;
+export const MAX_TUNNEL_SCAN_CELLS = 12000;
 const EDIT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function validateEdit(command) {
   if (!command || typeof command !== 'object' ||
-      !['carve-sphere','damage-sphere'].includes(command.type) ||
+      !['carve-sphere','damage-sphere','carve-tunnel'].includes(command.type) ||
       typeof command.id !== 'string' || !EDIT_ID.test(command.id)) {
     throw new TypeError('Expected a bounded sphere command with a stable edit ID');
   }
@@ -24,10 +29,28 @@ function validateEdit(command) {
       !Number.isFinite(radius) || radius <= 0 || radius > MAX_EDIT_RADIUS) {
     throw new RangeError('Invalid sphere center or radius');
   }
+  const tunnel = command.type === 'carve-tunnel';
+  const to = tunnel ? [command.toX, command.toY, command.toZ] : [x,y,z];
+  if (tunnel && (!to.every(Number.isSafeInteger) ||
+      to.every((n,i)=>n === [x,y,z][i]) ||
+      radius > MAX_TUNNEL_RADIUS ||
+      Math.hypot(to[0]-x,to[1]-y,to[2]-z) > MAX_TUNNEL_LENGTH)) {
+    throw new RangeError('Tunnel endpoint, length or radius exceeds V2 edit limits');
+  }
   const extent = Math.ceil(radius) + 1;
-  if (![x, y, z].every(n => Number.isSafeInteger(n - extent) &&
-                                Number.isSafeInteger(n + extent))) {
-    throw new RangeError('Sphere bounds exceed safe integer coordinates');
+  if (![...to, x, y, z].every(n =>
+    Number.isSafeInteger(n - extent) && Number.isSafeInteger(n + extent))) {
+    throw new RangeError('Terrain edit bounds exceed safe integer coordinates');
+  }
+  // Preflight a bounded voxel-scan budget even for diagonal tunnels, where
+  // the swept path is narrow but its axis-aligned bounding box can be large.
+  if (tunnel) {
+    const counts = [x,y,z].map((n,i) =>
+      Math.ceil(Math.max(n,to[i])+radius) -
+      Math.floor(Math.min(n,to[i])-radius) + 1);
+    if (counts.reduce((product,count)=>product*count,1) > MAX_TUNNEL_SCAN_CELLS) {
+      throw new RangeError('Tunnel scan budget exceeded');
+    }
   }
   if (expectedRevision !== undefined &&
       (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
@@ -42,13 +65,16 @@ function validateEdit(command) {
        command.power > MAX_DAMAGE_POWER)) {
     throw new RangeError('Damage power must be an integer from 1 to 8');
   }
-  if (command.type === 'carve-sphere' && command.power !== undefined) {
+  if (command.type !== 'damage-sphere' && command.power !== undefined) {
     throw new TypeError('Instant carve must not supply damage power');
   }
   // Normalize -0 and avoid property-order-dependent payload comparisons.
   return {
     id: command.id, type: command.type, x: x + 0, y: y + 0, z: z + 0,
     radius, power: command.type === 'damage-sphere' ? command.power : null,
+    toX: tunnel ? to[0]+0 : null,
+    toY: tunnel ? to[1]+0 : null,
+    toZ: tunnel ? to[2]+0 : null,
     expectedRevision, expectedEditRevision
   };
 }
@@ -122,6 +148,7 @@ export class TerrainEditLedger {
     const edit = validateEdit(command);
     const signature = JSON.stringify([
       edit.type, edit.x, edit.y, edit.z, edit.radius, edit.power,
+      edit.toX, edit.toY, edit.toZ,
       edit.expectedRevision ?? null, edit.expectedEditRevision ?? null
     ]);
     const recorded = this.#history.get(edit.id);
@@ -155,14 +182,28 @@ export class TerrainEditLedger {
     let removed = 0, damaged = 0, newDamageSlots = 0;
     let min = null, max = null;
     const r2 = edit.radius * edit.radius;
+    const tunnel = edit.type === 'carve-tunnel';
+    const a = [edit.x,edit.y,edit.z];
+    const b = tunnel ? [edit.toX,edit.toY,edit.toZ] : a;
+    const direction = b.map((v,i)=>v-a[i]);
+    const lengthSquared = direction.reduce((sum,v)=>sum+v*v,0);
+    const minCoords = a.map((v,i)=>Math.floor(Math.min(v,b[i])-edit.radius));
+    const maxCoords = a.map((v,i)=>Math.ceil(Math.max(v,b[i])+edit.radius));
 
-    // Plan a bounded edit before committing its world changes. Damage pulses
-    // consume capacity only for partial voxels. Carve removes partial entries.
-    for (let z = Math.floor(edit.z - edit.radius); z <= Math.ceil(edit.z + edit.radius); z++) {
-      for (let y = Math.floor(edit.y - edit.radius); y <= Math.ceil(edit.y + edit.radius); y++) {
-        for (let x = Math.floor(edit.x - edit.radius); x <= Math.ceil(edit.x + edit.radius); x++) {
-          const dx = x - edit.x, dy = y - edit.y, dz = z - edit.z;
-          if (dx * dx + dy * dy + dz * dz >= r2) continue;
+    // Plan the entire bounded edit before mutating committed terrain.
+    // A tunnel uses the squared distance from a voxel center to its closest
+    // point on the 3D segment; this makes diagonal tunnels continuous and
+    // prevents multiple overlapping sphere commands or partial commits.
+    for (let z = minCoords[2]; z <= maxCoords[2]; z++) {
+      for (let y = minCoords[1]; y <= maxCoords[1]; y++) {
+        for (let x = minCoords[0]; x <= maxCoords[0]; x++) {
+          const offset = [x-a[0],y-a[1],z-a[2]];
+          const t = tunnel ? Math.max(0,Math.min(1,
+            offset.reduce((sum,v,i)=>sum+v*direction[i],0)/lengthSquared)) : 0;
+          const dx = offset[0]-t*direction[0];
+          const dy = offset[1]-t*direction[1];
+          const dz = offset[2]-t*direction[2];
+          if (dx*dx + dy*dy + dz*dz >= r2) continue;
           const material = this.#world.get(x, y, z);
           if (material === 0 || this.#protected.has(material)) continue;
 
@@ -220,6 +261,11 @@ export class TerrainEditLedger {
       x: edit.x, y: edit.y, z: edit.z, radius: edit.radius
     };
     if (edit.power !== null) recordedCommand.power = edit.power;
+    if (edit.type === 'carve-tunnel') {
+      recordedCommand.toX = edit.toX;
+      recordedCommand.toY = edit.toY;
+      recordedCommand.toZ = edit.toZ;
+    }
     if (edit.expectedRevision !== undefined) recordedCommand.expectedRevision = edit.expectedRevision;
     if (edit.expectedEditRevision !== undefined) {
       recordedCommand.expectedEditRevision = edit.expectedEditRevision;
