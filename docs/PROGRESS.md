@@ -96,6 +96,34 @@ gap beneath the stone roof, including when panning. At 16³ and 32³ it should l
 Carve sphere and Reset must work; send one Arch screenshot and optionally a benchmark report.
 No visual bug fix is considered accepted until checked on physical iPhone Safari.
 
+## V2 0.0.009 — Arch demo destruction correction
+
+**Observed on physical iPhone Safari (0.0.008):** A freestanding Arch visibly renders in
+WebGL2, with 3,612 triangles and 8 draw calls on a 32³ world. The user reported
+that **Carve sphere did not affect the Arch**. The benchmark showed p95 17 ms and
+p99 33 ms over 590 samples, 4 hitches over 33 ms, no hitches over 50 ms,
+0 context losses; this is a short diagnostic sample, not sustained acceptance.
+
+**Root cause:** The lab's fixed sphere was centered at (0,3,0), in empty air
+under the new freestanding Arch; the pillars occupy x=±5, z=1..3 and the roof y=8.
+A mesh rebuild could not display a change where no stone was removed.
+
+**Small fix:** move the Arch-only demo sphere to (5,5,2) radius 3.5, which cuts
+the visible right stone pillar and nearby roof. Other scenes keep their previous
+impact area. The handler now reports the number of committed removed voxels,
+skips redundant remesh/upload when it removes nothing, and exports `lastCarve`.
+A separate, bounded lab-only module and regression tests cover 16³/32³ geometry
+and prevent the empty-target regression.
+
+**Scope limitation:** this is still a lab fixture, **not** the full V2.3
+authoritative ordered/edit-ID destruction command system. No V1 reuse; no change
+to camera, touch, WebGL2 shaders or material styling.
+
+**Player check:** load 0.0.009, select Arch, 32³, seed 7, press Carve sphere.
+A visible section of the right pillar/roof must disappear, and the message
+must show a positive removed-voxel count. Reset must restore the intact arch.
+Repeat at 16³ and optionally export the JSON.
+
 ### Research and limitations
 
 The 75-document [research ledger](RESEARCH.md) and [architecture decisions](ARCHITECTURE-DECISIONS.md)
@@ -104,7 +132,7 @@ V2 0.0.007 has an initial WebGL2 solid-face preview with a Canvas2D fallback. It
 pixel-art terrain renderer: material atlas, greedy meshing, sustained mobile testing and context-loss device acceptance remain open.
 Chunk size 16 is experimental, not a final optimized choice.
 
-### Current change: 0.0.008
+### Current change: 0.0.009
 
 - Frame intervals are measured with `requestAnimationFrame`, not GPU timers.
 - Hidden-tab gaps and invalid samples are excluded; a rolling 1800-sample window is bounded.

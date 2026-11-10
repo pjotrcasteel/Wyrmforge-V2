@@ -46,6 +46,8 @@ jobs:
           node --check tests/exposed-face-mesher.test.mjs
           node --check src/webgl-voxel-view.mjs
           node --check tests/webgl-voxel-view.test.mjs
+          node --check src/demo-carve.mjs
+          node --check tests/demo-carve.test.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
 
