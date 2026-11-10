@@ -113,7 +113,8 @@ function updateTerrainMeshes() {
           'Background meshing complete: ' + job.dirtyIds.length +
           ' chunks · CPU ' + reply.cpuMs.toFixed(1) + 'ms · GPU upload ' +
           gpuUploadMs.toFixed(1) + 'ms · total ' + endToEndMs.toFixed(1) + 'ms';
-        dirty = true;
+        // Schedule a draw after the GPU mesh replacement becomes current.
+        requestAnimationFrame(() => { dirty = true; });
       } catch (error) {
         syncFallback(error.message);
       }
