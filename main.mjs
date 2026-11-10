@@ -594,7 +594,77 @@ function draw() {
   visibleSurfaces = surfaces.length;
 }
 
+
+const presetRunButton = document.querySelector('#preset-run');
+const presetStopButton = document.querySelector('#preset-stop');
+const presetProgress = document.querySelector('#preset-progress');
+let preset = null;
+let lastPresetReport = null;
+function stopPreset(reason = 'Stopped', exportReport = false) {
+  if (!preset) return;
+  const elapsedMs = Math.max(0, performance.now() - preset.startedAt);
+  lastPresetReport = {
+    schema:'voxel-v2.preset.v1', status:exportReport ? 'complete' : 'stopped',
+    reason, elapsedMs:Math.round(elapsedMs), impacts:preset.impacts,
+    plannedDurationMs:180000, seed:7, scene:'hill', meshing:'worker'
+  };
+  preset = null;
+  presetRunButton.disabled = false;
+  presetStopButton.disabled = true;
+  presetProgress.textContent = reason + ' · ' + lastPresetReport.impacts + ' impacts';
+  if (exportReport) document.querySelector('#report').click();
+}
+function advancePreset(now) {
+  if (!preset) return;
+  if (document.hidden || gpuError) {
+    stopPreset(document.hidden ? 'Paused by backgrounding' : 'Renderer error');
+    return;
+  }
+  const elapsed = now - preset.startedAt;
+  if (elapsed >= 180000) {
+    stopPreset('Completed', true);
+    return;
+  }
+  // Three 40-second attack phases separated by 20-second recovery periods.
+  const phase = elapsed % 60000;
+  if (phase < 40000 && now >= preset.nextImpactAt) {
+    document.querySelector('#damage').click();
+    preset.impacts++;
+    preset.nextImpactAt = now + 650;
+  }
+  if (now >= preset.nextStatusAt) {
+    presetProgress.textContent = Math.floor(elapsed / 1000) + '/180 s · ' +
+      preset.impacts + ' impacts · ' + (phase < 40000 ? 'destruction' : 'recovery');
+    preset.nextStatusAt = now + 1000;
+  }
+}
+presetRunButton.addEventListener('click', () => {
+  if (preset) return;
+  scenePicker.value = 'hill';
+  seedPicker.value = '7';
+  chunkPicker.value = '32';
+  cameraPicker.value = 'hunt';
+  terrainMeshMode.value = 'worker';
+  terrainTargetMode.value = 'spell';
+  chooseScene();
+  cameraPicker.dispatchEvent(new Event('change'));
+  if (terrainMeshMode.value !== 'worker') {
+    presetProgress.textContent = 'Worker unavailable; preset not started';
+    return;
+  }
+  lastPresetReport = null;
+  const now = performance.now();
+  preset = {startedAt:now, nextImpactAt:now + 1000, nextStatusAt:now, impacts:0};
+  presetRunButton.disabled = true;
+  presetStopButton.disabled = false;
+  controlsPanel.hidden = true;
+  document.querySelector('#lab-controls-toggle').setAttribute('aria-expanded','false');
+  presetProgress.textContent = 'Running · 0/180 s';
+});
+presetStopButton.addEventListener('click', () => stopPreset('Stopped manually'));
+
 function tick(now) {
+  advancePreset(now);
   // Observe before the upload drain; otherwise short-lived queues disappear from telemetry.
   if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
   if (gpuRenderer?.pendingUploads) {
@@ -1146,7 +1216,7 @@ document.querySelector('#report').addEventListener('click', () => {
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
-    frames, sustainedTelemetry:sustainedTelemetry.report(),
+    frames, sustainedTelemetry:sustainedTelemetry.report(), presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastTunnel, lastBurst,
