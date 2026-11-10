@@ -87,7 +87,8 @@ function updateTerrainMeshes() {
       if (terrainWorker !== worker) return;
       worker.terminate();
       terrainWorker = null;
-      if (world !== originWorld || !isCurrentTerrainMeshReply(reply,job,world.revision)) {
+      if (world !== originWorld) return; // Reset replaced the authority: never touch its GPU meshes.
+      if (!isCurrentTerrainMeshReply(reply,job,world.revision)) {
         syncFallback(reply?.message || 'stale/invalid worker result');
         return;
       }
