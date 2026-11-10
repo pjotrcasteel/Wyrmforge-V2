@@ -1011,6 +1011,22 @@ replayImportFile.addEventListener('change', async () => {
   }
 });
 
+const contextRecoveryButton = document.querySelector('#context-recovery-test');
+let contextRecoveryTest = { supported: null, attempts: 0, lastAction: null };
+contextRecoveryButton.addEventListener('click', () => {
+  const action = gpuRenderer?.ready ? 'lose' : 'restore';
+  const supported = gpuRenderer?.simulateContextTransition(action) ?? false;
+  contextRecoveryTest = {
+    supported, attempts: contextRecoveryTest.attempts + 1,
+    lastAction: supported ? action : 'unsupported'
+  };
+  contextRecoveryButton.textContent = action === 'lose' ? 'Restore WebGL context' : 'Lose WebGL context';
+  if (!supported) {
+    contextRecoveryButton.textContent = 'Context loss unsupported';
+    contextRecoveryButton.disabled = true;
+  }
+  dirty = true;
+});
 document.querySelector('#mesh-audit-button').addEventListener('click', () => {
   meshAuditStatus.textContent = 'Auditing exposed voxel faces…';
   try {
@@ -1137,6 +1153,7 @@ document.querySelector('#report').addEventListener('click', () => {
       resistanceByMaterial:MATERIAL_RESISTANCE },
     terrainMeshingMode:terrainMeshMode.value, terrainWorker:lastTerrainWorker,
     terrainWorkerWarmupMs, pendingTerrainChunks:pendingTerrainDirty.size,
+    contextRecoveryTest,
     gpuUploadQueue:gpuRenderer?.uploadQueueStatistics ?? null,
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
@@ -1356,6 +1373,7 @@ try {
     onAvailabilityChange(available, error) {
       gpuCanvas.style.display = available ? 'block' : 'none';
       gpuError = error?.message ?? null;
+      contextRecoveryButton.textContent = available ? 'Lose WebGL context' : 'Restore WebGL context';
       // WebGLVoxelView restores its retained chunk meshes; no duplicate full upload.
       dirty = true;
     }
