@@ -15,8 +15,31 @@ export const TERRAIN_TEXTURE_DEFAULTS = Object.freeze({
  * Missing optional maps are represented by neutral fallback values.
  * No image loading occurs here; upload and cache ownership belong to the renderer.
  */
+/** Predict immutable RGBA8 texture-array allocation, including optional mip levels. */
+export function estimateTerrainTextureBytes(tileSize, layersByChannel, mipLevels = 1) {
+  const maximumLevels = Math.floor(Math.log2(tileSize)) + 1;
+  if (!Number.isSafeInteger(tileSize) || tileSize < 1 ||
+      !Number.isSafeInteger(mipLevels) || mipLevels < 1 || mipLevels > maximumLevels ||
+      !layersByChannel || typeof layersByChannel !== 'object') {
+    throw new RangeError('Invalid terrain texture allocation estimate');
+  }
+  let bytes = 0;
+  for (const channel of TERRAIN_TEXTURE_CHANNELS) {
+    const layers = layersByChannel[channel] ?? 0;
+    if (!Number.isSafeInteger(layers) || layers < 0) {
+      throw new RangeError('Invalid terrain texture layer count');
+    }
+    for (let level = 0; level < mipLevels; level++) {
+      const side = Math.max(1, tileSize >> level);
+      bytes += side * side * 4 * layers;
+    }
+  }
+  if (!Number.isSafeInteger(bytes)) throw new RangeError('Terrain texture estimate overflow');
+  return bytes;
+}
+
 export function compileTerrainTextureManifest(library = TERRAIN_SURFACE_LIBRARY, {
-  tileSize = 256, maxLayers = 256, maxEstimatedBytes = 64 * 1024 * 1024
+  tileSize = 256, maxLayers = 256, maxEstimatedBytes = 64 * 1024 * 1024, mipLevels = 1
 } = {}) {
   validateTerrainSurfaceLibrary(library);
   if (!Number.isSafeInteger(tileSize) || tileSize < 16 || tileSize > 2048 ||
@@ -53,18 +76,18 @@ export function compileTerrainTextureManifest(library = TERRAIN_SURFACE_LIBRARY,
     Object.freeze(surfaces[surfaceKey]);
   }
   // A texture-array implementation reserves a layer for every asset per channel.
-  // The estimate intentionally excludes mipmaps and staging buffers; the upload
-  // implementation must budget those separately before allocating GPU memory.
+  // Estimate actual allocated mip levels. Transient decoded image/staging memory
+  // is a separate CPU-side budget, not part of immutable GPU texture storage.
   const layersByChannel = Object.fromEntries(TERRAIN_TEXTURE_CHANNELS.map(channel =>
     [channel, [...assets.values()].filter(asset => asset.channel === channel).length]));
-  const totalLayers = Object.values(layersByChannel).reduce((sum, count) => sum + count, 0);
-  const estimatedBytes = totalLayers * tileSize * tileSize * 4;
+  const estimatedBytes = estimateTerrainTextureBytes(tileSize, layersByChannel, mipLevels);
   if (Object.values(layersByChannel).some(count => count > maxLayers) ||
       estimatedBytes > maxEstimatedBytes) {
     throw new RangeError('Terrain texture manifest exceeds configured GPU budget');
   }
   return Object.freeze({
     tileSize,
+    mipLevels,
     assets: Object.freeze([...assets.values()]),
     surfaces: Object.freeze(surfaces),
     layersByChannel: Object.freeze(layersByChannel),
