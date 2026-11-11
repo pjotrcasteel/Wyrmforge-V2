@@ -241,7 +241,10 @@ export class WebGLVoxelView {
       throw new RangeError('Terrain albedo tiles must match manifest dimensions');
     }
     this.#terrainTileImages.set(key, image);
-    if (this.ready) this.#terrainCache.upload('albedo', key, image);
+    if (this.ready) {
+      this.#ensureTerrainCache();
+      this.#terrainCache.upload('albedo', key, image);
+    }
   }
 
   setTerrainTextureScale(tilesPerVoxel) {
@@ -402,15 +405,24 @@ export class WebGLVoxelView {
     };
     this.#uploadGrassTexture();
     this.#terrainCache?.dispose();
-    this.#terrainCache = new TerrainGpuTextureCache(gl, this.#terrainManifest);
-    this.#terrainCache.initialize();
-    for (const [key, image] of this.#terrainTileImages) {
-      this.#terrainCache.upload('albedo', key, image);
+    this.#terrainCache = null;
+    if (this.#terrainTileImages.size) {
+      this.#ensureTerrainCache();
+      for (const [key, image] of this.#terrainTileImages) {
+        this.#terrainCache.upload('albedo', key, image);
+      }
     }
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
     gl.disable(gl.CULL_FACE);
+  }
+
+  #ensureTerrainCache() {
+    if (this.#terrainCache) return;
+    const cache = new TerrainGpuTextureCache(this.#gl, this.#terrainManifest);
+    cache.initialize();
+    this.#terrainCache = cache;
   }
 
   #disposeRecord(record) {
@@ -549,12 +561,12 @@ export class WebGLVoxelView {
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];
     const layers = keys.map(key => {
       const variant = TERRAIN_SURFACE_LIBRARY[key].variants[0];
-      return this.#terrainCache.getLayer('albedo', variant.textures.albedo) ?? -1;
+      return this.#terrainCache?.getLayer('albedo', variant.textures.albedo) ?? -1;
     });
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache.getTexture('albedo'));
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture('albedo') ?? null);
     gl.uniform1i(this.#uniforms.terrainAlbedo, 1);
-    gl.uniform4fv(this.#uniforms.terrainLayers, layers);
+    gl.uniform4fv?.(this.#uniforms.terrainLayers, layers);
     gl.uniform1f(this.#uniforms.terrainScale, this.#terrainTilesPerVoxel);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
