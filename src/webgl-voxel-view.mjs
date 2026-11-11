@@ -44,6 +44,10 @@ in vec3 vWorld;
 flat in float vMaterial;
 uniform sampler2D uGrassTexture;
 uniform highp sampler2DArray uTerrainAlbedo;
+uniform highp sampler2DArray uTerrainNormal;
+uniform highp sampler2DArray uTerrainOrm;
+uniform vec4 uTerrainNormalLayers;
+uniform vec4 uTerrainOrmLayers;
 uniform vec4 uTerrainLayers;
 uniform vec4 uTerrainSecondaryLayers;
 uniform float uTerrainTilesPerVoxel;
@@ -107,10 +111,13 @@ void main() {
   int surfaceIndex = abs(vMaterial - 1.0) < 0.5
     ? (vNormal.y > 0.5 ? 0 : 1)
     : (abs(vMaterial - 2.0) < 0.5 ? 2 : 3);
+  vec2 materialUv = abs(vNormal.y) > 0.5 ? vWorld.xz
+    : abs(vNormal.x) > 0.5 ? vWorld.zy : vWorld.xy;
   float layer = uTerrainLayers[surfaceIndex];
+  float normalLayer = uTerrainNormalLayers[surfaceIndex];
+  float ormLayer = uTerrainOrmLayers[surfaceIndex];
   if (layer >= 0.0) {
-    vec2 uv = abs(vNormal.y) > 0.5 ? vWorld.xz
-      : abs(vNormal.x) > 0.5 ? vWorld.zy : vWorld.xy;
+    vec2 uv = materialUv;
     vec3 primary = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
     float secondaryLayer = uTerrainSecondaryLayers[surfaceIndex];
     if (secondaryLayer >= 0.0) {
@@ -141,6 +148,31 @@ void main() {
     : vNormal.x > 0.5 ? 0.74
     : vNormal.z > 0.5 ? 0.62
     : vNormal.x < -0.5 ? 0.55 : 0.50;
+  // Voxel-local material response: fixed, inexpensive directional illumination.
+  // This is not Lighting Engine V2 and introduces no dynamic lights or shadows.
+  if (layer >= 0.0 && normalLayer >= 0.0) {
+    vec3 tangentNormal = texture(uTerrainNormal,
+      vec3(materialUv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
+    // Explicit face bases prevent top/wall normal maps from rotating incorrectly.
+    vec3 n = normalize(vNormal);
+    vec3 t = abs(n.y) > 0.5 ? vec3(1.0, 0.0, 0.0)
+      : abs(n.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 b = normalize(cross(n, t));
+    vec3 detailedNormal = normalize(t * tangentNormal.x + b * tangentNormal.y +
+      n * max(0.2, tangentNormal.z));
+    vec3 lightDirection = normalize(vec3(-0.4, 0.85, 0.3));
+    float baseDiffuse = max(dot(n, lightDirection), 0.0);
+    float detailedDiffuse = max(dot(detailedNormal, lightDirection), 0.0);
+    lighting *= clamp(1.0 + (detailedDiffuse - baseDiffuse) * 0.4, 0.75, 1.25);
+  }
+  if (layer >= 0.0 && ormLayer >= 0.0) {
+    vec3 orm = texture(uTerrainOrm,
+      vec3(materialUv * uTerrainTilesPerVoxel, ormLayer)).rgb;
+    // AO is local material micro-occlusion; roughness reduces broad highlights.
+    // Metalness is reserved for a future physically based renderer.
+    lighting *= mix(0.65, 1.0, orm.r);
+    lighting *= mix(0.96, 1.0, orm.g);
+  }
   outColor = vec4(albedo * lighting, 1.0);
 }
 `;
@@ -434,6 +466,10 @@ export class WebGLVoxelView {
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
+      terrainNormal: gl.getUniformLocation(this.#program, 'uTerrainNormal'),
+      terrainOrm: gl.getUniformLocation(this.#program, 'uTerrainOrm'),
+      terrainNormalLayers: gl.getUniformLocation(this.#program, 'uTerrainNormalLayers'),
+      terrainOrmLayers: gl.getUniformLocation(this.#program, 'uTerrainOrmLayers'),
       terrainLayers: gl.getUniformLocation(this.#program, 'uTerrainLayers'),
       terrainSecondaryLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryLayers'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
@@ -602,6 +638,19 @@ export class WebGLVoxelView {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture('albedo') ?? null);
     gl.uniform1i(this.#uniforms.terrainAlbedo, 1);
     gl.uniform4fv?.(this.#uniforms.terrainLayers, layers);
+    for (const [channel, unit, sampler, locations] of [
+      ['normal', 2, this.#uniforms.terrainNormal, this.#uniforms.terrainNormalLayers],
+      ['orm', 3, this.#uniforms.terrainOrm, this.#uniforms.terrainOrmLayers]
+    ]) {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture(channel) ?? null);
+      gl.uniform1i(sampler, unit);
+      const channelLayers = keys.map(key => {
+        const variant = TERRAIN_SURFACE_LIBRARY[key].variants[0];
+        return this.#terrainCache?.getLayer(channel, variant.textures[channel]) ?? -1;
+      });
+      gl.uniform4fv?.(locations, channelLayers);
+    }
     const secondaryLayers = keys.map(key => {
       const variant = TERRAIN_SURFACE_LIBRARY[key].variants[1];
       return variant ? (this.#terrainCache?.getLayer('albedo', variant.textures.albedo) ?? -1) : -1;
