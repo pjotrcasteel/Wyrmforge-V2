@@ -1,3 +1,4 @@
+import { estimateTerrainTextureBytes } from './terrain-texture-manifest.mjs';
 // Voxel V2 WebGL2 texture-array upload adapter. No lighting or voxel-world dependency.
 // Each channel has a separate array to preserve sRGB/linear sampling semantics.
 export class TerrainGpuTextureCache {
@@ -33,15 +34,17 @@ export class TerrainGpuTextureCache {
     const gl = this.#gl;
     const tileSize = this.#manifest.tileSize;
     const pending = [];
-    let requiredBytes = 0;
+    const mipLevels = this.#manifest.mipLevels ?? 1;
+    const requiredBytes = estimateTerrainTextureBytes(tileSize, this.#manifest.layersByChannel, mipLevels);
     for (const channel of ['albedo', 'normal', 'orm', 'height']) {
       const assets = this.#manifest.assets.filter(asset => asset.channel === channel);
       if (!assets.length) continue;
       const maxLayers = gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS);
       if (assets.length > maxLayers) throw new RangeError('Texture array layer limit exceeded');
-      const bytes = tileSize * tileSize * 4 * assets.length;
-      requiredBytes += bytes;
-      pending.push({ channel, assets, bytes });
+      pending.push({ channel, assets });
+    }
+    if (requiredBytes !== this.#manifest.estimatedBytes) {
+      throw new RangeError('Terrain texture manifest allocation estimate mismatch');
     }
     if (requiredBytes > this.#maxBytes) throw new RangeError('Terrain GPU texture budget exceeded');
     try {
@@ -51,7 +54,7 @@ export class TerrainGpuTextureCache {
         this.#textures.set(entry.channel, texture);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
         const format = entry.channel === 'albedo' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
-        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, format,
+        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, mipLevels, format,
           tileSize, tileSize, entry.assets.length);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
