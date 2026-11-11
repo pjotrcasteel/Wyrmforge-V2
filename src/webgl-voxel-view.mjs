@@ -359,6 +359,13 @@ export class WebGLVoxelView {
       replacements.set(mesh.id, mesh);
     }
     for (const id of ids) {
+      // A direct authoritative replacement supersedes any older staged upload.
+      // Otherwise the stale queue entry could overwrite this edit on a later frame.
+      if (this.#queuedUploads.has(id)) {
+        const queuedMesh = this.#queuedUploads.get(id);
+        if (queuedMesh) this.#uploadQueueBytes -= this.#meshBytes(queuedMesh);
+        this.#queuedUploads.delete(id);
+      }
       const recoveryMesh = this.#recoveryQueue.get(id);
       if (recoveryMesh) this.#recoveryBytes -= this.#meshBytes(recoveryMesh);
       this.#recoveryQueue.delete(id);
