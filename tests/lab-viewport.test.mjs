@@ -63,3 +63,16 @@ test('all existing lab controls retain unique IDs in the collapsed mobile drawer
     assert.ok(ids.includes(id), `Preserve existing lab control ${id}`);
   }
 });
+
+test('Grass 002 uses the live voxel renderer and three real camera zoom presets', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const renderer = readFileSync(new URL('../src/webgl-voxel-view.mjs', import.meta.url), 'utf8');
+  assert.match(html, /id="grass-texture-file"/);
+  for (const zoom of ['0.65', '1', '2']) {
+    assert.ok(html.includes('data-grass-zoom="' + zoom + '"'));
+  }
+  assert.match(main, /zoomAt\(rect\.width \/ 2, rect\.height \/ 2, target \/ zoomFactor\)/);
+  assert.match(main, /gpuRenderer\.setGrassMaterial\(image, Number\(grassDensity\.value\)\)/);
+  assert.match(renderer, /vWorld\.xz \* \(uGrassTexelsPerVoxel \/ 1024\.0\)/);
+});
