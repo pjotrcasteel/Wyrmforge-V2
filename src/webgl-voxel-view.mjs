@@ -214,6 +214,7 @@ export class WebGLVoxelView {
   #terrainManifest = compileTerrainTextureManifest();
   #terrainCache = null;
   #terrainTileImages = new Map();
+  #pendingTerrainTiles = new Map();
   #terrainTileStagingBytes = 0;
   #terrainTileStagingMaxBytes = 32 * 1024 * 1024;
   #terrainTilesPerVoxel = 1;
@@ -252,6 +253,7 @@ export class WebGLVoxelView {
       this.#program = null;
       this.#grassTexture = null;
       this.#terrainCache?.contextLost();
+      this.#pendingTerrainTiles.clear();
       this.#gpuMeshes.clear();
       this.#recoveryQueue.clear();
       this.#recoveryBytes = 0;
@@ -309,18 +311,16 @@ export class WebGLVoxelView {
     if (nextBytes > this.#terrainTileStagingMaxBytes) {
       throw new RangeError('Terrain decoded tile staging budget exceeded');
     }
-    // Do not retain a failed upload as a valid replacement. Recovery must
-    // always replay the last successfully accepted material image.
-    if (this.ready) {
-      this.#ensureTerrainCache();
-      this.#terrainCache.upload(channel, key, image);
-    }
+    // Last-write-wins queue. Retained images are the source of truth for
+    // context recovery; the frame loop performs GPU uploads incrementally.
     this.#terrainTileImages.set(identity, { channel, key, image, bytes });
     this.#terrainTileStagingBytes = nextBytes;
+    this.#pendingTerrainTiles.set(identity, { channel, key, image });
   }
 
   clearTerrainAlbedoTiles() {
     this.#terrainTileImages.clear();
+    this.#pendingTerrainTiles.clear();
     this.#terrainTileStagingBytes = 0;
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
@@ -329,6 +329,7 @@ export class WebGLVoxelView {
   get terrainTileStagingStatistics() {
     return Object.freeze({ retainedTiles: this.#terrainTileImages.size,
       estimatedDecodedBytes: this.#terrainTileStagingBytes,
+      pendingTiles: this.#pendingTerrainTiles.size,
       maxBytes: this.#terrainTileStagingMaxBytes });
   }
 
@@ -375,7 +376,7 @@ export class WebGLVoxelView {
   }
 
   get ready() { return !this.#lost && this.#program !== null; }
-  get pendingUploads() { return this.#queuedUploads.size + this.#recoveryQueue.size; }
+  get pendingUploads() { return this.#queuedUploads.size + this.#recoveryQueue.size + this.#pendingTerrainTiles.size; }
   get recovering() { return this.#recovering; }
   #meshBytes(mesh) {
     return mesh.positions.byteLength + mesh.normals.byteLength +
@@ -385,7 +386,8 @@ export class WebGLVoxelView {
     return { pendingChunks: this.#queuedUploads.size,
       pendingBytes: this.#uploadQueueBytes + this.#recoveryBytes,
       recoveryChunks: this.#recoveryQueue.size,
-      peakChunks: this.#uploadQueuePeak };
+      peakChunks: this.#uploadQueuePeak,
+      pendingTextureTiles: this.#pendingTerrainTiles.size };
   }
 
   // V2.4: stage a bounded batch; caller invalidates it on new edits/reset.
@@ -436,7 +438,12 @@ export class WebGLVoxelView {
     const start = now();
     let chunks = 0;
     while (this.pendingUploads && (chunks === 0 || now() - start < budgetMs)) {
-      if (this.#queuedUploads.size) {
+      if (this.#pendingTerrainTiles.size) {
+        const [identity, tile] = this.#pendingTerrainTiles.entries().next().value;
+        this.#ensureTerrainCache();
+        this.#terrainCache.upload(tile.channel, tile.key, tile.image);
+        this.#pendingTerrainTiles.delete(identity);
+      } else if (this.#queuedUploads.size) {
         const [id, mesh] = this.#queuedUploads.entries().next().value;
         this.#queuedUploads.delete(id);
         this.#uploadQueueBytes -= mesh ? this.#meshBytes(mesh) : 0;
@@ -496,12 +503,8 @@ export class WebGLVoxelView {
     this.#uploadGrassTexture();
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
-    if (this.#terrainTileImages.size) {
-      this.#ensureTerrainCache();
-      for (const { channel, key, image } of this.#terrainTileImages.values()) {
-        this.#terrainCache.upload(channel, key, image);
-      }
-    }
+    // Restore textures through the existing per-frame upload drain.
+    this.#pendingTerrainTiles = new Map(this.#terrainTileImages);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
@@ -703,6 +706,7 @@ export class WebGLVoxelView {
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
     this.#terrainTileImages.clear();
+    this.#pendingTerrainTiles.clear();
     this.#terrainTileStagingBytes = 0;
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
