@@ -8,7 +8,7 @@ import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './
 import { createTerrainMeshJob, isCurrentTerrainMeshReply } from './src/terrain-mesh-protocol.mjs';
 import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
-import { REFERENCE_TERRAIN_KEYS, createReferenceTerrainCanvas } from './src/terrain-reference-tiles.mjs';
+import { REFERENCE_TERRAIN_KEYS, createReferenceTerrainCanvas, createReferenceMaterialCanvas } from './src/terrain-reference-tiles.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
@@ -50,6 +50,11 @@ referenceTerrainToggle.addEventListener('click', () => {
     } else {
       for (const [key, kind] of Object.entries(REFERENCE_TERRAIN_KEYS)) {
         gpuRenderer.setTerrainAlbedoTile(key, createReferenceTerrainCanvas(kind));
+        for (const channel of ['normal', 'orm']) {
+          const mapKey = key.replace(/\/albedo$/, '/' + channel);
+          gpuRenderer.setTerrainMaterialTile(channel, mapKey,
+            createReferenceMaterialCanvas(kind, channel));
+        }
       }
     }
     referenceTerrainEnabled = !referenceTerrainEnabled;

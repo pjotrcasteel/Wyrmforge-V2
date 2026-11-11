@@ -77,3 +77,58 @@ export function createReferenceTerrainCanvas(kind, documentRef = document) {
   context.putImageData(image, 0, 0);
   return canvas;
 }
+
+/**
+ * Material reference maps use the same wrapped height field for every channel.
+ * Normal is tangent-space XYZ, ORM packs occlusion/roughness/metalness in RGB.
+ * These are preview assets only; no lighting engine dependency.
+ */
+export function createReferenceMaterialPixels(kind, channel, size = 256) {
+  if (!['grass', 'grass-dark', 'roots', 'dirt', 'dirt-dark', 'stone'].includes(kind) ||
+      !['normal', 'orm'].includes(channel) || size !== 256) {
+    throw new RangeError('Unknown reference material channel or tile size');
+  }
+  const pixels = new Uint8ClampedArray(size * size * 4);
+  const seed = { grass: 11, 'grass-dark': 17, roots: 29,
+    dirt: 47, 'dirt-dark': 53, stone: 71 }[kind];
+  const height = (x, y) => {
+    const wx = wrap(x, size);
+    const wy = wrap(y, size);
+    return smoothNoise(wx, wy, 32, seed) * 0.65 +
+      smoothNoise(wx, wy, 8, seed + 3) * 0.35;
+  };
+  const roughness = kind.startsWith('grass') ? 0.88 :
+    kind === 'stone' ? 0.76 : 0.93;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const h = height(x, y);
+      if (channel === 'normal') {
+        const dx = (height(x + 1, y) - height(x - 1, y)) * 4;
+        const dy = (height(x, y + 1) - height(x, y - 1)) * 4;
+        const length = Math.hypot(dx, dy, 1);
+        pixels[i] = Math.round((1 - dx / length) * 127.5);
+        pixels[i + 1] = Math.round((1 - dy / length) * 127.5);
+        pixels[i + 2] = Math.round((1 / length + 1) * 127.5);
+      } else {
+        pixels[i] = Math.round(255 * (0.84 + h * 0.16));
+        pixels[i + 1] = Math.round(255 * Math.min(1, roughness + (0.5 - h) * 0.08));
+        pixels[i + 2] = 0;
+      }
+      pixels[i + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+export function createReferenceMaterialCanvas(kind, channel, documentRef = document) {
+  const canvas = documentRef.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('2D canvas is unavailable');
+  const image = context.createImageData(256, 256);
+  image.data.set(createReferenceMaterialPixels(kind, channel));
+  context.putImageData(image, 0, 0);
+  return canvas;
+}

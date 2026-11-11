@@ -24,6 +24,6 @@ test('all four terrain surfaces resolve to registered albedo assets', () => {
 
 test('context restoration retains authored tiles and rebuilds GPU cache', () => {
   assert.match(source, /this\.#terrainCache\?\.contextLost\(\)/);
-  assert.match(source, /for \(const \[key, image\] of this\.#terrainTileImages\)/);
-  assert.match(source, /this\.#terrainCache\.upload\('albedo', key, image\)/);
+  assert.match(source, /for \(const \{ channel, key, image \} of this\.#terrainTileImages\.values\(\)\)/);
+  assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\)/);
 });

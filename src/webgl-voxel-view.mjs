@@ -258,16 +258,20 @@ export class WebGLVoxelView {
   // Optional authored albedo tiles; unchanged terrain continues using procedural fallback.
   // Keys must exist in the material manifest. Images are retained for context recovery.
   setTerrainAlbedoTile(key, image) {
-    const asset = this.#terrainManifest.assets.find(item => item.channel === 'albedo' && item.key === key);
-    if (!asset) throw new RangeError('Unknown terrain albedo asset');
+    return this.setTerrainMaterialTile('albedo', key, image);
+  }
+
+  setTerrainMaterialTile(channel, key, image) {
+    const asset = this.#terrainManifest.assets.find(item => item.channel === channel && item.key === key);
+    if (!asset) throw new RangeError('Unknown terrain material asset');
     if (!image || image.width !== this.#terrainManifest.tileSize ||
         image.height !== this.#terrainManifest.tileSize) {
-      throw new RangeError('Terrain albedo tiles must match manifest dimensions');
+      throw new RangeError('Terrain material tiles must match manifest dimensions');
     }
-    this.#terrainTileImages.set(key, image);
+    this.#terrainTileImages.set(channel + ':' + key, { channel, key, image });
     if (this.ready) {
       this.#ensureTerrainCache();
-      this.#terrainCache.upload('albedo', key, image);
+      this.#terrainCache.upload(channel, key, image);
     }
   }
 
@@ -439,8 +443,8 @@ export class WebGLVoxelView {
     this.#terrainCache = null;
     if (this.#terrainTileImages.size) {
       this.#ensureTerrainCache();
-      for (const [key, image] of this.#terrainTileImages) {
-        this.#terrainCache.upload('albedo', key, image);
+      for (const { channel, key, image } of this.#terrainTileImages.values()) {
+        this.#terrainCache.upload(channel, key, image);
       }
     }
     gl.enable(gl.DEPTH_TEST);

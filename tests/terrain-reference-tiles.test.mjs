@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReferenceTerrainPixels, REFERENCE_TERRAIN_KEYS } from '../src/terrain-reference-tiles.mjs';
+import { createReferenceTerrainPixels, createReferenceMaterialPixels, REFERENCE_TERRAIN_KEYS } from '../src/terrain-reference-tiles.mjs';
 import { compileTerrainTextureManifest } from '../src/terrain-texture-manifest.mjs';
 
 test('all preview tiles match logical albedo keys and manifest dimensions', () => {
@@ -43,4 +43,27 @@ test('dark variants are independently generated and remain stable', () => {
   assert.deepEqual(earthDark, createReferenceTerrainPixels('dirt-dark'));
   assert.equal(REFERENCE_TERRAIN_KEYS['grass/meadow-dark/albedo'], 'grass-dark');
   assert.equal(REFERENCE_TERRAIN_KEYS['dirt/earth-dark/albedo'], 'dirt-dark');
+});
+
+test('every reference variant has tileable, neutral-metalness normal and ORM maps', () => {
+  const manifest = compileTerrainTextureManifest();
+  for (const [key, kind] of Object.entries(REFERENCE_TERRAIN_KEYS)) {
+    for (const channel of ['normal', 'orm']) {
+      const mapKey = key.replace(/\/albedo$/, '/' + channel);
+      assert.ok(manifest.assets.some(asset => asset.key === mapKey && asset.channel === channel));
+      const pixels = createReferenceMaterialPixels(kind, channel);
+      assert.equal(pixels.length, 256 * 256 * 4);
+      assert.deepEqual(pixels, createReferenceMaterialPixels(kind, channel));
+      for (let i = 0; i < pixels.length; i += 4 * 101) {
+        assert.equal(pixels[i + 3], 255);
+        if (channel === 'orm') {
+          assert.equal(pixels[i + 2], 0, 'terrain is nonmetallic');
+          assert.ok(pixels[i + 1] > 140, 'terrain remains rough');
+        } else {
+          assert.ok(pixels[i + 2] >= 128, 'normal points away from tangent plane');
+        }
+      }
+    }
+  }
+  assert.throws(() => createReferenceMaterialPixels('grass', 'height'), RangeError);
 });
