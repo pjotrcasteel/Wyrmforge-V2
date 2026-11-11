@@ -45,6 +45,7 @@ flat in float vMaterial;
 uniform sampler2D uGrassTexture;
 uniform highp sampler2DArray uTerrainAlbedo;
 uniform vec4 uTerrainLayers;
+uniform vec4 uTerrainSecondaryLayers;
 uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform float uGrassTexelsPerVoxel;
@@ -110,7 +111,30 @@ void main() {
   if (layer >= 0.0) {
     vec2 uv = abs(vNormal.y) > 0.5 ? vWorld.xz
       : abs(vNormal.x) > 0.5 ? vWorld.zy : vWorld.xy;
-    albedo = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
+    vec3 primary = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
+    float secondaryLayer = uTerrainSecondaryLayers[surfaceIndex];
+    if (secondaryLayer >= 0.0) {
+      // World-anchored 4-voxel cells: deterministic patches survive excavation
+      // and remeshing. Neighboring cells blend without hard checkerboard edges.
+      vec2 cell = uv / 4.0;
+      vec2 grid = floor(cell);
+      vec2 blend = smoothstep(vec2(0.15), vec2(0.85), fract(cell));
+      vec2 h0 = vec2(dot(grid, vec2(127.1, 311.7)), dot(grid, vec2(269.5, 183.3)));
+      vec2 h1 = h0 + vec2(127.1, 269.5);
+      vec2 h2 = h0 + vec2(311.7, 183.3);
+      vec2 h3 = h0 + vec2(438.8, 452.8);
+      float threshold = surfaceIndex == 0 ? 0.25 : 0.20;
+      float a = step(1.0 - threshold, fract(sin(h0.x + h0.y) * 43758.5453));
+      float b = step(1.0 - threshold, fract(sin(h1.x + h1.y) * 43758.5453));
+      float c = step(1.0 - threshold, fract(sin(h2.x + h2.y) * 43758.5453));
+      float d = step(1.0 - threshold, fract(sin(h3.x + h3.y) * 43758.5453));
+      float mixAmount = mix(mix(a, b, blend.x), mix(c, d, blend.x), blend.y);
+      vec3 secondary = texture(uTerrainAlbedo,
+        vec3(uv * uTerrainTilesPerVoxel, secondaryLayer)).rgb;
+      albedo = mix(primary, secondary, mixAmount);
+    } else {
+      albedo = primary;
+    }
   }
   float lighting = vNormal.y > 0.5 ? 1.0
     : vNormal.y < -0.5 ? 0.43
@@ -407,6 +431,7 @@ export class WebGLVoxelView {
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
       terrainLayers: gl.getUniformLocation(this.#program, 'uTerrainLayers'),
+      terrainSecondaryLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryLayers'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
     };
     this.#uploadGrassTexture();
@@ -573,6 +598,11 @@ export class WebGLVoxelView {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture('albedo') ?? null);
     gl.uniform1i(this.#uniforms.terrainAlbedo, 1);
     gl.uniform4fv?.(this.#uniforms.terrainLayers, layers);
+    const secondaryLayers = keys.map(key => {
+      const variant = TERRAIN_SURFACE_LIBRARY[key].variants[1];
+      return variant ? (this.#terrainCache?.getLayer('albedo', variant.textures.albedo) ?? -1) : -1;
+    });
+    gl.uniform4fv?.(this.#uniforms.terrainSecondaryLayers, secondaryLayers);
     gl.uniform1f(this.#uniforms.terrainScale, this.#terrainTilesPerVoxel);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
