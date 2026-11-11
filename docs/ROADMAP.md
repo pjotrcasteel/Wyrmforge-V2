@@ -156,6 +156,57 @@ intentionally deferred full-game integration and structural collapse from its
 *first simple release*. Those features are now explicitly required **after**
 that foundation, without rewriting or changing its original milestones.
 
+### Hunt Map Generation V2 — independent engine boundary (required for V2.8)
+
+**Decision (2026-11-11):** Hunt Map Generation V2 is a **separate, replaceable,
+platform-independent engine**, not a biome-specific feature inside Voxel V2.
+This expands the implementation scope of the existing V2.8 milestone; it does
+**not** supersede V2.0–V2.7, reorder the foundation, or create a competing
+roadmap. Finish and accept Voxel V2 first, including externally generated
+terrain load/query/edit/unload contracts and device/performance evidence.
+
+**Versioned World Definition V2:** input includes stable site identity, world
+seed, generator version, biome and corruption progression, hunt tier, required
+landmarks, route/entrance/exit constraints and gameplay clearances. Output
+contains deterministic terrain initialization data, water/structure/landmark
+descriptors, object-placement records, reserved areas, spawn/objective/exit
+metadata and validation results. It contains **no browser, WebGL2, Metal,
+Vulkan or native UI dependencies**. Browser/Pages is the current development
+host; eventual native iOS and Android clients are architectural targets.
+
+**Generation sequence:** plan gameplay relationships and traversable routes;
+derive elevation, drainage and geology; form rivers and carve riverbeds; choose
+crossings and place bridge descriptors only where bank/support/span constraints
+are met; generate voxel terrain; reserve paths, clearings, spawn and boss zones;
+place trees, rocks and other props according to biome, slope, moisture,
+geology, spacing and exclusion rules; then validate and deterministically
+repair or reject invalid sites. Prefer clustered vegetation and geological
+rock distributions over uniform random scatter. A bridge solves a required
+crossing; it must not be placed independently at arbitrary coordinates.
+
+**Engine ownership:** World Generation owns site planning and placement;
+Voxel V2 owns authoritative terrain, material/height/slope queries and
+destruction; Object V2 owns instantiated trees, boulders, bridges and other
+props; Water V2 owns water representation/behavior; Physics and Navigation V2
+own collision, movement and dynamic path invalidation; Lighting V2 owns
+lighting/atmosphere; Hunt gameplay owns encounters and progression. Exchange
+typed versioned contracts, never import another engine's renderer.
+
+**First integrated acceptance slice (V2.8):** a seeded, repeatable forest
+Hunt with natural hills, a river, a navigable bridge crossing, reserved spawn
+and objective, forest clusters and rock placements, reachable paths and
+reproducible layout variation. Test invalid crossings, slopes, overlap,
+blocked routes, destruction around bridge supports, cross-chunk boundaries,
+stable material mapping after edits and bounded generation work. Record the
+generator version with the seed so save/replay compatibility is explicit.
+The first slice may use placeholder object representations until Object V2
+is integrated; it must not claim final art or physics.
+
+**Biome progression:** bright Living Forest -> Fading Wilds -> Ashen Mountains
+-> dark Wyrmlayer, driven by continuous world corruption. World Generation
+selects biome and material/object descriptors; it does not hardcode
+illumination into terrain geometry or implement Lighting V2.
+
 ### V2.8 — First playable Wyrmforge Hunt integration (gravity may be off)
 
 **Deliver:** use the *new independent* V2 voxel terrain engine inside a
@@ -272,7 +323,7 @@ Maintain a working vertical slice after every milestone. Small remote commits, i
 | Audio V2 | material and impact events | audio owns sound selection, mixing and spatialization |
 | AI/navigation V2 | changed walkability/visibility regions and solid queries | new V2 navigation contracts; incremental invalidation, no renderer dependency |
 | Animation/characters V2 | new V2 coordinate/projection contract and grounding queries | terrain does not own rigs or animation; no V1 sprite/animation pipeline dependency |
-| World generation V2 | seeded material/voxel initialization interface | generation owns biomes, landmarks and protected routes |
+| Hunt Map Generation V2 | seeded, versioned terrain initialization plus ground/material/slope queries and reserved-region contracts | independent generator owns geography, biomes, rivers, crossings, landmarks, object placement and validation; voxel engine does not |
 | Save/replay | snapshot schema, ordered accepted edits, canonical hashes | gameplay/save owner controls persistence and schema migration |
 | HUD/debug tools | counters, test scenario commands, benchmark report schema | no performance-critical game logic in UI |
 
