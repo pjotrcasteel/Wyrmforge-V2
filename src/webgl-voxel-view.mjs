@@ -214,6 +214,8 @@ export class WebGLVoxelView {
   #terrainManifest = compileTerrainTextureManifest();
   #terrainCache = null;
   #terrainTileImages = new Map();
+  #terrainTileStagingBytes = 0;
+  #terrainTileStagingMaxBytes = 32 * 1024 * 1024;
   #terrainTilesPerVoxel = 1;
   #grassTexture = null;
   #grassTexelsPerVoxel = 32;
@@ -300,17 +302,34 @@ export class WebGLVoxelView {
         image.height !== this.#terrainManifest.tileSize) {
       throw new RangeError('Terrain material tiles must match manifest dimensions');
     }
-    this.#terrainTileImages.set(channel + ':' + key, { channel, key, image });
+    const identity = channel + ':' + key;
+    const previous = this.#terrainTileImages.get(identity);
+    const bytes = image.width * image.height * 4;
+    const nextBytes = this.#terrainTileStagingBytes - (previous?.bytes ?? 0) + bytes;
+    if (nextBytes > this.#terrainTileStagingMaxBytes) {
+      throw new RangeError('Terrain decoded tile staging budget exceeded');
+    }
+    // Do not retain a failed upload as a valid replacement. Recovery must
+    // always replay the last successfully accepted material image.
     if (this.ready) {
       this.#ensureTerrainCache();
       this.#terrainCache.upload(channel, key, image);
     }
+    this.#terrainTileImages.set(identity, { channel, key, image, bytes });
+    this.#terrainTileStagingBytes = nextBytes;
   }
 
   clearTerrainAlbedoTiles() {
     this.#terrainTileImages.clear();
+    this.#terrainTileStagingBytes = 0;
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
+  }
+
+  get terrainTileStagingStatistics() {
+    return Object.freeze({ retainedTiles: this.#terrainTileImages.size,
+      estimatedDecodedBytes: this.#terrainTileStagingBytes,
+      maxBytes: this.#terrainTileStagingMaxBytes });
   }
 
   setTerrainTextureScale(tilesPerVoxel) {
@@ -684,6 +703,7 @@ export class WebGLVoxelView {
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
     this.#terrainTileImages.clear();
+    this.#terrainTileStagingBytes = 0;
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
     this.#sourceMeshes.clear();
