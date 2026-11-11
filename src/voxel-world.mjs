@@ -116,7 +116,7 @@ function mixSceneSeed(seed) {
 }
 
 export function createScene(name = 'hill', seed = 7, { chunkEdge = CHUNK_EDGE } = {}) {
-  if (!['flat', 'hill', 'cliff', 'arch'].includes(name)) throw new RangeError('Unknown scene');
+  if (!['flat', 'hill', 'cliff', 'arch', 'hunt-load'].includes(name)) throw new RangeError('Unknown scene');
   if (!Number.isSafeInteger(seed)) throw new TypeError('Seed must be a safe integer');
   if (seed < 0 || seed > MAX_SCENE_SEED) throw new RangeError('Seed must be an unsigned 32-bit integer');
   // Flat, cliff and arch stay fixed as comparable baseline fixtures.
@@ -126,9 +126,16 @@ export function createScene(name = 'hill', seed = 7, { chunkEdge = CHUNK_EDGE } 
   const hillCenterZ = (Math.floor(variation / 5) % 5) - 2;
   const hillHeight = 6 + (Math.floor(variation / 25) % 3);
   const world = new VoxelWorld({ chunkEdge });
-  for (let z = -12; z < 12; z++) {
-    for (let x = -12; x < 12; x++) {
+  // Larger V2-only performance fixture: 96 x 96 cells, not a final Hunt map size.
+  const radius = name === 'hunt-load' ? 48 : 12;
+  for (let z = -radius; z < radius; z++) {
+    for (let x = -radius; x < radius; x++) {
       let top = 1;
+      if (name === 'hunt-load') {
+        const ridge = Math.sin((x + (variation % 13)) / 13) * 2 +
+          Math.cos((z - (variation % 11)) / 17) * 2;
+        top += Math.max(0, Math.floor(3 + ridge));
+      }
       if (name === 'hill') top += Math.max(0, Math.floor(hillHeight - Math.hypot(x - hillCenterX, z - hillCenterZ) / 2));
       if (name === 'cliff') top += x >= 0 ? 8 : 0;
       if (name === 'arch') {
