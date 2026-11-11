@@ -84,8 +84,10 @@ export class TerrainGpuTextureCache {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#textures.get(channel));
     try {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      // TexImageSource (HTMLCanvasElement/ImageBitmap/Image) uses the 8-argument
+      // WebGL2 overload. The 11-argument overload is for typed pixel buffers.
       gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer,
-        image.width, image.height, 1, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        gl.RGBA, gl.UNSIGNED_BYTE, image);
       this.#uploaded.add(identity);
     } finally {
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);
