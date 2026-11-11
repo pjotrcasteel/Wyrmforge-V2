@@ -64,6 +64,17 @@ vec3 soilAlbedo(vec3 world, vec3 normal) {
   return clamp(base * (1.0 + coarse * 0.17 + fine * 0.075), 0.0, 1.0);
 }
 
+// Subtle, deterministic grass fallback until an authored grass PNG is supplied.
+// Sampling world-space coordinates keeps the pattern fixed after excavation.
+vec3 grassAlbedo(vec3 world) {
+  vec2 coarseCell = floor(world.xz * 7.0);
+  vec2 fineCell = floor(world.xz * 23.0);
+  float coarse = soilHash(coarseCell + vec2(41.0, 17.0)) - 0.5;
+  float fine = soilHash(fineCell + vec2(9.0, 63.0)) - 0.5;
+  vec3 base = terrainAlbedo(1.0);
+  return clamp(base * (1.0 + coarse * 0.10 + fine * 0.045), 0.0, 1.0);
+}
+
 void main() {
   vec3 albedo = terrainAlbedo(vMaterial);
   if (abs(vMaterial - 2.0) < 0.5) {
@@ -71,6 +82,7 @@ void main() {
   }
   if (abs(vMaterial - 1.0) < 0.5) {
     if (vNormal.y > 0.5) {
+      albedo = grassAlbedo(vWorld);
       if (uGrassEnabled) {
         // World-anchored mapping: edits and chunk boundaries cannot shift the texture.
         vec2 uv = vWorld.xz * (uGrassTexelsPerVoxel / 1024.0);
