@@ -115,7 +115,14 @@ export class TerrainWorkerSession {
   }
 
   #handleMessage(message, generation) {
-    if (message?.schema !== SCHEMA) return;
+    // An invalid response for the active job must fail rather than deadlock the
+    // single-in-flight session. Unrelated messages remain safely ignored.
+    if (message?.schema !== SCHEMA) {
+      if (this.#active && message?.id === this.#active.job.id) {
+        this.#fail('Invalid terrain worker response schema');
+      }
+      return;
+    }
     if (message.type === 'warm' && message.id === generation && !this.#ready) {
       this.#ready = true;
       this.#warmupMs = this.#now() - this.#startedAt;
