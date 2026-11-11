@@ -45,6 +45,10 @@ test('uploads tile to stable layer and resets handles on context loss', () => {
   const layer = cache.upload(asset.channel, asset.key, { width: 16, height: 16 });
   assert.equal(cache.getLayer(asset.channel, asset.key), layer);
   assert.equal(calls.filter(call => call[0] === 'upload').length, 1);
+  const upload = calls.find(call => call[0] === 'upload');
+  assert.equal(upload.length, 9, 'TexImageSource overload requires exactly eight WebGL arguments');
+  assert.equal(upload[8].width, 16);
+  assert.equal(upload[8].height, 16);
   cache.contextLost();
   assert.equal(cache.statistics.allocatedBytes, 0);
   assert.equal(cache.getLayer(asset.channel, asset.key), null);
