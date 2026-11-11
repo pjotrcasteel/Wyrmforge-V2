@@ -60,7 +60,7 @@ test('retained decoded terrain images are budgeted before upload and released on
   assert.match(source, /this\.#terrainTileImages\.set\(identity/);
   assert.match(source, /this\.#pendingTerrainTiles\.set\(identity/);
   assert.match(source, /clearTerrainAlbedoTiles\(\) \{[\s\S]*?this\.#terrainTileStagingBytes = 0/);
-  assert.match(source, /dispose\(\) \{[\s\S]*?this\.#terrainTileImages\.clear\(\);\s*this\.#terrainTileStagingBytes = 0/);
+  assert.match(source, /dispose\(\) \{[\s\S]*?this\.#terrainTileImages\.clear\(\);\s*this\.#pendingTerrainTiles\.clear\(\);\s*this\.#terrainTileStagingBytes = 0/);
 });
 
 
