@@ -16,6 +16,7 @@ uniform vec3 uCameraRight;
 uniform vec3 uCameraDown;
 uniform vec3 uCameraDepth;
 out vec3 vNormal;
+out vec3 vWorld;
 flat out float vMaterial;
 
 void main() {
@@ -28,6 +29,7 @@ void main() {
                      1.0 - 2.0 * pixel.y / uViewport.y,
                      depth, 1.0);
   vNormal = aNormal;
+  vWorld = world;
   vMaterial = aMaterial;
 }
 `;
@@ -35,13 +37,22 @@ void main() {
 const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 in vec3 vNormal;
+in vec3 vWorld;
 flat in float vMaterial;
+uniform sampler2D uGrassTexture;
+uniform bool uGrassEnabled;
+uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
 
 ${terrainMaterialGlsl()}
 
 void main() {
   vec3 albedo = terrainAlbedo(vMaterial);
+  if (uGrassEnabled && abs(vMaterial - 1.0) < 0.5 && vNormal.y > 0.5) {
+    // World-anchored mapping: edits and chunk boundaries cannot shift the texture.
+    vec2 uv = vWorld.xz * (uGrassTexelsPerVoxel / 1024.0);
+    albedo = texture(uGrassTexture, uv).rgb;
+  }
   float lighting = vNormal.y > 0.5 ? 1.0
     : vNormal.y < -0.5 ? 0.43
     : vNormal.x > 0.5 ? 0.74
@@ -84,6 +95,9 @@ function createProgram(gl) {
 
 export class WebGLVoxelView {
   #gl;
+  #grassImage = null;
+  #grassTexture = null;
+  #grassTexelsPerVoxel = 32;
   #contextLossExtension = null;
   #program = null;
   #uniforms = null;
@@ -115,6 +129,7 @@ export class WebGLVoxelView {
       this.#lost = true;
       this.#losses++;
       this.#program = null;
+      this.#grassTexture = null;
       this.#gpuMeshes.clear();
       this.#recoveryQueue.clear();
       this.#recoveryBytes = 0;
@@ -150,6 +165,41 @@ export class WebGLVoxelView {
     else if (action === 'restore' && this.#lost) extension.restoreContext();
     else return false;
     return true;
+  }
+
+  setGrassMaterial(image, texelsPerVoxel = 32) {
+    if (!image || image.width !== 1024 || image.height !== 1024) {
+      throw new RangeError("Grass texture must be exactly 1024×1024");
+    }
+    if (![16, 32, 64, 128].includes(texelsPerVoxel)) {
+      throw new RangeError("Unsupported grass texture density");
+    }
+    this.#grassImage = image;
+    this.#grassTexelsPerVoxel = texelsPerVoxel;
+    if (this.ready) this.#uploadGrassTexture();
+  }
+
+  setGrassDensity(value) {
+    if (![16, 32, 64, 128].includes(value)) throw new RangeError("Unsupported grass density");
+    this.#grassTexelsPerVoxel = value;
+  }
+
+  #uploadGrassTexture() {
+    const gl = this.#gl;
+    if (this.#grassTexture) gl.deleteTexture(this.#grassTexture);
+    this.#grassTexture = null;
+    if (!this.#grassImage || this.#lost || gl.isContextLost()) return;
+    const texture = gl.createTexture();
+    if (!texture) throw new Error("Cannot allocate grass texture");
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.#grassImage);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.#grassTexture = texture;
   }
 
   get ready() { return !this.#lost && this.#program !== null; }
@@ -258,8 +308,12 @@ export class WebGLVoxelView {
       scale: gl.getUniformLocation(this.#program, 'uScale'),
       cameraRight: gl.getUniformLocation(this.#program, 'uCameraRight'),
       cameraDown: gl.getUniformLocation(this.#program, 'uCameraDown'),
-      cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth')
+      cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth'),
+      grassTexture: gl.getUniformLocation(this.#program, 'uGrassTexture'),
+      grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
+      grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel')
     };
+    this.#uploadGrassTexture();
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
@@ -394,6 +448,11 @@ export class WebGLVoxelView {
     gl.clearDepth(1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.#program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#grassTexture);
+    gl.uniform1i(this.#uniforms.grassTexture, 0);
+    gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
+    gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
@@ -416,6 +475,8 @@ export class WebGLVoxelView {
     this.#recoveryBytes = 0;
     this.#recovering = false;
     this.#discardGpuMeshes();
+    if (this.#grassTexture && !this.#lost) this.#gl.deleteTexture(this.#grassTexture);
+    this.#grassTexture = null;
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
     this.#sourceMeshes.clear();

@@ -34,6 +34,39 @@ const build = document.querySelector('#build');
 build.textContent = `v${VERSION} · ${COMMIT === 'local' ? 'local build' : COMMIT.slice(0, 7)}`;
 build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 
+// Grass 002 remains an opt-in lab material until visual approval.
+let grassMaterialImage = null;
+const grassFile = document.querySelector('#grass-texture-file');
+const grassDensity = document.querySelector('#grass-density');
+const grassStatus = document.querySelector('#grass-material-status');
+grassFile.addEventListener('change', async () => {
+  const file = grassFile.files?.[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    if (image.width !== 1024 || image.height !== 1024) {
+      throw new RangeError('Expected an original 1024×1024 PNG');
+    }
+    if (!gpuRenderer?.ready) throw new Error('WebGL2 renderer unavailable');
+    gpuRenderer.setGrassMaterial(image, Number(grassDensity.value));
+    grassMaterialImage = image;
+    grassStatus.textContent = 'Grass 002 on actual voxel top faces · ' + grassDensity.value + ' px/voxel';
+    dirty = true;
+  } catch (error) {
+    grassStatus.textContent = 'Grass texture not applied: ' + error.message;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+});
+grassDensity.addEventListener('change', () => {
+  if (!grassMaterialImage || !gpuRenderer?.ready) return;
+  gpuRenderer.setGrassDensity(Number(grassDensity.value));
+  grassStatus.textContent = 'Grass 002 on actual voxel top faces · ' + grassDensity.value + ' px/voxel';
+  dirty = true;
+});
 const canvas = document.querySelector('#view');
 const gpuCanvas = document.querySelector('#gpu-view');
 const actorCanvas = document.querySelector('#actor-view');
