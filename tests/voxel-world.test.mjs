@@ -193,3 +193,15 @@ test('Arch is a freestanding solid span with an actual see-through opening', () 
       createScene('arch', 7, { chunkEdge }).snapshots(), 'the fixture is deterministic');
   }
 });
+
+
+test('hunt-load fixture is larger, bounded, deterministic and independent of legacy terrain', () => {
+  const a = createScene('hunt-load', 7, {chunkEdge:32});
+  const b = createScene('hunt-load', 7, {chunkEdge:32});
+  assert.equal(a.chunkCount,36, '96×96 footprint spans 6×6 horizontal chunks');
+  assert.equal(a.allocatedVoxelBytes,36 * 32 ** 3);
+  assert.deepEqual(a.snapshots(),b.snapshots());
+  assert.equal(a.get(-48,0,-48),2);
+  assert.equal(a.get(47,0,47),2);
+  assert.equal(a.get(48,0,0),0);
+});
