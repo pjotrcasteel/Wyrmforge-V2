@@ -1,6 +1,9 @@
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
 import { getCameraPreset } from './camera-presets.mjs';
 import { terrainMaterialGlsl } from './terrain-materials.mjs';
+import { compileTerrainTextureManifest } from './terrain-texture-manifest.mjs';
+import { TERRAIN_SURFACE_LIBRARY } from './terrain-surface-library.mjs';
+import { TerrainGpuTextureCache } from './terrain-gpu-texture-cache.mjs';
 export { projectVoxel } from './camera-presets.mjs';
 
 const VERTEX_SHADER = `#version 300 es
@@ -40,6 +43,9 @@ in vec3 vNormal;
 in vec3 vWorld;
 flat in float vMaterial;
 uniform sampler2D uGrassTexture;
+uniform highp sampler2DArray uTerrainAlbedo;
+uniform vec4 uTerrainLayers;
+uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
@@ -96,6 +102,16 @@ void main() {
       albedo = mix(soil, albedo, topRim);
     }
   }
+  // Surface-specific albedo layers; negative layer means procedural fallback.
+  int surfaceIndex = abs(vMaterial - 1.0) < 0.5
+    ? (vNormal.y > 0.5 ? 0 : 1)
+    : (abs(vMaterial - 2.0) < 0.5 ? 2 : 3);
+  float layer = uTerrainLayers[surfaceIndex];
+  if (layer >= 0.0) {
+    vec2 uv = abs(vNormal.y) > 0.5 ? vWorld.xz
+      : abs(vNormal.x) > 0.5 ? vWorld.zy : vWorld.xy;
+    albedo = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
+  }
   float lighting = vNormal.y > 0.5 ? 1.0
     : vNormal.y < -0.5 ? 0.43
     : vNormal.x > 0.5 ? 0.74
@@ -139,6 +155,10 @@ function createProgram(gl) {
 export class WebGLVoxelView {
   #gl;
   #grassImage = null;
+  #terrainManifest = compileTerrainTextureManifest();
+  #terrainCache = null;
+  #terrainTileImages = new Map();
+  #terrainTilesPerVoxel = 1;
   #grassTexture = null;
   #grassTexelsPerVoxel = 32;
   #contextLossExtension = null;
@@ -173,6 +193,7 @@ export class WebGLVoxelView {
       this.#losses++;
       this.#program = null;
       this.#grassTexture = null;
+      this.#terrainCache?.contextLost();
       this.#gpuMeshes.clear();
       this.#recoveryQueue.clear();
       this.#recoveryBytes = 0;
@@ -208,6 +229,29 @@ export class WebGLVoxelView {
     else if (action === 'restore' && this.#lost) extension.restoreContext();
     else return false;
     return true;
+  }
+
+  // Optional authored albedo tiles; unchanged terrain continues using procedural fallback.
+  // Keys must exist in the material manifest. Images are retained for context recovery.
+  setTerrainAlbedoTile(key, image) {
+    const asset = this.#terrainManifest.assets.find(item => item.channel === 'albedo' && item.key === key);
+    if (!asset) throw new RangeError('Unknown terrain albedo asset');
+    if (!image || image.width !== this.#terrainManifest.tileSize ||
+        image.height !== this.#terrainManifest.tileSize) {
+      throw new RangeError('Terrain albedo tiles must match manifest dimensions');
+    }
+    this.#terrainTileImages.set(key, image);
+    if (this.ready) {
+      this.#ensureTerrainCache();
+      this.#terrainCache.upload('albedo', key, image);
+    }
+  }
+
+  setTerrainTextureScale(tilesPerVoxel) {
+    if (!Number.isFinite(tilesPerVoxel) || tilesPerVoxel <= 0 || tilesPerVoxel > 16) {
+      throw new RangeError('Invalid terrain texture scale');
+    }
+    this.#terrainTilesPerVoxel = tilesPerVoxel;
   }
 
   setGrassMaterial(image, texelsPerVoxel = 32) {
@@ -354,13 +398,31 @@ export class WebGLVoxelView {
       cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth'),
       grassTexture: gl.getUniformLocation(this.#program, 'uGrassTexture'),
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
-      grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel')
+      grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
+      terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
+      terrainLayers: gl.getUniformLocation(this.#program, 'uTerrainLayers'),
+      terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
     };
     this.#uploadGrassTexture();
+    this.#terrainCache?.dispose();
+    this.#terrainCache = null;
+    if (this.#terrainTileImages.size) {
+      this.#ensureTerrainCache();
+      for (const [key, image] of this.#terrainTileImages) {
+        this.#terrainCache.upload('albedo', key, image);
+      }
+    }
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.disable(gl.BLEND);
     gl.disable(gl.CULL_FACE);
+  }
+
+  #ensureTerrainCache() {
+    if (this.#terrainCache) return;
+    const cache = new TerrainGpuTextureCache(this.#gl, this.#terrainManifest);
+    cache.initialize();
+    this.#terrainCache = cache;
   }
 
   #disposeRecord(record) {
@@ -496,6 +558,16 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.grassTexture, 0);
     gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
+    const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];
+    const layers = keys.map(key => {
+      const variant = TERRAIN_SURFACE_LIBRARY[key].variants[0];
+      return this.#terrainCache?.getLayer('albedo', variant.textures.albedo) ?? -1;
+    });
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture('albedo') ?? null);
+    gl.uniform1i(this.#uniforms.terrainAlbedo, 1);
+    gl.uniform4fv?.(this.#uniforms.terrainLayers, layers);
+    gl.uniform1f(this.#uniforms.terrainScale, this.#terrainTilesPerVoxel);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
@@ -520,6 +592,9 @@ export class WebGLVoxelView {
     this.#discardGpuMeshes();
     if (this.#grassTexture && !this.#lost) this.#gl.deleteTexture(this.#grassTexture);
     this.#grassTexture = null;
+    this.#terrainCache?.dispose();
+    this.#terrainCache = null;
+    this.#terrainTileImages.clear();
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
     this.#sourceMeshes.clear();
