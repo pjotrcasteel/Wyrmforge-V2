@@ -1,5 +1,6 @@
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
 import { getCameraPreset } from './camera-presets.mjs';
+import { terrainMaterialGlsl } from './terrain-materials.mjs';
 export { projectVoxel } from './camera-presets.mjs';
 
 const VERTEX_SHADER = `#version 300 es
@@ -37,12 +38,10 @@ in vec3 vNormal;
 flat in float vMaterial;
 out vec4 outColor;
 
+${terrainMaterialGlsl()}
+
 void main() {
-  vec3 albedo = vMaterial < 1.5
-    ? vec3(0.38, 0.55, 0.28)        // V2 grass
-    : vMaterial < 2.5
-      ? vec3(0.48, 0.34, 0.24)      // V2 dirt
-      : vec3(0.42, 0.47, 0.53);     // V2 stone
+  vec3 albedo = terrainAlbedo(vMaterial);
   float lighting = vNormal.y > 0.5 ? 1.0
     : vNormal.y < -0.5 ? 0.43
     : vNormal.x > 0.5 ? 0.74
