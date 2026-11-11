@@ -247,6 +247,12 @@ export class WebGLVoxelView {
     }
   }
 
+  clearTerrainAlbedoTiles() {
+    this.#terrainTileImages.clear();
+    this.#terrainCache?.dispose();
+    this.#terrainCache = null;
+  }
+
   setTerrainTextureScale(tilesPerVoxel) {
     if (!Number.isFinite(tilesPerVoxel) || tilesPerVoxel <= 0 || tilesPerVoxel > 16) {
       throw new RangeError('Invalid terrain texture scale');
