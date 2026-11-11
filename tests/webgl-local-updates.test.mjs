@@ -14,7 +14,7 @@ function fakeCanvas() {
     DEPTH_TEST: 2929, LEQUAL: 515, BLEND: 3042, CULL_FACE: 2884,
     ARRAY_BUFFER: 34962, ELEMENT_ARRAY_BUFFER: 34963, STATIC_DRAW: 35044,
     FLOAT: 5126, BYTE: 5120, UNSIGNED_BYTE: 5121, UNSIGNED_INT: 5125,
-    TRIANGLES: 4, COLOR_BUFFER_BIT: 16384, DEPTH_BUFFER_BIT: 256,
+    TRIANGLES: 4, COLOR_BUFFER_BIT: 16384, DEPTH_BUFFER_BIT: 256, TEXTURE0: 33984, TEXTURE_2D: 3553,
     createShader: () => ({ id: ++nextId }), shaderSource() {}, compileShader() {},
     getShaderParameter: () => true, getShaderInfoLog: () => '',
     deleteShader() {}, createProgram: () => ({ id: ++nextId }), attachShader() {},
@@ -35,7 +35,7 @@ function fakeCanvas() {
     deleteBuffer: buffer => stats.deletedBuffers.push(buffer),
     bindBuffer() {}, bufferData() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     isContextLost: () => false, viewport() {}, clearColor() {}, clearDepth() {}, clear() {},
-    useProgram() {}, uniform2f() {}, uniform1f() {},
+    useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i() {}, uniform2f() {}, uniform1f() {},
     uniform3fv: (location, value) => {
       if (location.startsWith('uCamera')) stats.cameraUniforms.push({ location, value: [...value] });
     },
