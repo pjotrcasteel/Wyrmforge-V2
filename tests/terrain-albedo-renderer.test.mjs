@@ -27,3 +27,15 @@ test('context restoration retains authored tiles and rebuilds GPU cache', () => 
   assert.match(source, /for \(const \{ channel, key, image \} of this\.#terrainTileImages\.values\(\)\)/);
   assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\)/);
 });
+
+test('material shader samples normal and ORM arrays with explicit fallback', () => {
+  assert.match(source, /sampler2DArray uTerrainNormal/);
+  assert.match(source, /sampler2DArray uTerrainOrm/);
+  assert.match(source, /normalLayer >= 0\.0/);
+  assert.match(source, /ormLayer >= 0\.0/);
+  assert.match(source, /tangentNormal/);
+  assert.match(source, /terrainNormal: gl\.getUniformLocation/);
+  assert.match(source, /terrainOrm: gl\.getUniformLocation/);
+  assert.match(source, /\['normal', 2/);
+  assert.match(source, /\['orm', 3/);
+});
