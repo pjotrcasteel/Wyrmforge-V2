@@ -26,6 +26,18 @@ This is the short execution companion to [the authoritative roadmap](ROADMAP.md)
 
 **Structural gravity:** remains a separate explicitly planned V2.9 requirement in the original roadmap; do not silently remove or implement it early. The numbering above is an execution order, not a renaming of existing milestone IDs.
 
+## Fire Tier 1 visual asset approval workflow (owner decision 2026-11-11)
+
+This workflow starts **after the voxel foundation acceptance gates**, not as a shortcut around them.
+
+- Review owner-provided V1 textures, trees, stones and props **as visual references only**. Recreate selected designs as new, independent V2 assets; never import V1 runtime code or directly depend on V1 asset paths.
+- Supplement the references with additional visual research when useful, preserving a clear V2-native provenance record for each authored asset.
+- Work on **one asset at a time**, beginning with Fire Tier 1 terrain materials before moving to separately represented interactive trees, boulders and props.
+- For each terrain texture, present the **actual 64×64 pixel asset** in chat alongside a **zoomed-out repeated tile grid** showing seams, visual rhythm and gameplay-distance readability. Include relevant face/variant previews where needed.
+- Wait for **explicit owner approval of that specific asset** before adding or merging it into the V2 repository. A preview or draft is not approval.
+- After approval: integrate through the replaceable material/object contracts, add appropriate tiling/UV/asset tests, run CI, merge only when green and verify deployment. Then repeat with the next asset until the Fire Tier 1 set is complete.
+- Trees, rocks, shrubs and other interactive world objects are **not flattened into ground textures**; they have independent placement, collision and destruction state.
+
 ## Current verified evidence (2026-11-10)
 
 - v0.0.047 on iPhone Safari: dynamic collision suite 3/3, 0 overlaps, 0 errors, stable landing after four-voxel drop across both 16 and 32 chunk boundaries; this verifies *that suite*, not every original foundation gate.
