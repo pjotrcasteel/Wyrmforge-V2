@@ -233,3 +233,42 @@ test('malformed response for active job fails fast and permits a fresh worker', 
   assert.equal(workers.length, 2);
   session.close();
 });
+
+
+test('sustained sequential worker meshing stays bounded across 120 edits and a restart', () => {
+  const workers = [], results = [], failures = [];
+  let time = 0;
+  const session = new TerrainWorkerSession({
+    createWorker: () => { const w = fakeWorker(); workers.push(w); return w; },
+    now: () => time,
+    onResult: (reply, source, metrics) => results.push({ reply, source, metrics }),
+    onFailure: reason => failures.push(reason)
+  });
+  const world = new VoxelWorld({ chunkEdge:16 });
+  for (let i = 1; i <= 120; i++) {
+    world.set(0,0,0,i % 2 ? 3 : 2);
+    const source = createTerrainMeshJob(world,new Set(['0,0,0']),i);
+    session.submit(source);
+    const worker = workers.at(-1);
+    if (!session.ready) {
+      worker.message({ schema:'voxel-v2.terrain-mesh-job.v1',type:'warm',id:workers.length });
+    }
+    assert.equal(session.busy,true);
+    assert.throws(() => session.submit(source),/already has a job/);
+    time += 2;
+    worker.message(processTerrainMeshJob(source));
+    assert.equal(session.busy,false);
+    assert.equal(results.length,i);
+    assert.equal(results.at(-1).reply.revision,world.revision);
+    assert.equal(results.at(-1).metrics.workerRoundTripMs,2);
+    if (i === 60) {
+      worker.error('Simulated mid-session worker failure');
+      assert.equal(worker.terminated,true);
+    }
+  }
+  assert.equal(workers.length,2,'only the deliberate failure should restart the worker');
+  assert.deepEqual(failures,['Simulated mid-session worker failure']);
+  assert.equal(results.length,120);
+  session.close();
+  assert.equal(workers[1].terminated,true);
+});
