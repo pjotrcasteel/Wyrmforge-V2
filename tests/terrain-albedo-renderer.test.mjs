@@ -50,3 +50,14 @@ test('normal and ORM maps are sampled only when corresponding terrain layers are
   assert.match(source, /\['normal', 2/);
   assert.match(source, /\['orm', 3/);
 });
+
+
+test('retained decoded terrain images are budgeted before upload and released on clear/dispose', () => {
+  assert.match(source, /#terrainTileStagingMaxBytes = 32 \* 1024 \* 1024/);
+  assert.match(source, /nextBytes > this\.#terrainTileStagingMaxBytes/);
+  assert.match(source, /throw new RangeError\('Terrain decoded tile staging budget exceeded'\)/);
+  assert.match(source, /this\.#terrainTileStagingBytes - \(previous\?\.bytes \?\? 0\) \+ bytes/);
+  assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\);[\s\S]*?this\.#terrainTileImages\.set\(identity/);
+  assert.match(source, /clearTerrainAlbedoTiles\(\) \{[\s\S]*?this\.#terrainTileStagingBytes = 0/);
+  assert.match(source, /dispose\(\) \{[\s\S]*?this\.#terrainTileImages\.clear\(\);\s*this\.#terrainTileStagingBytes = 0/);
+});
