@@ -11,6 +11,7 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
+import { fissureSites, applyFissureStage, FISSURE_STAGE_TIMES_MS } from './src/ambush-fissure-fixture.mjs';
 import { runCollisionProbe } from './src/collision-benchmark.mjs';
 import { runCollisionFixtureSuite } from './src/collision-fixtures.mjs';
 import { runDynamicCollisionSuite } from './src/dynamic-collision-benchmark.mjs';
@@ -601,6 +602,7 @@ function draw() {
 
 const presetRunButton = document.querySelector('#preset-run');
 const ambushRunButton = document.querySelector('#ambush-run');
+const fissureRunButton = document.querySelector('#fissure-run');
 const collisionPresetRunButton = document.querySelector('#collision-preset-run');
 const collisionFixturesButton = document.querySelector('#collision-fixtures-run');
 const dynamicCollisionButton = document.querySelector('#dynamic-collision-run');
@@ -611,6 +613,74 @@ let lastPresetReport = null;
 let presetDamageTarget = null;
 let ambush = null;
 let lastAmbushReport = null;
+let fissureRun = null;
+let lastFissureReport = null;
+function finishFissures(status, reason) {
+  if (!fissureRun) return;
+  lastFissureReport = {
+    schema:'voxel-v2.fissure-acceptance.v1',status,reason,
+    fissures:fissureRun.sites.length,stages:fissureRun.results,
+    durationMs:Math.round(performance.now()-fissureRun.startedAt),
+    removedVoxels:fissureRun.results.reduce((sum,s)=>sum+s.removedVoxels,0),
+    workerMode:terrainMeshMode.value,scene:activeScene,
+    gravityIncluded:false,enemyRenderingIncluded:false,vfxIncluded:false
+  };
+  fissureRun = null;
+  fissureRunButton.disabled = false;
+  presetProgress.textContent = 'Fissure test ' + status + ' · ' + reason;
+  if (status === 'complete') document.querySelector('#report').click();
+}
+function advanceFissures(now) {
+  if (!fissureRun) return;
+  if (document.hidden || gpuError || terrainMeshMode.value !== 'worker') {
+    finishFissures('stopped','Backgrounded, renderer error, or worker unavailable');
+    return;
+  }
+  const stage = fissureRun.results.length;
+  if (stage === 3) {
+    if (!activeTerrainJob && pendingTerrainDirty.size === 0 && !gpuRenderer?.pendingUploads) {
+      finishFissures('complete','Three synchronized stages and uploads drained');
+    }
+    return;
+  }
+  if (now < fissureRun.startedAt + 1000 + FISSURE_STAGE_TIMES_MS[stage]) return;
+  try {
+    const startedAt = performance.now();
+    const result = applyFissureStage(world,terrainEdits,stage,fissureRun.sites);
+    fissureRun.results.push({...result,editCpuMs:performance.now()-startedAt,
+      stageElapsedMs:Math.round(now-fissureRun.startedAt-1000)});
+    if (result.dirtyChunks.length) {
+      cancelTerrainWorker();
+      invalidateMeshAudit();
+      for (const id of result.dirtyChunks) pendingTerrainDirty.add(id);
+      updateTerrainMeshes();
+      dirty = true;
+    }
+    presetProgress.textContent = 'Fissures · stage ' + (stage+1) + '/3 · ' +
+      result.removedVoxels + ' voxels removed';
+  } catch (error) {
+    finishFissures('failed',error.message);
+  }
+}
+fissureRunButton.addEventListener('click', () => {
+  if (preset || ambush || fissureRun) return;
+  scenePicker.value = 'hunt-load';
+  seedPicker.value = '7';
+  chunkPicker.value = '32';
+  cameraPicker.value = 'hunt';
+  terrainMeshMode.value = 'worker';
+  chooseScene();
+  cameraPicker.dispatchEvent(new Event('change'));
+  if (terrainMeshMode.value !== 'worker' || !gpuRenderer?.ready) {
+    presetProgress.textContent = 'Fissure test requires WebGL2 and worker';
+    return;
+  }
+  lastFissureReport = null;
+  fissureRun = {startedAt:performance.now(),sites:fissureSites(18),results:[]};
+  fissureRunButton.disabled = true;
+  setLabControlsOpen(false);
+  presetProgress.textContent = '18 fissures · starting synchronized 0.7-second eruption';
+});
 function finishAmbush(status, reason) {
   if (!ambush) return;
   lastAmbushReport = {
@@ -808,6 +878,7 @@ collisionPresetRunButton.addEventListener('click', () => {
 
 function tick(now) {
   advancePreset(now);
+  advanceFissures(now);
   advanceAmbush(now);
   // Observe before the upload drain; otherwise short-lived queues disappear from telemetry.
   if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
@@ -858,6 +929,7 @@ function tick(now) {
 }
 function chooseScene() {
   if (ambush) finishAmbush('stopped','Scene reset');
+  if (fissureRun) finishFissures('stopped','Scene reset');
   const rawSeed = seedPicker.value.trim();
   const seed = Number(rawSeed);
   if (!/^\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
@@ -1361,7 +1433,8 @@ document.querySelector('#report').addEventListener('click', () => {
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
-    frames, sustainedTelemetry:sustainedTelemetry.report(), ambushScenario:lastAmbushReport ?? (ambush ? {schema:'voxel-v2.ambush-stress.v1',status:'running',impacts:ambush.impacts,changedImpacts:ambush.changedImpacts,elapsedMs:Math.round(performance.now()-ambush.startedAt)} : null),
+    frames, sustainedTelemetry:sustainedTelemetry.report(), fissureScenario:lastFissureReport ?? (fissureRun ? {schema:'voxel-v2.fissure-acceptance.v1',status:'running',stages:fissureRun.results} : null),
+    ambushScenario:lastAmbushReport ?? (ambush ? {schema:'voxel-v2.ambush-stress.v1',status:'running',impacts:ambush.impacts,changedImpacts:ambush.changedImpacts,elapsedMs:Math.round(performance.now()-ambush.startedAt)} : null),
     presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
