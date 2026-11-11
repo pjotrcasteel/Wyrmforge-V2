@@ -15,7 +15,7 @@ export function fissureSites(count = FISSURE_COUNT) {
 }
 export function applyFissureStage(world, ledger, stage, sites = fissureSites()) {
   if (!Number.isInteger(stage) || stage < 0 || stage > 2) throw new RangeError('Invalid fissure stage');
-  const lengths = [5,10,15], radii = [1.2,2.1,3.1];
+  const lengths = [5,9,13], radii = [1.2,2.1,3.1];
   const dirty = new Set();
   let removedVoxels = 0, accepted = 0;
   for (const site of sites) {
