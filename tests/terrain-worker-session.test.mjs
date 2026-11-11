@@ -18,6 +18,9 @@ function fakeWorker() {
     message(data) { listeners.get('message')({ data }); },
     error(message) {
       listeners.get('error')({ message, preventDefault() {} });
+    },
+    messageError() {
+      listeners.get('messageerror')({ preventDefault() {} });
     }
   };
 }
@@ -168,4 +171,42 @@ test('invalid jobs, factories and messages are handled defensively', () => {
   w.message({type:'warm',id:1,schema:'unrelated'});
   assert.equal(session.ready,false);
   session.close();
+});
+
+
+test('message deserialization failure terminates the worker and reports the active job', () => {
+  const workers = [], failures = [], results = [];
+  const session = new TerrainWorkerSession({
+    createWorker: () => { const worker = fakeWorker(); workers.push(worker); return worker; },
+    now: () => 0,
+    onFailure: (reason, source) => failures.push({ reason, source }),
+    onResult: result => results.push(result)
+  });
+  session.start();
+  workers[0].message({ schema: 'voxel-v2.terrain-mesh-job.v1', type: 'warm', id: 1 });
+  session.submit(job(41));
+  workers[0].messageError();
+  assert.match(failures[0].reason, /deserialized/);
+  assert.equal(failures[0].source.id, 41);
+  assert.equal(workers[0].terminated, true);
+  assert.equal(session.busy, false);
+  workers[0].message(processTerrainMeshJob(job(41)));
+  assert.equal(results.length, 0, 'late response from failed worker must be ignored');
+  session.submit(job(42));
+  assert.equal(workers.length, 2, 'a new worker can recover after the fault');
+  session.close();
+});
+
+test('message deserialization failure during warmup clears pending work', () => {
+  const worker = fakeWorker(), failures = [];
+  const session = new TerrainWorkerSession({
+    createWorker: () => worker, now: () => 0,
+    onFailure: (reason, source) => failures.push({ reason, source })
+  });
+  session.submit(job(43));
+  worker.messageError();
+  assert.equal(failures[0].source.id, 43);
+  assert.equal(session.busy, false);
+  assert.equal(session.ready, false);
+  assert.equal(worker.terminated, true);
 });
