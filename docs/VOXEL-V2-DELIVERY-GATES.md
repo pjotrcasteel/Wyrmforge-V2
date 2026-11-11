@@ -56,3 +56,8 @@ This workflow starts **after the voxel foundation acceptance gates**, not as a s
 ## Next engineering action
 
 **Audit the outstanding original foundation gates against the current repository and collected device evidence.** Then implement the first missing foundation acceptance item. Once gates are genuinely satisfied, start the grass/dirt/stone material pipeline with a single texture-atlas + per-face UV vertical slice. Do not begin another engine.
+
+
+## Hunt-scale ambush performance fixture (2026-11-11)
+
+The standalone lab includes a **hunt-load** scene (96×96 horizontal cells, 36 chunks at 32³, 1,179,648 bytes of voxel payload). This is a bounded comparative stress fixture, **not** a final Hunt map dimension or evidence of final device performance. The V1 ambush performance notes describe 18 simultaneous fissure points and expensive terrain repaint/crowd rendering; the V2 fixture will exercise that pressure using new V2-native impact commands and worker/GPU queues, without importing V1 code or VFX. The scene can be selected manually now; automated staged ambush impacts, enemy proxies, and sustained phone acceptance are separate unfinished gates. Do not confuse terrain-only performance with full ambush FPS.
