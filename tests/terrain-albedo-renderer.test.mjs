@@ -39,3 +39,14 @@ test('material shader samples normal and ORM arrays with explicit fallback', () 
   assert.match(source, /\['normal', 2/);
   assert.match(source, /\['orm', 3/);
 });
+
+test('normal and ORM maps are sampled only when corresponding terrain layers are uploaded', () => {
+  assert.match(source, /sampler2DArray uTerrainNormal/);
+  assert.match(source, /sampler2DArray uTerrainOrm/);
+  assert.match(source, /layer >= 0\.0 && normalLayer >= 0\.0/);
+  assert.match(source, /layer >= 0\.0 && ormLayer >= 0\.0/);
+  assert.match(source, /vec3 detailedNormal = normalize/);
+  assert.match(source, /lighting \*= mix\(0\.65, 1\.0, orm\.r\)/);
+  assert.match(source, /\['normal', 2/);
+  assert.match(source, /\['orm', 3/);
+});
