@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compileTerrainTextureManifest, TERRAIN_TEXTURE_DEFAULTS } from '../src/terrain-texture-manifest.mjs';
+import { compileTerrainTextureManifest, estimateTerrainTextureBytes, TERRAIN_TEXTURE_DEFAULTS } from '../src/terrain-texture-manifest.mjs';
 import { TERRAIN_SURFACE_LIBRARY } from '../src/terrain-surface-library.mjs';
 
 test('manifest compiles all material variants without touching voxel IDs', () => {
@@ -47,4 +47,28 @@ test('missing optional maps receive neutral defaults, not fake asset paths', () 
   assert.equal(slots.normal, null);
   assert.equal(slots.orm, null);
   assert.equal(slots.height, null);
+});
+
+
+test('GPU memory estimate accounts for every allocated mip level', () => {
+  const manifest = compileTerrainTextureManifest(undefined, { tileSize: 16, mipLevels: 5 });
+  const layers = manifest.assets.length;
+  assert.equal(manifest.mipLevels, 5);
+  assert.equal(manifest.estimatedBytes, layers * 4 * (256 + 64 + 16 + 4 + 1));
+  assert.equal(estimateTerrainTextureBytes(16, manifest.layersByChannel), layers * 16 * 16 * 4);
+  assert.throws(() => compileTerrainTextureManifest(undefined, { tileSize: 16, mipLevels: 6 }), RangeError);
+  assert.throws(() => compileTerrainTextureManifest(undefined, {
+    tileSize: 16, mipLevels: 5, maxEstimatedBytes: layers * 16 * 16 * 4
+  }), RangeError);
+});
+
+test('texture cache rejects mismatched manifest accounting before GPU allocation', async () => {
+  const { TerrainGpuTextureCache } = await import('../src/terrain-gpu-texture-cache.mjs');
+  let created = 0;
+  const gl = { createTexture() { created++; return {}; },
+    getParameter() { return 256; }, MAX_ARRAY_TEXTURE_LAYERS: 1 };
+  const manifest = compileTerrainTextureManifest();
+  const cache = new TerrainGpuTextureCache(gl, { ...manifest, estimatedBytes: 1 });
+  assert.throws(() => cache.initialize(), /estimate mismatch/);
+  assert.equal(created, 0);
 });
