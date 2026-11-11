@@ -94,3 +94,23 @@ test('job creation enforces ID, count, type and payload safety limits', () => {
   assert.throws(()=>processTerrainMeshJob({...job,snapshotBytes:1}),TypeError);
   assert.throws(()=>processTerrainMeshJob({...job,snapshots:[...job.snapshots,...job.snapshots]}),TypeError);
 });
+
+
+test('malformed worker mesh buffers and indices are rejected before GPU upload', () => {
+  const world = new VoxelWorld({chunkEdge:16});
+  world.set(0,0,0,3);
+  const job = createTerrainMeshJob(world,new Set(['0,0,0']),77);
+  const reply = processTerrainMeshJob(job);
+  assert.equal(isCurrentTerrainMeshReply(reply,job,world.revision),true);
+  const mesh = reply.meshes[0];
+  const invalid = [
+    {...mesh,vertexCount:-1},
+    {...mesh,triangleCount:NaN},
+    {...mesh,normals:new Int8Array(0)},
+    {...mesh,materials:new Uint8Array(0)},
+    {...mesh,indices:new Uint32Array([...mesh.indices.slice(0,-1),mesh.vertexCount])}
+  ];
+  for (const replacement of invalid) {
+    assert.equal(isCurrentTerrainMeshReply({...reply,meshes:[replacement]},job,world.revision),false);
+  }
+});
