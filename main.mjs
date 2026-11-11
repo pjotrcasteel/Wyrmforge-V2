@@ -603,6 +603,12 @@ function draw() {
 const presetRunButton = document.querySelector('#preset-run');
 const ambushRunButton = document.querySelector('#ambush-run');
 const fissureRunButton = document.querySelector('#fissure-run');
+const phoneStressLevel = document.querySelector('#phone-stress-level');
+const PHONE_STRESS_PROFILES = Object.freeze({
+  current:{label:'Current device',cpuContentionMs:0,uploadBudgetMs:2},
+  older:{label:'Older mid-range (synthetic)',cpuContentionMs:2,uploadBudgetMs:1},
+  low:{label:'Older low-end (synthetic)',cpuContentionMs:5,uploadBudgetMs:0.5}
+});
 const collisionPresetRunButton = document.querySelector('#collision-preset-run');
 const collisionFixturesButton = document.querySelector('#collision-fixtures-run');
 const dynamicCollisionButton = document.querySelector('#dynamic-collision-run');
@@ -623,6 +629,8 @@ function finishFissures(status, reason) {
     durationMs:Math.round(performance.now()-fissureRun.startedAt),
     removedVoxels:fissureRun.results.reduce((sum,s)=>sum+s.removedVoxels,0),
     workerMode:terrainMeshMode.value,scene:activeScene,
+    stressProfile:fissureRun.profileName,stressConstraints:fissureRun.profile,
+    simulationCaveat:'Synthetic main-thread contention and upload budget only; not a hardware or thermal emulator',
     gravityIncluded:false,enemyRenderingIncluded:false,vfxIncluded:false
   };
   fissureRun = null;
@@ -676,10 +684,13 @@ fissureRunButton.addEventListener('click', () => {
     return;
   }
   lastFissureReport = null;
-  fissureRun = {startedAt:performance.now(),sites:fissureSites(18),results:[]};
+  const profileName = phoneStressLevel.value;
+  const profile = PHONE_STRESS_PROFILES[profileName];
+  if (!profile) throw new Error('Unknown phone stress profile');
+  fissureRun = {startedAt:performance.now(),sites:fissureSites(18),results:[],profileName,profile};
   fissureRunButton.disabled = true;
   setLabControlsOpen(false);
-  presetProgress.textContent = '18 fissures · starting synchronized 0.7-second eruption';
+  presetProgress.textContent = '18 fissures · ' + profile.label + ' · synchronized eruption';
 });
 function finishAmbush(status, reason) {
   if (!ambush) return;
@@ -877,6 +888,11 @@ collisionPresetRunButton.addEventListener('click', () => {
 });
 
 function tick(now) {
+  if (fissureRun?.profile.cpuContentionMs) {
+    // Deliberately synthetic contention, applied only during the acceptance run.
+    const until = performance.now() + fissureRun.profile.cpuContentionMs;
+    while (performance.now() < until) { /* simulated competing main-thread work */ }
+  }
   advancePreset(now);
   advanceFissures(now);
   advanceAmbush(now);
@@ -884,7 +900,7 @@ function tick(now) {
   if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
   if (gpuRenderer?.pendingUploads) {
     try {
-      const upload = gpuRenderer.flushQueuedUploads({budgetMs:2});
+      const upload = gpuRenderer.flushQueuedUploads({budgetMs:fissureRun?.profile.uploadBudgetMs ?? 2});
       if (upload.chunks) dirty = true;
       if (!gpuRenderer.pendingUploads && lastTerrainWorker?.status === 'upload-queued') {
         const visibleMs = queuedUploadStartedAt === null ? null : performance.now() - queuedUploadStartedAt;
