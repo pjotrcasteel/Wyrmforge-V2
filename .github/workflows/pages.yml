@@ -12,8 +12,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: v2-pages
-  cancel-in-progress: false
+  # PR checks must not queue behind Pages deployment or unrelated PRs.
+  # Preserve sequential production deployment while superseding stale PR checks.
+  group: ${{ github.event_name == 'pull_request' && format('v2-pr-{0}', github.event.pull_request.number) || 'v2-pages-main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
