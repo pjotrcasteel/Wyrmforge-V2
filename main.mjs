@@ -588,6 +588,16 @@ function zoomAt(cssX, cssY, ratio) {
   dirty = true;
 }
 
+// Camera presets use the same live WebGL terrain, not image-based approximations.
+for (const button of document.querySelectorAll('[data-grass-zoom]')) {
+  button.addEventListener('click', () => {
+    const target = Number(button.dataset.grassZoom);
+    if (!Number.isFinite(target) || target < 0.55 || target > 2.5) return;
+    const rect = canvas.getBoundingClientRect();
+    zoomAt(rect.width / 2, rect.height / 2, target / zoomFactor);
+  });
+}
+
 function pointerPosition(event) {
   const rect = canvas.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
