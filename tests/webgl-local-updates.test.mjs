@@ -15,6 +15,9 @@ function fakeCanvas() {
     ARRAY_BUFFER: 34962, ELEMENT_ARRAY_BUFFER: 34963, STATIC_DRAW: 35044,
     FLOAT: 5126, BYTE: 5120, UNSIGNED_BYTE: 5121, UNSIGNED_INT: 5125,
     TRIANGLES: 4, COLOR_BUFFER_BIT: 16384, DEPTH_BUFFER_BIT: 256, TEXTURE0: 33984, TEXTURE_2D: 3553,
+    RGBA: 6408, REPEAT: 10497, LINEAR: 9729, TEXTURE_WRAP_S: 10242,
+    TEXTURE_WRAP_T: 10243, TEXTURE_MIN_FILTER: 10241, TEXTURE_MAG_FILTER: 10240,
+    UNPACK_FLIP_Y_WEBGL: 37440,
     createShader: () => ({ id: ++nextId }), shaderSource() {}, compileShader() {},
     getShaderParameter: () => true, getShaderInfoLog: () => '',
     deleteShader() {}, createProgram: () => ({ id: ++nextId }), attachShader() {},
@@ -36,6 +39,8 @@ function fakeCanvas() {
     bindBuffer() {}, bufferData() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     isContextLost: () => false, viewport() {}, clearColor() {}, clearDepth() {}, clear() {},
     useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i() {}, uniform2f() {}, uniform1f() {},
+    createTexture: () => ({ id: ++nextId }), deleteTexture() {}, pixelStorei() {},
+    texImage2D() { stats.textureUploads = (stats.textureUploads ?? 0) + 1; }, texParameteri() {},
     uniform3fv: (location, value) => {
       if (location.startsWith('uCamera')) stats.cameraUniforms.push({ location, value: [...value] });
     },
@@ -145,5 +150,22 @@ test('switching camera uniforms does not reallocate or replace GPU chunk buffers
     .filter(item => item.location === 'uCameraRight')
     .map(item => item.value);
   assert.deepEqual(rightBases, [[0.75, 0, -0.75], [1, 0, 0], [0.75, 0, -0.75]]);
+  view.dispose();
+});
+
+test('Grass 002 is uploaded once, density changes do not rebuild GPU meshes', () => {
+  const { canvas, stats } = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  const world = new VoxelWorld();
+  world.set(0, 0, 0, 1);
+  view.setMeshes(buildExposedFaceMeshes(world));
+  const before = view.statistics;
+  view.setGrassMaterial({ width: 1024, height: 1024 }, 32);
+  assert.equal(stats.textureUploads, 1);
+  view.setGrassDensity(64);
+  assert.deepEqual(view.statistics, before);
+  assert.equal(stats.textureUploads, 1);
+  assert.equal(view.render({ width: 400, height: 600, scale: 11, panX: 0, panY: 0, camera: 'hunt' }), true);
+  assert.throws(() => view.setGrassMaterial({ width: 512, height: 512 }), /1024/);
   view.dispose();
 });
