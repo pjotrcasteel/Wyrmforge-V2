@@ -148,8 +148,13 @@ export function isCurrentTerrainMeshReply(reply, job, currentRevision) {
         !(mesh.normals instanceof Int8Array) ||
         !(mesh.materials instanceof Uint8Array) ||
         !(mesh.indices instanceof Uint32Array) ||
+        !Number.isSafeInteger(mesh.vertexCount) || mesh.vertexCount < 0 ||
+        !Number.isSafeInteger(mesh.triangleCount) || mesh.triangleCount < 0 ||
         mesh.positions.length !== mesh.vertexCount*3 ||
-        mesh.indices.length !== mesh.triangleCount*3) return false;
+        mesh.normals.length !== mesh.vertexCount*3 ||
+        mesh.materials.length !== mesh.vertexCount ||
+        mesh.indices.length !== mesh.triangleCount*3 ||
+        mesh.indices.some(index => index >= mesh.vertexCount)) return false;
     seen.add(mesh.id);
   }
   return true;
