@@ -703,6 +703,7 @@ export class WebGLVoxelView {
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
     this.#terrainTileImages.clear();
+    this.#terrainTileStagingBytes = 0;
     if (this.#program && !this.#lost) this.#gl.deleteProgram(this.#program);
     this.#program = null;
     this.#sourceMeshes.clear();
