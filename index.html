@@ -62,7 +62,8 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
   </div></section>
   <section aria-label="Grass material on actual voxels"><h2>GRASS 002 — LIVE VOXEL MATERIAL</h2>
 <div class="lab-fields">
-<div class="lab-field"><label for="grass-texture-file">Grass 002 PNG (1024×1024)</label><input id="grass-texture-file" type="file" accept="image/png"></div>
+<div class="lab-field"><button id="reference-terrain-toggle" type="button" aria-pressed="false">Preview reference terrain textures: Off</button></div>
+    <div class="lab-field"><label for="grass-texture-file">Grass 002 PNG (1024×1024)</label><input id="grass-texture-file" type="file" accept="image/png"></div>
 <div class="lab-field"><label for="grass-density">Texture pixels / voxel</label><select id="grass-density"><option value="16">16</option><option value="32" selected>32</option><option value="64">64</option><option value="128">128</option></select></div>
 <div class="lab-field"><label>Live hunt-camera zoom</label><div class="lab-fields" role="group" aria-label="Grass zoom inspection presets"><button type="button" data-grass-zoom="0.65">Far 0.65×</button><button type="button" data-grass-zoom="1">Hunt 1×</button><button type="button" data-grass-zoom="2">Near 2×</button></div></div>
 <span id="grass-material-status" role="status">No texture loaded — original material unchanged</span>
