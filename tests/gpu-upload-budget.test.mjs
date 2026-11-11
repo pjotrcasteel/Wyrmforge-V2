@@ -192,3 +192,21 @@ test('dirty replacements during context recovery remain frame-budgeted', () => {
   assert.equal(view.uploadQueueStatistics.pendingBytes,0);
   view.dispose();
 });
+
+
+test('direct authoritative replacement invalidates stale queued uploads without affecting other chunks', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'),mesh('b')]);
+  view.queueReplacementMeshes(['a','b'],[mesh('a'),mesh('b')]);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,120);
+  view.replaceMeshes(new Set(['a']),[]);
+  assert.equal(view.pendingUploads,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,60);
+  view.replaceMeshes(new Set(['b']),[mesh('b')]);
+  assert.equal(view.pendingUploads,0);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  assert.equal(view.flushQueuedUploads({now}).chunks,0);
+  assert.equal(view.statistics.drawCalls,1,'removed chunk must not reappear');
+  view.dispose();
+});
