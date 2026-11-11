@@ -31,3 +31,16 @@ test('generated texture contains spatial detail rather than a flat color', () =>
     assert.ok(samples.size > 10, kind + ' lacks texture detail');
   }
 });
+
+test('dark variants are independently generated and remain stable', () => {
+  const meadow = createReferenceTerrainPixels('grass');
+  const meadowDark = createReferenceTerrainPixels('grass-dark');
+  const earth = createReferenceTerrainPixels('dirt');
+  const earthDark = createReferenceTerrainPixels('dirt-dark');
+  assert.notDeepEqual(meadow, meadowDark);
+  assert.notDeepEqual(earth, earthDark);
+  assert.deepEqual(meadowDark, createReferenceTerrainPixels('grass-dark'));
+  assert.deepEqual(earthDark, createReferenceTerrainPixels('dirt-dark'));
+  assert.equal(REFERENCE_TERRAIN_KEYS['grass/meadow-dark/albedo'], 'grass-dark');
+  assert.equal(REFERENCE_TERRAIN_KEYS['dirt/earth-dark/albedo'], 'dirt-dark');
+});
