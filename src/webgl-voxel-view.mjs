@@ -46,8 +46,29 @@ out vec4 outColor;
 
 ${terrainMaterialGlsl()}
 
+// Low-frequency, world-anchored soil detail. This is a first procedural dirt
+// material, not a final authored texture. No additional texture uploads.
+float soilHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+vec3 soilAlbedo(vec3 world, vec3 normal) {
+  // Use horizontal world coordinates on tops and world-height on walls.
+  vec2 uv = abs(normal.y) > 0.5 ? world.xz
+    : abs(normal.x) > 0.5 ? world.zy : world.xy;
+  vec2 coarseCell = floor(uv * 5.0);
+  vec2 fineCell = floor(uv * 17.0);
+  float coarse = soilHash(coarseCell) - 0.5;
+  float fine = soilHash(fineCell) - 0.5;
+  vec3 base = terrainAlbedo(2.0);
+  return clamp(base * (1.0 + coarse * 0.17 + fine * 0.075), 0.0, 1.0);
+}
+
 void main() {
   vec3 albedo = terrainAlbedo(vMaterial);
+  if (abs(vMaterial - 2.0) < 0.5) {
+    albedo = soilAlbedo(vWorld, vNormal);
+  }
   if (abs(vMaterial - 1.0) < 0.5) {
     if (vNormal.y > 0.5) {
       if (uGrassEnabled) {
@@ -58,8 +79,8 @@ void main() {
     } else if (vNormal.y < 0.5) {
       // An exposed grass voxel side is soil, not a vertical grass photograph.
       // The narrow upper rim remains grass-colored and tracks each voxel top.
-      vec3 soil = terrainAlbedo(2.0);
-      float topRim = smoothstep(0.79, 0.94, fract(vWorld.y - 0.001));
+      vec3 soil = soilAlbedo(vWorld, vNormal);
+      float topRim = smoothstep(0.79, 0.94, fract(vWorld.y));
       albedo = mix(soil, albedo, topRim);
     }
   }
