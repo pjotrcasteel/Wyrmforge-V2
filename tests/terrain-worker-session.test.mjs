@@ -139,7 +139,7 @@ test('single-in-flight rule rejects backlog and unexpected results are ignored',
   assert.throws(()=>session.submit(job(15)),/already has a job/);
   w.message(processTerrainMeshJob(job(999)));
   assert.equal(results.length,0);
-  w.message({schema:'other',type:'ready',id:14});
+  w.message({schema:'other',type:'ready',id:999});
   assert.equal(session.busy,true);
   w.message(processTerrainMeshJob(job(14)));
   assert.equal(results.length,1);
@@ -209,4 +209,27 @@ test('message deserialization failure during warmup clears pending work', () => 
   assert.equal(session.busy, false);
   assert.equal(session.ready, false);
   assert.equal(worker.terminated, true);
+});
+
+
+test('malformed response for active job fails fast and permits a fresh worker', () => {
+  const workers = [], failures = [], results = [];
+  const session = new TerrainWorkerSession({
+    createWorker: () => { const w = fakeWorker(); workers.push(w); return w; },
+    now: () => 0,
+    onFailure: (reason, source) => failures.push({ reason, source }),
+    onResult: reply => results.push(reply)
+  });
+  session.submit(job(50));
+  workers[0].message({ schema: 'voxel-v2.terrain-mesh-job.v1', type: 'warm', id: 1 });
+  workers[0].message({ schema: 'unexpected', type: 'ready', id: 50 });
+  assert.match(failures[0].reason, /schema/);
+  assert.equal(failures[0].source.id, 50);
+  assert.equal(session.busy, false);
+  assert.equal(workers[0].terminated, true);
+  workers[0].message(processTerrainMeshJob(job(50)));
+  assert.equal(results.length, 0);
+  session.submit(job(51));
+  assert.equal(workers.length, 2);
+  session.close();
 });
