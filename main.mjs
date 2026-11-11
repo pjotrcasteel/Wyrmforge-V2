@@ -8,6 +8,7 @@ import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './
 import { createTerrainMeshJob, isCurrentTerrainMeshReply } from './src/terrain-mesh-protocol.mjs';
 import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
+import { REFERENCE_TERRAIN_KEYS, createReferenceTerrainCanvas } from './src/terrain-reference-tiles.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
@@ -36,6 +37,30 @@ build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 
 // Grass 002 remains an opt-in lab material until visual approval.
 let grassMaterialImage = null;
+const referenceTerrainToggle = document.querySelector('#reference-terrain-toggle');
+let referenceTerrainEnabled = false;
+referenceTerrainToggle.addEventListener('click', () => {
+  if (!gpuRenderer?.ready) {
+    referenceTerrainToggle.textContent = 'WebGL2 unavailable — preview cannot start';
+    return;
+  }
+  try {
+    if (referenceTerrainEnabled) {
+      gpuRenderer.clearTerrainAlbedoTiles();
+    } else {
+      for (const [key, kind] of Object.entries(REFERENCE_TERRAIN_KEYS)) {
+        gpuRenderer.setTerrainAlbedoTile(key, createReferenceTerrainCanvas(kind));
+      }
+    }
+    referenceTerrainEnabled = !referenceTerrainEnabled;
+    referenceTerrainToggle.setAttribute('aria-pressed', String(referenceTerrainEnabled));
+    referenceTerrainToggle.textContent = 'Preview reference terrain textures: ' +
+      (referenceTerrainEnabled ? 'On (temporary artwork)' : 'Off');
+    dirty = true;
+  } catch (error) {
+    referenceTerrainToggle.textContent = 'Texture preview error: ' + error.message;
+  }
+});
 const grassFile = document.querySelector('#grass-texture-file');
 const grassDensity = document.querySelector('#grass-density');
 const grassStatus = document.querySelector('#grass-material-status');
