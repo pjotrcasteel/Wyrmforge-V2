@@ -99,6 +99,11 @@ jobs:
           node --check tests/tunnel-lab.test.mjs
           node --check scripts/create-versioned-lab.mjs
           node --check tests/versioned-lab.test.mjs
+      - name: Verify live Grass 002 integration is included
+        run: |
+          grep -q 'grass-texture-file' index.html
+          grep -q 'setGrassMaterial' src/webgl-voxel-view.mjs
+          grep -q 'uGrassTexture' src/webgl-voxel-view.mjs
       - name: Run independent 16-vs-32 storage benchmark
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures
@@ -128,6 +133,8 @@ jobs:
           test -s "builds/$GITHUB_SHA/main.mjs"
           test -s "builds/$GITHUB_SHA/src/build-info.mjs"
           grep -q "$GITHUB_SHA" "builds/$GITHUB_SHA/src/build-info.mjs"
+          grep -q 'grass-texture-file' "builds/$GITHUB_SHA/index.html"
+          grep -q 'setGrassMaterial' "builds/$GITHUB_SHA/src/webgl-voxel-view.mjs"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
