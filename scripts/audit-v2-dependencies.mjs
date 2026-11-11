@@ -12,6 +12,7 @@ const ENTRY_FILES=['main.mjs'];
 // interpret fixture strings or regex literals as executable imports.
 const IMPORT_PATTERN=/^\s*(?:import\s+(?:[^'"\r\n]*?\s+from\s*)?|export\s+[^'"\r\n]*?\s+from\s*)['"]([^'"\r\n]+)['"]/gm;
 const ASSET_PATTERN=/(?:\b(?:src|href)\s*=\s*|\bnew\s+URL\s*\(\s*)['"]([^'"]+)['"]/g;
+const DYNAMIC_IMPORT_PATTERN=/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const FORBIDDEN=/(?:^|[\\/])(?:Wyrmforge\.Presentation|experimental|legacy|v1)(?:[\\/]|$)/i;
 function within(root,file) {
   const path=relative(root,file);
@@ -50,6 +51,7 @@ export function auditV2Dependencies(root) {
     scanned++;
     const source=readFileSync(file,'utf8');
     for(const match of source.matchAll(IMPORT_PATTERN)) checkPath(file,match[1],'import');
+    for(const match of source.matchAll(DYNAMIC_IMPORT_PATTERN)) checkPath(file,match[1],'import');
     if(extname(file)==='.html') {
       for(const match of source.matchAll(ASSET_PATTERN)) checkPath(file,match[1],'asset');
     }
