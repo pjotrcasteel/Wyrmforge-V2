@@ -3,8 +3,10 @@
 // Pixel values depend only on wrapped tile coordinates, never on chunk boundaries.
 export const REFERENCE_TERRAIN_KEYS = Object.freeze({
   'grass/meadow/albedo': 'grass',
+  'grass/meadow-dark/albedo': 'grass-dark',
   'grass/rooted-soil/albedo': 'roots',
   'dirt/earth/albedo': 'dirt',
+  'dirt/earth-dark/albedo': 'dirt-dark',
   'stone/bedrock/albedo': 'stone'
 });
 
@@ -34,23 +36,23 @@ function smoothNoise(x, y, frequency, seed) {
 
 /** Pure pixel generator, useful for repeatability and seam tests. */
 export function createReferenceTerrainPixels(kind, size = 256) {
-  if (!['grass', 'roots', 'dirt', 'stone'].includes(kind) || size !== 256) {
+  if (!['grass', 'grass-dark', 'roots', 'dirt', 'dirt-dark', 'stone'].includes(kind) || size !== 256) {
     throw new RangeError('Unknown reference terrain material or tile size');
   }
   const data = new Uint8ClampedArray(size * size * 4);
   const palettes = {
-    grass: [65, 93, 39], roots: [103, 72, 46],
-    dirt: [113, 76, 48], stone: [102, 107, 110]
+    grass: [65, 93, 39], 'grass-dark': [42, 70, 32], roots: [103, 72, 46],
+    dirt: [113, 76, 48], 'dirt-dark': [78, 55, 39], stone: [102, 107, 110]
   };
   const base = palettes[kind];
-  const seed = { grass: 11, roots: 29, dirt: 47, stone: 71 }[kind];
+  const seed = { grass: 11, 'grass-dark': 17, roots: 29, dirt: 47, 'dirt-dark': 53, stone: 71 }[kind];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const low = smoothNoise(x, y, 32, seed);
       const mid = smoothNoise(x, y, 8, seed + 3);
       const fine = hash(x, y, seed + 9);
       const grain = (low - 0.5) * 43 + (mid - 0.5) * 29 + (fine - 0.5) * 17;
-      const grassBlade = kind === 'grass' && hash(Math.floor(x / 2), Math.floor(y / 5), seed + 19) > 0.78;
+      const grassBlade = (kind === 'grass' || kind === 'grass-dark') && hash(Math.floor(x / 2), Math.floor(y / 5), seed + 19) > 0.78;
       const stoneVein = kind === 'stone' && Math.abs(mid - 0.49) < 0.065;
       const roots = kind === 'roots' && Math.abs(mid - 0.52) < 0.055;
       const detail = grassBlade ? 16 : stoneVein ? -20 : roots ? -15 : 0;
