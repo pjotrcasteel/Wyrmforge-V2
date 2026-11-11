@@ -48,10 +48,20 @@ ${terrainMaterialGlsl()}
 
 void main() {
   vec3 albedo = terrainAlbedo(vMaterial);
-  if (uGrassEnabled && abs(vMaterial - 1.0) < 0.5 && vNormal.y > 0.5) {
-    // World-anchored mapping: edits and chunk boundaries cannot shift the texture.
-    vec2 uv = vWorld.xz * (uGrassTexelsPerVoxel / 1024.0);
-    albedo = texture(uGrassTexture, uv).rgb;
+  if (abs(vMaterial - 1.0) < 0.5) {
+    if (vNormal.y > 0.5) {
+      if (uGrassEnabled) {
+        // World-anchored mapping: edits and chunk boundaries cannot shift the texture.
+        vec2 uv = vWorld.xz * (uGrassTexelsPerVoxel / 1024.0);
+        albedo = texture(uGrassTexture, uv).rgb;
+      }
+    } else if (vNormal.y < 0.5) {
+      // An exposed grass voxel side is soil, not a vertical grass photograph.
+      // The narrow upper rim remains grass-colored and tracks each voxel top.
+      vec3 soil = terrainAlbedo(2.0);
+      float topRim = smoothstep(0.79, 0.94, fract(vWorld.y - 0.001));
+      albedo = mix(soil, albedo, topRim);
+    }
   }
   float lighting = vNormal.y > 0.5 ? 1.0
     : vNormal.y < -0.5 ? 0.43

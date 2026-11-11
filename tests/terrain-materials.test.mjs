@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TERRAIN_MATERIALS, terrainMaterial, terrainMaterialGlsl } from '../src/terrain-materials.mjs';
+import { TERRAIN_MATERIALS, terrainMaterial, terrainMaterialGlsl, terrainSurfaceKey } from '../src/terrain-materials.mjs';
 
 test('terrain material IDs remain stable for existing saves and meshing', () => {
   assert.deepEqual(TERRAIN_MATERIALS.map(m => [m.id,m.key,m.textureKey]), [
@@ -16,4 +16,14 @@ test('material shader lookup contains each distinct albedo and unknown fallback'
     assert.ok(glsl.includes(material.albedo.map(x=>x.toFixed(2)).join(', ')));
   }
   assert.match(glsl,/return vec3\(1\.0, 0\.0, 1\.0\)/);
+});
+
+test('exposed surface keys distinguish grass top from grassy soil sides', () => {
+  assert.equal(terrainSurfaceKey(1, 1), 'terrain/grass');
+  assert.equal(terrainSurfaceKey(1, 0), 'terrain/grass-soil-side');
+  assert.equal(terrainSurfaceKey(1, -1), 'terrain/grass-soil-side');
+  assert.equal(terrainSurfaceKey(2, 1), 'terrain/dirt');
+  assert.equal(terrainSurfaceKey(2, 0), 'terrain/dirt');
+  assert.equal(terrainSurfaceKey(3, 1), 'terrain/stone');
+  assert.equal(terrainSurfaceKey(0, 1), null);
 });

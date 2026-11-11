@@ -19,3 +19,20 @@ export function terrainMaterialGlsl() {
   });
   return `vec3 terrainAlbedo(float materialId) {\n${branches.join('\n')}\n  return vec3(1.0, 0.0, 1.0);\n}`;
 }
+
+/**
+ * Choose a visual surface independently of the voxel's authoritative material.
+ * Grass tops are vegetation; exposed grass sides are soil with a grassy rim.
+ * Dirt and stone never render unless their voxel face borders air.
+ */
+export function terrainSurfaceKey(materialId, normalY) {
+  if (!Number.isInteger(materialId) || ![-1, 0, 1].includes(normalY)) {
+    throw new TypeError('Expected material ID and axis-aligned face normal Y');
+  }
+  switch (materialId) {
+    case 1: return normalY > 0 ? 'terrain/grass' : 'terrain/grass-soil-side';
+    case 2: return 'terrain/dirt';
+    case 3: return 'terrain/stone';
+    default: return null;
+  }
+}
