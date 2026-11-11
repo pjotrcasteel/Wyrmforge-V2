@@ -39,3 +39,21 @@ test('allows new local assets but rejects escaping HTML assets',()=>{
     assert.ok(auditV2Dependencies(root).issues.length>0);
   } finally {rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('literal dynamic imports obey the same V2 clean-room rules',()=>{
+  const root=fixture("const load=()=>import('./src/engine.mjs');");
+  try {
+    writeFileSync(join(root,'src/engine.mjs'),'export const x=1;');
+    assert.deepEqual(auditV2Dependencies(root).issues,[]);
+    for(const code of [
+      "const load=()=>import('external-package');",
+      "const load=()=>import('./src/v1/renderer.mjs');",
+      "const load=()=>import('../Wyrmforge/main.mjs');",
+      "const load=()=>import('./missing.mjs');"
+    ]) {
+      writeFileSync(join(root,'main.mjs'),code);
+      assert.ok(auditV2Dependencies(root).issues.length>0,code);
+    }
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
