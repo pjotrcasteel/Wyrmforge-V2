@@ -27,3 +27,26 @@ test('context restoration retains authored tiles and rebuilds GPU cache', () => 
   assert.match(source, /for \(const \{ channel, key, image \} of this\.#terrainTileImages\.values\(\)\)/);
   assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\)/);
 });
+
+test('material shader samples normal and ORM arrays with explicit fallback', () => {
+  assert.match(source, /sampler2DArray uTerrainNormal/);
+  assert.match(source, /sampler2DArray uTerrainOrm/);
+  assert.match(source, /normalLayer >= 0\.0/);
+  assert.match(source, /ormLayer >= 0\.0/);
+  assert.match(source, /tangentNormal/);
+  assert.match(source, /terrainNormal: gl\.getUniformLocation/);
+  assert.match(source, /terrainOrm: gl\.getUniformLocation/);
+  assert.match(source, /\['normal', 2/);
+  assert.match(source, /\['orm', 3/);
+});
+
+test('normal and ORM maps are sampled only when corresponding terrain layers are uploaded', () => {
+  assert.match(source, /sampler2DArray uTerrainNormal/);
+  assert.match(source, /sampler2DArray uTerrainOrm/);
+  assert.match(source, /layer >= 0\.0 && normalLayer >= 0\.0/);
+  assert.match(source, /layer >= 0\.0 && ormLayer >= 0\.0/);
+  assert.match(source, /vec3 detailedNormal = normalize/);
+  assert.match(source, /lighting \*= mix\(0\.65, 1\.0, orm\.r\)/);
+  assert.match(source, /\['normal', 2/);
+  assert.match(source, /\['orm', 3/);
+});
