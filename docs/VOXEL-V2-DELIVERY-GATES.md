@@ -61,3 +61,8 @@ This workflow starts **after the voxel foundation acceptance gates**, not as a s
 ## Hunt-scale ambush performance fixture (2026-11-11)
 
 The standalone lab includes a **hunt-load** scene (96×96 horizontal cells, 32 chunks at 32³, 1,048,576 bytes of voxel payload). This is a bounded comparative stress fixture, **not** a final Hunt map dimension or evidence of final device performance. The V1 ambush performance notes describe 18 simultaneous fissure points and expensive terrain repaint/crowd rendering; the V2 fixture will exercise that pressure using new V2-native impact commands and worker/GPU queues, without importing V1 code or VFX. The scene can be selected manually now; automated staged ambush impacts, enemy proxies, and sustained phone acceptance are separate unfinished gates. Do not confuse terrain-only performance with full ambush FPS.
+
+
+### V2-native ambush terrain stress benchmark
+
+The lab's **Run V2 ambush stress (3 × 18)** action resets to the 96×96 hunt-load scene with 32³ chunks, Hunt camera and background worker meshing. It submits three waves of 18 deterministic terrain damage targets at 650 ms intervals, with a 3.5-second wave boundary, and waits for the final worker and GPU queues to drain before exporting the JSON benchmark. The export contains `ambushScenario`, frame metrics, worker state, queue peaks and sustained telemetry. Backgrounding, renderer failure or loss of worker mode stops the run without a pass claim. This is **terrain-only**: no enemy AI, crowd rendering, fissure VFX, particles or lighting; the actual V1 ambush must be measured separately before declaring full-game acceptance. 96×96 is a lab stress size, not the locked production Hunt dimensions.

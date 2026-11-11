@@ -600,6 +600,7 @@ function draw() {
 
 
 const presetRunButton = document.querySelector('#preset-run');
+const ambushRunButton = document.querySelector('#ambush-run');
 const collisionPresetRunButton = document.querySelector('#collision-preset-run');
 const collisionFixturesButton = document.querySelector('#collision-fixtures-run');
 const dynamicCollisionButton = document.querySelector('#dynamic-collision-run');
@@ -608,6 +609,73 @@ const presetProgress = document.querySelector('#preset-progress');
 let preset = null;
 let lastPresetReport = null;
 let presetDamageTarget = null;
+let ambush = null;
+let lastAmbushReport = null;
+function finishAmbush(status, reason) {
+  if (!ambush) return;
+  lastAmbushReport = {
+    schema:'voxel-v2.ambush-stress.v1', status, reason,
+    scene:'hunt-load', seed:activeSeed, waves:3, sitesPerWave:18,
+    impacts:ambush.impacts, changedImpacts:ambush.changedImpacts,
+    rejectedImpacts:ambush.rejectedImpacts,
+    elapsedMs:Math.round(performance.now()-ambush.startedAt),
+    workerMode:terrainMeshMode.value, chunks:world.chunkCount,
+    voxelPayloadBytes:world.allocatedVoxelBytes,
+    terrainOnly:true, enemyRenderingIncluded:false, vfxIncluded:false
+  };
+  ambush = null;
+  ambushRunButton.disabled = false;
+  presetProgress.textContent = 'Ambush ' + status + ' · ' + lastAmbushReport.impacts + '/54 impacts';
+  if (status === 'complete') document.querySelector('#report').click();
+}
+function advanceAmbush(now) {
+  if (!ambush) return;
+  if (document.hidden || gpuError || terrainMeshMode.value !== 'worker') {
+    finishAmbush('stopped','Backgrounded, renderer error, or worker unavailable');
+    return;
+  }
+  if (ambush.impacts >= 54) {
+    if (!activeTerrainJob && pendingTerrainDirty.size === 0 && !gpuRenderer?.pendingUploads) {
+      finishAmbush('complete','All 3 waves completed and upload queue drained');
+    }
+    return;
+  }
+  if (now < ambush.nextImpactAt) return;
+  const index = ambush.impacts;
+  presetDamageTarget = spatialDamageTarget(world,index % 18);
+  const before = terrainEdits.editRevision;
+  const revision = world.revision;
+  document.querySelector('#damage').click();
+  presetDamageTarget = null;
+  ambush.impacts++;
+  if (terrainEdits.editRevision === before) ambush.rejectedImpacts++;
+  if (world.revision > revision) ambush.changedImpacts++;
+  ambush.nextImpactAt = now + (ambush.impacts % 18 === 0 ? 3500 : 650);
+  presetProgress.textContent = 'Ambush wave ' + (Math.ceil(ambush.impacts/18)) +
+    '/3 · ' + ambush.impacts + '/54 impacts · ' + ambush.changedImpacts + ' terrain changes';
+}
+ambushRunButton.addEventListener('click', () => {
+  if (preset || ambush) return;
+  scenePicker.value = 'hunt-load';
+  seedPicker.value = '7';
+  chunkPicker.value = '32';
+  cameraPicker.value = 'hunt';
+  terrainMeshMode.value = 'worker';
+  terrainTargetMode.value = 'spell';
+  chooseScene();
+  cameraPicker.dispatchEvent(new Event('change'));
+  if (terrainMeshMode.value !== 'worker' || !gpuRenderer?.ready) {
+    presetProgress.textContent = 'Ambush requires WebGL2 and background worker';
+    return;
+  }
+  lastAmbushReport = null;
+  const now = performance.now();
+  ambush = {startedAt:now,nextImpactAt:now+1000,impacts:0,changedImpacts:0,rejectedImpacts:0};
+  ambushRunButton.disabled = true;
+  controlsPanel.hidden = true;
+  controlsToggle.setAttribute('aria-expanded','false');
+  presetProgress.textContent = 'Ambush · starting 3 × 18 impact waves';
+});
 function stopPreset(reason = 'Stopped', exportReport = false) {
   if (!preset) return;
   const elapsedMs = Math.max(0, performance.now() - preset.startedAt);
@@ -662,7 +730,7 @@ function advancePreset(now) {
   }
 }
 presetRunButton.addEventListener('click', () => {
-  if (preset) return;
+  if (preset || ambush) return;
   scenePicker.value = 'hill';
   seedPicker.value = '7';
   chunkPicker.value = '32';
@@ -740,6 +808,7 @@ collisionPresetRunButton.addEventListener('click', () => {
 
 function tick(now) {
   advancePreset(now);
+  advanceAmbush(now);
   // Observe before the upload drain; otherwise short-lived queues disappear from telemetry.
   if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
   if (gpuRenderer?.pendingUploads) {
@@ -788,6 +857,7 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 function chooseScene() {
+  if (ambush) finishAmbush('stopped','Scene reset');
   const rawSeed = seedPicker.value.trim();
   const seed = Number(rawSeed);
   if (!/^\d+$/.test(rawSeed) || !Number.isSafeInteger(seed) || seed > MAX_SCENE_SEED) {
@@ -1291,7 +1361,8 @@ document.querySelector('#report').addEventListener('click', () => {
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
-    frames, sustainedTelemetry:sustainedTelemetry.report(), presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
+    frames, sustainedTelemetry:sustainedTelemetry.report(), ambushScenario:lastAmbushReport ?? (ambush ? {schema:'voxel-v2.ambush-stress.v1',status:'running',impacts:ambush.impacts,changedImpacts:ambush.changedImpacts,elapsedMs:Math.round(performance.now()-ambush.startedAt)} : null),
+    presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
     meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastTunnel, lastBurst,
