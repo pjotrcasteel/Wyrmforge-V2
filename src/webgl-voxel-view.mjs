@@ -143,8 +143,11 @@ void main() {
       float mixAmount = mix(mix(a, b, blend.x), mix(c, d, blend.x), blend.y);
       vec3 secondary = texture(uTerrainAlbedo,
         vec3(uv * uTerrainTilesPerVoxel, secondaryLayer)).rgb;
-      albedo = mix(primary, secondary, mixAmount);
-      variantMix = mixAmount;
+      // Retain broad biome variation without making separate dark checkerboard
+      // patches dominate a tiny mobile Hunt viewport. All channels share it.
+      float softMix = mixAmount * (surfaceIndex == 0 ? 0.46 : 0.60);
+      albedo = mix(primary, secondary, softMix);
+      variantMix = softMix;
     } else {
       albedo = primary;
     }
@@ -237,7 +240,9 @@ export class WebGLVoxelView {
   #gl;
   #grassImage = null;
   // Authored texture slots are native 64px art, not downscaled preview assets.
-  #terrainManifest = compileTerrainTextureManifest(undefined,{tileSize:64});
+  // Seven mip levels (64 -> 1) prevent 64 texels of artwork from aliasing
+  // into a few screen pixels at normal Hunt camera zoom.
+  #terrainManifest = compileTerrainTextureManifest(undefined,{tileSize:64,mipLevels:7});
   #terrainCache = null;
   #terrainTileImages = new Map();
   #pendingTerrainTiles = new Map();
