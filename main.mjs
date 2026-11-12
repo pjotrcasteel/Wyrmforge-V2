@@ -838,6 +838,10 @@ function stopPreset(reason = 'Stopped', completed = false) {
   // Preserve the final sample even if the duration boundary falls between ticks.
   if (run.profile.resetBetweenCycles) sampleSustainedTelemetry(performance.now(), true);
   const elapsedMs = Math.max(0, performance.now() - run.startedAt);
+  const frameSession = frameMetrics.sessionSummary();
+  const telemetryContinuity = sustainedTelemetry.report();
+  const timingReviewNeeded = frameSession.longAnimationFrameGaps > 0 ||
+    telemetryContinuity.samplingGapCount > 0;
   const queuesDrained = !activeTerrainJob && pendingTerrainDirty.size === 0 &&
     !gpuRenderer?.pendingUploads;
   const expectedResets = run.profile.resetBetweenCycles
@@ -857,6 +861,10 @@ function stopPreset(reason = 'Stopped', completed = false) {
     profile: run.profile.id, plannedDurationMs: run.profile.durationMs,
     completedSceneResets: run.cycleResets, expectedSceneResets: expectedResets,
     queuesDrained, seed: 7, scene: 'hill', meshing: 'worker',
+    timingQuality: timingReviewNeeded ? 'review-gaps' : 'no-large-gaps-observed',
+    sessionFrameHitchesOver50Ms: frameSession.hitchesOver50Ms,
+    longAnimationFrameGaps: frameSession.longAnimationFrameGaps,
+    largestSamplingGapMs: telemetryContinuity.largestSamplingGapMs,
     evidenceLimits: 'Terrain-only laboratory; no enemies, VFX, structural gravity, ' +
       'GPU driver timing or automatic thermal/performance acceptance'
   };
@@ -1593,7 +1601,8 @@ document.querySelector('#report').addEventListener('click', () => {
     sceneGenerator:SCENE_GENERATOR_VERSION, seed:activeSeed, cameraPreset:activeCamera,
     userAgent:navigator.userAgent, viewport:[canvas.width,canvas.height],
     viewportCss:[canvas.clientWidth,canvas.clientHeight], renderScale:canvas.width/canvas.clientWidth,
-    frames, sustainedTelemetry:sustainedTelemetry.report(), fissureScenario:lastFissureReport ?? (fissureRun ? {schema:'voxel-v2.fissure-acceptance.v1',status:'running',stages:fissureRun.results} : null),
+    frames, frameSession:frameMetrics.sessionSummary(),
+    sustainedTelemetry:sustainedTelemetry.report(), fissureScenario:lastFissureReport ?? (fissureRun ? {schema:'voxel-v2.fissure-acceptance.v1',status:'running',stages:fissureRun.results} : null),
     ambushScenario:lastAmbushReport ?? (ambush ? {schema:'voxel-v2.ambush-stress.v1',status:'running',impacts:ambush.impacts,changedImpacts:ambush.changedImpacts,elapsedMs:Math.round(performance.now()-ambush.startedAt)} : null),
     presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
