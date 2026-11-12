@@ -31,76 +31,12 @@ jobs:
         run: node scripts/audit-v2-dependencies.mjs
       - name: Verify static entry
         run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs
-      - name: Validate JavaScript syntax
+      - name: Syntax-check every V2 JavaScript module
         run: |
+          set -eu
           node --check main.mjs
-          node --check src/voxel-world.mjs
-          node --check tests/voxel-world.test.mjs
-          node --check src/build-info.mjs
-          node --check scripts/write-build-info.mjs
-          node --check src/frame-metrics.mjs
-          node --check tests/frame-metrics.test.mjs
-          node --check src/pointer-gestures.mjs
-          node --check tests/pointer-gestures.test.mjs
-          node --check scripts/benchmark-chunks.mjs
-          node --check src/exposed-face-mesher.mjs
-          node --check tests/exposed-face-mesher.test.mjs
-          node --check src/webgl-voxel-view.mjs
-          node --check tests/webgl-voxel-view.test.mjs
-          node --check src/demo-carve.mjs
-          node --check tests/demo-carve.test.mjs
-          node --check src/chunk-dirty.mjs
-          node --check tests/chunk-local-remesh.test.mjs
-          node --check tests/webgl-local-updates.test.mjs
-          node --check src/camera-presets.mjs
-          node --check tests/camera-presets.test.mjs
-          node --check src/greedy-mesher.mjs
-          node --check tests/greedy-mesher.test.mjs
-          node --check src/meshing-comparison.mjs
-          node --check scripts/benchmark-meshes.mjs
-          node --check tests/lab-viewport.test.mjs
-          node --check src/mesh-worker-protocol.mjs
-          node --check src/mesh-comparison.worker.mjs
-          node --check tests/mesh-worker-protocol.test.mjs
-          node --check src/terrain-mesh-protocol.mjs
-          node --check src/terrain-mesh.worker.mjs
-          node --check tests/terrain-mesh-protocol.test.mjs
-          node --check src/terrain-worker-session.mjs
-          node --check tests/terrain-worker-session.test.mjs
-          node --check src/terrain-edit-ledger.mjs
-          node --check tests/terrain-edit-ledger.test.mjs
-          node --check src/demo-burst.mjs
-          node --check tests/demo-burst.test.mjs
-          node --check tests/material-resistance.test.mjs
-          node --check src/replay-checkpoint.mjs
-          node --check tests/replay-checkpoint.test.mjs
-          node --check tests/replay-lab.test.mjs
-          node --check src/replay-file.mjs
-          node --check tests/replay-file.test.mjs
-          node --check src/terrain-raycast.mjs
-          node --check tests/terrain-raycast.test.mjs
-          node --check src/hunt-terrain-impact.mjs
-          node --check src/terrain-tap-recognizer.mjs
-          node --check tests/terrain-tap-recognizer.test.mjs
-          node --check tests/hunt-terrain-lab.test.mjs
-          node --check src/terrain-actor.mjs
-          node --check tests/terrain-actor.test.mjs
-          node --check tests/terrain-actor-lab.test.mjs
-          node --check src/actor-support-excavation.mjs
-          node --check tests/actor-support-excavation.test.mjs
-          node --check tests/terrain-actor-motion.test.mjs
-          node --check tests/terrain-arch-collision.test.mjs
-          node --check src/diagnostics/actor-proxy.mjs
-          node --check tests/actor-proxy-collision-alignment.test.mjs
-          node --check src/terrain-integration-port.mjs
-          node --check src/terrain-consumer-probes.mjs
-          node --check tests/terrain-integration-port.test.mjs
-          node --check tests/terrain-integration-lab.test.mjs
-          node --check src/demo-tunnel.mjs
-          node --check tests/tunnel-carving.test.mjs
-          node --check tests/tunnel-lab.test.mjs
-          node --check scripts/create-versioned-lab.mjs
-          node --check tests/versioned-lab.test.mjs
+          find src scripts tests -type f \( -name '*.mjs' -o -name '*.js' \) -print0 |
+            xargs -0 -r -n1 node --check
       - name: Verify live Grass 002 integration is included
         run: |
           grep -q 'grass-texture-file' index.html
