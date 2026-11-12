@@ -74,3 +74,39 @@ and Android Chrome, real GPU context-loss recovery, representative Hunt
 workload, pixel-readability screenshots and owner-approved material visuals.
 The watchdog thresholds are conservative failure limits, not promised
 edit-to-visible latency or universal performance guarantees.
+
+## iPhone Safari blank terrain presentation — visual blocker, 2026-11-12
+
+Observed screenshot: the world is populated (terrain revision 2994) and the
+host reports **WebGL2, 0 triangles and 0 draw calls**, while the screen is
+completely blank. This is a missing presentation issue, not a texture
+approval problem. A ready WebGL context alone does **not** mean a scene
+exists. The existing lab returned early from `draw()` when WebGL cleared
+its canvas successfully even if it had no rendered terrain, covering the
+Canvas2D fallback with an opaque empty GPU canvas.
+
+### Implemented safeguards
+
+- The renderer is now made visible **only** after its initial-scene,
+  recovery and old-buffer-retirement queues drain and actual populated
+  geometry exists. During startup, scene changes and GL recovery, the
+  existing authoritative Canvas2D preview stays visible instead of a blank
+  overlay. The visible status distinguishes a staging or missing-geometry
+  presentation from a completed WebGL scene.
+- A GPU upload exception now terminates that renderer and stays on the
+  Canvas2D terrain, preserving the error. It no longer silently clears the
+  error and requeues the same failed full scene every animation frame.
+  **Reset** explicitly retries WebGL2 after a failure.
+- Tests exercise a real populated hill and flat scene, bounded queue
+  transitions, reset, simulated context-loss/recovery, missing geometry
+  and host fallback wiring. This is a regression gate for the blank
+  presentation state.
+
+**Still not proven:** why this particular Safari session did not reach
+an uploaded GPU scene, and whether it does after this change. The fallback
+fix restores visible terrain and exposes the error state; it is not a
+claim that WebGL GPU uploads are universally reliable. Request a single
+new screenshot from the immutable new build only after green CI and
+successful Pages deployment. A screenshot that still says WebGL2 with
+0 draws should **show the CPU terrain** rather than a black screen; if
+WebGL remains blocked the status/error provides the next diagnosis.
