@@ -4,8 +4,9 @@ import { SustainedTelemetry } from '../src/sustained-telemetry.mjs';
 
 const input = n => ({
   frames: {p95:20,p99:30,hitchesOver50Ms:0},
-  queue:{pendingChunks:n,pendingBytes:n*100,recoveryChunks:0},
-  renderer:{gpuBufferBytesEstimate:1000+n},
+  queue:{pendingChunks:n,pendingBytes:n*100,recoveryChunks:0,pendingTextureTiles:n},
+  renderer:{gpuBufferBytesEstimate:1000+n,terrainGpuTextureBytesEstimate:n*256,
+    terrainDecodedTileBytesEstimate:n*512},
   voxelBytes:262144,edits:n,pendingTerrainChunks:0
 });
 
@@ -45,6 +46,7 @@ test('subsecond upload peaks survive the next one-second sample', () => {
   assert.equal(report.peakPendingBytes,32768);
   assert.equal(report.peakPendingChunks,12);
   assert.equal(report.peakRecoveryChunks,3);
+  assert.equal(report.peakPendingTextureTiles,0);
   telemetry.reset();
   assert.equal(telemetry.report().peakPendingBytes,0);
 });
