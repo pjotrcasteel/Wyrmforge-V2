@@ -85,3 +85,32 @@ test('final forced soak sample captures end-of-run queues without waiting a seco
   assert.equal(report.samples.at(-1).edits,2);
   assert.equal(report.elapsedSeconds,1);
 });
+
+test('missing sample intervals are reported without claiming a GPU freeze', () => {
+  const telemetry = new SustainedTelemetry({intervalMs:1000});
+  telemetry.record(0,input(0));
+  telemetry.record(1000,input(0));
+  telemetry.record(19000,input(0));
+  telemetry.record(20000,input(0));
+  const report = telemetry.report();
+  assert.equal(report.samplingGapCount,1);
+  assert.equal(report.largestSamplingGapMs,18000);
+  assert.equal(report.estimatedSkippedIntervals,17);
+  assert.deepEqual(report.samplingGaps,[{
+    afterSeconds:1,gapMs:18000,estimatedSkippedIntervals:17
+  }]);
+  report.samplingGaps[0].gapMs=1;
+  assert.equal(telemetry.report().samplingGaps[0].gapMs,18000);
+  telemetry.reset();
+  assert.equal(telemetry.report().samplingGapCount,0);
+  assert.equal(telemetry.report().largestSamplingGapMs,0);
+});
+
+test('ordinary one-second jitter and forced final samples do not create fake gaps', () => {
+  const telemetry = new SustainedTelemetry({intervalMs:1000});
+  telemetry.record(0,input(0));
+  telemetry.record(1050,input(0));
+  telemetry.record(1200,input(0),{force:true});
+  telemetry.record(2300,input(0));
+  assert.equal(telemetry.report().samplingGapCount,0);
+});
