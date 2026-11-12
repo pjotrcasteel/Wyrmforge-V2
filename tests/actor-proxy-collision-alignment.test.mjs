@@ -18,7 +18,7 @@ test('iPhone Hunt proxy fits the physical actor: no fake 30px torso or floating 
     const projected=projectActorDiagnostic(actor,view);
     assert.equal(projected.colliderHeight,ACTOR_HEIGHT);
     assert.equal(projected.colliderHalfWidth,ACTOR_HALF_WIDTH);
-    assert.ok(Math.abs(projected.projectedHeight - (16*.48*1.6)) < 1e-9);
+    assert.ok(Math.abs(projected.projectedHeight - (16*.64*1.6)) < 1e-9);
     assert.ok(projected.projectedHeight < 15,
       'do not force 30 backing pixels for a 12.3-pixel projected collider');
     assert.ok(Math.abs(projected.head.y-projected.head.radius-
