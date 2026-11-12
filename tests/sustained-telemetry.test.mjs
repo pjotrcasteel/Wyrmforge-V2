@@ -72,3 +72,16 @@ test('texture upload peaks and estimated texture memory are visible in sustained
   assert.equal(telemetry.report().peakPendingGpuDisposals,0);
   assert.equal(telemetry.report().peakRetiredGpuBytesEstimate,0);
 });
+
+test('final forced soak sample captures end-of-run queues without waiting a second', () => {
+  const telemetry = new SustainedTelemetry({intervalMs:1000});
+  telemetry.record(0,input(0));
+  telemetry.record(1000,input(1));
+  assert.equal(telemetry.record(1250,input(2)),false);
+  assert.equal(telemetry.record(1250,input(2),{force:true}),true);
+  const report = telemetry.report();
+  assert.equal(report.sampleCount,3);
+  assert.equal(report.samples.at(-1).pendingChunks,2);
+  assert.equal(report.samples.at(-1).edits,2);
+  assert.equal(report.elapsedSeconds,1);
+});
