@@ -179,18 +179,7 @@ test('empty edit journal survives replay, and oversized snapshot exports fail',(
   restored.unload();
   original.unload();
 
-  const bigDefinition=createExternalSiteFixture();
-  // A portable checkpoint is intentionally more restrictive than the loader.
-  bigDefinition.runs=[];
-  for(let row=0;row<8192;row++) {
-    bigDefinition.runs.push({x:0,y:row,z:0,length:1,material:3});
-  }
-  const bigLoader=new V2ExternalTerrainLoader(bigDefinition);
-  while(!bigLoader.progress.done) bigLoader.loadStep();
-  const jumbo=createExternalTerrainCheckpoint(bigLoader);
-  assert.throws(()=>{
-    const huge={...jumbo,extra:'x'.repeat(1024*1024)};
-    new V2ExternalTerrainReplaySession(huge);
-  },/1 MiB portable limit/);
-  bigLoader.unload();
+  const huge={...checkpoint,extra:'x'.repeat(1024*1024)};
+  assert.throws(()=>new V2ExternalTerrainReplaySession(huge),
+    /1 MiB portable limit/);
 });
