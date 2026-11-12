@@ -35,6 +35,7 @@ let errorMessage=null;
 let renderer=null;
 let meshBridge=null;
 let pendingMesh=null;
+let pendingEdit=null;
 let meshSource='worker';
 
 function resizeCanvas() {
@@ -52,6 +53,13 @@ function updateStatus(now=performance.now()) {
   lastStatusAt=now;
   if(errorMessage) {
     status.textContent='V2.6 error: '+errorMessage;
+    return;
+  }
+  if(pendingEdit) {
+    const progress=meshBridge.status;
+    status.textContent='V2.7 localized worker edit · '+
+      progress.completedChunks+'/'+progress.totalChunks+
+      ' dirty chunks · '+lastImpactRemoved+' voxels removed';
     return;
   }
   if(pendingMesh) {
@@ -94,6 +102,7 @@ function resetSite() {
     restoreButton.disabled=true;
     meshBridge?.cancel();
     pendingMesh=null;
+    pendingEdit=null;
     restoring?.unload();
     restoring=null;
     restoredSession?.unload();
@@ -116,7 +125,14 @@ function resetSite() {
 }
 
 function impactSpan() {
-  if(!active || restoring || !renderer.ready || renderer.pendingUploads) return;
+  if(!active || restoring || pendingMesh || pendingEdit || errorMessage ||
+      !renderer.ready || renderer.pendingUploads) return;
+  if(typeof Worker!=='function' && active.world.chunkCount>8) {
+    errorMessage='Web Worker is required to edit larger external terrain';
+    lastStatusAt=-Infinity;
+    updateStatus();
+    return;
+  }
   try {
     const result=active.port.apply({
       id:'v26-site-breach-'+(++breachCount),
@@ -126,10 +142,20 @@ function impactSpan() {
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {
-      // Small localized edits remain on the existing current meshing path.
-      // Full import/replay geometry never runs synchronously in this host.
-      const meshes=buildExposedFaceMeshes(active.world,{chunkIds:dirty});
-      renderer.queueReplacementMeshes(dirty,meshes);
+      if(typeof Worker==='function') {
+        // Authoritative edits are immediately visible to queries; derived
+        // GPU meshes now use the existing bounded worker path.
+        const epoch=meshBridge.replace(active.world,dirty);
+        if(!meshBridge.status.busy) {
+          throw new Error('Localized V2 mesh worker did not start');
+        }
+        pendingEdit={world:active.world,epoch,dirty:[...dirty]};
+      } else {
+        // Only the existing tiny-site compatibility exception remains.
+        const meshes=buildExposedFaceMeshes(active.world,{chunkIds:dirty});
+        renderer.queueReplacementMeshes(dirty,meshes);
+        meshSource='small-site sync compatibility';
+      }
       breachButton.disabled=true;
     }
     lastStatusAt=-Infinity;
@@ -141,7 +167,7 @@ function impactSpan() {
 }
 
 function saveState() {
-  if(!active || restoring || renderer.pendingUploads) return;
+  if(!active || restoring || pendingEdit || renderer.pendingUploads) return;
   try {
     const checkpoint=restoredSession
       ? restoredSession.saveCheckpoint()
@@ -158,7 +184,7 @@ function saveState() {
 }
 
 function restoreState() {
-  if(!active || !savedCheckpoint || restoring || renderer.pendingUploads) return;
+  if(!active || !savedCheckpoint || restoring || pendingEdit || renderer.pendingUploads) return;
   try {
     // Keep the active world visible until the new source + journal is verified.
     restoring=new V2ExternalTerrainReplaySession(savedCheckpoint);
@@ -245,7 +271,8 @@ function frame(now) {
       });
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
-      Boolean(errorMessage) || Boolean(restoring) || Boolean(pendingMesh);
+      Boolean(errorMessage) || Boolean(restoring) ||
+      Boolean(pendingMesh) || Boolean(pendingEdit);
     breachButton.disabled=blocked;
     saveButton.disabled=blocked;
     restoreButton.disabled=blocked || !savedCheckpoint;
@@ -253,6 +280,7 @@ function frame(now) {
   } catch(error) {
     meshBridge?.cancel();
     pendingMesh=null;
+    pendingEdit=null;
     restoring?.unload();
     restoring=null;
     errorMessage=error.message;
@@ -292,7 +320,24 @@ try {
     createWorker:()=>new Worker(new URL('./src/terrain-mesh.worker.mjs',import.meta.url),
       {type:'module'}),
     now:()=>performance.now(),
-    onReady:(world,meshes,epoch)=>{
+    onReady:(world,meshes,epoch,kind,dirtyIds)=>{
+      if(kind==='edit') {
+        if(!pendingEdit || pendingEdit.world!==world ||
+            pendingEdit.epoch!==epoch || active?.world!==world) return;
+        try {
+          // The original dirty IDs also remove emptied GPU chunks when
+          // the worker sends no replacement mesh for a deleted chunk.
+          renderer.queueReplacementMeshes(new Set(dirtyIds),meshes);
+          meshSource='worker (full + localized)';
+          pendingEdit=null;
+          lastStatusAt=-Infinity;
+        } catch(error) {
+          pendingEdit=null;
+          errorMessage=error.message;
+          lastStatusAt=-Infinity;
+        }
+        return;
+      }
       if(!pendingMesh || pendingMesh.terrain.world!==world ||
           pendingMesh.epoch!==epoch) return;
       try {
@@ -306,6 +351,7 @@ try {
       }
     },
     onFailure:message=>{
+      pendingEdit=null;
       pendingMesh=null;
       // Never retry a failed restore every animation frame or leave an
       // unverified temporary world allocated behind the existing scene.
