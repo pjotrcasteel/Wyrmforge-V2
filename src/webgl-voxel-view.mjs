@@ -232,6 +232,8 @@ export class WebGLVoxelView {
   #recoveryBytes = 0;
   #sceneQueue = new Map();
   #sceneBytes = 0;
+  #retiredGpuMeshes = [];
+  #retiredGpuBytes = 0;
   #recovering = false;
   #lost = false;
   #losses = 0;
@@ -257,6 +259,9 @@ export class WebGLVoxelView {
       this.#terrainCache?.contextLost();
       this.#pendingTerrainTiles.clear();
       this.#gpuMeshes.clear();
+      // Context loss destroys GPU handles; never replay obsolete retirement work.
+      this.#retiredGpuMeshes.length = 0;
+      this.#retiredGpuBytes = 0;
       this.#recoveryQueue.clear();
       this.#recoveryBytes = 0;
       this.#sceneQueue.clear();
@@ -381,7 +386,8 @@ export class WebGLVoxelView {
 
   get ready() { return !this.#lost && this.#program !== null; }
   get pendingUploads() {
-    return this.#queuedUploads.size + this.#sceneQueue.size + this.#recoveryQueue.size + this.#pendingTerrainTiles.size;
+    return this.#queuedUploads.size + this.#sceneQueue.size + this.#recoveryQueue.size +
+      this.#pendingTerrainTiles.size + this.#retiredGpuMeshes.length;
   }
   get recovering() { return this.#recovering; }
   #meshBytes(mesh) {
@@ -393,6 +399,8 @@ export class WebGLVoxelView {
       pendingBytes: this.#uploadQueueBytes + this.#sceneBytes + this.#recoveryBytes,
       sceneChunks: this.#sceneQueue.size,
       recoveryChunks: this.#recoveryQueue.size,
+      pendingGpuDisposals: this.#retiredGpuMeshes.length,
+      retiredGpuBytesEstimate: this.#retiredGpuBytes,
       peakChunks: this.#uploadQueuePeak,
       pendingTextureTiles: this.#pendingTerrainTiles.size };
   }
@@ -445,7 +453,15 @@ export class WebGLVoxelView {
     const start = now();
     let chunks = 0;
     while (this.pendingUploads && (chunks === 0 || now() - start < budgetMs)) {
-      if (this.#pendingTerrainTiles.size) {
+      // Free old scene buffers before allocating any new ones on rapid resets.
+      // Each WebGL delete operation is synchronous; one retired mesh is the
+      // smallest bounded disposal step we can schedule.
+      if (this.#retiredGpuMeshes.length) {
+        const record = this.#retiredGpuMeshes.at(-1);
+        this.#disposeRecord(record);
+        this.#retiredGpuMeshes.pop();
+        this.#retiredGpuBytes -= record.bytes;
+      } else if (this.#pendingTerrainTiles.size) {
         const [identity, tile] = this.#pendingTerrainTiles.entries().next().value;
         this.#ensureTerrainCache();
         this.#terrainCache.upload(tile.channel, tile.key, tile.image);
@@ -483,7 +499,8 @@ export class WebGLVoxelView {
       renderer: 'WebGL2 exposed-face V2 baseline',
       triangles,
       drawCalls: this.#gpuMeshes.size,
-      gpuBufferBytesEstimate: gpuBytes,
+      gpuBufferBytesEstimate: gpuBytes + this.#retiredGpuBytes,
+      retiredGpuBytesEstimate: this.#retiredGpuBytes,
       terrainGpuTextureBytesEstimate: this.#terrainCache?.statistics.allocatedBytes ?? 0,
       terrainDecodedTileBytesEstimate: this.#terrainTileStagingBytes,
       contextLosses: this.#losses,
@@ -544,6 +561,17 @@ export class WebGLVoxelView {
     this.#gpuMeshes.clear();
   }
 
+  #retireGpuMeshes() {
+    // Remove the old scene from rendering immediately, then release its GPU
+    // handles in the ordinary frame-budgeted drain. Multiple rapid resets
+    // cannot allocate new scene buffers ahead of pending retirements.
+    for (const record of this.#gpuMeshes.values()) {
+      this.#retiredGpuMeshes.push(record);
+      this.#retiredGpuBytes += record.bytes;
+    }
+    this.#gpuMeshes.clear();
+  }
+
   #uploadOne(mesh) {
     if (mesh.indices.length === 0) return;
     const gl = this.#gl;
@@ -587,7 +615,7 @@ export class WebGLVoxelView {
     this.#recoveryQueue.clear();
     this.#recoveryBytes = 0;
     this.#recovering = false;
-    this.#discardGpuMeshes();
+    this.#retireGpuMeshes();
     // Full scene initialization uses the same bounded per-frame upload drain.
     this.#sceneQueue = new Map(this.#sourceMeshes);
     this.#sceneBytes = [...this.#sceneQueue.values()].reduce((sum, mesh) =>
@@ -654,8 +682,8 @@ export class WebGLVoxelView {
           // Recovery must stay frame-budgeted even when edits arrive mid-restore.
           this.#recoveryQueue.set(id, replacement);
           this.#recoveryBytes += this.#meshBytes(replacement);
-        } else if (this.ready && this.#sceneQueue.size) {
-          // An edit cannot bypass a pending full-scene upload batch.
+        } else if (this.ready && (this.#sceneQueue.size || this.#retiredGpuMeshes.length)) {
+          // An edit cannot bypass pending full-scene uploads or GPU disposal.
           this.#sceneQueue.set(id, replacement);
           this.#sceneBytes += this.#meshBytes(replacement);
         } else if (this.ready) {
@@ -730,6 +758,10 @@ export class WebGLVoxelView {
     this.#sceneBytes = 0;
     this.#recovering = false;
     this.#discardGpuMeshes();
+    // Explicit disposal is terminal: release any delayed old-scene buffers now.
+    for (const record of this.#retiredGpuMeshes) this.#disposeRecord(record);
+    this.#retiredGpuMeshes.length = 0;
+    this.#retiredGpuBytes = 0;
     if (this.#grassTexture && !this.#lost) this.#gl.deleteTexture(this.#grassTexture);
     this.#grassTexture = null;
     this.#terrainCache?.dispose();
