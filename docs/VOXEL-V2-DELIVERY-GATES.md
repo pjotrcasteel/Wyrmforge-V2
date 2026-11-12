@@ -122,3 +122,38 @@ acceptance certificate.** Do not commit or merge actual material image art
 without first presenting its native 64×64 image and repeated tile-grid
 proof and obtaining the owner's explicit approval for that asset.
 Await measured iPhone/Android visual and performance evidence separately.
+
+## V2.2 readability and material filtering vertical slice — 2026-11-12
+
+After the owner verified the 3D iPhone Safari scene, material brightness and
+real crater remeshing (build `21ee58f`), Hunt-camera altitude remained
+visually compressed and 64px reference tiles had no mipmaps. The renderer
+previously used `GL_LINEAR` on a single 64×64 layer even at zoom distances
+where each voxel occupies far fewer pixels than its artwork.
+
+This slice **strengthens the existing V2.2 acceptance path**:
+- Keep Hunt north-up and unchanged X/Z controls but increase visible
+  one-voxel elevation by 33% (`down.y` from -0.48 to -0.64). The matched
+  depth coefficients preserve perpendicular screen/depth projection. The
+  inspection camera is unchanged.
+- Use a full seven-level 64→1 mip chain for V2 material albedo, normal and
+  ORM arrays, with trilinear minification. WebGL2 generates the mip chain
+  after each frame-budgeted tile upload; context restoration regenerates
+  each retained map without bypassing the upload budget.
+- Reduce visual dominance of dark grass/dirt patches by softening the shared
+  albedo/normal/ORM variant mix. Its cell positions remain world-anchored
+  across chunk boundaries and excavation.
+- Seal opposite 64px reference-map borders with deterministic four-pixel
+  feathering for all three channels; tests check exact opposite-edge
+  RGB continuity and ensure albedo detail remains. These are temporary
+  in-repository reference generators, **not approved artist assets**.
+- The 64px mip chain adds approximately 33% GPU texture-array storage
+  relative to its single-level 64px layout, but remains smaller than the
+  previous one-level 256px preview. Byte-budget estimates, real upload
+  signatures and recovery are automatically tested.
+
+**Not yet accepted:** owner visual check of the new Hunt camera and reference
+materials at near/far zoom, iPhone Safari and Android Chrome measured GPU
+filtering and sustained p95/p99, and approval of actual authored 64px art.
+No new renderer/lighting engine, objects, biome generator or gameplay
+simulation was introduced.

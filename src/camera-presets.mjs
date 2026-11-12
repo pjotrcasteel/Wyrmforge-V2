@@ -7,8 +7,10 @@ export const CAMERA_PRESETS = Object.freeze({
     id: 'hunt',
     label: 'Hunt-style (candidate)',
     right: Object.freeze([1, 0, 0]),
-    down: Object.freeze([0, -0.48, 0.90]),
-    depth: Object.freeze([0, -0.90 / 128, -0.48 / 128])
+    // Taller one-voxel steps in Hunt, without rotating the player's X/Z axes.
+    // Keep down/depth perpendicular so cliffs and spell impacts remain aligned.
+    down: Object.freeze([0, -0.64, 0.77]),
+    depth: Object.freeze([0, -0.77 / 128, -0.64 / 128])
   }),
   inspection: Object.freeze({
     id: 'inspection',

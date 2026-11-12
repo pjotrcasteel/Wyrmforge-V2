@@ -18,6 +18,47 @@ function hash(x, y, seed) {
 
 function wrap(value, size) { return ((value % size) + size) % size; }
 
+// Reference art is temporary; its repeated grid must still have no one-pixel
+// edge discontinuity. Feather opposite borders together across four pixels.
+// This is a *preview* seam guarantee, not a license to modify approved art.
+export function sealReferenceTileEdges(pixels, size) {
+  if (!(pixels instanceof Uint8ClampedArray) ||
+      ![64, 256].includes(size) || pixels.length !== size * size * 4) {
+    throw new RangeError('Expected a 64px or 256px RGBA reference tile');
+  }
+  const width = 4;
+  const blend = (first, second) => {
+    const mean = (pixels[first] + pixels[second]) * 0.5;
+    for (let offset = 0; offset < width; offset++) {
+      const intensity = 1 - offset / width;
+      const a = first + offset * 4;
+      const b = second - offset * 4;
+      pixels[a] = Math.round(pixels[a] * (1 - intensity) + mean * intensity);
+      pixels[b] = Math.round(pixels[b] * (1 - intensity) + mean * intensity);
+    }
+  };
+  for (let y = 0; y < size; y++) {
+    for (let channel = 0; channel < 3; channel++) {
+      blend((y * size) * 4 + channel, (y * size + size - 1) * 4 + channel);
+    }
+  }
+  for (let x = 0; x < size; x++) {
+    for (let channel = 0; channel < 3; channel++) {
+      const top = x * 4 + channel;
+      const bottom = ((size - 1) * size + x) * 4 + channel;
+      const mean = (pixels[top] + pixels[bottom]) * 0.5;
+      for (let i = 0; i < width; i++) {
+        const strength = 1 - i / width;
+        const a = (i * size + x) * 4 + channel;
+        const z = ((size - 1 - i) * size + x) * 4 + channel;
+        pixels[a] = Math.round(pixels[a] * (1 - strength) + mean * strength);
+        pixels[z] = Math.round(pixels[z] * (1 - strength) + mean * strength);
+      }
+    }
+  }
+  return pixels;
+}
+
 function smoothNoise(x, y, frequency, seed, size) {
   const sx = x / frequency;
   const sy = y / frequency;
@@ -63,7 +104,7 @@ export function createReferenceTerrainPixels(kind, size = 256) {
       data[i + 3] = 255;
     }
   }
-  return data;
+  return sealReferenceTileEdges(data,size);
 }
 
 export function createReferenceTerrainCanvas(kind, documentRef = document, size = 256) {
@@ -118,7 +159,7 @@ export function createReferenceMaterialPixels(kind, channel, size = 256) {
       pixels[i + 3] = 255;
     }
   }
-  return pixels;
+  return sealReferenceTileEdges(pixels,size);
 }
 
 export function createReferenceMaterialCanvas(kind, channel, documentRef = document, size = 256) {

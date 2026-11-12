@@ -8,14 +8,16 @@ function fakeGl(maxLayers = 256) {
   const gl = {
     TEXTURE_2D_ARRAY: 1, MAX_ARRAY_TEXTURE_LAYERS: 2, SRGB8_ALPHA8: 3,
     RGBA8: 4, TEXTURE_MIN_FILTER: 5, TEXTURE_MAG_FILTER: 6,
+    LINEAR_MIPMAP_LINEAR: 17,
     TEXTURE_WRAP_S: 7, TEXTURE_WRAP_T: 8, LINEAR: 9, REPEAT: 10,
     UNPACK_FLIP_Y_WEBGL: 11, RGBA: 12, UNSIGNED_BYTE: 13,
     getParameter: () => maxLayers,
     createTexture: () => ({}),
     bindTexture: (...args) => calls.push(['bind', ...args]),
     texStorage3D: (...args) => calls.push(['storage', ...args]),
-    texParameteri: () => {},
+    texParameteri: (...args) => calls.push(['parameter',...args]),
     pixelStorei: () => {},
+    generateMipmap: (...args) => calls.push(['mipmap',...args]),
     texSubImage3D: (...args) => {
       // A permissive mock previously allowed eight arguments and hid the
       // native Safari TypeError until a player opened the material preview.
@@ -99,5 +101,54 @@ test('native WebGL2 argument contract holds for color, normal and ORM tiles', ()
     assert.equal(call[8], 1, 'each tile occupies exactly one texture-array layer');
   }
   assert.equal(cache.statistics.uploadedAssets, 3);
+  cache.dispose();
+});
+
+test('full 64px mip chain uses trilinear filtering and regenerates after each valid upload',()=>{
+  const mips=compileTerrainTextureManifest(undefined,{tileSize:64,mipLevels:7});
+  const {gl,calls}=fakeGl();
+  const cache=new TerrainGpuTextureCache(gl,mips);
+  cache.initialize();
+  const initial=cache.statistics;
+  assert.equal(initial.mipLevels,7);
+  assert.equal(initial.mipGenerations,0);
+  assert.equal(initial.allocatedBytes,mips.estimatedBytes);
+  const storage=calls.filter(c=>c[0]==='storage');
+  assert.equal(storage.length,3);
+  for(const call of storage) {
+    assert.equal(call[2],7);
+    assert.equal(call[4],64);
+    assert.equal(call[5],64);
+  }
+  // Inspect the exact WebGL2 minification filter, not a mock-side flag.
+  const filterCalls=calls.filter(c=>c[0]==='parameter' && c[2]===gl.TEXTURE_MIN_FILTER);
+  assert.equal(filterCalls.length,3);
+  assert.ok(filterCalls.every(c=>c[3]===gl.LINEAR_MIPMAP_LINEAR));
+  for(const channel of ['albedo','normal','orm']) {
+    const asset=mips.assets.find(a=>a.channel===channel);
+    cache.upload(channel,asset.key,{width:64,height:64});
+  }
+  assert.equal(cache.statistics.uploadedAssets,3);
+  assert.equal(cache.statistics.mipGenerations,3);
+  assert.equal(calls.filter(c=>c[0]==='mipmap').length,3);
+  assert.ok(calls.every(c=>c[0]!=='mipmap' || c[1]===gl.TEXTURE_2D_ARRAY));
+  cache.contextLost();
+  assert.equal(cache.statistics.mipGenerations,0);
+  cache.contextRestored();
+  assert.equal(cache.statistics.allocatedBytes,mips.estimatedBytes);
+  assert.equal(cache.statistics.uploadedAssets,0);
+  cache.dispose();
+});
+
+test('one-level legacy material manifest does not invoke mip generation',()=>{
+  const {gl,calls}=fakeGl();
+  const cache=new TerrainGpuTextureCache(gl,manifest);
+  cache.initialize();
+  const asset=manifest.assets[0];
+  cache.upload(asset.channel,asset.key,{width:16,height:16});
+  assert.equal(cache.statistics.mipGenerations,0);
+  assert.equal(calls.filter(c=>c[0]==='mipmap').length,0);
+  const filters=calls.filter(c=>c[0]==='parameter' && c[2]===gl.TEXTURE_MIN_FILTER);
+  assert.ok(filters.every(c=>c[3]===gl.LINEAR));
   cache.dispose();
 });

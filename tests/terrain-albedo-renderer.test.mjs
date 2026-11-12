@@ -76,11 +76,12 @@ test('terrain tile GPU uploads use the frame budget and context restore requeues
 test('secondary albedo variants blend their matching authored normal and ORM maps', () => {
   assert.match(source,/uniform vec4 uTerrainSecondaryNormalLayers/);
   assert.match(source,/uniform vec4 uTerrainSecondaryOrmLayers/);
-  assert.match(source,/variantMix = mixAmount/);
+  assert.match(source,/float softMix = mixAmount \* \(surfaceIndex == 0 \? 0\.46 : 0\.60\)/);
+  assert.match(source,/variantMix = softMix/);
+  assert.match(source,/compileTerrainTextureManifest\(undefined,\{tileSize:64,mipLevels:7\}\)/);
   assert.match(source,/tangentNormal = normalize\(mix\(tangentNormal, nextNormal, variantMix\)\)/);
   assert.match(source,/orm = mix\(orm, nextOrm, variantMix\)/);
   assert.match(source,/terrainSecondaryNormalLayers: gl\.getUniformLocation/);
   assert.match(source,/terrainSecondaryOrmLayers: gl\.getUniformLocation/);
   assert.match(source,/gl\.uniform4fv\?\.\(secondaryUniform, secondLayers\)/);
-  assert.match(source,/compileTerrainTextureManifest\(undefined,\{tileSize:64\}\)/);
 });

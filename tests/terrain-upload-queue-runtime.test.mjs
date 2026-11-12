@@ -19,6 +19,7 @@ function fakeCanvas() {
     SRGB8_ALPHA8: 11, RGBA8: 12, TEXTURE_MIN_FILTER: 13,
     TEXTURE_MAG_FILTER: 14, TEXTURE_WRAP_S: 15, TEXTURE_WRAP_T: 16,
     LINEAR: 17, REPEAT: 18, UNPACK_FLIP_Y_WEBGL: 19,
+    LINEAR_MIPMAP_LINEAR: 27,
     RGBA: 20, UNSIGNED_BYTE: 21, ARRAY_BUFFER: 22,
     ELEMENT_ARRAY_BUFFER: 23, STATIC_DRAW: 24,
     FLOAT: 25, BYTE: 26,
@@ -29,6 +30,10 @@ function fakeCanvas() {
     enable() {}, depthFunc() {}, disable() {}, deleteProgram() {},
     createTexture: () => ({}), deleteTexture() {}, bindTexture() {},
     getParameter: () => 256, texStorage3D() {}, texParameteri() {},
+    generateMipmap(target) {
+      if(target!==gl.TEXTURE_2D_ARRAY) throw new Error('Unexpected mip target');
+      clock += 1;
+    },
     createVertexArray: () => ({}), bindVertexArray() {}, deleteVertexArray() {},
     createBuffer: () => ({}), bindBuffer() {}, deleteBuffer() {},
     bufferData() { clock += 3; }, enableVertexAttribArray() {},
@@ -147,7 +152,7 @@ test('renderer uses native 64px material tiles and rejects legacy 256px array im
   assert.equal(view.flushQueuedUploads({budgetMs:2,now:runtime.now}).chunks,1);
   assert.equal(runtime.uploaded.at(-1).at(-1).width,64);
   assert.equal(view.statistics.terrainGpuTextureBytesEstimate,
-    compileTerrainTextureManifest(undefined,{tileSize:64}).estimatedBytes);
+    compileTerrainTextureManifest(undefined,{tileSize:64,mipLevels:7}).estimatedBytes);
   assert.equal(view.pendingUploads,0);
   view.dispose();
 });
@@ -221,5 +226,30 @@ test('context restore prioritizes terrain geometry over retained material maps',
   assert.equal(runtime.uploaded.length,uploadedBefore);
   view.flushQueuedUploads({budgetMs:2,now:runtime.now});
   assert.equal(runtime.uploaded.length,uploadedBefore+1);
+  view.dispose();
+});
+
+test('real renderer mip allocation stays bounded during material uploads and context restore',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  const mips=compileTerrainTextureManifest(undefined,{tileSize:64,mipLevels:7});
+  const baseline=view.statistics.terrainGpuTextureBytesEstimate;
+  assert.equal(baseline,0);
+  const chosen=assets.slice(0,3);
+  for(const asset of chosen) view.setTerrainAlbedoTile(asset.key,image());
+  assert.equal(view.pendingUploads,3);
+  while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(view.statistics.terrainGpuTextureBytesEstimate,mips.estimatedBytes);
+  assert.equal(runtime.uploaded.length,3);
+  for(const result of runtime.uploaded) {
+    assert.equal(result.length,11);
+    assert.deepEqual(result.slice(5,8),[64,64,1]);
+  }
+  runtime.lose();
+  runtime.restore();
+  assert.equal(view.pendingUploads,3);
+  while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(view.statistics.terrainGpuTextureBytesEstimate,mips.estimatedBytes);
+  assert.equal(view.pendingUploads,0);
   view.dispose();
 });

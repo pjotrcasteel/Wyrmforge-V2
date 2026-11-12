@@ -8,6 +8,7 @@ export class TerrainGpuTextureCache {
   #layers = new Map();
   #uploaded = new Set();
   #bytes = 0;
+  #mipGenerations = 0;
   #maxBytes;
   #lost = false;
 
@@ -24,7 +25,8 @@ export class TerrainGpuTextureCache {
 
   get statistics() {
     return Object.freeze({ allocatedBytes: this.#bytes, uploadedAssets: this.#uploaded.size,
-      allocatedChannels: this.#textures.size, lost: this.#lost });
+      allocatedChannels: this.#textures.size, mipLevels:this.#manifest.mipLevels ?? 1,
+      mipGenerations:this.#mipGenerations, lost: this.#lost });
   }
 
   /** Allocate channel arrays once; all layers use the same tile size. */
@@ -56,7 +58,8 @@ export class TerrainGpuTextureCache {
         const format = entry.channel === 'albedo' ? gl.SRGB8_ALPHA8 : gl.RGBA8;
         gl.texStorage3D(gl.TEXTURE_2D_ARRAY, mipLevels, format,
           tileSize, tileSize, entry.assets.length);
-        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER,
+          mipLevels > 1 ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
@@ -93,6 +96,12 @@ export class TerrainGpuTextureCache {
       try {
         gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer,
           image.width, image.height, 1, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        if ((this.#manifest.mipLevels ?? 1) > 1) {
+          // WebGL2 builds the smaller levels for all current array layers in
+          // a single call. 64px tiles and one job per frame keep this bounded.
+          gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+          this.#mipGenerations++;
+        }
       } catch (error) {
         // Preserve actionable asset and API context in the mobile error panel.
         throw new Error('WebGL2 texture array upload failed for ' + identity +
@@ -121,6 +130,7 @@ export class TerrainGpuTextureCache {
     this.#layers.clear();
     this.#uploaded.clear();
     this.#bytes = 0;
+    this.#mipGenerations = 0;
   }
 
   contextRestored() {
@@ -136,5 +146,6 @@ export class TerrainGpuTextureCache {
     this.#layers.clear();
     this.#uploaded.clear();
     this.#bytes = 0;
+    this.#mipGenerations = 0;
   }
 }
