@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { projectVoxel } from '../src/camera-presets.mjs';
 
 test('visible V2.6 proof uses real terrain loader, authority, mesher and WebGL renderer',()=>{
   const entry=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
@@ -27,4 +28,31 @@ test('external proof fixture remains a fixed material input, not the world gener
   assert.match(fixture,/TERRAIN_INITIALIZATION_SCHEMA/);
   assert.match(fixture,/EXTERNAL_SITE_BREACH/);
   assert.doesNotMatch(fixture,/Math\.random|import .*Wyrmforge/);
+});
+
+test('external site opens with diagonal 3D inspection, while keeping the optional Hunt comparison',()=>{
+  const html=readFileSync(new URL('../external-terrain-lab.html',import.meta.url),'utf8');
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  assert.match(html,/<select id="view-camera"/);
+  assert.match(html,/<option value="inspection" selected>3D inspection/);
+  assert.match(html,/<option value="hunt">Hunt camera/);
+  assert.match(host,/const camera=viewCamera\.value/);
+  assert.match(host,/renderer\.render\(\{[\s\S]*?scale,panX:0,panY:0,camera/);
+  assert.doesNotMatch(host,/camera:'hunt'/,
+    'external proof must not force the nearly top-down Hunt camera');
+  assert.doesNotMatch(host,/viewCamera\.addEventListener\('change',resetSite\)/,
+    'a camera-only change must not destroy and reload the voxel world');
+});
+
+test('diagonal inspection visibly separates a 3D arch underside and side depths',()=>{
+  const options={width:390,height:700,scale:11,panX:0,panY:0};
+  const floor=projectVoxel(0,1,0,{...options,camera:'inspection'});
+  const arch=projectVoxel(0,6,0,{...options,camera:'inspection'});
+  const near=projectVoxel(4,1,0,{...options,camera:'inspection'});
+  const away=projectVoxel(0,1,4,{...options,camera:'inspection'});
+  assert.ok(arch.y<floor.y-50,'six-voxel roof projects well above ground');
+  assert.ok(near.x>floor.x && away.x<floor.x,
+    'both ground axes are visible in an actual diagonal 3D view');
+  assert.notEqual(near.depth,away.depth,
+    'camera depth is not simulated by a flat 2D ground overlay');
 });
