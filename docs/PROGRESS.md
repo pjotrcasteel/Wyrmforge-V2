@@ -1,5 +1,27 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 physical older-Android 10-minute soak — sustained frame-pacing regression (2026-11-12)
+
+**Device/build:** User-reported older Android phone, Android 17 / **Firefox 159** (not Android Chrome); build `fd5456faf6a22e93d762f13335699267d3a4e752`, Hill/seed 7/32³ and worker meshing. The session completed **600.024 s**, including **594/594 successful terrain impacts**, **0 rejected**, **8,732 removed voxels**, **9/9 controlled scene resets**, drained CPU/GPU queues, and **no renderer error**. This is solid correctness/resource-lifecycle evidence.
+
+**Sustained frame-pacing issue — open blocker:** rolling frame p95 begins near 8.34–16.68 ms, crosses approximately 41.7 ms at ~48 s, and remains near **41.7 ms (approximately 24 FPS) from about 2 minutes through the end**. Final rolling 1,800-frame p50/p95/p99: **41.66 / 41.68 / 41.72 ms**, with 1 >50 ms hitch **in the rolling window only**. The rolling window showed up to 2 >50 ms hitches earlier; full-session totals were unavailable in this prior build. This is materially worse than the Android device's earlier ~8 ms short fissure test and iPhone Safari's 17 ms ending cadence. The reason is **not established**: browser scheduling/display refresh policy, device thermal/power constraints, and engine load remain possible. Never infer the handset's exact model from the UA.
+
+**Resource/memory context:** peak pending GPU disposals 8, estimated retired buffers 220,880 bytes; peak estimated GPU mesh bytes 220,880; all queues zero on completion, and mesh estimate resets to the same baseline (~158,400 bytes). No evidence of accumulating retained GPU mesh allocations, but JS heap and actual GPU-driver memory are unavailable. 586 sustained samples across 600 seconds show no large >=3 s gap in the one-second rounded timestamps. A limited sampled cadence does not explain the persistent slowdown.
+
+**Action:** keep **V2.7 mobile performance gate OPEN**. Add main-thread frame-work duration distinct from RAF interval pacing, full-session hitch counts, and sampling/frame-gap continuity diagnostics in the next build. Repeat on the same Android Firefox device, then separately on Android Chrome to isolate browser differences. Do not undertake speculative physics, artwork, or broad renderer rewrites before collecting discriminating evidence.
+
+
+## V2.7 physical iPhone 10-minute soak — evidence review (2026-11-12)
+
+**Device/build:** iPhone Safari; `fd5456faf6a22e93d762f13335699267d3a4e752`; Hill/seed 7/32³, worker meshing. The physical run completed the full **600.007 s**, including **605 accepted/605 changed terrain impacts, 0 rejected, 8,880 removed voxels, 9/9 controlled scene resets, and drained upload/retirement queues**. No renderer error was reported.
+
+**GPU mesh-retirement evidence:** peak 8 queued retirements (~220,176 estimated bytes), peak estimated GPU mesh bytes 220,880, and zero queued retirements at completion. Per-cycle mesh-memory samples returned near the same baseline after resets. No progressive **estimated mesh-resource** growth is apparent; actual GPU driver allocation and JS heap were not measurable.
+
+**Frame and collection caveat:** final frame p95/p99 17/17 ms is based on the **last 1,800** rendered frame intervals, not the complete 10-minute run. Earlier per-second samples include rolling p95 up to 34 ms, rolling p99 up to 42 ms, and up to 2 frames above 50 ms while those frames were still in the rolling window. Sustained telemetry contains **584 samples over 600 seconds**; there was an approximately **18-second sampling gap** from elapsed second 37 to 55. The prior sampler cannot distinguish a browser scheduling interruption from an engine stall, and it drops >=1-second requestAnimationFrame intervals from its frame metrics. No cause should be inferred from this evidence alone.
+
+**Follow-up implementation:** full-session hitch counts and excluded frame-gap measurements, explicit missing one-second telemetry intervals, and `timingQuality` in the mobile-soak report. Review physical iPhone and Android Chrome runs with this improved continuity evidence before accepting full V2.7. This is a **terrain-only** laboratory scenario, excluding real Hunt enemies, VFX, lighting, and structural gravity. No V2.7 full-device or full-game acceptance is claimed.
+
+
 ## Physical-phone foundation evidence — 2026-11-12 (PRs #100–#101)
 
 **Build:** `8df1c010a5c6eb9d5e5030d7d48d103d27daffe9` (frame-budgeted initial uploads and retired GPU-buffer disposal). User reports that scene switching/reset appearance looks good. The supplied machine reports are **18-fissure, ~1.6-second scenarios**, not 3-minute or 10-minute sustained runs.

@@ -50,3 +50,36 @@ test('invalid capacity is rejected', () => {
     assert.throws(() => new FrameMetrics(capacity), RangeError);
   }
 });
+
+test('full-session hitch counters outlive the rolling percentile window', () => {
+  const data = new FrameMetrics(3);
+  for (const ms of [17, 51, 101, 17, 17, 17]) data.record(ms);
+  assert.equal(data.summary().hitchesOver50Ms, 0, 'recent window no longer contains early hitches');
+  const total = data.sessionSummary();
+  assert.equal(total.validFrameCount, 6);
+  assert.equal(total.hitchesOver33Ms, 2);
+  assert.equal(total.hitchesOver50Ms, 2);
+  assert.equal(total.hitchesOver100Ms, 1);
+  assert.equal(total.maxMeasuredFrameIntervalMs, 101);
+  assert.equal(total.longAnimationFrameGaps, 0);
+  data.reset();
+  assert.equal(data.sessionSummary().validFrameCount, 0);
+  assert.equal(data.sessionSummary().hitchesOver50Ms, 0);
+});
+
+test('excluded long requestAnimationFrame intervals are retained as continuity evidence', () => {
+  const data = new FrameMetrics();
+  assert.equal(data.record(17),true);
+  assert.equal(data.record(18_000),false);
+  assert.equal(data.record(2000),false);
+  assert.equal(data.record(20),true);
+  const total = data.sessionSummary();
+  assert.equal(data.summary().count,2);
+  assert.equal(total.validFrameCount,2);
+  assert.equal(total.longAnimationFrameGaps,2);
+  assert.equal(total.longestAnimationFrameGapMs,18_000);
+  assert.equal(total.totalLongAnimationFrameGapMs,20_000);
+  assert.equal(total.hitchesOver100Ms,0,'scheduling gaps are not GPU frame times');
+  data.reset();
+  assert.equal(data.sessionSummary().longestAnimationFrameGapMs,null);
+});
