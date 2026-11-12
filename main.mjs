@@ -9,6 +9,7 @@ import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './
 import { createTerrainMeshJob, isCurrentTerrainMeshReply } from './src/terrain-mesh-protocol.mjs';
 import { TerrainWorkerSession } from './src/terrain-worker-session.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
+import { terrainPresentationState } from './src/terrain-presentation-state.mjs';
 import { REFERENCE_TERRAIN_KEYS, createReferenceTerrainCanvas, createReferenceMaterialCanvas } from './src/terrain-reference-tiles.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
@@ -646,8 +647,11 @@ function invalidateMeshAudit() {
 const formatMs = ms => ms === null ? 'n/a' : `${ms.toFixed(1)}ms`;
 function updateStatus() {
   const frames = frameMetrics.summary();
+  const presentation = terrainPresentationState(gpuRenderer, world.chunkCount);
   const rendererStatus = gpuRenderer?.ready
-    ? `WebGL2 · ${gpuRenderer.statistics.triangles} triangles · ${gpuRenderer.statistics.drawCalls} draws`
+    ? `WebGL2 · ${gpuRenderer.statistics.triangles} triangles · ${gpuRenderer.statistics.drawCalls} draws` +
+      (presentation === 'gpu' ? '' :
+        ` · 2D terrain visible (${presentation}; ${gpuRenderer.uploadQueueStatistics.sceneChunks} scene uploads)`)
     : `Canvas2D fallback${gpuError ? ' (' + gpuError + ')' : ''}`;
   state.textContent = `V2-only · ${rendererStatus} · camera ${activeCamera} · ${world.chunkEdge}³ chunks · seed ${activeSeed}` +
     ` · zoom ${zoomFactor.toFixed(2)}× · rev ${world.revision}` +
@@ -719,12 +723,17 @@ function pointerPosition(event) {
 function draw() {
   if (!dirty) return;
   dirty = false;
-  if (gpuRenderer?.ready && gpuRenderer.render({
+  // Do not cover the authoritative 2D terrain with an empty WebGL canvas.
+  // Startup, scene replacement and context restore all enter staging first.
+  const readyToPresent = terrainPresentationState(gpuRenderer, world.chunkCount) === 'gpu';
+  if (readyToPresent && gpuRenderer.render({
     width: gpuCanvas.width, height: gpuCanvas.height,
     scale, panX: cameraX, panY: cameraY, camera: activeCamera
   })) {
+    gpuCanvas.style.display = 'block';
     return;
   }
+  gpuCanvas.style.display = 'none';
   ctx.fillStyle = '#101820';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   // Foundation visualizer: deliberately simple and not the future WebGL2 renderer.
@@ -1160,10 +1169,16 @@ function tick(now) {
         queuedUploadStartedAt = null;
       }
     } catch (error) {
-      cancelTerrainWorker();
-      gpuError = error.message;
+      // Do not repeatedly restage the same failed uploads on every frame.
+      // That loop hid the useful error while keeping the opaque GPU view empty.
+      cancelTerrainWorker({dispose:true});
+      gpuError = 'GPU terrain upload failed: ' + (error?.message ?? String(error));
       terrainMeshMode.value = 'sync';
-      rebuildGpuMeshes();
+      gpuRenderer?.dispose();
+      gpuRenderer = null;
+      gpuCanvas.style.display = 'none';
+      meshAuditStatus.textContent = gpuError + ' · Canvas2D terrain active; Reset retries WebGL2.';
+      dirty = true;
     }
   }
   if (!document.hidden) sustainedTelemetry.observeQueue(gpuRenderer?.uploadQueueStatistics);
@@ -1208,7 +1223,8 @@ function chooseScene({ preserveMeasurements = false } = {}) {
   lastBurst = null;
   lastDamage = null;
   invalidateMeshAudit();
-  rebuildGpuMeshes();
+  if (gpuRenderer) rebuildGpuMeshes();
+  else initializeGpuRenderer();
   activeScene = scenePicker.value;
   activeSeed = seed;
   if (!preserveMeasurements) {
@@ -1982,21 +1998,29 @@ window.addEventListener('blur', () => {
   actorPrevious = null;
   actorAccumulator = 0;
 });
-try {
-  gpuRenderer = new WebGLVoxelView(gpuCanvas, {
-    onAvailabilityChange(available, error) {
-      gpuCanvas.style.display = available ? 'block' : 'none';
-      gpuError = error?.message ?? null;
-      contextRecoveryButton.textContent = available ? 'Lose WebGL context' : 'Restore WebGL context';
-      // WebGLVoxelView restores its retained chunk meshes; no duplicate full upload.
-      dirty = true;
-    }
-  });
-  gpuCanvas.style.display = 'block';
-  rebuildGpuMeshes();
-} catch (error) {
-  gpuError = error.message;
-  gpuCanvas.style.display = 'none';
+function initializeGpuRenderer() {
+  try {
+    gpuRenderer = new WebGLVoxelView(gpuCanvas, {
+      onAvailabilityChange(available, error) {
+        // A usable context may still have zero terrain draw calls; draw()
+        // decides visibility after the scene/recovery queue actually drains.
+        gpuCanvas.style.display = 'none';
+        gpuError = error?.message ?? null;
+        contextRecoveryButton.textContent = available ? 'Lose WebGL context' : 'Restore WebGL context';
+        dirty = true;
+      }
+    });
+    gpuCanvas.style.display = 'none';
+    rebuildGpuMeshes();
+  } catch (error) {
+    gpuError = error?.message ?? String(error);
+    gpuCanvas.style.display = 'none';
+    gpuRenderer?.dispose();
+    gpuRenderer = null;
+    meshAuditStatus.textContent = 'WebGL2 unavailable; showing Canvas2D terrain: ' + gpuError;
+    dirty = true;
+  }
 }
+initializeGpuRenderer();
 resize();
 requestAnimationFrame(tick);
