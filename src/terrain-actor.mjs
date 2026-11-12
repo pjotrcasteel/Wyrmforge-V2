@@ -219,7 +219,7 @@ export function recoverTerrainActor(world,position,{
   const cz=Math.floor(position.z)+0.5;
   const feet=Math.floor(position.y-SKIN);
   // Search increasing Manhattan displacement in three dimensions.
-  // Prefer a nearby supported floor over jumping several voxels onto a roof.
+  // Prefer a nearby supported floor over moving vertically onto a roof.
   // Candidate tie order is stable for deterministic replay and restoration.
   for(let distance=0;distance<=horizontalRadius+verticalRange;distance++) {
     for(let radius=0;radius<=Math.min(horizontalRadius,distance);radius++) {
