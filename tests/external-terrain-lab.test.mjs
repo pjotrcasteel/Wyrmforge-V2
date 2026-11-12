@@ -53,6 +53,6 @@ test('diagonal inspection visibly separates a 3D arch underside and side depths'
   assert.ok(arch.y<floor.y-50,'six-voxel roof projects well above ground');
   assert.ok(near.x>floor.x && away.x<floor.x,
     'both ground axes are visible in an actual diagonal 3D view');
-  assert.notEqual(near.depth,away.depth,
-    'camera depth is not simulated by a flat 2D ground overlay');
+  assert.notEqual(near.depth,floor.depth,
+    'the oblique camera preserves actual depth ordering of geometry');
 });
