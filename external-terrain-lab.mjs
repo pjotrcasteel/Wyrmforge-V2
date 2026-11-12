@@ -34,6 +34,7 @@ let breachCount=0;
 let lastImpactRemoved=0;
 let lastStatusAt=-Infinity;
 let errorMessage=null;
+let rendererErrorMessage=null;
 let renderer=null;
 let meshBridge=null;
 let pendingMesh=null;
@@ -53,8 +54,9 @@ function resizeCanvas() {
 function updateStatus(now=performance.now()) {
   if(now-lastStatusAt<200 && !errorMessage) return;
   lastStatusAt=now;
-  if(errorMessage) {
-    status.textContent='V2.6 error: '+errorMessage;
+  const displayedError=errorMessage ?? rendererErrorMessage;
+  if(displayedError) {
+    status.textContent='V2.6 error: '+displayedError;
     return;
   }
   if(pendingEdit) {
@@ -84,12 +86,14 @@ function updateStatus(now=performance.now()) {
   status.textContent=progress.done
     ? '3D site '+active.source.siteId+' · '+loaded.chunkCount+
       ' chunks · '+loaded.revision+' authoritative revisions · '+
-      'runtime epoch '+active.port.epoch+' · '+ 
+      'runtime epoch '+active.port.epoch+' · '+
+      'renderer scene '+renderer.sceneEpoch+' · '+
       renderer.pendingUploads+' GPU operations remaining'+
       ' · '+(viewCamera.value==='inspection' ? '3D inspection' : 'Hunt camera')+
       (breachCount ? ' · '+breachCount+' span impacts'+
         ' · last removed '+lastImpactRemoved+' voxels' : '')+
       (savedCheckpoint ? ' · saved state available' : '')+
+      ' · stale GPU replies blocked: '+renderer.uploadQueueStatistics.staleUploadRejections+
       ' · mesh source: '+meshSource
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
@@ -152,11 +156,13 @@ function impactSpan() {
         if(!meshBridge.status.busy) {
           throw new Error('Localized V2 mesh worker did not start');
         }
-        pendingEdit={world:active.world,epoch,dirty:[...dirty]};
+        pendingEdit={world:active.world,epoch,dirty:[...dirty],
+          rendererSceneEpoch:renderer.sceneEpoch};
       } else {
         // Only the existing tiny-site compatibility exception remains.
         const meshes=buildExposedFaceMeshes(active.world,{chunkIds:dirty});
-        renderer.queueReplacementMeshes(dirty,meshes);
+        renderer.queueReplacementMeshes(dirty,meshes,
+          {sceneEpoch:renderer.sceneEpoch});
         meshSource='small-site sync compatibility';
       }
       breachButton.disabled=true;
@@ -275,7 +281,7 @@ function frame(now) {
       });
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
-      Boolean(errorMessage) || Boolean(restoring) ||
+      Boolean(errorMessage) || Boolean(rendererErrorMessage) || Boolean(restoring) ||
       Boolean(pendingMesh) || Boolean(pendingEdit);
     breachButton.disabled=blocked;
     saveButton.disabled=blocked;
@@ -315,7 +321,8 @@ window.addEventListener('pagehide',()=>{
 try {
   renderer=new WebGLVoxelView(canvas,{
     onAvailabilityChange(ready,error) {
-      errorMessage=ready ? null : (error?.message ?? 'WebGL context lost');
+      // A restored GL context cannot clear an unrelated worker or replay failure.
+      rendererErrorMessage=ready ? null : (error?.message ?? 'WebGL context lost');
       lastStatusAt=-Infinity;
       updateStatus();
     }
@@ -331,7 +338,10 @@ try {
         try {
           // The original dirty IDs also remove emptied GPU chunks when
           // the worker sends no replacement mesh for a deleted chunk.
-          renderer.queueReplacementMeshes(new Set(dirtyIds),meshes);
+          if(!renderer.queueReplacementMeshes(new Set(dirtyIds),meshes,
+              {sceneEpoch:pendingEdit.rendererSceneEpoch})) {
+            throw new Error('Renderer scene changed while external mesh was building');
+          }
           meshSource='worker (full + localized)';
           pendingEdit=null;
           lastStatusAt=-Infinity;
