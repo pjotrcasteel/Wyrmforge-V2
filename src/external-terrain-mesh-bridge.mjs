@@ -85,8 +85,11 @@ export class V2ExternalTerrainMeshBridge {
       throw new RangeError('External terrain edit chunk budget exceeded');
     }
     const pattern=/^-?(0|[1-9][0-9]*),-?(0|[1-9][0-9]*),-?(0|[1-9][0-9]*)$/;
-    if(!ids.every(id=>typeof id==='string' && pattern.test(id) &&
-        id.split(',').map(Number).every(Number.isSafeInteger))) {
+    if(!ids.every(id=>{
+      if(typeof id!=='string' || !pattern.test(id)) return false;
+      const parts=id.split(',').map(Number);
+      return parts.every(Number.isSafeInteger) && parts.join(',')===id;
+    })) {
       throw new TypeError('Expected canonical signed V2 dirty chunk IDs');
     }
     ids.sort();
