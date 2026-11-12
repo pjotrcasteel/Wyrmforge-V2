@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.6 — Externally generated 3D world handoff (2026-11-12)
+
+**Purpose:** Voxel V2 can now accept terrain data produced by a future independent, platform-neutral World Generation V2 engine, without adopting map generation inside the voxel engine. New `voxel-v2.terrain-initialization.v1` source contracts include `siteId`, `generatorVersion`, deterministic seed, chosen chunk size, and bounded X-directed 3D material runs. Runs preserve overhangs, caves and negative coordinates; unlike a heightmap, they represent the real signed 3D cells.
+
+**Safety:** Preflight validates site/generator IDs, cell and run budgets, material bytes, supported chunk sizes, bounds, and overlapping spans *before* world allocation. It canonicalizes run order so identical input generates the same world hash regardless of producer ordering. `V2ExternalTerrainLoader.loadStep(maxCells)` applies no more than 4096 material cells per call. This is a bounded **cell** budget, not a verified millisecond frame-time guarantee. The partial world is hidden from external consumers; once complete, the loader exposes the existing V2-only authoritative `VoxelWorld`, one `TerrainEditLedger` and `V2TerrainPort`. Unloading clears the world and disposes the port.
+
+**Verification:** Automated tests check identical hashes at 16³ and 32³ chunk sizes, real 3D overhang collision and raycasts, one accepted spell edit after import, output copy isolation, signed chunk boundaries, invalid input rejection, staged loading and disposal. No game/V1 migration, biome generation, texture artwork, physical phone test or ten-minute soak is part of this slice.
+
+**Next visible goal:** The first procedural forest *belongs to V2.8*, after the remaining documented foundation acceptance gates. This handoff makes that integration possible without creating a second voxel authority. The older Android Firefox ~24 FPS issue remains open, not explained away.
+
+
 ## V2.0 — CI source completeness and clean-room asset guardrails (2026-11-12)
 
 The Pages validation job now syntax-checks **every current and future V2 JavaScript source, test, and script** instead of maintaining a stale manual file list. The repository-local dependency audit now covers **every root HTML entry**, rejects missing local page assets, non-local remote/data/blob page assets, and Node standard-library imports in browser runtime modules. Node builtins remain permitted for offline test/build tooling.
