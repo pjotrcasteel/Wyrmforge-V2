@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
+import { terrainPresentationState } from '../src/terrain-presentation-state.mjs';
+import { createScene } from '../src/voxel-world.mjs';
+import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 
 function fakeCanvas() {
   let clock = 0;
@@ -425,5 +428,66 @@ test('scene guards validate unsafe epochs before accepting GPU work', () => {
   assert.equal(view.sceneEpoch,0);
   assert.equal(view.pendingUploads,0);
   assert.equal(view.uploadQueueStatistics.staleUploadRejections,0);
+  view.dispose();
+});
+
+test('populated V2 hill stays in safe presentation mode until real GPU scene completes',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  const world=createScene('hill',7,{chunkEdge:16});
+  const meshes=buildExposedFaceMeshes(world);
+  assert.ok(world.revision>0);
+  assert.ok(meshes.some(mesh=>mesh.triangleCount>0));
+  assert.equal(terrainPresentationState(view,world.chunkCount),'missing-geometry',
+    'WebGL2 context readiness cannot hide real terrain before uploads are staged');
+  view.setMeshes(meshes);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'staging');
+  assert.equal(view.statistics.drawCalls,0);
+  view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  if(view.uploadQueueStatistics.sceneChunks>0) {
+    assert.equal(terrainPresentationState(view,world.chunkCount),'staging',
+      'a partially uploaded GPU world must not become visible');
+  }
+  drain(view,runtime.now);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'gpu');
+  assert.ok(view.statistics.drawCalls>0);
+  assert.ok(view.statistics.triangles>0);
+
+  view.setMeshes(meshes);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'staging',
+    'replacing even an identical scene must hide incomplete GPU presentation');
+  drain(view,runtime.now);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'gpu');
+  view.dispose();
+});
+
+test('context loss and recovery preserve 2D fallback until latest GPU geometry is complete',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  const world=createScene('flat',7,{chunkEdge:16});
+  view.setMeshes(buildExposedFaceMeshes(world));
+  drain(view,runtime.now);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'gpu');
+  runtime.emit('webglcontextlost');
+  assert.equal(terrainPresentationState(view,world.chunkCount),'fallback');
+  runtime.emit('webglcontextrestored');
+  assert.equal(terrainPresentationState(view,world.chunkCount),'staging');
+  drain(view,runtime.now);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'gpu');
+  view.setMeshes([]);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'staging');
+  drain(view,runtime.now);
+  assert.equal(terrainPresentationState(view,world.chunkCount),'missing-geometry',
+    'WebGL must not obscure terrain with a blank canvas after a bad scene reset');
+  view.dispose();
+});
+
+test('presentation gate validates caller world state and empty worlds fall back',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  for(const bad of [-1,1.5,NaN,Infinity,'2',null]) {
+    assert.throws(()=>terrainPresentationState(view,bad),RangeError);
+  }
+  assert.equal(terrainPresentationState(view,0),'fallback');
   view.dispose();
 });
