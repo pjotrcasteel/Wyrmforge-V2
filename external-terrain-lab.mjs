@@ -251,6 +251,7 @@ function stageTerrainMeshes(terrain,kind) {
 
 function frame(now) {
   try {
+    if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
       if(restoring.progress.done) {
@@ -311,6 +312,8 @@ viewCamera.addEventListener('change',()=>{
 breachButton.addEventListener('click',impactSpan);
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
+document.addEventListener('visibilitychange',()=>
+  meshBridge?.setPaused(document.hidden));
 window.addEventListener('pagehide',()=>{
   meshBridge?.close();
   restoring?.unload();

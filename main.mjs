@@ -1058,6 +1058,9 @@ function tick(now) {
     const until = performance.now() + fissureRun.profile.cpuContentionMs;
     while (performance.now() < until) { /* simulated competing main-thread work */ }
   }
+  // Detect an unresponsive worker before attempting any further GPU updates.
+  // Host error handling switches to the existing safe baseline; never spin retries.
+  if (!document.hidden) terrainWorkerSession?.pollTimeout();
   advancePreset(now);
   advanceFissures(now);
   advanceAmbush(now);
@@ -1882,6 +1885,7 @@ canvas.addEventListener('wheel', event => {
 }, { passive: false });
 window.addEventListener('resize',resize);
 document.addEventListener('visibilitychange', () => {
+  terrainWorkerSession?.setPaused(document.hidden);
   previous = null;
   actorPrevious = null;
   actorAccumulator = 0;

@@ -6,12 +6,16 @@ import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url';
 
 const CODE_EXTENSIONS=new Set(['.mjs','.js']);
-const SCAN_DIRS=['src','tests','scripts'];
+const SCAN_DIRS=['src','tests','scripts','assets','styles','css'];
 const ENTRY_FILES=['main.mjs','external-terrain-lab.mjs'];
 // Match import/export declarations at the beginning of a source line; do not
 // interpret fixture strings or regex literals as executable imports.
 const IMPORT_PATTERN=/^\s*(?:import\s+(?:[^'"\r\n]*?\s+from\s*)?|export\s+[^'"\r\n]*?\s+from\s*)['"]([^'"\r\n]+)['"]/gm;
 const ASSET_PATTERN=/(?:\b(?:src|href)\s*=\s*|\bnew\s+URL\s*\(\s*)['"]([^'"]+)['"]/g;
+// CSS asset references can live in standalone .css files or inline <style>.
+const CSS_URL_PATTERN=/\burl\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+const CSS_IMPORT_PATTERN=/@import\s+(['"])([^'"]+)\1/g;
+const SRCSET_PATTERN=/\bsrcset\s*=\s*(["'])(.*?)\1/g;
 const DYNAMIC_IMPORT_PATTERN=/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const FORBIDDEN=/(?:^|[\\/])(?:Wyrmforge\.Presentation|experimental|legacy|v1)(?:[\\/]|$)/i;
 function within(root,file) {
@@ -24,7 +28,11 @@ export function auditV2Dependencies(root) {
   let scanned=0,dependencies=0;
   function checkPath(from,specifier,kind) {
     dependencies++;
-    if(specifier.startsWith('#')) return; // Local same-page fragment.
+    if(kind==='asset' && specifier.startsWith('#')) return; // Local fragment.
+    if(kind==='import' && specifier.startsWith('#')) {
+      issues.push(from+': non-local import '+specifier);
+      return;
+    }
     if(/^(?:https?:|data:|blob:|\/\/)/i.test(specifier)) {
       issues.push(from+': non-local '+kind+' '+specifier);
       return;
@@ -36,7 +44,7 @@ export function auditV2Dependencies(root) {
     if(kind==='import' && pathOnly.startsWith('node:')) {
       // Development/tests may use the Node standard library. Production
       // WebGL2 modules are browser-only and must never import Node builtins.
-      const runtime=from===resolve(base,'main.mjs') ||
+      const runtime=ENTRY_FILES.some(name=>from===resolve(base,name)) ||
         from.startsWith(resolve(base,'src')+sep);
       if(runtime) issues.push(from+': browser runtime imports Node '+specifier);
       return;
@@ -68,8 +76,26 @@ export function auditV2Dependencies(root) {
     const source=readFileSync(file,'utf8');
     for(const match of source.matchAll(IMPORT_PATTERN)) checkPath(file,match[1],'import');
     for(const match of source.matchAll(DYNAMIC_IMPORT_PATTERN)) checkPath(file,match[1],'import');
-    if(extname(file)==='.html') {
+    const extension=extname(file);
+    const isHtml=extension==='.html';
+    const isCss=extension==='.css';
+    const isRuntimeCode=CODE_EXTENSIONS.has(extension) &&
+      !file.startsWith(resolve(base,'tests')+sep);
+    if(isHtml || isRuntimeCode) {
+      // Covers both HTML attributes and import.meta.url Worker/image/JSON assets.
       for(const match of source.matchAll(ASSET_PATTERN)) checkPath(file,match[1],'asset');
+    }
+    if(isHtml) {
+      for(const match of source.matchAll(SRCSET_PATTERN)) {
+        for(const entry of match[2].split(',')) {
+          const uri=entry.trim().split(/\s+/,1)[0];
+          if(uri) checkPath(file,uri,'asset');
+        }
+      }
+    }
+    if(isHtml || isCss) {
+      for(const match of source.matchAll(CSS_URL_PATTERN)) checkPath(file,match[2].trim(),'asset');
+      for(const match of source.matchAll(CSS_IMPORT_PATTERN)) checkPath(file,match[2].trim(),'asset');
     }
   }
   function walk(dir) {
@@ -78,14 +104,16 @@ export function auditV2Dependencies(root) {
       const path=resolve(dir,entry.name);
       if(entry.isSymbolicLink()) {issues.push(path+': symlink not allowed');continue;}
       if(entry.isDirectory()) walk(path);
-      else if(entry.isFile() && CODE_EXTENSIONS.has(extname(path))) scan(path);
+      else if(entry.isFile() &&
+        (CODE_EXTENSIONS.has(extname(path)) || extname(path)==='.css')) scan(path);
     }
   }
   for(const dir of SCAN_DIRS) walk(resolve(base,dir));
   for(const name of ENTRY_FILES) if(existsSync(resolve(base,name))) scan(resolve(base,name));
   // Audit every shipped standalone HTML entry, not just the main lab page.
   for(const name of readdirSync(base)) {
-    if(name.endsWith('.html') && statSync(resolve(base,name)).isFile()) {
+    if((name.endsWith('.html') || name.endsWith('.css')) &&
+        statSync(resolve(base,name)).isFile()) {
       scan(resolve(base,name));
     }
   }
