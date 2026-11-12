@@ -1,5 +1,12 @@
 # Voxel Engine V2 — implementation status
 
+## V2.0 — CI source completeness and clean-room asset guardrails (2026-11-12)
+
+The Pages validation job now syntax-checks **every current and future V2 JavaScript source, test, and script** instead of maintaining a stale manual file list. The repository-local dependency audit now covers **every root HTML entry**, rejects missing local page assets, non-local remote/data/blob page assets, and Node standard-library imports in browser runtime modules. Node builtins remain permitted for offline test/build tooling.
+
+This guards independent V2 module ownership, mobile browser compatibility, and Pages artifact integrity. Its fixture tests include malicious external loaders, missing assets, V1 directory escapes and unintended Node imports. **No V1 code/assets were imported and no rendering/gameplay behavior changed.** This is one V2.0 acceptance subgate only: mobile Chrome, production-route safety and remaining V2.0–V2.7 device/performance gates stay open.
+
+
 ## V2.5 — Opt-in safe actor recovery (foundation follow-up, 2026-11-12)
 
 **Purpose:** A selected player/enemy start position can become physically obstructed by authoritative voxels or be unsupported. Add a deterministic, bounded `recoverTerrainActor(world, position, {horizontalRadius,verticalRange})` query. It first preserves any already-safe supported position, then searches nearest Manhattan-distance solid-supported candidate footprints (grid-cell centres), with strict limits of 8 horizontal cells and 12 vertical cells. The query reads live V2 voxels, rejects interior collisions and unsupported air, and returns `null` if no safe destination is available; it never changes terrain or authoritatively teleports an actor.
