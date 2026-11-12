@@ -4,6 +4,9 @@ import { buildExposedFaceMeshes } from './exposed-face-mesher.mjs';
 
 export const MAX_TERRAIN_JOB_CHUNKS = 64;
 export const MAX_TERRAIN_JOB_BYTES = 2 * 1024 * 1024;
+// A small snapshot can expand to a very large exposed-face mesh. Bound the
+// transferred result independently of the inbound voxel snapshot budget.
+export const MAX_TERRAIN_RESULT_BYTES = 16 * 1024 * 1024;
 
 const directions = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 const key = (x,y,z) => `${x},${y},${z}`;
@@ -121,10 +124,14 @@ export function processTerrainMeshJob(job, now = () => performance.now()) {
   const start = now();
   const meshes = buildExposedFaceMeshes(view, { chunkIds:dirtyIds });
   const cpuMs = now()-start;
+  const meshBytes=meshes.reduce((sum,mesh)=>sum+mesh.cpuBufferBytes,0);
+  if(meshBytes>MAX_TERRAIN_RESULT_BYTES) {
+    throw new RangeError('Terrain mesh output byte budget exceeded');
+  }
   return { schema:job.schema, type:'ready', id:job.id,
     revision:job.revision, dirtyIds:job.dirtyIds,
     meshes, cpuMs, snapshotBytes:bytes,
-    meshBytes:meshes.reduce((sum,mesh)=>sum+mesh.cpuBufferBytes,0) };
+    meshBytes };
 }
 
 export function terrainMeshTransfers(reply) {
@@ -138,9 +145,12 @@ export function isCurrentTerrainMeshReply(reply, job, currentRevision) {
       reply.type !== 'ready' || reply.id !== job?.id ||
       reply.revision !== job.revision || reply.revision !== currentRevision ||
       !Array.isArray(reply.dirtyIds) || !Array.isArray(reply.meshes) ||
-      reply.dirtyIds.length !== job.dirtyIds.length) return false;
+      reply.dirtyIds.length !== job.dirtyIds.length ||
+      !Number.isSafeInteger(reply.meshBytes) || reply.meshBytes < 0 ||
+      reply.meshBytes > MAX_TERRAIN_RESULT_BYTES) return false;
   if (!reply.dirtyIds.every((id,i)=>id===job.dirtyIds[i])) return false;
   const dirty = new Set(reply.dirtyIds), seen = new Set();
+  let actualBytes = 0;
   for (const mesh of reply.meshes) {
     if (!mesh || typeof mesh.id !== 'string' || !dirty.has(mesh.id) ||
         seen.has(mesh.id) ||
@@ -155,7 +165,12 @@ export function isCurrentTerrainMeshReply(reply, job, currentRevision) {
         mesh.materials.length !== mesh.vertexCount ||
         mesh.indices.length !== mesh.triangleCount*3 ||
         mesh.indices.some(index => index >= mesh.vertexCount)) return false;
+    const bytes=mesh.positions.byteLength+mesh.normals.byteLength+
+      mesh.materials.byteLength+mesh.indices.byteLength;
+    if(mesh.cpuBufferBytes!==bytes) return false;
+    actualBytes+=bytes;
+    if(actualBytes>MAX_TERRAIN_RESULT_BYTES) return false;
     seen.add(mesh.id);
   }
-  return true;
+  return actualBytes===reply.meshBytes;
 }
