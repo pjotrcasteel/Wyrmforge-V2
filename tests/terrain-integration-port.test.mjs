@@ -215,3 +215,27 @@ test('port rejects invalid constructor shape and async consumer safely', () => {
   assert.equal(port.metrics().listenerFailures,1);
   assert.match(port.metrics().lastFailure.message,/synchronous/);
 });
+
+test('V2 port offers deterministic read-only spawn recovery without derived mesh authority', () => {
+  for(const edge of [16,32]) {
+    const world=new VoxelWorld({chunkEdge:edge});
+    for(let x=-2;x<=2;x++) {
+      for(let z=-2;z<=2;z++) world.set(x,0,z,3);
+    }
+    world.set(0,1,0,3);
+    world.set(0,2,0,3);
+    const ledger=new TerrainEditLedger(world);
+    const port=new V2TerrainPort(world,ledger);
+    const source={x:.5,y:1+1e-5,z:.5};
+    const revision=world.revision;
+    const recovered=port.recoverActor(source,{horizontalRadius:1,verticalRange:3});
+    assert.equal(recovered.x,-.5);
+    assert.equal(recovered.y,1+1e-5);
+    assert.equal(recovered.grounded,true);
+    assert.equal(port.actorOverlaps(recovered),false);
+    assert.equal(world.revision,revision);
+    assert.equal(port.metrics().published,0);
+    port.dispose();
+    assert.throws(()=>port.recoverActor(source),/disposed/);
+  }
+});

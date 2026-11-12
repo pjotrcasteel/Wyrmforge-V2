@@ -1,5 +1,14 @@
 # Voxel Engine V2 — implementation status
 
+## V2.5 — Opt-in safe actor recovery (foundation follow-up, 2026-11-12)
+
+**Purpose:** A selected player/enemy start position can become physically obstructed by authoritative voxels or be unsupported. Add a deterministic, bounded `recoverTerrainActor(world, position, {horizontalRadius,verticalRange})` query. It first preserves any already-safe supported position, then searches nearest Manhattan-distance solid-supported candidate footprints (grid-cell centres), with strict limits of 8 horizontal cells and 12 vertical cells. The query reads live V2 voxels, rejects interior collisions and unsupported air, and returns `null` if no safe destination is available; it never changes terrain or authoritatively teleports an actor.
+
+**Integration:** `V2TerrainPort.recoverActor(...)` exposes the same V2-only read-only capability for a future Physics/Game V2 controller. The renderer and V1 are not dependencies; automatic respawn remains the responsibility of the future game controller. Deterministic tests cover already-safe starts, rock pillars, overhangs, signed negative coordinates, both 16³ and 32³ chunks, unsupported worlds, invalid limits, and event-free port access.
+
+**Status:** Implemented in an isolated PR. This does **not** complete the overall V2.5 or V2.7 acceptance gates, and does not cure the separate Android Firefox sustained ~24 FPS frame-pacing issue. No further 10-minute device tests are requested during this foundation development step.
+
+
 ## V2.7 physical older-Android 10-minute soak — sustained frame-pacing regression (2026-11-12)
 
 **Device/build:** User-reported older Android phone, Android 17 / **Firefox 159** (not Android Chrome); build `fd5456faf6a22e93d762f13335699267d3a4e752`, Hill/seed 7/32³ and worker meshing. The session completed **600.024 s**, including **594/594 successful terrain impacts**, **0 rejected**, **8,732 removed voxels**, **9/9 controlled scene resets**, drained CPU/GPU queues, and **no renderer error**. This is solid correctness/resource-lifecycle evidence.
