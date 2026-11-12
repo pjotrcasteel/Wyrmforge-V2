@@ -24,8 +24,8 @@ test('all four terrain surfaces resolve to registered albedo assets', () => {
 
 test('context restoration retains authored tiles and rebuilds GPU cache', () => {
   assert.match(source, /this\.#terrainCache\?\.contextLost\(\)/);
-  assert.match(source, /for \(const \{ channel, key, image \} of this\.#terrainTileImages\.values\(\)\)/);
-  assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\)/);
+  assert.match(source, /this\.#pendingTerrainTiles = new Map\(this\.#terrainTileImages\)/);
+  assert.match(source, /this\.#terrainCache\.upload\(tile\.channel, tile\.key, tile\.image\)/);
 });
 
 test('material shader samples normal and ORM arrays with explicit fallback', () => {
