@@ -230,6 +230,8 @@ export class WebGLVoxelView {
   #uploadQueueBytes = 0;
   #recoveryQueue = new Map();
   #recoveryBytes = 0;
+  #sceneQueue = new Map();
+  #sceneBytes = 0;
   #recovering = false;
   #lost = false;
   #losses = 0;
@@ -257,6 +259,8 @@ export class WebGLVoxelView {
       this.#gpuMeshes.clear();
       this.#recoveryQueue.clear();
       this.#recoveryBytes = 0;
+      this.#sceneQueue.clear();
+      this.#sceneBytes = 0;
       this.#recovering = false;
       this.#onAvailabilityChange(false);
     });
@@ -376,7 +380,9 @@ export class WebGLVoxelView {
   }
 
   get ready() { return !this.#lost && this.#program !== null; }
-  get pendingUploads() { return this.#queuedUploads.size + this.#recoveryQueue.size + this.#pendingTerrainTiles.size; }
+  get pendingUploads() {
+    return this.#queuedUploads.size + this.#sceneQueue.size + this.#recoveryQueue.size + this.#pendingTerrainTiles.size;
+  }
   get recovering() { return this.#recovering; }
   #meshBytes(mesh) {
     return mesh.positions.byteLength + mesh.normals.byteLength +
@@ -384,7 +390,8 @@ export class WebGLVoxelView {
   }
   get uploadQueueStatistics() {
     return { pendingChunks: this.#queuedUploads.size,
-      pendingBytes: this.#uploadQueueBytes + this.#recoveryBytes,
+      pendingBytes: this.#uploadQueueBytes + this.#sceneBytes + this.#recoveryBytes,
+      sceneChunks: this.#sceneQueue.size,
       recoveryChunks: this.#recoveryQueue.size,
       peakChunks: this.#uploadQueuePeak,
       pendingTextureTiles: this.#pendingTerrainTiles.size };
@@ -448,6 +455,12 @@ export class WebGLVoxelView {
         this.#queuedUploads.delete(id);
         this.#uploadQueueBytes -= mesh ? this.#meshBytes(mesh) : 0;
         this.replaceMeshes(new Set([id]), mesh ? [mesh] : []);
+      } else if (this.#sceneQueue.size) {
+        const [id, mesh] = this.#sceneQueue.entries().next().value;
+        this.#sceneQueue.delete(id);
+        this.#sceneBytes -= this.#meshBytes(mesh);
+        // A reset or edit may supersede a pending scene mesh.
+        if (this.#sourceMeshes.get(id) === mesh) this.#uploadOne(mesh);
       } else {
         const [id, mesh] = this.#recoveryQueue.entries().next().value;
         this.#recoveryQueue.delete(id);
@@ -570,12 +583,15 @@ export class WebGLVoxelView {
     }
   }
 
-  #uploadAll() {
+  #stageNewScene() {
     this.#recoveryQueue.clear();
     this.#recoveryBytes = 0;
     this.#recovering = false;
     this.#discardGpuMeshes();
-    for (const mesh of this.#sourceMeshes.values()) this.#uploadOne(mesh);
+    // Full scene initialization uses the same bounded per-frame upload drain.
+    this.#sceneQueue = new Map(this.#sourceMeshes);
+    this.#sceneBytes = [...this.#sceneQueue.values()].reduce((sum, mesh) =>
+      sum + this.#meshBytes(mesh), 0);
   }
 
   // Full reset for a new scene/seed/chunk size; remove all old GPU resources.
@@ -590,7 +606,9 @@ export class WebGLVoxelView {
       next.set(mesh.id, mesh);
     }
     this.#sourceMeshes = next;
-    if (this.ready) this.#uploadAll();
+    this.#sceneQueue.clear();
+    this.#sceneBytes = 0;
+    if (this.ready) this.#stageNewScene();
   }
 
   // Replace ONLY dirty chunk meshes; an empty result deletes a removed chunk.
@@ -619,6 +637,9 @@ export class WebGLVoxelView {
         if (queuedMesh) this.#uploadQueueBytes -= this.#meshBytes(queuedMesh);
         this.#queuedUploads.delete(id);
       }
+      const sceneMesh = this.#sceneQueue.get(id);
+      if (sceneMesh) this.#sceneBytes -= this.#meshBytes(sceneMesh);
+      this.#sceneQueue.delete(id);
       const recoveryMesh = this.#recoveryQueue.get(id);
       if (recoveryMesh) this.#recoveryBytes -= this.#meshBytes(recoveryMesh);
       this.#recoveryQueue.delete(id);
@@ -633,6 +654,10 @@ export class WebGLVoxelView {
           // Recovery must stay frame-budgeted even when edits arrive mid-restore.
           this.#recoveryQueue.set(id, replacement);
           this.#recoveryBytes += this.#meshBytes(replacement);
+        } else if (this.ready && this.#sceneQueue.size) {
+          // An edit cannot bypass a pending full-scene upload batch.
+          this.#sceneQueue.set(id, replacement);
+          this.#sceneBytes += this.#meshBytes(replacement);
         } else if (this.ready) {
           this.#uploadOne(replacement);
         }
@@ -701,6 +726,8 @@ export class WebGLVoxelView {
     this.cancelQueuedUploads();
     this.#recoveryQueue.clear();
     this.#recoveryBytes = 0;
+    this.#sceneQueue.clear();
+    this.#sceneBytes = 0;
     this.#recovering = false;
     this.#discardGpuMeshes();
     if (this.#grassTexture && !this.#lost) this.#gl.deleteTexture(this.#grassTexture);
