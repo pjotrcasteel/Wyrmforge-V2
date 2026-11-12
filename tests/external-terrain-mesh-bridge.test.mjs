@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
+import { VoxelWorld } from '../src/voxel-world.mjs';
 import { createExternalSiteFixture } from '../src/diagnostics/external-site-fixture.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 import { processTerrainMeshJob } from '../src/terrain-mesh-protocol.mjs';
@@ -30,7 +31,7 @@ function bridge(workers,ready,errors) {
   return new V2ExternalTerrainMeshBridge({
     createWorker:()=>{const w=fakeWorker();workers.push(w);return w;},
     now:()=>0,
-    onReady:(world,meshes,epoch)=>ready.push({world,meshes,epoch}),
+    onReady:(world,meshes,epoch,kind,dirtyIds)=>ready.push({world,meshes,epoch,kind,dirtyIds}),
     onFailure:(reason,epoch)=>errors.push({reason,epoch})
   });
 }
@@ -196,6 +197,124 @@ test('worker staging does not copy every chunk before making its first bounded j
     new Map(ready[0].meshes.map(mesh=>[mesh.id,mesh])),
     new Map(buildExposedFaceMeshes(world).map(mesh=>[mesh.id,mesh]))
   );
+  runner.close();
+  loader.unload();
+});
+
+test('localized destruction meshes only dirty chunks, not the entire external site',()=>{
+  for(const chunkEdge of [16,32]) {
+    const loader=loaded(chunkEdge);
+    const {world,port}=loader.terrain;
+    const breach=port.apply({
+      id:'worker-breach',type:'carve-sphere',x:0,y:6,z:0,radius:2.3,
+      expectedRevision:world.revision
+    });
+    assert.ok(breach.removedVoxels>0);
+    const ids=[...new Set(breach.dirtyChunks)].sort();
+    const workers=[],ready=[],errors=[];
+    const runner=bridge(workers,ready,errors);
+    const epoch=runner.replace(world,new Set(ids));
+    assert.equal(runner.status.totalChunks,ids.length);
+    assert.equal(ready.length,0,'edit must not block the caller with synchronous geometry');
+    warm(workers[0]);
+    complete(workers[0]);
+    assert.equal(ready.length,1);
+    assert.equal(ready[0].kind,'edit');
+    assert.equal(ready[0].epoch,epoch);
+    assert.deepEqual(ready[0].dirtyIds,ids);
+    assert.deepEqual(
+      new Map(ready[0].meshes.map(mesh=>[mesh.id,mesh])),
+      new Map(buildExposedFaceMeshes(world,{chunkIds:new Set(ids)}).map(mesh=>[mesh.id,mesh]))
+    );
+    const jobs=workers[0].sent.filter(row=>row.payload.type==='build');
+    assert.ok(jobs.every(row=>row.payload.dirtyIds.length<=EXTERNAL_MESH_BATCH_CHUNKS));
+    assert.equal(runner.status.busy,false);
+    assert.deepEqual(errors,[]);
+    runner.close();
+    loader.unload();
+  }
+});
+
+test('an emptied voxel chunk produces no GPU mesh but preserves the dirty chunk ID',()=>{
+  for(const chunkEdge of [16,32]) {
+    const world=new VoxelWorld({chunkEdge});
+    world.set(0,0,0,3);
+    world.set(0,0,0,0);
+    assert.equal(world.chunkCount,0);
+    const workers=[],ready=[],errors=[];
+    const runner=bridge(workers,ready,errors);
+    runner.replace(world,new Set(['0,0,0']));
+    warm(workers[0]);
+    complete(workers[0]);
+    assert.equal(ready.length,1);
+    assert.deepEqual(ready[0].dirtyIds,['0,0,0']);
+    assert.deepEqual(ready[0].meshes,[],
+      'renderer receives a dirty ID to remove its retired chunk mesh');
+    assert.deepEqual(errors,[]);
+    runner.close();
+  }
+});
+
+test('world replacement cancels a localized job and rejects identical-revision late geometry',()=>{
+  const old=loaded(),next=loaded();
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  const dirty=new Set(['0,0,0']);
+  const oldEpoch=runner.replace(old.terrain.world,dirty);
+  warm(workers[0]);
+  const first=workers[0].sent[1].payload;
+  const nextEpoch=runner.replace(next.terrain.world,dirty);
+  assert.ok(nextEpoch>oldEpoch);
+  assert.equal(workers[0].terminated,true);
+  workers[0].message(processTerrainMeshJob(first));
+  assert.equal(ready.length,0);
+  warm(workers[1]);
+  complete(workers[1]);
+  assert.equal(ready.length,1);
+  assert.equal(ready[0].world,next.terrain.world);
+  assert.equal(ready[0].epoch,nextEpoch);
+  assert.equal(ready[0].kind,'edit');
+  assert.deepEqual(errors,[]);
+  runner.close();
+  old.unload();
+  next.unload();
+});
+
+test('post-command edit invalidates a pending localized worker response',()=>{
+  const loader=loaded();
+  const {world,port}=loader.terrain;
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  runner.replace(world,new Set(['0,0,0']));
+  warm(workers[0]);
+  const pending=workers[0].sent[1].payload;
+  const changed=port.apply({
+    id:'new-edit-mid-worker',type:'carve-sphere',x:0,y:6,z:0,radius:2.3,
+    expectedRevision:world.revision
+  });
+  assert.ok(changed.removedVoxels>0);
+  workers[0].message(processTerrainMeshJob(pending));
+  assert.equal(ready.length,0);
+  assert.equal(errors.length,1);
+  assert.match(errors[0].reason,/Stale or invalid/);
+  assert.equal(runner.status.busy,false);
+  runner.close();
+  loader.unload();
+});
+
+test('dirty IDs are bounded and canonical before any worker is started',()=>{
+  const loader=loaded();
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  for(const input of [
+    [],new Set(),['+1,0,0'],['-0,0,0'],['1.5,0,0'],
+    ['9007199254740992,0,0'],[3],null
+  ]) {
+    assert.throws(()=>runner.replace(loader.terrain.world,input));
+  }
+  const many=Array.from({length:129},(_,i)=>i+',0,0');
+  assert.throws(()=>runner.replace(loader.terrain.world,many),RangeError);
+  assert.equal(workers.length,0);
   runner.close();
   loader.unload();
 });
