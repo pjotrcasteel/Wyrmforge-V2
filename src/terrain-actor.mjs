@@ -185,6 +185,59 @@ export function spawnTerrainActor(world,{
   return null;
 }
 
+// Recover an obstructed or unsupported actor using ONLY committed V2 voxels.
+// A bounded, opt-in query: no automatic teleport inside a physics tick.
+// Search nearest horizontal grid cells first and nearest vertical support
+// heights next. If nothing is safe, return null rather than spawn inside rock.
+export function recoverTerrainActor(world,position,{
+  horizontalRadius=4,verticalRange=6
+}={}) {
+  validateWorld(world);
+  validatePosition(position);
+  if (!Number.isSafeInteger(horizontalRadius) || horizontalRadius<0 ||
+      horizontalRadius>8 || !Number.isSafeInteger(verticalRange) ||
+      verticalRange<0 || verticalRange>12) {
+    throw new RangeError('Actor recovery search bounds exceeded');
+  }
+
+  function supported(x,y,z) {
+    const candidate={x,y,z};
+    return !actorOverlapsTerrain(world,candidate) && groundProbe(world,candidate);
+  }
+  function restored(x,y,z) {
+    return {
+      schema:ACTOR_PHYSICS_SCHEMA,x,y,z,vy:0,grounded:true,
+      wallContact:false,ceilingContact:false,stepUp:false,
+      worldRevision:world.revision,error:null
+    };
+  }
+  if (supported(position.x,position.y,position.z)) {
+    return restored(position.x,position.y,position.z);
+  }
+
+  const cx=Math.floor(position.x)+0.5;
+  const cz=Math.floor(position.z)+0.5;
+  const feet=Math.floor(position.y-SKIN);
+  const heights=[0];
+  for(let n=1;n<=verticalRange;n++) heights.push(n,-n);
+
+  // Diamond rings give a deterministic nearest-first horizontal footprint.
+  // Always require actual solid support; a valid air pocket is not a spawn.
+  for(let radius=0;radius<=horizontalRadius;radius++) {
+    for(let dx=-radius;dx<=radius;dx++) {
+      for(let dz=-radius;dz<=radius;dz++) {
+        if(Math.abs(dx)+Math.abs(dz)!==radius) continue;
+        const x=cx+dx,z=cz+dz;
+        for(const height of heights) {
+          const y=feet+height+SKIN;
+          if(supported(x,y,z)) return restored(x,y,z);
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export function simulateTerrainActor(world,actor,{
   moveX=0,moveZ=0,dt=1/60
 }={}) {
