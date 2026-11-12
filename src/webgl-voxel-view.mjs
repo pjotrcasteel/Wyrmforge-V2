@@ -225,6 +225,10 @@ export class WebGLVoxelView {
   #uniforms = null;
   #gpuMeshes = new Map();
   #sourceMeshes = new Map();
+  // Scene generation, independent of the terrain world's runtime epoch.
+  // Async consumers must present the generation they captured before starting work.
+  #sceneEpoch = 0;
+  #staleUploadRejections = 0;
   #queuedUploads = new Map();
   #uploadQueuePeak = 0;
   #uploadQueueBytes = 0;
@@ -390,6 +394,19 @@ export class WebGLVoxelView {
       this.#pendingTerrainTiles.size + this.#retiredGpuMeshes.length;
   }
   get recovering() { return this.#recovering; }
+  get sceneEpoch() { return this.#sceneEpoch; }
+
+  #acceptSceneEpoch(epoch) {
+    // Legacy callers may omit the guard, but asynchronous consumers must use it.
+    if (epoch === undefined) return true;
+    if (!Number.isSafeInteger(epoch) || epoch < 0) {
+      throw new RangeError('Invalid renderer scene epoch');
+    }
+    if (epoch === this.#sceneEpoch) return true;
+    this.#staleUploadRejections++;
+    return false;
+  }
+
   #meshBytes(mesh) {
     return mesh.positions.byteLength + mesh.normals.byteLength +
       mesh.materials.byteLength + mesh.indices.byteLength;
@@ -402,11 +419,14 @@ export class WebGLVoxelView {
       pendingGpuDisposals: this.#retiredGpuMeshes.length,
       retiredGpuBytesEstimate: this.#retiredGpuBytes,
       peakChunks: this.#uploadQueuePeak,
+      sceneEpoch: this.#sceneEpoch,
+      staleUploadRejections: this.#staleUploadRejections,
       pendingTextureTiles: this.#pendingTerrainTiles.size };
   }
 
   // V2.4: stage a bounded batch; caller invalidates it on new edits/reset.
-  queueReplacementMeshes(dirtyIds, meshes) {
+  queueReplacementMeshes(dirtyIds, meshes, { sceneEpoch } = {}) {
+    if (!this.#acceptSceneEpoch(sceneEpoch)) return false;
     const ids = new Set(dirtyIds);
     if (!ids.size || ids.size > 128 || !Array.isArray(meshes)) {
       throw new RangeError('Invalid bounded GPU replacement batch');
@@ -437,6 +457,7 @@ export class WebGLVoxelView {
     }
     this.#uploadQueueBytes = nextBytes;
     this.#uploadQueuePeak = Math.max(this.#uploadQueuePeak, this.#queuedUploads.size);
+    return true;
   }
 
   cancelQueuedUploads() {
@@ -624,7 +645,6 @@ export class WebGLVoxelView {
 
   // Full reset for a new scene/seed/chunk size; remove all old GPU resources.
   setMeshes(meshes) {
-    this.cancelQueuedUploads();
     if (!Array.isArray(meshes)) throw new TypeError('Expected V2 chunk meshes');
     const next = new Map();
     for (const mesh of meshes) {
@@ -633,6 +653,13 @@ export class WebGLVoxelView {
       }
       next.set(mesh.id, mesh);
     }
+    if (this.#sceneEpoch === Number.MAX_SAFE_INTEGER) {
+      throw new RangeError('Renderer scene epoch exhausted');
+    }
+    // Validate before invalidating the currently queued scene. Failed scene
+    // activations must not discard a valid active world's deferred uploads.
+    this.cancelQueuedUploads();
+    this.#sceneEpoch++;
     this.#sourceMeshes = next;
     this.#sceneQueue.clear();
     this.#sceneBytes = 0;
@@ -640,7 +667,8 @@ export class WebGLVoxelView {
   }
 
   // Replace ONLY dirty chunk meshes; an empty result deletes a removed chunk.
-  replaceMeshes(dirtyIds, meshes) {
+  replaceMeshes(dirtyIds, meshes, { sceneEpoch } = {}) {
+    if (!this.#acceptSceneEpoch(sceneEpoch)) return false;
     if (!(dirtyIds instanceof Set) && !Array.isArray(dirtyIds)) {
       throw new TypeError('Expected a dirty-chunk Set or array');
     }
@@ -691,6 +719,7 @@ export class WebGLVoxelView {
         }
       }
     }
+    return true;
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection' }) {
