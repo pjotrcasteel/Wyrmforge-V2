@@ -53,10 +53,10 @@ test('invalid capacity is rejected', () => {
 
 test('full-session hitch counters outlive the rolling percentile window', () => {
   const data = new FrameMetrics(3);
-  for (const ms of [17, 51, 101, 17, 17]) data.record(ms);
+  for (const ms of [17, 51, 101, 17, 17, 17]) data.record(ms);
   assert.equal(data.summary().hitchesOver50Ms, 0, 'recent window no longer contains early hitches');
   const total = data.sessionSummary();
-  assert.equal(total.validFrameCount, 5);
+  assert.equal(total.validFrameCount, 6);
   assert.equal(total.hitchesOver33Ms, 2);
   assert.equal(total.hitchesOver50Ms, 2);
   assert.equal(total.hitchesOver100Ms, 1);
