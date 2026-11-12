@@ -835,6 +835,8 @@ ambushRunButton.addEventListener('click', () => {
 function stopPreset(reason = 'Stopped', completed = false) {
   if (!preset) return;
   const run = preset;
+  // Preserve the final sample even if the duration boundary falls between ticks.
+  if (run.profile.resetBetweenCycles) sampleSustainedTelemetry(performance.now(), true);
   const elapsedMs = Math.max(0, performance.now() - run.startedAt);
   const queuesDrained = !activeTerrainJob && pendingTerrainDirty.size === 0 &&
     !gpuRenderer?.pendingUploads;
@@ -867,12 +869,13 @@ function stopPreset(reason = 'Stopped', completed = false) {
     ' impacts · ' + lastPresetReport.verdict;
   // A completion from the animation frame is automatically exported, matching
   // the original preset. Interrupted evidence remains available via Export benchmark.
-  if (completed || reason === 'Stopped manually') document.querySelector('#report').click();
+  if (completed || reason === 'Stopped manually' ||
+      reason === 'Scene changed during soak') document.querySelector('#report').click();
 }
 
 function advancePreset(now) {
   if (!preset) return;
-  if (document.hidden || gpuError || terrainMeshMode.value !== 'worker') {
+  if (document.hidden || gpuError || terrainMeshMode.value !== 'worker' || !gpuRenderer?.ready) {
     stopPreset(document.hidden ? 'Stopped by backgrounding' :
       'Renderer error or worker unavailable');
     return;
@@ -1020,6 +1023,19 @@ collisionPresetRunButton.addEventListener('click', () => {
   document.querySelector('#report').click();
 });
 
+// The terminal sample captures the exact last queue state before export.
+function sampleSustainedTelemetry(now, force = false) {
+  return sustainedTelemetry.record(now, {
+    frames: frameMetrics.summary(),
+    queue: gpuRenderer?.uploadQueueStatistics ?? null,
+    renderer: gpuRenderer?.ready ? gpuRenderer.statistics : null,
+    voxelBytes: world.allocatedVoxelBytes,
+    edits: terrainEdits.recordedEdits,
+    pendingTerrainChunks: pendingTerrainDirty.size,
+    heapBytes: performance.memory?.usedJSHeapSize ?? null
+  }, { force });
+}
+
 function tick(now) {
   if (fissureRun?.profile.cpuContentionMs) {
     // Deliberately synthetic contention, applied only during the acceptance run.
@@ -1060,15 +1076,7 @@ function tick(now) {
   draw();
   drawActorOverlay();
   if (!document.hidden && sustainedTelemetry.due(now)) {
-    sustainedTelemetry.record(now, {
-      frames: frameMetrics.summary(),
-      queue: gpuRenderer?.uploadQueueStatistics ?? null,
-      renderer: gpuRenderer?.ready ? gpuRenderer.statistics : null,
-      voxelBytes: world.allocatedVoxelBytes,
-      edits: terrainEdits.recordedEdits,
-      pendingTerrainChunks: pendingTerrainDirty.size,
-      heapBytes: performance.memory?.usedJSHeapSize ?? null
-    });
+    sampleSustainedTelemetry(now);
   }
   if (now - lastStatusAt >= 1000 && !document.hidden) {
     updateStatus();
