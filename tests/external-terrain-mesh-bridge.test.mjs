@@ -178,3 +178,24 @@ test('cancel and close reject stale results without exposing partial geometry',(
   assert.throws(()=>runner.begin(null),/closed/);
   loader.unload();
 });
+
+test('worker staging does not copy every chunk before making its first bounded job',()=>{
+  const loader=loaded(32);
+  const world=loader.terrain.world;
+  const snapshots=world.snapshots;
+  world.snapshots=()=>{throw new Error('Full-world snapshot forbidden during staged meshing');};
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  runner.begin(world);
+  warm(workers[0]);
+  complete(workers[0]);
+  assert.equal(ready.length,1);
+  assert.deepEqual(errors,[]);
+  delete world.snapshots;
+  assert.deepEqual(
+    new Map(ready[0].meshes.map(mesh=>[mesh.id,mesh])),
+    new Map(buildExposedFaceMeshes(world).map(mesh=>[mesh.id,mesh]))
+  );
+  runner.close();
+  loader.unload();
+});
