@@ -19,7 +19,9 @@ function fakeCanvas() {
     SRGB8_ALPHA8: 11, RGBA8: 12, TEXTURE_MIN_FILTER: 13,
     TEXTURE_MAG_FILTER: 14, TEXTURE_WRAP_S: 15, TEXTURE_WRAP_T: 16,
     LINEAR: 17, REPEAT: 18, UNPACK_FLIP_Y_WEBGL: 19,
-    RGBA: 20, UNSIGNED_BYTE: 21,
+    RGBA: 20, UNSIGNED_BYTE: 21, ARRAY_BUFFER: 22,
+    ELEMENT_ARRAY_BUFFER: 23, STATIC_DRAW: 24,
+    FLOAT: 25, BYTE: 26,
     createShader: () => ({}), shaderSource() {}, compileShader() {},
     getShaderParameter: () => true, deleteShader() {},
     createProgram: () => ({}), attachShader() {}, linkProgram() {},
@@ -27,8 +29,15 @@ function fakeCanvas() {
     enable() {}, depthFunc() {}, disable() {}, deleteProgram() {},
     createTexture: () => ({}), deleteTexture() {}, bindTexture() {},
     getParameter: () => 256, texStorage3D() {}, texParameteri() {},
+    createVertexArray: () => ({}), bindVertexArray() {}, deleteVertexArray() {},
+    createBuffer: () => ({}), bindBuffer() {}, deleteBuffer() {},
+    bufferData() { clock += 3; }, enableVertexAttribArray() {},
+    vertexAttribPointer() {},
     pixelStorei() {},
     texSubImage3D(...args) {
+      if (args.length !== 11) {
+        throw new TypeError('Not enough arguments');
+      }
       if (failNextUpload) {
         failNextUpload = false;
         throw new Error('Simulated texture upload failure');
@@ -163,5 +172,54 @@ test('all three authored channels recover incrementally without changing voxel g
   for(let i=0;i<3;i++) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
   assert.equal(runtime.uploaded.length,6);
   assert.equal(view.pendingUploads,0);
+  view.dispose();
+});
+
+function smallMesh() {
+  return {
+    id:'0,0,0',origin:[0,0,0],positions:new Float32Array(9),
+    normals:new Int8Array(9),materials:new Uint8Array(3),
+    indices:new Uint32Array([0,1,2]),triangleCount:1,cpuBufferBytes:60
+  };
+}
+
+test('a preview texture cannot block geometry presentation on a cold start',()=>{
+  const runtime = fakeCanvas();
+  const view = new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([smallMesh()]);
+  view.setTerrainAlbedoTile(assets[0].key, image());
+  assert.equal(view.uploadQueueStatistics.sceneChunks, 1);
+  assert.equal(view.uploadQueueStatistics.pendingTextureTiles, 1);
+  assert.equal(view.statistics.drawCalls, 0);
+  const first=view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(first.chunks,1);
+  assert.equal(view.statistics.drawCalls,1,'terrain must be uploaded before optional art');
+  assert.equal(runtime.uploaded.length,0,'art cannot prevent the terrain reaching the GPU');
+  assert.equal(view.uploadQueueStatistics.pendingTextureTiles,1);
+  const second=view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(second.chunks,1);
+  assert.equal(runtime.uploaded.length,1);
+  assert.equal(runtime.uploaded[0].length,11,'native WebGL2 TexImageSource signature');
+  assert.deepEqual(runtime.uploaded[0].slice(5,8),[64,64,1]);
+  assert.equal(view.pendingUploads,0);
+  view.dispose();
+});
+
+test('context restore prioritizes terrain geometry over retained material maps',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([smallMesh()]);
+  view.setTerrainAlbedoTile(assets[0].key,image());
+  while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  runtime.lose();
+  runtime.restore();
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,1);
+  assert.equal(view.uploadQueueStatistics.pendingTextureTiles,1);
+  const uploadedBefore=runtime.uploaded.length;
+  view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(view.statistics.drawCalls,1,'restored world recovers before art');
+  assert.equal(runtime.uploaded.length,uploadedBefore);
+  view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(runtime.uploaded.length,uploadedBefore+1);
   view.dispose();
 });
