@@ -228,16 +228,19 @@ export class TerrainEditLedger {
     const direction = b.map((v,i)=>v-a[i]);
     const lengthSquared = direction.reduce((sum,v)=>sum+v*v,0);
     const half = area ? [edit.halfX,edit.halfY,edit.halfZ] : null;
-    const minCoords = area
-      ? a.map((n,i)=>n-half[i])
-      : crater
-        ? [Math.floor(edit.x-edit.radius),edit.y-edit.depth+1,Math.floor(edit.z-edit.radius)]
-        : a.map((v,i)=>Math.floor(Math.min(v,b[i])-edit.radius));
-    const maxCoords = area
-      ? a.map((n,i)=>n+half[i])
-      : crater
-        ? [Math.ceil(edit.x+edit.radius),edit.y,Math.ceil(edit.z+edit.radius)]
-        : a.map((v,i)=>Math.ceil(Math.max(v,b[i])+edit.radius));
+    let minCoords, maxCoords;
+    if (area) {
+      minCoords = a.map((n,i)=>n-half[i]);
+      maxCoords = a.map((n,i)=>n+half[i]);
+    } else if (crater) {
+      minCoords = [Math.floor(edit.x-edit.radius),edit.y-edit.depth+1,
+        Math.floor(edit.z-edit.radius)];
+      maxCoords = [Math.ceil(edit.x+edit.radius),edit.y,
+        Math.ceil(edit.z+edit.radius)];
+    } else {
+      minCoords = a.map((v,i)=>Math.floor(Math.min(v,b[i])-edit.radius));
+      maxCoords = a.map((v,i)=>Math.ceil(Math.max(v,b[i])+edit.radius));
+    }
 
     // Plan the entire bounded edit before mutating committed terrain.
     // A tunnel uses the squared distance from a voxel center to its closest
