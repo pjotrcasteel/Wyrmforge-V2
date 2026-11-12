@@ -1,6 +1,7 @@
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
 import { getCameraPreset } from './camera-presets.mjs';
 import { terrainMaterialGlsl } from './terrain-materials.mjs';
+import { terrainColorTransferGlsl } from './terrain-color-space.mjs';
 import { compileTerrainTextureManifest } from './terrain-texture-manifest.mjs';
 import { TERRAIN_SURFACE_LIBRARY } from './terrain-surface-library.mjs';
 import { TerrainGpuTextureCache } from './terrain-gpu-texture-cache.mjs';
@@ -58,6 +59,7 @@ uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
 
 ${terrainMaterialGlsl()}
+${terrainColorTransferGlsl()}
 
 // Low-frequency, world-anchored soil detail. This is a first procedural dirt
 // material, not a final authored texture. No additional texture uploads.
@@ -189,7 +191,14 @@ void main() {
     lighting *= mix(0.65, 1.0, orm.r);
     lighting *= mix(0.96, 1.0, orm.g);
   }
-  outColor = vec4(albedo * lighting, 1.0);
+  // SRGB8_ALPHA8 albedo arrays have already been decoded to linear RGB by
+  // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
+  // Never treat the two types of albedo identically before lighting.
+  vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
+  // The WebGL default canvas does not perform the sRGB output transfer.
+  // Encoding before writing fixes near-black textured terrain on iPhone Safari
+  // without changing the artist's PNG pixels or the underlying voxel world.
+  outColor = vec4(linearToSrgbColor(linearAlbedo * lighting), 1.0);
 }
 `;
 
