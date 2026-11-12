@@ -22,7 +22,7 @@ test('Hunt camera is north-up and shows elevation without diagonal tile rotation
 
 test('Hunt camera near/far depth agrees with the orthographic view basis', () => {
   const far = projectVoxel(0, 0, 0, { ...view, camera: 'hunt' });
-  const near = projectVoxel(0, .90, .48, { ...view, camera: 'hunt' });
+  const near = projectVoxel(0, .77, .64, { ...view, camera: 'hunt' });
   assert.ok(Math.abs(near.x - far.x) < 1e-8);
   assert.ok(Math.abs(near.y - far.y) < 1e-8);
   assert.ok(near.depth < far.depth, 'near terrain must win depth testing');
@@ -64,4 +64,28 @@ test('presets are immutable and unknown values are rejected', () => {
   assert.ok(Object.isFrozen(CAMERA_PRESETS.hunt.right));
   assert.throws(() => getCameraPreset('unrecognized'), RangeError);
   assert.throws(() => getCameraPreset('__proto__'), RangeError);
+});
+
+test('Hunt preserves north-up controls and projects 1-voxel cliffs more clearly',()=>{
+  const options={...view,camera:'hunt'};
+  const base=projectVoxel(1,0,1,options);
+  const elevated=projectVoxel(1,1,1,options);
+  const difference=base.y-elevated.y;
+  assert.ok(difference >= 0.60 * view.scale,'each raised block needs meaningful screen height');
+  assert.ok(difference <= 0.70 * view.scale,'preserve the top-down Hunt identity');
+  assert.equal(base.x,elevated.x,'elevation never shifts X');
+  assert.ok(Math.abs(getCameraPreset('hunt').down[2] - 0.77)<1e-10);
+  const camera=getCameraPreset('hunt');
+  const orthogonality=camera.down.reduce((sum,n,i)=>sum+n*camera.depth[i],0);
+  assert.ok(Math.abs(orthogonality)<1e-10,'depth and screen-up stay perpendicular');
+  // Projection alone changes; the world, snapshots and chunk meshes do not.
+  const world=createScene('hill',7,{chunkEdge:32});
+  const oldRevision=world.revision;
+  const oldMeshes=buildExposedFaceMeshes(world);
+  for(const voxel of [[0,0,0],[7,8,7],[-3,2,-4]]) {
+    const values=projectVoxel(...voxel,options);
+    assert.ok(Number.isFinite(values.x) && Number.isFinite(values.y));
+  }
+  assert.equal(world.revision,oldRevision);
+  assert.deepEqual(buildExposedFaceMeshes(world),oldMeshes);
 });
