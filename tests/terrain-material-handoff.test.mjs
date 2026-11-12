@@ -51,6 +51,7 @@ test('valid 64px PNG is verified before decoding and handed to the proper channe
 });
 
 test('PNG preflight rejects wrong dimensions, invalid headers, oversized payload and non-PNG files',async()=>{
+  const png=pngHeader();
   const invalid=[pngHeader(128,64),pngHeader(64,128),pngHeader(2048,2048)];
   for(const file of invalid) {
     await assert.rejects(inspectTerrainArtPngHeader(file),/64×64/);
