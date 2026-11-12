@@ -12,6 +12,9 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { REFERENCE_TERRAIN_KEYS, createReferenceTerrainCanvas, createReferenceMaterialCanvas } from './src/terrain-reference-tiles.mjs';
 import { getCameraPreset, projectVoxel } from './src/camera-presets.mjs';
 import { demoCarveTarget } from './src/demo-carve.mjs';
+import {
+  TERRAIN_ART_TILE_SIZE, inspectTerrainArtPngHeader, validateTerrainArtInput
+} from './src/terrain-material-handoff.mjs';
 import { spatialDamageTarget } from './src/spatial-benchmark.mjs';
 import { fissureSites, applyFissureStage, FISSURE_STAGE_TIMES_MS } from './src/ambush-fissure-fixture.mjs';
 import { runCollisionProbe } from './src/collision-benchmark.mjs';
@@ -40,32 +43,107 @@ build.title = `Voxel Engine V2 ${VERSION} | commit ${COMMIT}`;
 // Grass 002 remains an opt-in lab material until visual approval.
 let grassMaterialImage = null;
 const referenceTerrainToggle = document.querySelector('#reference-terrain-toggle');
+const materialPreviewSlot = document.querySelector('#terrain-material-slot');
+const materialPreviewChannel = document.querySelector('#terrain-material-channel');
+const materialPreviewFile = document.querySelector('#terrain-material-file');
+const materialPreviewReset = document.querySelector('#terrain-material-clear');
+const materialPreviewStatus = document.querySelector('#terrain-material-status');
+const authoredMaterialTiles = new Map();
 let referenceTerrainEnabled = false;
+let materialRequestGeneration = 0;
+
+// Local previews only: never add artwork or extra voxel IDs to the engine.
+// Compose temporary reference maps with user-supplied 64px layers, then let the
+// existing frame-budgeted GPU queue upload the resulting texture-array slices.
+function applyTerrainMaterialPreview() {
+  if (!gpuRenderer?.ready) throw new Error('WebGL2 renderer unavailable');
+  gpuRenderer.clearTerrainAlbedoTiles();
+  if (referenceTerrainEnabled) {
+    for (const [key, kind] of Object.entries(REFERENCE_TERRAIN_KEYS)) {
+      gpuRenderer.setTerrainAlbedoTile(key,
+        createReferenceTerrainCanvas(kind, document, TERRAIN_ART_TILE_SIZE));
+      for (const channel of ['normal', 'orm']) {
+        const mapKey = key.replace(/\/albedo$/, '/' + channel);
+        gpuRenderer.setTerrainMaterialTile(channel, mapKey,
+          createReferenceMaterialCanvas(kind, channel, document, TERRAIN_ART_TILE_SIZE));
+      }
+    }
+  }
+  for (const tile of authoredMaterialTiles.values()) {
+    gpuRenderer.setTerrainMaterialTile(tile.channel, tile.key, tile.image);
+  }
+  dirty = true;
+}
+
 referenceTerrainToggle.addEventListener('click', () => {
   if (!gpuRenderer?.ready) {
     referenceTerrainToggle.textContent = 'WebGL2 unavailable — preview cannot start';
     return;
   }
   try {
-    if (referenceTerrainEnabled) {
-      gpuRenderer.clearTerrainAlbedoTiles();
-    } else {
-      for (const [key, kind] of Object.entries(REFERENCE_TERRAIN_KEYS)) {
-        gpuRenderer.setTerrainAlbedoTile(key, createReferenceTerrainCanvas(kind));
-        for (const channel of ['normal', 'orm']) {
-          const mapKey = key.replace(/\/albedo$/, '/' + channel);
-          gpuRenderer.setTerrainMaterialTile(channel, mapKey,
-            createReferenceMaterialCanvas(kind, channel));
-        }
-      }
-    }
+    const previous = referenceTerrainEnabled;
     referenceTerrainEnabled = !referenceTerrainEnabled;
+    try { applyTerrainMaterialPreview(); }
+    catch (error) { referenceTerrainEnabled = previous; throw error; }
     referenceTerrainToggle.setAttribute('aria-pressed', String(referenceTerrainEnabled));
     referenceTerrainToggle.textContent = 'Preview reference terrain textures: ' +
       (referenceTerrainEnabled ? 'On (temporary artwork)' : 'Off');
-    dirty = true;
+    materialPreviewStatus.textContent = 'Local 64×64 authoring layers: ' +
+      authoredMaterialTiles.size + ' · queued for frame-budgeted GPU upload';
   } catch (error) {
     referenceTerrainToggle.textContent = 'Texture preview error: ' + error.message;
+  }
+});
+
+materialPreviewFile.addEventListener('change', async () => {
+  const file = materialPreviewFile.files?.[0];
+  if (!file) return;
+  const generation = ++materialRequestGeneration;
+  const slot = materialPreviewSlot.value;
+  const channel = materialPreviewChannel.value;
+  let url = null;
+  try {
+    // Check the real PNG dimensions before asking Safari/Chrome to decode.
+    await inspectTerrainArtPngHeader(file);
+    if (!gpuRenderer?.ready) throw new Error('WebGL2 renderer unavailable');
+    url = URL.createObjectURL(file);
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    if (generation !== materialRequestGeneration) return;
+    const asset = validateTerrainArtInput(file, image, slot, channel);
+    const identity = asset.channel + ':' + asset.key;
+    const old = authoredMaterialTiles.get(identity);
+    authoredMaterialTiles.set(identity, { ...asset, image });
+    try { applyTerrainMaterialPreview(); }
+    catch (error) {
+      if (old) authoredMaterialTiles.set(identity, old);
+      else authoredMaterialTiles.delete(identity);
+      throw error;
+    }
+    materialPreviewStatus.textContent = 'Previewing ' + file.name + ' as ' +
+      asset.key + ' · ' + authoredMaterialTiles.size + ' local map(s) · ' +
+      'uploads remain frame-budgeted';
+  } catch (error) {
+    if (generation === materialRequestGeneration) {
+      materialPreviewStatus.textContent = 'Material not applied: ' + error.message;
+    }
+  } finally {
+    if (url) URL.revokeObjectURL(url);
+    materialPreviewFile.value = '';
+  }
+});
+
+materialPreviewReset.addEventListener('click', () => {
+  materialRequestGeneration++;
+  authoredMaterialTiles.clear();
+  try {
+    applyTerrainMaterialPreview();
+    materialPreviewStatus.textContent = referenceTerrainEnabled
+      ? 'Local art cleared; temporary reference maps remain'
+      : 'Local art cleared; procedural fallback restored';
+  } catch (error) {
+    materialPreviewStatus.textContent = 'Material reset failed: ' + error.message;
   }
 });
 const grassFile = document.querySelector('#grass-texture-file');

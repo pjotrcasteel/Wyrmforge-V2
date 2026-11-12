@@ -4,7 +4,7 @@ import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
 import { compileTerrainTextureManifest } from '../src/terrain-texture-manifest.mjs';
 
 const assets = compileTerrainTextureManifest().assets.filter(asset => asset.channel === 'albedo');
-const image = () => ({ width: 256, height: 256 });
+const image = () => ({ width: 64, height: 64 });
 
 function fakeCanvas() {
   const listeners = new Map();
@@ -125,5 +125,43 @@ test('failed texture upload stays pending for a retry, clearing rejects pending 
   assert.equal(view.pendingUploads, 0);
   assert.equal(view.terrainTileStagingStatistics.estimatedDecodedBytes, 0);
   assert.equal(view.flushQueuedUploads({ now: runtime.now }).chunks, 0);
+  view.dispose();
+});
+
+test('renderer uses native 64px material tiles and rejects legacy 256px array images', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  const color=assets[0];
+  assert.throws(()=>view.setTerrainAlbedoTile(color.key,{width:256,height:256}),/manifest dimensions/);
+  view.setTerrainAlbedoTile(color.key,image());
+  assert.equal(view.terrainTileStagingStatistics.estimatedDecodedBytes,64*64*4);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now:runtime.now}).chunks,1);
+  assert.equal(runtime.uploaded.at(-1).at(-1).width,64);
+  assert.equal(view.statistics.terrainGpuTextureBytesEstimate,
+    compileTerrainTextureManifest(undefined,{tileSize:64}).estimatedBytes);
+  assert.equal(view.pendingUploads,0);
+  view.dispose();
+});
+
+test('all three authored channels recover incrementally without changing voxel geometry',()=>{
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  const slots=compileTerrainTextureManifest(undefined,{tileSize:64}).assets;
+  const names=['albedo','normal','orm'];
+  const layers=names.map(channel=>slots.find(asset=>asset.channel===channel));
+  for(const asset of layers) view.setTerrainMaterialTile(asset.channel,asset.key,image());
+  assert.equal(view.pendingUploads,3);
+  assert.equal(runtime.uploaded.length,0);
+  for(let i=0;i<3;i++) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(runtime.uploaded.length,3);
+  assert.equal(view.pendingUploads,0);
+  runtime.lose();
+  assert.equal(view.pendingUploads,0);
+  runtime.restore();
+  assert.equal(view.pendingUploads,3,'restore retains every authored channel');
+  assert.equal(runtime.uploaded.length,3,'restore callback does not bulk-upload');
+  for(let i=0;i<3;i++) view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(runtime.uploaded.length,6);
+  assert.equal(view.pendingUploads,0);
   view.dispose();
 });
