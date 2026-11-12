@@ -73,7 +73,7 @@ export class V2ExternalTerrainReplaySession {
   #verified=false;
   #closed=false;
 
-  constructor(checkpoint) {
+  constructor(checkpoint,{epoch=1}={}) {
     checkpointSize(checkpoint);
     if(!checkpoint || checkpoint.schema!==EXTERNAL_TERRAIN_CHECKPOINT_SCHEMA ||
         !Number.isSafeInteger(checkpoint.editRevision) ||
@@ -107,7 +107,8 @@ export class V2ExternalTerrainReplaySession {
       journal:JSON.parse(JSON.stringify(checkpoint.journal)),
       checksums:{...checkpoint.checksums}
     };
-    this.#loader=new V2ExternalTerrainLoader(source);
+    // Runtime epoch belongs to the hosting session, not the persisted world.
+    this.#loader=new V2ExternalTerrainLoader(source,{epoch});
   }
 
   get progress() {
