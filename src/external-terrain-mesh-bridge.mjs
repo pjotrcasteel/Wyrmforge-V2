@@ -47,6 +47,10 @@ export class V2ExternalTerrainMeshBridge {
     });
   }
 
+  // Host-driven watchdog; one stalled batch fails the staged scene atomically.
+  pollTimeout() { return this.#session.pollTimeout(); }
+  setPaused(paused) { this.#session.setPaused(paused); }
+
   #validateWorld(world) {
     if(this.#closed) throw new Error('External terrain mesh bridge is closed');
     if(!world || ![16,32].includes(world.chunkEdge) ||
