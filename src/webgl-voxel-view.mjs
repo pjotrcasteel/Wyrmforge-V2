@@ -499,11 +499,6 @@ export class WebGLVoxelView {
         this.#disposeRecord(record);
         this.#retiredGpuMeshes.pop();
         this.#retiredGpuBytes -= record.bytes;
-      } else if (this.#pendingTerrainTiles.size) {
-        const [identity, tile] = this.#pendingTerrainTiles.entries().next().value;
-        this.#ensureTerrainCache();
-        this.#terrainCache.upload(tile.channel, tile.key, tile.image);
-        this.#pendingTerrainTiles.delete(identity);
       } else if (this.#queuedUploads.size) {
         const [id, mesh] = this.#queuedUploads.entries().next().value;
         this.#queuedUploads.delete(id);
@@ -515,12 +510,19 @@ export class WebGLVoxelView {
         this.#sceneBytes -= this.#meshBytes(mesh);
         // A reset or edit may supersede a pending scene mesh.
         if (this.#sourceMeshes.get(id) === mesh) this.#uploadOne(mesh);
-      } else {
+      } else if (this.#recoveryQueue.size) {
         const [id, mesh] = this.#recoveryQueue.entries().next().value;
         this.#recoveryQueue.delete(id);
         this.#recoveryBytes -= this.#meshBytes(mesh);
         // Source mesh may have changed during recovery; never resurrect it.
         if (this.#sourceMeshes.get(id) === mesh) this.#uploadOne(mesh);
+      } else {
+        // Surface art is optional. Never allow decoded texture work to block
+        // a newly activated world or its GPU recovery geometry.
+        const [identity, tile] = this.#pendingTerrainTiles.entries().next().value;
+        this.#ensureTerrainCache();
+        this.#terrainCache.upload(tile.channel, tile.key, tile.image);
+        this.#pendingTerrainTiles.delete(identity);
       }
       chunks++;
     }
