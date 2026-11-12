@@ -15,12 +15,12 @@ function load(epoch,chunkEdge) {
   return loader;
 }
 
-function change(loader,id) {
+function change(loader,id,position={x:0,y:6,z:0,radius:2.3}) {
   const {world,port}=loader.terrain;
   const seen=[];
   const unsubscribe=port.subscribe('lighting',event=>seen.push(event));
   const result=port.apply({
-    id,type:'carve-sphere',x:0,y:6,z:0,radius:2.3,
+    id,type:'carve-sphere',...position,
     expectedRevision:world.revision
   });
   assert.equal(result.status,'accepted');
@@ -74,8 +74,8 @@ test('checkpoint replay adopts a new host epoch but preserves all saved geometry
     assert.equal(Object.hasOwn(checkpoint,'epoch'),false);
     assert.equal(Object.hasOwn(checkpoint.source,'epoch'),false);
 
-    const next=change(restore,'post-restore-impact');
-    // Same surface is already gone, so create a distinct second edit separately below.
+    const next=change(restore,'post-restore-impact',
+      {x:8,y:2,z:6,radius:.6});
     assert.equal(next.epoch,12);
     restore.unload();
     original.unload();
