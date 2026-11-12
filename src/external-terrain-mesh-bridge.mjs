@@ -84,7 +84,7 @@ export class V2ExternalTerrainMeshBridge {
     if(ids.length<1 || ids.length>128) {
       throw new RangeError('External terrain edit chunk budget exceeded');
     }
-    const pattern=/^-?(0|[1-9]\\d*),-?(0|[1-9]\\d*),-?(0|[1-9]\\d*)$/;
+    const pattern=/^-?(0|[1-9][0-9]*),-?(0|[1-9][0-9]*),-?(0|[1-9][0-9]*)$/;
     if(!ids.every(id=>typeof id==='string' && pattern.test(id) &&
         id.split(',').map(Number).every(Number.isSafeInteger))) {
       throw new TypeError('Expected canonical signed V2 dirty chunk IDs');
