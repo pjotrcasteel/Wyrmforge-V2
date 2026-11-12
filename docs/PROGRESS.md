@@ -1,5 +1,18 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 — Bounded worker meshing of externally initialized and restored sites (2026-11-12)
+
+**Gap closed:** The V2.6 external-site proof and V2.7 portable checkpoint used bounded terrain-cell loading but still synchronously called `buildExposedFaceMeshes(world)` for every chunk when activating a new scene or a restored checkpoint. The complete world mesh could hitch the browser main thread on the larger generated sites required later for V2.8.
+
+**Implementation:** `V2ExternalTerrainMeshBridge` reuses the existing independent V2 `TerrainWorkerSession` and `terrain-mesh-job.v1` protocol, with **one in-flight worker job** and batches of at most **four requested chunks**. Including six immediate neighbors, the snapshot batch remains under the existing 64-chunk/2 MiB worker caps for either 16³ or 32³ pitch. Each reply validates the active job and authoritative world revision before joining the staged mesh set. **Only the final complete, revision-consistent geometry is published.** Scene replacement or cancellation invalidates the previous worker generation, and errors discard partial output rather than displaying stale fragments.
+
+**Live V2 proof:** `external-terrain-lab.html` uses worker-backed full-scene meshing both after external source initialization and after a verified save/replay. The previously visible scene remains present until the replacement's replay **and** worker meshing finish; WebGL2 GPU scene uploads and retired-buffer disposal still use their existing per-frame queues. A clearly labeled small-site fallback retains synchronous meshing only when the browser exposes no Worker and the fixture uses at most eight occupied chunks; large future sites must use the worker path. Small localized carving still uses its separate bounded incremental mesh path.
+
+**Verification:** Node tests simulate warmup, sequential chunk batches, exact exposed-face output, equal-revision but different-world resets, old-worker message delivery after cancellation, edits during a build, worker runtime failure and retry, and terminal cleanup. Browser-route source tests assert the new worker path and prohibit an unconditional main-thread full-scene rebuild.
+
+**Limits:** A four-chunk input batch bounds requested chunk/snapshot payload, **not wall-clock worker CPU time** or GPU execution time. Final mesh publication aggregates CPU-side typed arrays before the GPU upload queue drains; high-scale streaming/LOD and per-chunk renderer presentation remain future work. This is a **V2.4/V2.7 foundation implementation subgate**, not complete mobile acceptance or the start of V2.8 world generation. Android Chrome sustained runs and the older Android Firefox ~24 FPS issue remain open; no additional long phone test is requested.
+
+
 ## V2.7 — Physical iPhone external checkpoint restore confirmed (2026-11-12)
 
 **Owner-observed functional check:** On the deployed build `a7f3f4f8bada0f8221a46fce350a0be913510997`, the user confirmed that the browser demonstration's **break → save → reload original site → restore destroyed site** flow works as expected. This closes the *manual visual proof of the external-terrain portable replay subfeature*, not the whole V2.7 foundation release. The result includes no recorded performance metrics, so no timing or memory claim is inferred.
