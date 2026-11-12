@@ -1,5 +1,25 @@
 # Voxel Engine V2 — implementation status
 
+## Physical-phone foundation evidence — 2026-11-12 (PRs #100–#101)
+
+**Build:** `8df1c010a5c6eb9d5e5030d7d48d103d27daffe9` (frame-budgeted initial uploads and retired GPU-buffer disposal). User reports that scene switching/reset appearance looks good. The supplied machine reports are **18-fissure, ~1.6-second scenarios**, not 3-minute or 10-minute sustained runs.
+
+| Metric | iPhone Safari (previous build `e941400`) | User-reported older Android phone, Firefox 159 (build `8df1c01`) |
+| --- | ---: | ---: |
+| Accepted terrain edits | 54 / 54 | 54 / 54 |
+| Removed voxels | 6,549 | 6,549 |
+| Frame interval p95 / p99 | 19 / 36 ms | 8.34 / 25 ms |
+| Frames exceeding 33 / 50 ms | 1 / 0 | 1 / 0 |
+| Edit-to-visible latency (last worker update) | 53 ms | 78 ms |
+| End-of-scenario pending GPU uploads / errors | 0 / none | 0 / none |
+
+The Android report also recorded **peak pending GPU disposals 32** and **peak retired buffer estimate 1,936,704 bytes**, both **zero at scenario completion**. This specifically corroborates the new deferred GPU disposal draining; it does not independently prove hitch-free synchronous WebGL deletes.
+
+**Evidence limits:** Phone model and hardware tier are not encoded in the Android report; “older phone” is the tester's description. Android's ~8.34 ms cadence is consistent with a 120 Hz display and is not an apples-to-apples device speed comparison with iPhone Safari. Android Firefox is **not Android Chrome acceptance**. Both short fissure runs omit real gameplay enemies, lighting, gravity, and VFX; no texture tiles were loaded. `contextRecoveryTest.attempts` was 0 on the Android report. WebGL lost/restored context, real Android Chrome, ten-minute repeated destruction, memory growth over time, and complete V2.0–V2.7 acceptance remain **open**.
+
+**Next foundation focus:** real-device context recovery and sustained background/foreground and reset sessions. Retain engine-specific timing/report evidence separately from subjective visual feedback.
+
+
 ## V2.0 — Independent foundation (IN PROGRESS)
 
 - [x] Separate V2 repository; V1 remains untouched
