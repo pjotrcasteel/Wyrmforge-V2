@@ -70,8 +70,14 @@ export function damageDigest(ledger) {
   });
 }
 
+// Versioned, non-cryptographic checksum for portable V2 data contracts.
+// Detects accidental changes; never use as authentication or a trust boundary.
+export function replayDataDigest(value) {
+  return digest(({token}) => token(JSON.stringify(value)));
+}
+
 function journalDigest(journal) {
-  return digest(({token}) => token(JSON.stringify(journal)));
+  return replayDataDigest(journal);
 }
 
 export function createReplayCheckpoint({ scene, seed, world, ledger }) {
