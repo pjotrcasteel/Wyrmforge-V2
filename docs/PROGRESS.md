@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 physical iPhone 10-minute soak — evidence review (2026-11-12)
+
+**Device/build:** iPhone Safari; `fd5456faf6a22e93d762f13335699267d3a4e752`; Hill/seed 7/32³, worker meshing. The physical run completed the full **600.007 s**, including **605 accepted/605 changed terrain impacts, 0 rejected, 8,880 removed voxels, 9/9 controlled scene resets, and drained upload/retirement queues**. No renderer error was reported.
+
+**GPU mesh-retirement evidence:** peak 8 queued retirements (~220,176 estimated bytes), peak estimated GPU mesh bytes 220,880, and zero queued retirements at completion. Per-cycle mesh-memory samples returned near the same baseline after resets. No progressive **estimated mesh-resource** growth is apparent; actual GPU driver allocation and JS heap were not measurable.
+
+**Frame and collection caveat:** final frame p95/p99 17/17 ms is based on the **last 1,800** rendered frame intervals, not the complete 10-minute run. Earlier per-second samples include rolling p95 up to 34 ms, rolling p99 up to 42 ms, and up to 2 frames above 50 ms while those frames were still in the rolling window. Sustained telemetry contains **584 samples over 600 seconds**; there was an approximately **18-second sampling gap** from elapsed second 37 to 55. The prior sampler cannot distinguish a browser scheduling interruption from an engine stall, and it drops >=1-second requestAnimationFrame intervals from its frame metrics. No cause should be inferred from this evidence alone.
+
+**Follow-up implementation:** full-session hitch counts and excluded frame-gap measurements, explicit missing one-second telemetry intervals, and `timingQuality` in the mobile-soak report. Review physical iPhone and Android Chrome runs with this improved continuity evidence before accepting full V2.7. This is a **terrain-only** laboratory scenario, excluding real Hunt enemies, VFX, lighting, and structural gravity. No V2.7 full-device or full-game acceptance is claimed.
+
+
 ## Physical-phone foundation evidence — 2026-11-12 (PRs #100–#101)
 
 **Build:** `8df1c010a5c6eb9d5e5030d7d48d103d27daffe9` (frame-budgeted initial uploads and retired GPU-buffer disposal). User reports that scene switching/reset appearance looks good. The supplied machine reports are **18-fissure, ~1.6-second scenarios**, not 3-minute or 10-minute sustained runs.
