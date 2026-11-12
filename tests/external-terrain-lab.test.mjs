@@ -17,7 +17,8 @@ test('visible V2.6 proof uses real terrain loader, authority, mesher and WebGL r
   assert.match(entry,/renderer\.setMeshes\(meshes\)/);
   assert.doesNotMatch(entry,/renderer\.setMeshes\(buildExposedFaceMeshes\(/);
   assert.match(entry,/const result=active\.port\.apply\(/);
-  assert.match(entry,/renderer\.queueReplacementMeshes\(dirty,meshes\)/);
+  assert.match(entry,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),meshes\)/);
+  assert.match(entry,/meshBridge\.replace\(active\.world,dirty\)/);
   assert.match(entry,/renderer\.flushQueuedUploads\(\{budgetMs:2\}\)/);
   assert.match(entry,/loader\.unload\(\)/);
   assert.doesNotMatch(entry,/createScene\(|new VoxelWorld\(|carveDemoSphere\(/);
@@ -71,4 +72,16 @@ test('external proof builds complete scenes on worker while allowing small-devic
   assert.match(entry,/meshBridge\?\.close\(\)/);
   assert.match(entry,/if\(terrain\.world\.chunkCount>8\)/,
     'large scenes must not silently fall back to synchronous meshing');
+});
+
+test('localized edits stay in the V2 worker queue and block saves until GPU sync',()=>{
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  assert.match(host,/pendingEdit=\{world:active\.world,epoch,dirty:\[\.\.\.dirty\]\}/);
+  assert.match(host,/if\(kind==='edit'\) \{/);
+  assert.match(host,/if\(!pendingEdit \|\| pendingEdit\.world!==world \|\|/);
+  assert.match(host,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),meshes\)/);
+  assert.match(host,/Boolean\(pendingMesh\) \|\| Boolean\(pendingEdit\)/);
+  assert.match(host,/meshBridge\?\.cancel\(\);\s*pendingMesh=null;\s*pendingEdit=null/);
+  assert.match(host,/if\(typeof Worker!=='function' && active\.world\.chunkCount>8\)/,
+    'a large site cannot synchronously rebuild edited terrain');
 });

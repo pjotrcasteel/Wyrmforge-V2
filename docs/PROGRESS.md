@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 — Bounded worker path for external-world destruction edits (2026-11-12)
+
+**Closed remaining main-thread remesh gap:** The external-world proof already performed initial and restored *full-scene* meshing using the bounded worker bridge, but its "Break stone span" action still synchronously called `buildExposedFaceMeshes(..., {chunkIds:dirty})` on the browser main thread. This is a risk for future V2.8 forest-sized terrain changes.
+
+**Implementation:** `V2ExternalTerrainMeshBridge.replace(world, dirtyIds)` now reuses the same worker generation, bounded four-chunk batches, authoritative world identity and revision checks, and one-job-at-a-time scheduling used for full loads. Unlike full scene generation, localized requests include an explicit canonical list of **changed chunk IDs**, including chunks deleted to air; the completed response retains these IDs even if the worker returns no mesh. WebGL2 therefore removes stale buffers for emptied chunks while only uploading replacement geometry for affected chunks. The existing V2 terrain port commits edits immediately, so collision and raycasts never wait for GPU remeshing. The interactive proof blocks overlapping edits, save and restore during pending worker/GPU work; reset cancels old worker jobs, and failures disable further editing instead of continuing with mismatched visuals. The small no-Worker fallback remains restricted to the original eight-chunk diagnostic fixture; larger sites fail closed.
+
+**Automated checks:** 16³/32³ worker results match the baseline localized mesher; deleted-chunk outputs preserve dirty IDs; equal-revision alternate-world responses are discarded; post-dispatch edits invalidate replies; malformed, unsafe and noncanonical chunk IDs are rejected before scheduling. Browser source tests verify the real worker invocation, in-flight UI guards, reset cancellation and WebGL2 localized queue handoff.
+
+**What this does not claim:** this is a V2.4/V2.7 integration correctness and scheduling subgate, not final V2.7 mobile acceptance, a production world stream, a new world generator, final materials or finished Wyrmforge Hunt integration. Final on-device behavior for the new edit path still requires short functional verification when convenient; no new prolonged run is needed for this change.
+
+
 ## V2.7 — Bounded worker meshing of externally initialized and restored sites (2026-11-12)
 
 **Gap closed:** The V2.6 external-site proof and V2.7 portable checkpoint used bounded terrain-cell loading but still synchronously called `buildExposedFaceMeshes(world)` for every chunk when activating a new scene or a restored checkpoint. The complete world mesh could hitch the browser main thread on the larger generated sites required later for V2.8.
