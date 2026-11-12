@@ -350,3 +350,80 @@ test('terminal dispose synchronously releases both active and queued retired GPU
   assert.equal(view.pendingUploads,0);
   assert.equal(view.statistics.gpuBufferBytesEstimate,0);
 });
+
+test('scene epochs reject a delayed GPU update after same-ID world replacement', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('0,0,0')]);
+  drain(view,runtime.now);
+  const previousScene=view.sceneEpoch;
+  assert.equal(view.queueReplacementMeshes(['0,0,0'],[mesh('0,0,0')],
+    {sceneEpoch:previousScene}),true);
+  assert.equal(view.pendingUploads,1);
+
+  view.setMeshes([mesh('0,0,0'),mesh('1,0,0')]);
+  const currentScene=view.sceneEpoch;
+  assert.equal(currentScene,previousScene+1);
+  assert.equal(view.uploadQueueStatistics.pendingChunks,0,
+    'new world must discard old queued uploads even with identical chunk IDs');
+  assert.equal(view.queueReplacementMeshes(['0,0,0'],[],{sceneEpoch:previousScene}),false);
+  assert.equal(view.replaceMeshes(new Set(['1,0,0']),[],
+    {sceneEpoch:previousScene}),false);
+  assert.equal(view.uploadQueueStatistics.staleUploadRejections,2);
+  assert.equal(view.uploadQueueStatistics.sceneEpoch,currentScene);
+  drain(view,runtime.now);
+  assert.equal(view.statistics.drawCalls,2,'stale delete must not remove new-world chunk');
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
+
+test('a rejected scene activation retains the previous valid GPU upload queue', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('base')]);
+  const initialEpoch=view.sceneEpoch;
+  view.queueReplacementMeshes(['edit'],[mesh('edit')],{sceneEpoch:initialEpoch});
+  assert.equal(view.pendingUploads,2);
+  assert.throws(()=>view.setMeshes([mesh('valid'),mesh('valid')]),/duplicate/);
+  assert.throws(()=>view.setMeshes(null),/Expected V2 chunk meshes/);
+  assert.equal(view.sceneEpoch,initialEpoch);
+  assert.equal(view.uploadQueueStatistics.pendingChunks,1);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  drain(view,runtime.now);
+  assert.equal(view.statistics.drawCalls,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
+
+test('context recovery preserves the scene epoch but blocks a replaced-world reply', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('old')]);
+  drain(view,runtime.now);
+  const oldEpoch=view.sceneEpoch;
+  runtime.emit('webglcontextlost');
+  runtime.emit('webglcontextrestored');
+  assert.equal(view.sceneEpoch,oldEpoch,'same-world context restoration is not a new scene');
+  view.setMeshes([mesh('new')]);
+  assert.equal(view.queueReplacementMeshes(['old'],[mesh('old')],
+    {sceneEpoch:oldEpoch}),false);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  drain(view,runtime.now);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
+
+test('scene guards validate unsafe epochs before accepting GPU work', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  for(const invalid of [-1,1.5,Number.MAX_SAFE_INTEGER+1,'1',null]) {
+    assert.throws(()=>view.queueReplacementMeshes(['0,0,0'],[],
+      {sceneEpoch:invalid}),RangeError);
+  }
+  assert.equal(view.sceneEpoch,0);
+  assert.equal(view.pendingUploads,0);
+  assert.equal(view.uploadQueueStatistics.staleUploadRejections,0);
+  view.dispose();
+});
