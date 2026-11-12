@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createReferenceTerrainPixels, createReferenceMaterialPixels, REFERENCE_TERRAIN_KEYS } from '../src/terrain-reference-tiles.mjs';
+import { createReferenceTerrainPixels, createReferenceMaterialPixels, sealReferenceTileEdges, REFERENCE_TERRAIN_KEYS } from '../src/terrain-reference-tiles.mjs';
 import { compileTerrainTextureManifest } from '../src/terrain-texture-manifest.mjs';
 
 test('all preview tiles match logical albedo keys and manifest dimensions', () => {
@@ -66,4 +66,46 @@ test('every reference variant has tileable, neutral-metalness normal and ORM map
     }
   }
   assert.throws(() => createReferenceMaterialPixels('grass', 'height'), RangeError);
+});
+
+test('every 64px reference material and channel has continuous repeated-image borders',()=>{
+  for(const kind of Object.values(REFERENCE_TERRAIN_KEYS)) {
+    for(const [channel,pixels] of [
+      ['albedo',createReferenceTerrainPixels(kind,64)],
+      ['normal',createReferenceMaterialPixels(kind,'normal',64)],
+      ['orm',createReferenceMaterialPixels(kind,'orm',64)]
+    ]) {
+      let minimum=255, maximum=0;
+      for(let axis=0;axis<64;axis++) {
+        for(let color=0;color<3;color++) {
+          const left=(axis*64)*4+color;
+          const right=(axis*64+63)*4+color;
+          const top=axis*4+color;
+          const bottom=(63*64+axis)*4+color;
+          assert.equal(pixels[left],pixels[right],kind+' '+channel+' horizontal seam');
+          assert.equal(pixels[top],pixels[bottom],kind+' '+channel+' vertical seam');
+        }
+      }
+      for(let i=0;i<pixels.length;i+=4) {
+        minimum=Math.min(minimum,pixels[i]);
+        maximum=Math.max(maximum,pixels[i]);
+        assert.equal(pixels[i+3],255,'all reference pixels remain opaque');
+      }
+      if(channel==='albedo') {
+        assert.ok(maximum-minimum>12,kind+' retains actual pixel detail');
+      }
+    }
+  }
+});
+
+test('reference tile edge sealing is deterministic, bounded, and rejects malformed RGBA',()=>{
+  for(const kind of Object.values(REFERENCE_TERRAIN_KEYS)) {
+    const before=createReferenceTerrainPixels(kind,64);
+    const copy=before.slice();
+    assert.deepEqual(sealReferenceTileEdges(copy,64),before,
+      'a second seam stitch must be stable');
+  }
+  assert.throws(()=>sealReferenceTileEdges(new Uint8Array(64*64*4),64),RangeError);
+  assert.throws(()=>sealReferenceTileEdges(new Uint8ClampedArray(63*64*4),64),RangeError);
+  assert.throws(()=>sealReferenceTileEdges(new Uint8ClampedArray(64*64*4),80),RangeError);
 });
