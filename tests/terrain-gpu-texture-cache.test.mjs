@@ -16,7 +16,12 @@ function fakeGl(maxLayers = 256) {
     texStorage3D: (...args) => calls.push(['storage', ...args]),
     texParameteri: () => {},
     pixelStorei: () => {},
-    texSubImage3D: (...args) => calls.push(['upload', ...args]),
+    texSubImage3D: (...args) => {
+      // A permissive mock previously allowed eight arguments and hid the
+      // native Safari TypeError until a player opened the material preview.
+      if (args.length !== 11) throw new TypeError('Not enough arguments');
+      calls.push(['upload', ...args]);
+    },
     deleteTexture: () => calls.push(['delete'])
   };
   return { gl, calls };
@@ -46,9 +51,14 @@ test('uploads tile to stable layer and resets handles on context loss', () => {
   assert.equal(cache.getLayer(asset.channel, asset.key), layer);
   assert.equal(calls.filter(call => call[0] === 'upload').length, 1);
   const upload = calls.find(call => call[0] === 'upload');
-  assert.equal(upload.length, 9, 'TexImageSource overload requires exactly eight WebGL arguments');
-  assert.equal(upload[8].width, 16);
-  assert.equal(upload[8].height, 16);
+  assert.equal(upload.length, 12, 'TexImageSource overload requires 11 WebGL arguments');
+  assert.deepEqual(upload.slice(1, 9), [
+    gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, 16, 16, 1
+  ]);
+  assert.equal(upload[9], gl.RGBA);
+  assert.equal(upload[10], gl.UNSIGNED_BYTE);
+  assert.equal(upload[11].width, 16);
+  assert.equal(upload[11].height, 16);
   cache.contextLost();
   assert.equal(cache.statistics.allocatedBytes, 0);
   assert.equal(cache.getLayer(asset.channel, asset.key), null);
@@ -68,5 +78,26 @@ test('rejects excessive GPU allocation and invalid tiles', () => {
   const asset = manifest.assets[0];
   assert.throws(() => cache.upload(asset.channel, asset.key, { width: 8, height: 16 }), RangeError);
   assert.throws(() => cache.upload('normal', 'missing', { width: 16, height: 16 }), RangeError);
+  cache.dispose();
+});
+
+test('native WebGL2 argument contract holds for color, normal and ORM tiles', () => {
+  const { gl, calls } = fakeGl();
+  const cache = new TerrainGpuTextureCache(gl, manifest);
+  cache.initialize();
+  for (const channel of ['albedo', 'normal', 'orm']) {
+    const asset = manifest.assets.find(candidate => candidate.channel === channel);
+    const image = { width: manifest.tileSize, height: manifest.tileSize };
+    cache.upload(channel, asset.key, image);
+  }
+  const callsToUpload = calls.filter(call => call[0] === 'upload');
+  assert.equal(callsToUpload.length, 3);
+  for (const call of callsToUpload) {
+    assert.equal(call.length, 12);
+    assert.equal(call[6], manifest.tileSize);
+    assert.equal(call[7], manifest.tileSize);
+    assert.equal(call[8], 1, 'each tile occupies exactly one texture-array layer');
+  }
+  assert.equal(cache.statistics.uploadedAssets, 3);
   cache.dispose();
 });

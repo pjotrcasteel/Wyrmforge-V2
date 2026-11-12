@@ -87,10 +87,17 @@ export class TerrainGpuTextureCache {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#textures.get(channel));
     try {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      // TexImageSource (HTMLCanvasElement/ImageBitmap/Image) uses the 8-argument
-      // WebGL2 overload. The 11-argument overload is for typed pixel buffers.
-      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer,
-        gl.RGBA, gl.UNSIGNED_BYTE, image);
+      // WebGL2 texSubImage3D requires the dimensions even for TexImageSource.
+      // The previous eight-argument call threw "Not enough arguments" on Safari
+      // whenever an authored/reference texture reached the GPU upload queue.
+      try {
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer,
+          image.width, image.height, 1, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      } catch (error) {
+        // Preserve actionable asset and API context in the mobile error panel.
+        throw new Error('WebGL2 texture array upload failed for ' + identity +
+          ': ' + (error?.message ?? String(error)), { cause: error });
+      }
       this.#uploaded.add(identity);
     } finally {
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, null);

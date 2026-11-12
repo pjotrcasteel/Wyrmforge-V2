@@ -110,3 +110,36 @@ new screenshot from the immutable new build only after green CI and
 successful Pages deployment. A screenshot that still says WebGL2 with
 0 draws should **show the CPU terrain** rather than a black screen; if
 WebGL remains blocked the status/error provides the next diagnosis.
+
+## Follow-up Safari screenshot: identified missing WebGL2 texture upload arguments — 2026-11-12
+
+Owner's next iPhone screenshot (build `f58c80a`) shows the authoritative
+Canvas2D fallback now renders the hill, but the GPU renderer stops with
+`GPU terrain upload failed: Not enough arguments`. Investigation of the
+existing V2 material cache confirmed the direct API contract violation:
+`texSubImage3D()` had been called with **eight** arguments, omitting
+width, height and depth. The WebGL2 `TexImageSource` overload requires
+**eleven**, including the source image's width, height and a depth of one
+texture-array layer. The prior loose mock explicitly asserted the wrong
+eight-argument signature, so CI approved an API call that WebKit rejects.
+
+### Resolution and regression gate
+
+- Use the correct 11-argument WebGL2 `texSubImage3D` overload for albedo,
+  normal and ORM tile uploads.
+- Replace the permissive GPU fake with a signature-strict API fake which
+  throws the native-style `Not enough arguments` failure if the bug recurs.
+- Prioritize actual voxel mesh uploads and context-recovery meshes ahead of
+  optional authored/reference material tiles; material preview work must
+  never hold the initial scene at zero GPU triangles.
+- Preserve channel/asset identity in any future native texture upload error,
+  so screenshots identify which layer failed.
+- Keep the previous nonblank CPU fallback until WebGL2 has drawn a complete
+  scene; preserve existing Grass 002 and local PNG authoring workflows.
+
+**Device acceptance still required:** the exact Safari screenshot with
+`Not enough arguments` is explained by a proven API bug, but a successful
+headless/unit validation is not itself evidence of a working iPhone GPU
+upload. Verify the new immutable build on the user's phone before claiming
+end-to-end WebGL2 success. Do not request another benchmark until the
+visible terrain issue is settled.
