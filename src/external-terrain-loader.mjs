@@ -92,6 +92,7 @@ export function validateExternalTerrainDefinition(definition) {
 export class V2ExternalTerrainLoader {
   #definition;
   #world;
+  #epoch;
   #ledger=null;
   #port=null;
   #runIndex=0;
@@ -99,8 +100,12 @@ export class V2ExternalTerrainLoader {
   #loaded=0;
   #closed=false;
 
-  constructor(definition) {
+  constructor(definition,{epoch=1}={}) {
+    if(!Number.isSafeInteger(epoch) || epoch<1) {
+      throw new RangeError('Expected a positive V2 terrain world epoch');
+    }
     this.#definition=validateExternalTerrainDefinition(definition);
+    this.#epoch=epoch;
     this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge});
   }
 
@@ -137,7 +142,7 @@ export class V2ExternalTerrainLoader {
     }
     if(this.#runIndex===this.#definition.runs.length && !this.#port) {
       this.#ledger=new TerrainEditLedger(this.#world);
-      this.#port=new V2TerrainPort(this.#world,this.#ledger);
+      this.#port=new V2TerrainPort(this.#world,this.#ledger,{epoch:this.#epoch});
     }
     return this.progress;
   }

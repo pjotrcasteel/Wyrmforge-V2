@@ -12,6 +12,7 @@ import {
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
+import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
@@ -23,6 +24,7 @@ const saveButton=document.querySelector('#save-site');
 const restoreButton=document.querySelector('#restore-site');
 document.querySelector('#build').textContent='v'+VERSION+' · '+COMMIT.slice(0,7);
 
+const terrainEpochs=new V2TerrainEpochClock();
 let loader=null;
 let restoredSession=null;
 let restoring=null;
@@ -82,6 +84,7 @@ function updateStatus(now=performance.now()) {
   status.textContent=progress.done
     ? '3D site '+active.source.siteId+' · '+loaded.chunkCount+
       ' chunks · '+loaded.revision+' authoritative revisions · '+
+      'runtime epoch '+active.port.epoch+' · '+ 
       renderer.pendingUploads+' GPU operations remaining'+
       ' · '+(viewCamera.value==='inspection' ? '3D inspection' : 'Hunt camera')+
       (breachCount ? ' · '+breachCount+' span impacts'+
@@ -114,7 +117,7 @@ function resetSite() {
     renderer.setMeshes([]);
     loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
       chunkEdge:Number(pitch.value),seed:7
-    }));
+    }),{epoch:terrainEpochs.next()});
     lastStatusAt=-Infinity;
     updateStatus();
   } catch(error) {
@@ -187,7 +190,8 @@ function restoreState() {
   if(!active || !savedCheckpoint || restoring || pendingEdit || renderer.pendingUploads) return;
   try {
     // Keep the active world visible until the new source + journal is verified.
-    restoring=new V2ExternalTerrainReplaySession(savedCheckpoint);
+    restoring=new V2ExternalTerrainReplaySession(savedCheckpoint,
+      {epoch:terrainEpochs.next()});
     errorMessage=null;
     lastStatusAt=-Infinity;
     updateStatus();

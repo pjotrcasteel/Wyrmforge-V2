@@ -1,5 +1,18 @@
 # Voxel Engine V2 — implementation status
 
+## V2.6 — Distinct runtime epochs across external world load and restore (2026-11-12)
+
+**Integration correctness:** V2 terrain change notifications already carried an `epoch`, but every `V2ExternalTerrainLoader` created its `V2TerrainPort` using the default `epoch=1`. Repeated loads and verified checkpoint restores therefore reused the same epoch, even if they had identical voxel revisions and edit sequence numbers. A future Physics V2, Lighting V2 or VFX V2 subscriber needs a reliable distinction between separate world activations.
+
+**Implementation:** New host-owned `V2TerrainEpochClock` hands out strictly increasing positive safe-integer values and fails on exhaustion. `V2ExternalTerrainLoader(definition,{epoch})` passes the host-supplied value into the existing terrain port. `V2ExternalTerrainReplaySession(checkpoint,{epoch})` supplies a *fresh runtime epoch* for the restored authority. The standalone external-site browser host uses one clock for resets and restores; its UI shows the active epoch for diagnosis. V2 engines continue receiving the existing versioned, ordered `voxel-v2.terrain-change.v1` contract, with no breaking schema change or second terrain store.
+
+**Persistence boundary:** Epochs identify world instances only within a live host. The generated source, checksum, deterministic geometry and saved edit journal **do not persist the runtime epoch**, so save/replay parity remains deterministic. Existing callers without explicit epochs retain the compatible default; integration hosts swapping worlds must allocate new values. Old ports are disposed on unload and cannot serve stale queries.
+
+**Tests:** both 16³ and 32³ paths prove that equal-revision, identical-seed worlds can emit the same edit sequence with different epochs, identical portable checkpoints, and a fresh epoch after verified replay. Exhaustion and invalid epoch arguments fail closed; source checks ensure that the actual browser host increments epochs on reset and restore.
+
+**Scope:** This closes one V2.6 event-lifecycle contract gap needed for the separate Physics/Lighting/VFX V2 integration. It does not change visuals, textures, mobile GPU scheduling, or the V2.8 generation milestone. Full foundation release still follows the existing roadmap's separate acceptance criteria.
+
+
 ## V2.7 — Bounded worker path for external-world destruction edits (2026-11-12)
 
 **Closed remaining main-thread remesh gap:** The external-world proof already performed initial and restored *full-scene* meshing using the bounded worker bridge, but its "Break stone span" action still synchronously called `buildExposedFaceMeshes(..., {chunkIds:dirty})` on the browser main thread. This is a risk for future V2.8 forest-sized terrain changes.

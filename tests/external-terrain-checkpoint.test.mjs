@@ -197,7 +197,7 @@ test('browser proof restores only verified terrain and keeps the old scene durin
   assert.match(html,/id="save-site"/);
   assert.match(html,/id="restore-site"/);
   assert.match(source,/savedCheckpoint=JSON\.parse\(JSON\.stringify\(checkpoint\)\)/);
-  assert.match(source,/restoring=new V2ExternalTerrainReplaySession\(savedCheckpoint\)/);
+  assert.match(source,/restoring=new V2ExternalTerrainReplaySession\(savedCheckpoint,\s*\{epoch:terrainEpochs\.next\(\)\}\)/);
   assert.match(source,/restoring\.step\(\{maxCells:192,maxEdits:1\}\)/);
   assert.match(source,/if\(restoring\.progress\.done\) \{/);
   assert.match(source,/stageTerrainMeshes\(restoring\.terrain,'restore'\)/);
