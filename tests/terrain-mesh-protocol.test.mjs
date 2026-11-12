@@ -5,7 +5,8 @@ import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 import { demoCarveTarget, carveDemoSphere } from '../src/demo-carve.mjs';
 import {
   createTerrainMeshJob, processTerrainMeshJob, terrainJobTransfers,
-  terrainMeshTransfers, isCurrentTerrainMeshReply, MAX_TERRAIN_JOB_CHUNKS
+  terrainMeshTransfers, isCurrentTerrainMeshReply, MAX_TERRAIN_JOB_CHUNKS,
+  MAX_TERRAIN_RESULT_BYTES
 } from '../src/terrain-mesh-protocol.mjs';
 
 test('actual worker output matches local exposed-face meshes after destructive carving', () => {
@@ -113,4 +114,45 @@ test('malformed worker mesh buffers and indices are rejected before GPU upload',
   for (const replacement of invalid) {
     assert.equal(isCurrentTerrainMeshReply({...reply,meshes:[replacement]},job,world.revision),false);
   }
+});
+
+test('expanded worker geometry has an independent byte ceiling',()=>{
+  assert.equal(MAX_TERRAIN_RESULT_BYTES,16*1024*1024);
+  // Two dense alternating 32-cubed snapshots fit comfortably under the
+  // 2 MiB input cap yet expand beyond 16 MiB of exposed-face geometry.
+  const edge=32, snapshots=new Map();
+  for(let cx=0;cx<2;cx++) {
+    const data=new Uint8Array(edge**3);
+    for(let y=0;y<edge;y++) {
+      for(let z=0;z<edge;z++) {
+        for(let x=0;x<edge;x++) {
+          if((x+y+z)%2) data[x+edge*(z+edge*y)]=3;
+        }
+      }
+    }
+    const id=cx+',0,0';
+    snapshots.set(id,{id,data,revision:1});
+  }
+  const world={
+    chunkEdge:edge,revision:1,
+    chunkSnapshot:(x,y,z)=>snapshots.get(x+','+y+','+z) ?? null
+  };
+  const job=createTerrainMeshJob(world,new Set(['0,0,0','1,0,0']),41);
+  assert.ok(job.snapshotBytes<MAX_TERRAIN_RESULT_BYTES);
+  assert.throws(()=>processTerrainMeshJob(job),/output byte budget exceeded/);
+});
+
+test('worker replies reject forged or mismatched mesh byte accounting',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  world.set(0,0,0,3);
+  const job=createTerrainMeshJob(world,new Set(['0,0,0']),52);
+  const reply=processTerrainMeshJob(job);
+  assert.equal(isCurrentTerrainMeshReply(reply,job,world.revision),true);
+  assert.equal(isCurrentTerrainMeshReply({...reply,meshBytes:MAX_TERRAIN_RESULT_BYTES+1},
+    job,world.revision),false);
+  assert.equal(isCurrentTerrainMeshReply({...reply,meshBytes:reply.meshBytes-1},
+    job,world.revision),false);
+  const corrupted={...reply.meshes[0],cpuBufferBytes:1};
+  assert.equal(isCurrentTerrainMeshReply({...reply,meshes:[corrupted]},
+    job,world.revision),false);
 });
