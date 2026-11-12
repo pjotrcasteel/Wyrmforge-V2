@@ -55,11 +55,13 @@ test('texture upload peaks and estimated texture memory are visible in sustained
   const telemetry = new SustainedTelemetry();
   telemetry.record(0,input(0));
   // A burst can appear and drain entirely between one-second samples.
-  telemetry.observeQueue({pendingTextureTiles:7});
+  telemetry.observeQueue({pendingTextureTiles:7,pendingGpuDisposals:12,retiredGpuBytesEstimate:12000});
   telemetry.observeQueue({pendingTextureTiles:1});
   telemetry.record(1000,input(2));
   const report = telemetry.report();
   assert.equal(report.peakPendingTextureTiles,7);
+  assert.equal(report.peakPendingGpuDisposals,12);
+  assert.equal(report.peakRetiredGpuBytesEstimate,12000);
   assert.equal(report.samples[1].pendingTextureTiles,2);
   assert.equal(report.samples[1].gpuTextureBytesEstimate,512);
   assert.equal(report.samples[1].terrainDecodedTileBytesEstimate,1024);
@@ -67,4 +69,6 @@ test('texture upload peaks and estimated texture memory are visible in sustained
   assert.equal(report.peakDecodedTileBytesEstimate,1024);
   telemetry.reset();
   assert.equal(telemetry.report().peakPendingTextureTiles,0);
+  assert.equal(telemetry.report().peakPendingGpuDisposals,0);
+  assert.equal(telemetry.report().peakRetiredGpuBytesEstimate,0);
 });

@@ -4,6 +4,7 @@ import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
 
 function fakeCanvas() {
   let clock = 0;
+  let deletedBuffers = 0;
   const gl = {
     VERTEX_SHADER:1, FRAGMENT_SHADER:2, COMPILE_STATUS:3, LINK_STATUS:4,
     DEPTH_TEST:5, LEQUAL:6, BLEND:7, CULL_FACE:8, ARRAY_BUFFER:9,
@@ -14,7 +15,7 @@ function fakeCanvas() {
     depthFunc(){}, disable(){}, createVertexArray:()=>({}), bindVertexArray(){},
     createBuffer:()=>({}), bindBuffer(){}, bufferData(){ clock++; },
     enableVertexAttribArray(){}, vertexAttribPointer(){}, deleteVertexArray(){},
-    deleteBuffer(){}, isContextLost:()=>false, deleteProgram(){}
+    deleteBuffer(){ deletedBuffers++; clock++; }, isContextLost:()=>false, deleteProgram(){}
   };
   const listeners = new Map();
   let contextLost = false;
@@ -24,7 +25,8 @@ function fakeCanvas() {
   } : null;
   gl.isContextLost = () => contextLost;
   return { canvas:{getContext:()=>gl,addEventListener:(type,fn)=>listeners.set(type,fn)},
-    now:()=>clock, emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
+    now:()=>clock, deletedBuffers:()=>deletedBuffers,
+    emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
 }
 function drain(view, now) {
   while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2, now });
@@ -264,4 +266,87 @@ test('edits supersede incomplete initial scene and context loss replays only lat
   assert.equal(view.statistics.drawCalls,2);
   assert.equal(view.uploadQueueStatistics.pendingBytes,0);
   view.dispose();
+});
+
+test('scene reset defers GPU deletes and drains them before uploading the replacement scene', () => {
+  const runtime = fakeCanvas();
+  const view = new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('old-a'),mesh('old-b')]);
+  drain(view,runtime.now);
+  assert.equal(runtime.deletedBuffers(),0);
+
+  view.setMeshes([mesh('new')]);
+  assert.equal(runtime.deletedBuffers(),0,'reset must not synchronously delete old GPU handles');
+  assert.equal(view.statistics.drawCalls,0,'old scene must vanish immediately');
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,2);
+  assert.equal(view.uploadQueueStatistics.retiredGpuBytesEstimate,120);
+  assert.equal(view.statistics.gpuBufferBytesEstimate,120);
+
+  const first=view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(first.chunks,1,'only one retired chunk should be deleted once budget expires');
+  assert.equal(runtime.deletedBuffers(),4);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,1);
+  assert.equal(view.statistics.drawCalls,0,'new allocations wait for old GPU cleanup');
+
+  drain(view,runtime.now);
+  assert.equal(runtime.deletedBuffers(),8);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,0);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.statistics.gpuBufferBytesEstimate,60);
+  view.dispose();
+});
+
+test('repeated resets and edits cannot allocate ahead of pending retirement', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('old-a'),mesh('old-b'),mesh('old-c')]);
+  drain(view,runtime.now);
+  view.setMeshes([mesh('intermediate')]);
+  view.setMeshes([mesh('latest')]);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,3);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  assert.equal(view.statistics.drawCalls,0);
+
+  view.flushQueuedUploads({budgetMs:2,now:runtime.now});
+  assert.equal(view.statistics.drawCalls,0);
+  view.replaceMeshes(new Set(['latest']),[]);
+  view.replaceMeshes(new Set(['edited']),[mesh('edited')]);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  drain(view,runtime.now);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,0);
+  view.dispose();
+});
+
+test('context loss while disposing old scene drops obsolete handles and rebuilds only latest scene', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('a'),mesh('b')]);
+  drain(view,runtime.now);
+  view.setMeshes([mesh('c')]);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,2);
+  runtime.emit('webglcontextlost');
+  assert.equal(view.ready,false);
+  assert.equal(view.uploadQueueStatistics.pendingGpuDisposals,0);
+  assert.equal(view.uploadQueueStatistics.retiredGpuBytesEstimate,0);
+  runtime.emit('webglcontextrestored');
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,1);
+  drain(view,runtime.now);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.statistics.gpuBufferBytesEstimate,60);
+  view.dispose();
+});
+
+test('terminal dispose synchronously releases both active and queued retired GPU resources', () => {
+  const runtime=fakeCanvas();
+  const view=new WebGLVoxelView(runtime.canvas);
+  view.setMeshes([mesh('a'),mesh('b')]);
+  drain(view,runtime.now);
+  view.setMeshes([mesh('c')]);
+  assert.equal(runtime.deletedBuffers(),0);
+  view.dispose();
+  assert.equal(runtime.deletedBuffers(),8);
+  assert.equal(view.pendingUploads,0);
+  assert.equal(view.statistics.gpuBufferBytesEstimate,0);
 });

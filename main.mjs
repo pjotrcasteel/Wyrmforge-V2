@@ -1553,7 +1553,7 @@ document.querySelector('#report').addEventListener('click', () => {
     acceptedTerrainEditIds:terrainEdits.recordedEdits,
     renderer: gpuRenderer?.ready ? gpuRenderer.statistics : { renderer:'Canvas2D fallback' },
     cpuMeshAndUploadMs:gpuBuildMs, lastMeshUpdate, rendererError:gpuError,
-    caveat:'Portable replay files can be exported/imported, but require manual file storage. Imports are bounded and checksum-verified, not cryptographically authenticated. Live GPU uploads remain synchronous.' };
+    caveat:'Portable replay files can be exported/imported, but require manual file storage. Imports are bounded and checksum-verified, not cryptographically authenticated. GPU operations are synchronous individually; uploads and scene disposal use bounded per-frame queues but are not GPU-time guarantees.' };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
   const link = document.createElement('a'); link.href=url; link.download='voxel-v2-report.json'; link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
