@@ -15,7 +15,7 @@ test('V2 tunnel is a real lab action using the existing authority, worker and UI
   assert.match(main,/cancelTerrainWorker\(\);/);
   assert.match(main,/updateTerrainMeshes\(\)/);
   assert.match(main,/lastTunnel = \{/);
-  assert.match(main,/lastCarve, lastTunnel, lastBurst/);
+  assert.match(main,/lastCarve, lastCrater, lastTunnel, lastBurst/);
   assert.match(main,/  lastTunnel = null;/);
   assert.doesNotMatch(main,/new TerrainEditLedger\(world\)\.apply\(\{/);
 });
