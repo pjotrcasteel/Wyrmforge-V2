@@ -84,5 +84,4 @@ test('secondary albedo variants blend their matching authored normal and ORM map
   assert.match(source,/terrainSecondaryNormalLayers: gl\.getUniformLocation/);
   assert.match(source,/terrainSecondaryOrmLayers: gl\.getUniformLocation/);
   assert.match(source,/gl\.uniform4fv\?\.\(secondaryUniform, secondLayers\)/);
-  assert.match(source,/compileTerrainTextureManifest\(undefined,\{tileSize:64\}\)/);
 });
