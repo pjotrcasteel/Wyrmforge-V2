@@ -47,12 +47,12 @@ export class V2ExternalTerrainMeshBridge {
     if(this.#closed) throw new Error('External terrain mesh bridge is closed');
     if(!world || ![16,32].includes(world.chunkEdge) ||
         !Number.isSafeInteger(world.revision) ||
-        typeof world.snapshots!=='function' ||
+        typeof world.chunkIds!=='function' ||
         typeof world.chunkSnapshot!=='function') {
       throw new TypeError('Expected an authoritative V2 voxel world');
     }
     this.cancel();
-    const ids=world.snapshots().map(chunk=>chunk.id).sort();
+    const ids=world.chunkIds();
     if(ids.length===0) throw new RangeError('External terrain has no occupied chunks');
     const target={
       epoch:this.#epoch,world,revision:world.revision,
