@@ -45,3 +45,28 @@ the Lighting Engine V2.
 distance, measured mobile filtering/mipmapping, iPhone and Android p95/p99,
 and runtime production Hunt integration. These are real remaining gates,
 not waived by a successful upload demonstration.
+
+## Hunt-distance filtering and seamless preview — 2026-11-12
+
+The active WebGL2 texture arrays now request `mipLevels: 7` for 64px
+material tiles. The texture cache sets `LINEAR_MIPMAP_LINEAR` and regenerates
+lower mip levels after successful, frame-budgeted uploads. The original
+256px manifest remains a testable default; legacy Grass 002 remains a
+separate comparison control. All 64px albedo/normal/ORM map slots use the
+same filtering policy and retain the original V2-native sRGB/linear formats.
+
+To avoid a conspicuous patchwork of dark green blocks, grass-top variants
+blend at 46% of their former maximum strength and dirt variants at 60%.
+Those exact weights also apply to the matching normal and ORM maps, using
+stable world coordinates. Temporary reference generators now feather the
+four outside pixel rows/columns and verify opposite RGB borders match
+across tile repetitions, without editing any user-supplied PNGs.
+
+The Hunt camera projects raised blocks approximately 33% taller on screen
+without rotating its north-up travel axes. This remains a **candidate Hunt
+camera**, not a locked gameplay choice. It does not change terrain voxels,
+meshing, replay or collision.
+
+Automated checks are not visual approval: compare inspection and Hunt at
+far/normal/near zoom on a physical device before accepting this material
+and camera-readability gate.
