@@ -471,6 +471,8 @@ export class WebGLVoxelView {
       triangles,
       drawCalls: this.#gpuMeshes.size,
       gpuBufferBytesEstimate: gpuBytes,
+      terrainGpuTextureBytesEstimate: this.#terrainCache?.statistics.allocatedBytes ?? 0,
+      terrainDecodedTileBytesEstimate: this.#terrainTileStagingBytes,
       contextLosses: this.#losses,
       ...this.uploadQueueStatistics,
       gpuTimingMs: null

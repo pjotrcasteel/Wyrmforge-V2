@@ -7,6 +7,7 @@ export class SustainedTelemetry {
   #peakPendingBytes = 0;
   #peakPendingChunks = 0;
   #peakRecoveryChunks = 0;
+  #peakPendingTextureTiles = 0;
   constructor({ intervalMs = 1000, capacity = 900 } = {}) {
     if (!Number.isFinite(intervalMs) || intervalMs <= 0 ||
         !Number.isInteger(capacity) || capacity < 1 || capacity > 3600) {
@@ -20,6 +21,7 @@ export class SustainedTelemetry {
     this.#peakPendingBytes = Math.max(this.#peakPendingBytes, queue.pendingBytes ?? 0);
     this.#peakPendingChunks = Math.max(this.#peakPendingChunks, queue.pendingChunks ?? 0, queue.peakChunks ?? 0);
     this.#peakRecoveryChunks = Math.max(this.#peakRecoveryChunks, queue.recoveryChunks ?? 0);
+    this.#peakPendingTextureTiles = Math.max(this.#peakPendingTextureTiles, queue.pendingTextureTiles ?? 0);
   }
   due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
   record(now, { frames, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
@@ -36,6 +38,9 @@ export class SustainedTelemetry {
       pendingChunks: queue?.pendingChunks ?? null,
       pendingBytes: queue?.pendingBytes ?? null,
       recoveryChunks: queue?.recoveryChunks ?? null,
+      pendingTextureTiles: queue?.pendingTextureTiles ?? null,
+      gpuTextureBytesEstimate: renderer?.terrainGpuTextureBytesEstimate ?? null,
+      terrainDecodedTileBytesEstimate: renderer?.terrainDecodedTileBytesEstimate ?? null,
       pendingTerrainChunks, gpuBytesEstimate: renderer?.gpuBufferBytesEstimate ?? null,
       voxelBytes, edits, heapBytes
     };
@@ -48,6 +53,7 @@ export class SustainedTelemetry {
     this.#peakPendingBytes = 0;
     this.#peakPendingChunks = 0;
     this.#peakRecoveryChunks = 0;
+    this.#peakPendingTextureTiles = 0;
   }
   report() {
     const samples = this.#samples.map(s => ({...s}));
@@ -60,6 +66,9 @@ export class SustainedTelemetry {
       peakPendingBytes: this.#peakPendingBytes,
       peakPendingChunks: this.#peakPendingChunks,
       peakRecoveryChunks: this.#peakRecoveryChunks,
+      peakPendingTextureTiles: this.#peakPendingTextureTiles,
+      peakGpuTextureBytesEstimate: max('gpuTextureBytesEstimate'),
+      peakDecodedTileBytesEstimate: max('terrainDecodedTileBytesEstimate'),
       peakGpuBytesEstimate: max('gpuBytesEstimate'),
       heapAvailable: samples.some(s => s.heapBytes !== null),
       samples
