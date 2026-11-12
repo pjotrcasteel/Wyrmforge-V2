@@ -12,8 +12,10 @@ test('visible V2.6 proof uses real terrain loader, authority, mesher and WebGL r
   assert.match(main,/href="\.\/external-terrain-lab\.html"/);
   assert.match(entry,/new V2ExternalTerrainLoader\(createExternalSiteFixture\(/);
   assert.match(entry,/loader\.loadStep\(192\)/);
-  assert.match(entry,/active=loader\.terrain/);
-  assert.match(entry,/renderer\.setMeshes\(buildExposedFaceMeshes\(active\.world\)\)/);
+  assert.match(entry,/stageTerrainMeshes\(loader\.terrain,'initial'\)/);
+  assert.match(entry,/new V2ExternalTerrainMeshBridge\(\{/);
+  assert.match(entry,/renderer\.setMeshes\(meshes\)/);
+  assert.doesNotMatch(entry,/renderer\.setMeshes\(buildExposedFaceMeshes\(/);
   assert.match(entry,/const result=active\.port\.apply\(/);
   assert.match(entry,/renderer\.queueReplacementMeshes\(dirty,meshes\)/);
   assert.match(entry,/renderer\.flushQueuedUploads\(\{budgetMs:2\}\)/);
@@ -55,4 +57,18 @@ test('diagonal inspection visibly separates a 3D arch underside and side depths'
     'both ground axes are visible in an actual diagonal 3D view');
   assert.notEqual(near.depth,floor.depth,
     'the oblique camera preserves actual depth ordering of geometry');
+});
+
+test('external proof builds complete scenes on worker while allowing small-device fallback',()=>{
+  const entry=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  assert.match(entry,/new Worker\(new URL\('\.\/src\/terrain-mesh\.worker\.mjs'/);
+  assert.match(entry,/pendingMesh=\{terrain,kind,epoch\}/);
+  assert.match(entry,/if\(!meshBridge\.status\.busy\)/);
+  assert.match(entry,/renderer\.setMeshes\(meshes\)/);
+  assert.match(entry,/if\(pendingMesh\) \{/);
+  assert.match(entry,/if\(kind==='restore'\) \{/);
+  assert.match(entry,/meshBridge\?\.cancel\(\)/);
+  assert.match(entry,/meshBridge\?\.close\(\)/);
+  assert.match(entry,/if\(terrain\.world\.chunkCount>8\)/,
+    'large scenes must not silently fall back to synchronous meshing');
 });
