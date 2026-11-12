@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 — External V2 terrain checkpoint and staged verified replay (2026-11-12)
+
+**Why:** The V2.6 external-terrain handoff supported load, mutation and unload, but the earlier replay-checkpoint format could only regenerate the four built-in lab scenes. A future World Generation V2 forest must persist the **original 3D definition, generator identity, seed, ordered terrain commands and accumulated material damage** rather than silently regenerating a fresh landscape.
+
+**Implemented:** `voxel-v2.external-terrain-checkpoint.v1` captures the loader's canonical independent V2 source runs and one authoritative edit journal. Its non-cryptographic fingerprints cover the source, journal, final voxel world and accumulated damage. The portable bound is 1 MiB and 128 recorded edit commands; this is for *accidental corruption detection, not cryptographic authentication*. A new `V2ExternalTerrainReplaySession` preflights the input before allocating, reinitializes at most 4096 source cells and replays at most 8 edit commands per step, and **does not expose its world until all source, journal, final geometry, and partial-damage checks pass**. On mismatch, it unloads its temporary world without changing the live authority. Replay emits no fake live events; only subsequent edits use the ordinary V2 port notifications. A verified replay can be saved again, including later edits.
+
+**Visible demonstration:** The separate V2.6 external-site page now offers `Save terrain state` and `Restore saved state` alongside `Reload external site`. A fresh site remains visible while a saved JSON checkpoint is rebuilt and verified in bounded steps; then the real WebGL renderer switches to the restored authoritative geometry. No V1 terrain, duplicate collision state, or final art is involved.
+
+**Acceptance and limits:** Automated tests verify byte-for-byte JSON roundtrip at 16³/32³, intact edited geometry and partial damage, identical stable world digest, idempotent ordered journal, future edit notifications, malformed/tampered source or journal rejection, rollback on final-state mismatch, source immutability, size/cell/edit budgets and cleanup. The 1 MiB / 128-edit *portable* format is not a production-sized save architecture. The final world-digest verification and mesh derivation are still synchronous; larger generated sites will require worker scheduling and measured budgets. This closes a V2.7 **correctness subgate**, not device acceptance. Older Android Firefox sustained ~24 FPS remains open; no 10-minute phone test requested.
+
+
 ## V2.6 — Camera readability of the external-site visual proof (2026-11-12)
 
 A physical iPhone screenshot of the initial `e2cc103` proof showed that the external site loaded, GPU queues drained and the stone-span damage command executed; however, the proof page forced the initial **Hunt-style camera**, making the authored freestanding 3D arch read as a largely top-down glyph. This is a **visual presentation limitation**, not evidence of a failed authoritative 3D terrain or GPU integration contract.

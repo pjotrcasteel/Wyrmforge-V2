@@ -142,6 +142,20 @@ export class V2ExternalTerrainLoader {
     return this.progress;
   }
 
+  // A canonical serializable copy for V2.7 replay. Never hand out the
+  // private retained generator runs: consumer mutations must stay isolated.
+  exportDefinition() {
+    if(this.#closed) throw new Error('External terrain loader is unloaded');
+    return {
+      schema:this.#definition.schema,
+      siteId:this.#definition.siteId,
+      generatorVersion:this.#definition.generatorVersion,
+      seed:this.#definition.seed,
+      chunkEdge:this.#definition.chunkEdge,
+      runs:this.#definition.runs.map(run=>({...run}))
+    };
+  }
+
   get terrain() {
     if(this.#closed) throw new Error('External terrain loader is unloaded');
     if(!this.#port) throw new Error('External terrain is not fully initialized');
