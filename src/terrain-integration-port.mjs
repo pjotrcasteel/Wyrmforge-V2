@@ -3,7 +3,7 @@
 // This port only forwards queries/commands and publishes versioned events after
 // successful commits; it never creates a second world, renderer or edit writer.
 import { raycastTerrain } from './terrain-raycast.mjs';
-import { actorOverlapsTerrain, sweepActorAxis } from './terrain-actor.mjs';
+import { actorOverlapsTerrain, sweepActorAxis, recoverTerrainActor } from './terrain-actor.mjs';
 
 export const TERRAIN_PORT_SCHEMA = 'voxel-v2.terrain-port.v1';
 export const TERRAIN_CHANGE_SCHEMA = 'voxel-v2.terrain-change.v1';
@@ -107,6 +107,11 @@ export class V2TerrainPort {
   sweepActor(position,axis,distance) {
     this.#active();
     return sweepActorAxis(this.#world,position,axis,distance);
+  }
+  // Explicit opt-in; does not teleport an actor or mutate the world.
+  recoverActor(position,options) {
+    this.#active();
+    return recoverTerrainActor(this.#world,position,options);
   }
 
   exportJournal() { this.#active(); return this.#ledger.exportJournal(); }
