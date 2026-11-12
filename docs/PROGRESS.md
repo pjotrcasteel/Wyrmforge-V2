@@ -1,5 +1,14 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 — Physical iPhone external checkpoint restore confirmed (2026-11-12)
+
+**Owner-observed functional check:** On the deployed build `a7f3f4f8bada0f8221a46fce350a0be913510997`, the user confirmed that the browser demonstration's **break → save → reload original site → restore destroyed site** flow works as expected. This closes the *manual visual proof of the external-terrain portable replay subfeature*, not the whole V2.7 foundation release. The result includes no recorded performance metrics, so no timing or memory claim is inferred.
+
+**Further automated coverage:** A V2.7 regression tests the actual external loader and staged checkpoint restore alongside a delayed, canceled mesh-worker result. It ensures an obsolete worker response from the pre-restore terrain cannot overwrite the restored world; a newly committed edit also invalidates a previously valid worker mesh response. Both 16³ and 32³ chunk pitches are included, and the authoritative voxel checksum is compared after restoration.
+
+**Remaining original gate:** Android Chrome ten-minute acceptance and older Android Firefox sustained ~24 FPS performance remain open, as do any other incomplete original V2.0–V2.7 release measurements. The user requested no further ten-minute phone tests for now; therefore continue automated foundation verification without claiming the overall foundation released or starting V2.8 generation prematurely.
+
+
 ## V2.7 — External V2 terrain checkpoint and staged verified replay (2026-11-12)
 
 **Why:** The V2.6 external-terrain handoff supported load, mutation and unload, but the earlier replay-checkpoint format could only regenerate the four built-in lab scenes. A future World Generation V2 forest must persist the **original 3D definition, generator identity, seed, ordered terrain commands and accumulated material damage** rather than silently regenerating a fresh landscape.
