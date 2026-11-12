@@ -1,5 +1,14 @@
 # Voxel Engine V2 — implementation status
 
+## V2.6 — Camera readability of the external-site visual proof (2026-11-12)
+
+A physical iPhone screenshot of the initial `e2cc103` proof showed that the external site loaded, GPU queues drained and the stone-span damage command executed; however, the proof page forced the initial **Hunt-style camera**, making the authored freestanding 3D arch read as a largely top-down glyph. This is a **visual presentation limitation**, not evidence of a failed authoritative 3D terrain or GPU integration contract.
+
+The standalone external-site proof now **defaults to the pre-existing diagonal V2 inspection camera**. A visible view selector permits comparison with the original Hunt camera without reloading the world, rebuilding mesh geometry or changing terrain authority. Status displays the active camera and the number of voxels removed by the previous hit. Automated projection tests verify that the stone roof and X/Z-ground axes separate in 3D; route tests guard the default and its presentation-only camera switching.
+
+This small follow-up does not alter the game camera baseline, V2.8 map generation, physics, textures, or V2.7 mobile acceptance. The older Android's sustained pacing issue remains open; no long-run manual tests were requested.
+
+
 ## V2.6 — Real WebGL external-terrain handoff proof (2026-11-12)
 
 **Built:** an independent `external-terrain-lab.html` route and versioned Pages copy. It consumes the existing V2.6 `V2ExternalTerrainLoader` with a **fixed authored engineering fixture**, rather than regenerating terrain inside Voxel V2. A 3D stone span with real walkable air underneath and layered ground is initialized in bounded 192-cell steps, then meshed by the existing exposed-face mesher, and uploaded using the existing **WebGL2 frame-budgeted GPU queue**. The route has an explicit break-span action committing to the existing `V2TerrainPort`; only dirty chunk meshes are queued for replacement, never a parallel collision state or fake canvas approximation. The route also supports 16³/32³ chunk pitch and explicit unload/reset.

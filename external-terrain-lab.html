@@ -30,6 +30,11 @@ footer{padding:6px 12px;color:#b6cbd8;font-size:11px;background:#101820}
 </header>
 <main><canvas id="site-view" aria-label="Real externally initialized voxel site with stone span and grassy ground"></canvas></main>
 <section id="controls" aria-label="External terrain demonstration">
+<label for="view-camera">View</label>
+<select id="view-camera" aria-label="Terrain viewing angle">
+  <option value="inspection" selected>3D inspection (default)</option>
+  <option value="hunt">Hunt camera (candidate)</option>
+</select>
 <label for="chunk-edge">Chunk pitch</label>
 <select id="chunk-edge"><option value="16">16³</option><option value="32" selected>32³</option></select>
 <button id="reset-site" type="button">Reload external site</button>

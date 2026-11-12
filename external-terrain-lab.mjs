@@ -12,6 +12,7 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
+const viewCamera=document.querySelector('#view-camera');
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
 document.querySelector('#build').textContent='v'+VERSION+' · '+COMMIT.slice(0,7);
@@ -19,6 +20,7 @@ document.querySelector('#build').textContent='v'+VERSION+' · '+COMMIT.slice(0,7
 let loader=null;
 let active=null;
 let breachCount=0;
+let lastImpactRemoved=0;
 let lastStatusAt=-Infinity;
 let errorMessage=null;
 let renderer=null;
@@ -48,7 +50,9 @@ function updateStatus(now=performance.now()) {
     ? '3D site '+active.source.siteId+' · '+loaded.chunkCount+
       ' chunks · '+loaded.revision+' authoritative revisions · '+
       renderer.pendingUploads+' GPU operations remaining'+
-      (breachCount ? ' · '+breachCount+' span impacts' : '')
+      ' · '+(viewCamera.value==='inspection' ? '3D inspection' : 'Hunt camera')+
+      (breachCount ? ' · '+breachCount+' span impacts'+
+        ' · last removed '+lastImpactRemoved+' voxels' : '')
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
 }
@@ -57,6 +61,7 @@ function resetSite() {
   try {
     errorMessage=null;
     breachCount=0;
+    lastImpactRemoved=0;
     breachButton.disabled=true;
     // Tear down the previous authority before a new one becomes public.
     // Renderer removes stale scene data and retires GPU records per frame.
@@ -83,6 +88,7 @@ function impactSpan() {
       type:'carve-sphere',...EXTERNAL_SITE_BREACH,
       expectedRevision:active.world.revision
     });
+    lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {
       // Only changed chunk meshes are recreated, never the entire scene.
@@ -111,10 +117,16 @@ function frame(now) {
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
     resizeCanvas();
     if(renderer?.ready) {
-      const scale=Math.max(9,Math.min(20,canvas.width/34));
+      // The hunt preset looks almost top-down on a small, low-profile fixture.
+      // Default to the already-tested diagonal inspection basis so the actual
+      // underside, stone walls and vertical height are legible on mobile.
+      // This is presentation-only: switching views never remeshes terrain.
+      const camera=viewCamera.value;
+      const scale=Math.max(9,Math.min(20,
+        canvas.width/(camera==='inspection' ? 37 : 34)));
       renderer.render({
         width:canvas.width,height:canvas.height,
-        scale,panX:0,panY:0,camera:'hunt'
+        scale,panX:0,panY:0,camera
       });
     }
     breachButton.disabled=!active || !renderer?.ready || renderer.pendingUploads ||
@@ -130,6 +142,10 @@ function frame(now) {
 
 resetButton.addEventListener('click',resetSite);
 pitch.addEventListener('change',resetSite);
+viewCamera.addEventListener('change',()=>{
+  lastStatusAt=-Infinity;
+  updateStatus();
+});
 breachButton.addEventListener('click',impactSpan);
 window.addEventListener('pagehide',()=>{
   loader?.unload();
