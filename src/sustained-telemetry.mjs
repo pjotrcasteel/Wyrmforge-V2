@@ -30,10 +30,10 @@ export class SustainedTelemetry {
   }
   due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
   record(now, { frames, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
-    heapBytes = null }) {
+    heapBytes = null }, { force = false } = {}) {
     if (!Number.isFinite(now)) return false;
     if (this.#start === null) this.#start = now;
-    if (this.#last !== null && now - this.#last < this.intervalMs) return false;
+    if (!force && this.#last !== null && now - this.#last < this.intervalMs) return false;
     this.#last = now;
     this.observeQueue(queue);
     const sample = {
