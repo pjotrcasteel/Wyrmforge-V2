@@ -50,6 +50,8 @@ uniform vec4 uTerrainNormalLayers;
 uniform vec4 uTerrainOrmLayers;
 uniform vec4 uTerrainLayers;
 uniform vec4 uTerrainSecondaryLayers;
+uniform vec4 uTerrainSecondaryNormalLayers;
+uniform vec4 uTerrainSecondaryOrmLayers;
 uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform float uGrassTexelsPerVoxel;
@@ -116,6 +118,7 @@ void main() {
   float layer = uTerrainLayers[surfaceIndex];
   float normalLayer = uTerrainNormalLayers[surfaceIndex];
   float ormLayer = uTerrainOrmLayers[surfaceIndex];
+  float variantMix = 0.0;
   if (layer >= 0.0) {
     vec2 uv = materialUv;
     vec3 primary = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
@@ -139,6 +142,7 @@ void main() {
       vec3 secondary = texture(uTerrainAlbedo,
         vec3(uv * uTerrainTilesPerVoxel, secondaryLayer)).rgb;
       albedo = mix(primary, secondary, mixAmount);
+      variantMix = mixAmount;
     } else {
       albedo = primary;
     }
@@ -153,6 +157,12 @@ void main() {
   if (layer >= 0.0 && normalLayer >= 0.0) {
     vec3 tangentNormal = texture(uTerrainNormal,
       vec3(materialUv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
+    float secondaryNormal = uTerrainSecondaryNormalLayers[surfaceIndex];
+    if (variantMix > 0.0 && secondaryNormal >= 0.0) {
+      vec3 nextNormal = texture(uTerrainNormal,
+        vec3(materialUv * uTerrainTilesPerVoxel, secondaryNormal)).xyz * 2.0 - 1.0;
+      tangentNormal = normalize(mix(tangentNormal, nextNormal, variantMix));
+    }
     // Explicit face bases prevent top/wall normal maps from rotating incorrectly.
     vec3 n = normalize(vNormal);
     vec3 t = abs(n.y) > 0.5 ? vec3(1.0, 0.0, 0.0)
@@ -168,6 +178,12 @@ void main() {
   if (layer >= 0.0 && ormLayer >= 0.0) {
     vec3 orm = texture(uTerrainOrm,
       vec3(materialUv * uTerrainTilesPerVoxel, ormLayer)).rgb;
+    float secondaryOrm = uTerrainSecondaryOrmLayers[surfaceIndex];
+    if (variantMix > 0.0 && secondaryOrm >= 0.0) {
+      vec3 nextOrm = texture(uTerrainOrm,
+        vec3(materialUv * uTerrainTilesPerVoxel, secondaryOrm)).rgb;
+      orm = mix(orm, nextOrm, variantMix);
+    }
     // AO is local material micro-occlusion; roughness reduces broad highlights.
     // Metalness is reserved for a future physically based renderer.
     lighting *= mix(0.65, 1.0, orm.r);
@@ -211,7 +227,8 @@ function createProgram(gl) {
 export class WebGLVoxelView {
   #gl;
   #grassImage = null;
-  #terrainManifest = compileTerrainTextureManifest();
+  // Authored texture slots are native 64px art, not downscaled preview assets.
+  #terrainManifest = compileTerrainTextureManifest(undefined,{tileSize:64});
   #terrainCache = null;
   #terrainTileImages = new Map();
   #pendingTerrainTiles = new Map();
@@ -551,6 +568,8 @@ export class WebGLVoxelView {
       terrainOrmLayers: gl.getUniformLocation(this.#program, 'uTerrainOrmLayers'),
       terrainLayers: gl.getUniformLocation(this.#program, 'uTerrainLayers'),
       terrainSecondaryLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryLayers'),
+      terrainSecondaryNormalLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryNormalLayers'),
+      terrainSecondaryOrmLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryOrmLayers'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
     };
     this.#uploadGrassTexture();
@@ -756,6 +775,13 @@ export class WebGLVoxelView {
         return this.#terrainCache?.getLayer(channel, variant.textures[channel]) ?? -1;
       });
       gl.uniform4fv?.(locations, channelLayers);
+      const secondLayers = keys.map(key => {
+        const variant = TERRAIN_SURFACE_LIBRARY[key].variants[1];
+        return variant ? (this.#terrainCache?.getLayer(channel, variant.textures[channel]) ?? -1) : -1;
+      });
+      const secondaryUniform = channel === 'normal'
+        ? this.#uniforms.terrainSecondaryNormalLayers : this.#uniforms.terrainSecondaryOrmLayers;
+      gl.uniform4fv?.(secondaryUniform, secondLayers);
     }
     const secondaryLayers = keys.map(key => {
       const variant = TERRAIN_SURFACE_LIBRARY[key].variants[1];
