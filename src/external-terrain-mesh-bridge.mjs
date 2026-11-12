@@ -43,7 +43,7 @@ export class V2ExternalTerrainMeshBridge {
     });
   }
 
-  begin(world) {
+  #validateWorld(world) {
     if(this.#closed) throw new Error('External terrain mesh bridge is closed');
     if(!world || ![16,32].includes(world.chunkEdge) ||
         !Number.isSafeInteger(world.revision) ||
@@ -51,16 +51,46 @@ export class V2ExternalTerrainMeshBridge {
         typeof world.chunkSnapshot!=='function') {
       throw new TypeError('Expected an authoritative V2 voxel world');
     }
+  }
+
+  #start(world,ids,kind) {
     this.cancel();
-    const ids=world.chunkIds();
-    if(ids.length===0) throw new RangeError('External terrain has no occupied chunks');
     const target={
-      epoch:this.#epoch,world,revision:world.revision,
+      epoch:this.#epoch,world,revision:world.revision,kind,
+      dirtyIds:kind==='edit' ? [...ids] : null,
       remaining:ids,meshes:[],completedChunks:0,totalChunks:ids.length
     };
     this.#active=target;
     this.#dispatch();
     return target.epoch;
+  }
+
+  begin(world) {
+    this.#validateWorld(world);
+    const ids=world.chunkIds();
+    if(ids.length===0) throw new RangeError('External terrain has no occupied chunks');
+    return this.#start(world,ids,'scene');
+  }
+
+  // Mesh only the changed chunks and their neighbors after an accepted edit.
+  // Removed chunks are valid dirty IDs: the worker returns no mesh for them,
+  // allowing WebGL to retire their old buffers. Never scan the whole scene.
+  replace(world,dirtyIds) {
+    this.#validateWorld(world);
+    if(!(dirtyIds instanceof Set) && !Array.isArray(dirtyIds)) {
+      throw new TypeError('Expected dirty V2 chunk IDs');
+    }
+    const ids=[...new Set(dirtyIds)];
+    if(ids.length<1 || ids.length>128) {
+      throw new RangeError('External terrain edit chunk budget exceeded');
+    }
+    const pattern=/^-?(0|[1-9]\\d*),-?(0|[1-9]\\d*),-?(0|[1-9]\\d*)$/;
+    if(!ids.every(id=>typeof id==='string' && pattern.test(id) &&
+        id.split(',').map(Number).every(Number.isSafeInteger))) {
+      throw new TypeError('Expected canonical signed V2 dirty chunk IDs');
+    }
+    ids.sort();
+    return this.#start(world,ids,'edit');
   }
 
   cancel() {
@@ -99,7 +129,7 @@ export class V2ExternalTerrainMeshBridge {
       this.#activeJob=null;
       // Publish meshes only as a complete set from one authoritative revision.
       try {
-        this.#onReady(target.world,target.meshes,target.epoch);
+        this.#onReady(target.world,target.meshes,target.epoch,target.kind,target.dirtyIds);
       } catch(error) {
         this.#onFailure(error?.message ?? String(error),target.epoch);
       }
