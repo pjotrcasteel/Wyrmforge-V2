@@ -2,6 +2,7 @@ import { createScene, MAX_SCENE_SEED, SCENE_GENERATOR_VERSION } from './src/voxe
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { FrameMetrics } from './src/frame-metrics.mjs';
 import { SustainedTelemetry } from './src/sustained-telemetry.mjs';
+import { SOAK_CYCLE_MS, SOAK_PROFILES, describeSoakProgress } from './src/mobile-soak-profile.mjs';
 import { PointerGestures } from './src/pointer-gestures.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { createMeshingJob, jobTransferBuffers, isCurrentMeshingResult } from './src/mesh-worker-protocol.mjs';
@@ -674,6 +675,7 @@ function draw() {
 
 
 const presetRunButton = document.querySelector('#preset-run');
+const soakRunButton = document.querySelector('#soak-run');
 const ambushRunButton = document.querySelector('#ambush-run');
 const fissureRunButton = document.querySelector('#fissure-run');
 const phoneStressLevel = document.querySelector('#phone-stress-level');
@@ -830,40 +832,89 @@ ambushRunButton.addEventListener('click', () => {
   controlsToggle.setAttribute('aria-expanded','false');
   presetProgress.textContent = 'Ambush · starting 3 × 18 impact waves';
 });
-function stopPreset(reason = 'Stopped', exportReport = false) {
+function stopPreset(reason = 'Stopped', completed = false) {
   if (!preset) return;
-  const elapsedMs = Math.max(0, performance.now() - preset.startedAt);
+  const run = preset;
+  const elapsedMs = Math.max(0, performance.now() - run.startedAt);
+  const queuesDrained = !activeTerrainJob && pendingTerrainDirty.size === 0 &&
+    !gpuRenderer?.pendingUploads;
+  const expectedResets = run.profile.resetBetweenCycles
+    ? Math.ceil(run.profile.durationMs / SOAK_CYCLE_MS) - 1 : 0;
+  const validCompletion = completed && elapsedMs >= run.profile.durationMs &&
+    run.cycleResets === expectedResets && queuesDrained &&
+    run.changedImpacts > 0 && run.rejectedImpacts === 0 && !gpuError;
   lastPresetReport = {
-    schema:'voxel-v2.preset.v1', status:exportReport ? 'complete' : 'stopped',
-    reason, elapsedMs:Math.round(elapsedMs), impacts:preset.impacts,
-    changedImpacts:preset.changedImpacts, removedVoxels:preset.removedVoxels,
-    uniqueSites:preset.sites.size, rejectedImpacts:preset.rejectedImpacts,
-    verdict:exportReport && preset.changedImpacts > 0 && preset.rejectedImpacts === 0 && !gpuError
-      ? 'pass' : 'incomplete',
-    plannedDurationMs:180000, seed:7, scene:'hill', meshing:'worker'
+    schema: run.profile.resetBetweenCycles ? 'voxel-v2.mobile-soak.v1' : 'voxel-v2.preset.v1',
+    status: completed ? 'complete' : 'stopped',
+    reason, elapsedMs: Math.round(elapsedMs), impacts: run.impacts,
+    changedImpacts: run.changedImpacts, removedVoxels: run.removedVoxels,
+    uniqueSites: run.sites.size, rejectedImpacts: run.rejectedImpacts,
+    verdict: run.profile.resetBetweenCycles
+      ? (validCompletion ? 'evidence-captured' : 'incomplete')
+      : (validCompletion ? 'pass' : 'incomplete'),
+    profile: run.profile.id, plannedDurationMs: run.profile.durationMs,
+    completedSceneResets: run.cycleResets, expectedSceneResets: expectedResets,
+    queuesDrained, seed: 7, scene: 'hill', meshing: 'worker',
+    evidenceLimits: 'Terrain-only laboratory; no enemies, VFX, structural gravity, ' +
+      'GPU driver timing or automatic thermal/performance acceptance'
   };
   preset = null;
   presetDamageTarget = null;
   presetRunButton.disabled = false;
+  soakRunButton.disabled = false;
   presetStopButton.disabled = true;
-  presetProgress.textContent = reason + ' · ' + lastPresetReport.impacts + ' impacts';
-  if (exportReport) document.querySelector('#report').click();
+  presetProgress.textContent = reason + ' · ' + lastPresetReport.impacts +
+    ' impacts · ' + lastPresetReport.verdict;
+  // A completion from the animation frame is automatically exported, matching
+  // the original preset. Interrupted evidence remains available via Export benchmark.
+  if (completed || reason === 'Stopped manually') document.querySelector('#report').click();
 }
+
 function advancePreset(now) {
   if (!preset) return;
-  if (document.hidden || gpuError) {
-    stopPreset(document.hidden ? 'Paused by backgrounding' : 'Renderer error');
+  if (document.hidden || gpuError || terrainMeshMode.value !== 'worker') {
+    stopPreset(document.hidden ? 'Stopped by backgrounding' :
+      'Renderer error or worker unavailable');
     return;
   }
   const elapsed = now - preset.startedAt;
-  if (elapsed >= 180000) {
-    stopPreset('Completed', true);
+  const step = describeSoakProgress(preset.profile, elapsed, preset.cycleIndex);
+  const queuesDrained = !activeTerrainJob && pendingTerrainDirty.size === 0 &&
+    !gpuRenderer?.pendingUploads;
+  if (step.finished) {
+    if (queuesDrained) {
+      stopPreset('Completed', true);
+    } else if (elapsed >= preset.profile.durationMs + 30_000) {
+      stopPreset('Timed out waiting for GPU or worker queues to drain');
+    } else {
+      presetProgress.textContent = 'Finishing soak · draining worker and GPU queues';
+    }
     return;
   }
-  // Three 40-second attack phases separated by 20-second recovery periods.
-  const phase = elapsed % 60000;
-  if (phase < 40000 && now >= preset.nextImpactAt) {
-    presetDamageTarget = spatialDamageTarget(world, preset.impacts);
+  if (step.resetDue) {
+    if (step.cycleIndex !== preset.cycleIndex + 1) {
+      stopPreset('Missed scheduled soak cycle; incomplete evidence');
+      return;
+    }
+    if (!queuesDrained) {
+      presetProgress.textContent = 'Soak cycle ' + (step.cycleIndex + 1) +
+        ' · draining uploads before safe world reset';
+      return;
+    }
+    // This rebuild must be measured, not hidden by clearing frame percentiles
+    // or the one-second samples. The renderer stages uploads and GPU disposals.
+    chooseScene({ preserveMeasurements: true });
+    if (terrainMeshMode.value !== 'worker' || !gpuRenderer?.ready) {
+      stopPreset('Worker or WebGL2 unavailable after scene reset');
+      return;
+    }
+    preset.cycleIndex = step.cycleIndex;
+    preset.cycleResets++;
+    preset.cycleImpacts = 0;
+    preset.nextImpactAt = now + 650;
+  }
+  if (step.attacking && now >= preset.nextImpactAt) {
+    presetDamageTarget = spatialDamageTarget(world, preset.cycleImpacts);
     preset.sites.add(presetDamageTarget.x + ',' + presetDamageTarget.z);
     const beforeRevision = world.revision;
     const beforeEditRevision = terrainEdits.editRevision;
@@ -874,17 +925,20 @@ function advancePreset(now) {
       ? (lastDamage?.removedVoxels ?? 0) : 0;
     presetDamageTarget = null;
     preset.impacts++;
+    preset.cycleImpacts++;
     preset.nextImpactAt = now + 650;
   }
   if (now >= preset.nextStatusAt) {
-    presetProgress.textContent = Math.floor(elapsed / 1000) + '/180 s · ' +
-      preset.impacts + ' impacts / ' + preset.changedImpacts + ' terrain changes · ' +
-      (phase < 40000 ? 'destruction' : 'recovery');
+    presetProgress.textContent = Math.floor(elapsed / 1000) + '/' +
+      (preset.profile.durationMs / 1000) + ' s · ' + preset.impacts +
+      ' impacts · ' + preset.cycleResets + ' resets · ' +
+      (step.attacking ? 'destruction' : 'recovery');
     preset.nextStatusAt = now + 1000;
   }
 }
-presetRunButton.addEventListener('click', () => {
-  if (preset || ambush) return;
+
+function startPreset(profile) {
+  if (preset || ambush || fissureRun) return;
   scenePicker.value = 'hill';
   seedPicker.value = '7';
   chunkPicker.value = '32';
@@ -893,20 +947,26 @@ presetRunButton.addEventListener('click', () => {
   terrainTargetMode.value = 'spell';
   chooseScene();
   cameraPicker.dispatchEvent(new Event('change'));
-  if (terrainMeshMode.value !== 'worker') {
-    presetProgress.textContent = 'Worker unavailable; preset not started';
+  if (terrainMeshMode.value !== 'worker' || !gpuRenderer?.ready) {
+    presetProgress.textContent = 'Worker and WebGL2 required; soak not started';
     return;
   }
   lastPresetReport = null;
   const now = performance.now();
-  preset = {startedAt:now, nextImpactAt:now + 1000, nextStatusAt:now, impacts:0,
-    changedImpacts:0, removedVoxels:0, rejectedImpacts:0, sites:new Set()};
+  preset = {
+    profile, startedAt: now, nextImpactAt: now + 1000,
+    nextStatusAt: now, impacts: 0, cycleImpacts: 0, cycleIndex: 0,
+    cycleResets: 0, changedImpacts: 0, removedVoxels: 0,
+    rejectedImpacts: 0, sites: new Set()
+  };
   presetRunButton.disabled = true;
+  soakRunButton.disabled = true;
   presetStopButton.disabled = false;
-  controlsPanel.hidden = true;
-  document.querySelector('#lab-controls-toggle').setAttribute('aria-expanded','false');
-  presetProgress.textContent = 'Running · 0/180 s';
-});
+  setLabControlsOpen(false);
+  presetProgress.textContent = profile.label + ' · 0/' + (profile.durationMs / 1000) + ' s';
+}
+presetRunButton.addEventListener('click', () => startPreset(SOAK_PROFILES.short));
+soakRunButton.addEventListener('click', () => startPreset(SOAK_PROFILES.sustained));
 presetStopButton.addEventListener('click', () => stopPreset('Stopped manually'));
 dynamicCollisionButton.addEventListener('click', () => {
   if (preset) {
@@ -1016,7 +1076,8 @@ function tick(now) {
   }
   requestAnimationFrame(tick);
 }
-function chooseScene() {
+function chooseScene({ preserveMeasurements = false } = {}) {
+  if (preset && !preserveMeasurements) stopPreset('Scene changed during soak');
   if (ambush) finishAmbush('stopped','Scene reset');
   if (fissureRun) finishFissures('stopped','Scene reset');
   const rawSeed = seedPicker.value.trim();
@@ -1042,9 +1103,11 @@ function chooseScene() {
   rebuildGpuMeshes();
   activeScene = scenePicker.value;
   activeSeed = seed;
-  frameMetrics.reset();
-  sustainedTelemetry.reset();
-  previous = null;
+  if (!preserveMeasurements) {
+    frameMetrics.reset();
+    sustainedTelemetry.reset();
+    previous = null;
+  }
   visibleSurfaces = 0;
   gestures.reset();
   if (actorEnabled) resetActorPilot();
