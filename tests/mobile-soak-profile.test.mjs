@@ -60,3 +60,12 @@ test('lab preserves real frame and sustained samples across soak resets', () => 
   assert.match(source, /completedSceneResets: run\.cycleResets, expectedSceneResets/);
   assert.match(source, /document\.hidden \|\| gpuError \|\| terrainMeshMode\.value !== 'worker'/);
 });
+
+test('mobile soak report includes full-session frame and sampling continuity evidence', () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  assert.match(source, /frameSession:frameMetrics\.sessionSummary\(\)/);
+  assert.match(source, /const frameSession = frameMetrics\.sessionSummary\(\)/);
+  assert.match(source, /timingQuality: timingReviewNeeded \? 'review-gaps'/);
+  assert.match(source, /sessionFrameHitchesOver50Ms: frameSession\.hitchesOver50Ms/);
+  assert.match(source, /largestSamplingGapMs: telemetryContinuity\.largestSamplingGapMs/);
+});
