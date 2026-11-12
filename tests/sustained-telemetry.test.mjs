@@ -114,3 +114,15 @@ test('ordinary one-second jitter and forced final samples do not create fake gap
   telemetry.record(2300,input(0));
   assert.equal(telemetry.report().samplingGapCount,0);
 });
+
+test('sustained samples separate browser frame pacing from main-thread work', () => {
+  const telemetry = new SustainedTelemetry();
+  telemetry.record(0, {...input(1),frameWork:{p95:2.5,p99:4.5}});
+  telemetry.record(1000, input(1));
+  const samples=telemetry.report().samples;
+  assert.equal(samples[0].p95Ms,20);
+  assert.equal(samples[0].frameWorkP95Ms,2.5);
+  assert.equal(samples[0].frameWorkP99Ms,4.5);
+  assert.equal(samples[1].frameWorkP95Ms,null);
+  assert.equal(samples[1].frameWorkP99Ms,null);
+});
