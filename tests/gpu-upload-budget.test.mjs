@@ -26,6 +26,9 @@ function fakeCanvas() {
   return { canvas:{getContext:()=>gl,addEventListener:(type,fn)=>listeners.set(type,fn)},
     now:()=>clock, emit:(type)=>listeners.get(type)?.({preventDefault(){}}) };
 }
+function drain(view, now) {
+  while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2, now });
+}
 function mesh(id) {
   return { id, origin:[0,0,0], positions:new Float32Array(9),
     normals:new Int8Array(9), materials:new Uint8Array(3),
@@ -60,6 +63,9 @@ test('cancel and full scene replacement invalidate stale pending geometry', () =
   assert.equal(view.statistics.drawCalls,0);
   view.queueReplacementMeshes(['0,0,0'],[mesh('0,0,0')]);
   view.setMeshes([mesh('2,0,0')]);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  assert.equal(view.statistics.drawCalls,0);
+  drain(view,now);
   assert.equal(view.pendingUploads,0);
   assert.equal(view.statistics.drawCalls,1);
   assert.throws(()=>view.queueReplacementMeshes(Array.from({length:129},(_,i)=>String(i)),[]),RangeError);
@@ -70,6 +76,7 @@ test('context restoration reuploads across frames instead of blocking restore ev
   const {canvas,now,emit}=fakeCanvas();
   const view=new WebGLVoxelView(canvas);
   view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  drain(view,now);
   assert.equal(view.statistics.drawCalls,3);
   emit('webglcontextlost');
   assert.equal(view.ready,false);
@@ -93,11 +100,15 @@ test('reset during context recovery discards old-world uploads', () => {
   const {canvas,now,emit}=fakeCanvas();
   const view=new WebGLVoxelView(canvas);
   view.setMeshes([mesh('old-a'),mesh('old-b')]);
+  drain(view,now);
   emit('webglcontextlost');
   emit('webglcontextrestored');
   view.setMeshes([mesh('new')]);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  assert.equal(view.statistics.drawCalls,0);
+  drain(view,now);
   assert.equal(view.pendingUploads,0);
-  assert.equal(view.flushQueuedUploads({now}).chunks,0);
   assert.equal(view.statistics.drawCalls,1);
   view.dispose();
 });
@@ -125,6 +136,7 @@ test('browser diagnostic context loss and restore drains retained meshes', () =>
   const {canvas,now} = fakeCanvas();
   const view = new WebGLVoxelView(canvas);
   view.setMeshes([mesh('a'), mesh('b')]);
+  drain(view,now);
   assert.equal(view.simulateContextTransition('lose'), true);
   assert.equal(view.ready, false);
   assert.equal(view.statistics.contextLosses, 1);
@@ -142,6 +154,7 @@ test('context loss during queued uploads restores latest authoritative meshes on
   const {canvas,now} = fakeCanvas();
   const view = new WebGLVoxelView(canvas);
   view.setMeshes([mesh('old-a'), mesh('old-b')]);
+  drain(view,now);
   view.queueReplacementMeshes(['old-a'], [mesh('old-a')]);
   view.queueReplacementMeshes(['old-b'], []);
   assert.equal(view.pendingUploads, 2);
@@ -160,6 +173,7 @@ test('scene reset during lost context does not restore old-world meshes', () => 
   const {canvas,now} = fakeCanvas();
   const view = new WebGLVoxelView(canvas);
   view.setMeshes([mesh('old-a'), mesh('old-b')]);
+  drain(view,now);
   assert.equal(view.simulateContextTransition('lose'), true);
   view.setMeshes([mesh('new-world')]);
   assert.equal(view.simulateContextTransition('restore'), true);
@@ -173,6 +187,7 @@ test('dirty replacements during context recovery remain frame-budgeted', () => {
   const {canvas,now,emit}=fakeCanvas();
   const view=new WebGLVoxelView(canvas);
   view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  drain(view,now);
   emit('webglcontextlost');
   emit('webglcontextrestored');
   assert.equal(view.statistics.drawCalls,0);
@@ -198,6 +213,7 @@ test('direct authoritative replacement invalidates stale queued uploads without 
   const {canvas,now} = fakeCanvas();
   const view = new WebGLVoxelView(canvas);
   view.setMeshes([mesh('a'),mesh('b')]);
+  drain(view,now);
   view.queueReplacementMeshes(['a','b'],[mesh('a'),mesh('b')]);
   assert.equal(view.uploadQueueStatistics.pendingBytes,120);
   view.replaceMeshes(new Set(['a']),[]);
@@ -208,5 +224,44 @@ test('direct authoritative replacement invalidates stale queued uploads without 
   assert.equal(view.uploadQueueStatistics.pendingBytes,0);
   assert.equal(view.flushQueuedUploads({now}).chunks,0);
   assert.equal(view.statistics.drawCalls,1,'removed chunk must not reappear');
+  view.dispose();
+});
+
+test('full-scene initialization is frame-budgeted and rapid reset never draws stale meshes', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('old-a'),mesh('old-b'),mesh('old-c')]);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,3);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,180);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  assert.equal(view.statistics.drawCalls,1);
+  view.setMeshes([mesh('new')]);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,60);
+  drain(view,now);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.statistics.triangles,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
+
+test('edits supersede incomplete initial scene and context loss replays only latest meshes', () => {
+  const {canvas,now,emit} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  view.replaceMeshes(new Set(['b']),[mesh('b')]);
+  view.replaceMeshes(new Set(['c']),[]);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,120);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  emit('webglcontextlost');
+  emit('webglcontextrestored');
+  assert.equal(view.uploadQueueStatistics.sceneChunks,0);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,2);
+  drain(view,now);
+  assert.equal(view.statistics.drawCalls,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
   view.dispose();
 });

@@ -60,6 +60,7 @@ test('GPU partial replacement removes only modified chunk resources, preserving 
   world.set(2, 2, 2, 1);
   world.set(20, 2, 2, 3);
   view.setMeshes(buildExposedFaceMeshes(world));
+  while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2 });
   assert.equal(view.statistics.drawCalls, 2);
   assert.equal(stats.createdArrays.length, 2);
   assert.equal(stats.deletedBuffers.length, 0);
@@ -94,6 +95,7 @@ test('a seam edit replaces both touched meshes, and context recovery uploads ret
   world.set(15, 3, 3, 2);
   world.set(16, 3, 3, 3);
   view.setMeshes(buildExposedFaceMeshes(world));
+  while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2 });
   assert.equal(view.statistics.triangles, 20);
   world.set(15, 3, 3, 0);
   const dirty = markDirtyForEditedVoxel(new Set(), 16, 15, 3, 3);
@@ -132,6 +134,7 @@ test('switching camera uniforms does not reallocate or replace GPU chunk buffers
   const world = new VoxelWorld();
   world.set(0, 0, 0, 3);
   view.setMeshes(buildExposedFaceMeshes(world));
+  while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2 });
   const initial = view.statistics;
   const createdBuffers = stats.createdBuffers.length;
   const createdArrays = stats.createdArrays.length;
@@ -159,6 +162,7 @@ test('Grass 002 is uploaded once, density changes do not rebuild GPU meshes', ()
   const world = new VoxelWorld();
   world.set(0, 0, 0, 1);
   view.setMeshes(buildExposedFaceMeshes(world));
+  while (view.pendingUploads) view.flushQueuedUploads({ budgetMs: 2 });
   const before = view.statistics;
   view.setGrassMaterial({ width: 1024, height: 1024 }, 32);
   assert.equal(stats.textureUploads, 1);
