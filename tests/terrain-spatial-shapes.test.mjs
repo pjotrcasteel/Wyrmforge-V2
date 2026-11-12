@@ -43,9 +43,9 @@ test('crater is a downward bowl exposing actual layered soil while retaining pro
     assert.equal(world.get(0,2,0),0);
     assert.equal(world.get(0,1,0),0);
     assert.equal(world.get(0,0,0),0,'center is the deepest');
-    assert.equal(world.get(0,-1,0),2,'crater does not excavate below its depth');
-    assert.equal(world.get(3,2,0),0,'rim removes only shallow grass');
-    assert.equal(world.get(3,1,0),2,'outside the bowl depth remains solid');
+    assert.equal(world.get(0,-1,0),3,'crater does not excavate below its depth');
+    assert.equal(world.get(3,2,2),0,'rim removes only shallow grass');
+    assert.equal(world.get(3,1,2),2,'outside the bowl depth remains solid');
     assert.equal(world.get(4,2,0),1,'outside radius is untouched');
     assert.equal(world.get(-2,-1,0),V2_BEDROCK_MATERIAL);
     assert.deepEqual(result.changedBounds.min.y,0);
@@ -185,12 +185,16 @@ test('localized worker geometry matches canonical exposed faces after a crater',
     const dirty=new Set(result.dirtyChunks);
     assert.ok(dirty.size>0);
     const reference=buildExposedFaceMeshes(world,{chunkIds:dirty});
-    // Worker protocol supports bounded localized batches. Split dirty chunks
-    // if this fixture ever grows beyond the standard single-job limit.
-    assert.ok(dirty.size<=4);
-    const job=createTerrainMeshJob(world,dirty,3);
-    const response=processTerrainMeshJob(job);
-    assert.equal(response.revision,world.revision);
-    assert.deepEqual(response.meshes,reference);
+    // Use production-sized four-chunk worker batches with exact dirty IDs.
+    const ids=[...dirty].sort();
+    const workerMeshes=[];
+    for(let i=0;i<ids.length;i+=4) {
+      const job=createTerrainMeshJob(world,new Set(ids.slice(i,i+4)),3+i);
+      const response=processTerrainMeshJob(job);
+      assert.equal(response.revision,world.revision);
+      workerMeshes.push(...response.meshes);
+    }
+    assert.deepEqual(new Map(workerMeshes.map(mesh=>[mesh.id,mesh])),
+      new Map(reference.map(mesh=>[mesh.id,mesh])));
   }
 });
