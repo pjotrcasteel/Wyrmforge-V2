@@ -4,6 +4,9 @@
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { V2ExternalTerrainLoader } from './src/external-terrain-loader.mjs';
 import {
+  createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
+} from './src/external-terrain-checkpoint.mjs';
+import {
   createExternalSiteFixture, EXTERNAL_SITE_BREACH
 } from './src/diagnostics/external-site-fixture.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
@@ -15,9 +18,14 @@ const pitch=document.querySelector('#chunk-edge');
 const viewCamera=document.querySelector('#view-camera');
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
+const saveButton=document.querySelector('#save-site');
+const restoreButton=document.querySelector('#restore-site');
 document.querySelector('#build').textContent='v'+VERSION+' · '+COMMIT.slice(0,7);
 
 let loader=null;
+let restoredSession=null;
+let restoring=null;
+let savedCheckpoint=null;
 let active=null;
 let breachCount=0;
 let lastImpactRemoved=0;
@@ -42,9 +50,15 @@ function updateStatus(now=performance.now()) {
     status.textContent='V2.6 error: '+errorMessage;
     return;
   }
-  if(!loader) return;
-  const progress=loader.progress;
-  const queue=renderer?.uploadQueueStatistics;
+  if(restoring) {
+    const progress=restoring.progress;
+    status.textContent='Restoring verified V2 terrain · '+
+      progress.loadedCells+'/'+progress.totalCells+' cells · '+
+      progress.appliedEdits+'/'+progress.totalEdits+' replayed edits';
+    return;
+  }
+  if(!loader && !restoredSession) return;
+  const progress=loader?.progress ?? restoredSession.progress;
   const loaded=active?.world;
   status.textContent=progress.done
     ? '3D site '+active.source.siteId+' · '+loaded.chunkCount+
@@ -52,7 +66,8 @@ function updateStatus(now=performance.now()) {
       renderer.pendingUploads+' GPU operations remaining'+
       ' · '+(viewCamera.value==='inspection' ? '3D inspection' : 'Hunt camera')+
       (breachCount ? ' · '+breachCount+' span impacts'+
-        ' · last removed '+lastImpactRemoved+' voxels' : '')
+        ' · last removed '+lastImpactRemoved+' voxels' : '')+
+      (savedCheckpoint ? ' · saved state available' : '')
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
 }
@@ -63,6 +78,12 @@ function resetSite() {
     breachCount=0;
     lastImpactRemoved=0;
     breachButton.disabled=true;
+    saveButton.disabled=true;
+    restoreButton.disabled=true;
+    restoring?.unload();
+    restoring=null;
+    restoredSession?.unload();
+    restoredSession=null;
     // Tear down the previous authority before a new one becomes public.
     // Renderer removes stale scene data and retires GPU records per frame.
     if(loader) loader.unload();
@@ -81,7 +102,7 @@ function resetSite() {
 }
 
 function impactSpan() {
-  if(!active || !renderer.ready || renderer.pendingUploads) return;
+  if(!active || restoring || !renderer.ready || renderer.pendingUploads) return;
   try {
     const result=active.port.apply({
       id:'v26-site-breach-'+(++breachCount),
@@ -104,8 +125,57 @@ function impactSpan() {
   }
 }
 
+function saveState() {
+  if(!active || restoring || renderer.pendingUploads) return;
+  try {
+    const checkpoint=restoredSession
+      ? restoredSession.saveCheckpoint()
+      : createExternalTerrainCheckpoint(loader);
+    // Prove the checkpoint survives the JSON boundary used by real saves.
+    savedCheckpoint=JSON.parse(JSON.stringify(checkpoint));
+    errorMessage=null;
+    lastStatusAt=-Infinity;
+    updateStatus();
+  } catch(error) {
+    errorMessage=error.message;
+    updateStatus();
+  }
+}
+
+function restoreState() {
+  if(!active || !savedCheckpoint || restoring || renderer.pendingUploads) return;
+  try {
+    // Keep the active world visible until the new source + journal is verified.
+    restoring=new V2ExternalTerrainReplaySession(savedCheckpoint);
+    errorMessage=null;
+    lastStatusAt=-Infinity;
+    updateStatus();
+  } catch(error) {
+    errorMessage=error.message;
+    updateStatus();
+  }
+}
+
 function frame(now) {
   try {
+    if(restoring) {
+      restoring.step({maxCells:192,maxEdits:1});
+      if(restoring.progress.done) {
+        const replacement=restoring.terrain;
+        const meshes=buildExposedFaceMeshes(replacement.world);
+        // Switch the renderer only after exact world and damage verification.
+        renderer.setMeshes(meshes);
+        loader?.unload();
+        restoredSession?.unload();
+        loader=null;
+        restoredSession=restoring;
+        restoring=null;
+        active=replacement;
+        breachCount=savedCheckpoint.journal.commands.length;
+        lastImpactRemoved=0;
+        lastStatusAt=-Infinity;
+      }
+    }
     if(loader && !loader.progress.done) {
       loader.loadStep(192); // bounded cells per animation frame, not CPU milliseconds
       if(loader.progress.done) {
@@ -129,12 +199,19 @@ function frame(now) {
         scale,panX:0,panY:0,camera
       });
     }
-    breachButton.disabled=!active || !renderer?.ready || renderer.pendingUploads ||
-      Boolean(errorMessage);
+    const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
+      Boolean(errorMessage) || Boolean(restoring);
+    breachButton.disabled=blocked;
+    saveButton.disabled=blocked;
+    restoreButton.disabled=blocked || !savedCheckpoint;
     updateStatus(now);
   } catch(error) {
+    restoring?.unload();
+    restoring=null;
     errorMessage=error.message;
     breachButton.disabled=true;
+    saveButton.disabled=true;
+    restoreButton.disabled=true;
     updateStatus(now);
   }
   requestAnimationFrame(frame);
@@ -147,7 +224,11 @@ viewCamera.addEventListener('change',()=>{
   updateStatus();
 });
 breachButton.addEventListener('click',impactSpan);
+saveButton.addEventListener('click',saveState);
+restoreButton.addEventListener('click',restoreState);
 window.addEventListener('pagehide',()=>{
+  restoring?.unload();
+  restoredSession?.unload();
   loader?.unload();
   renderer?.dispose();
 });
