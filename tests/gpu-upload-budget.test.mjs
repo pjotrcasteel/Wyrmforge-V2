@@ -226,3 +226,42 @@ test('direct authoritative replacement invalidates stale queued uploads without 
   assert.equal(view.statistics.drawCalls,1,'removed chunk must not reappear');
   view.dispose();
 });
+
+test('full-scene initialization is frame-budgeted and rapid reset never draws stale meshes', () => {
+  const {canvas,now} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('old-a'),mesh('old-b'),mesh('old-c')]);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,3);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,180);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  assert.equal(view.statistics.drawCalls,1);
+  view.setMeshes([mesh('new')]);
+  assert.equal(view.statistics.drawCalls,0);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,60);
+  drain(view,now);
+  assert.equal(view.statistics.drawCalls,1);
+  assert.equal(view.statistics.triangles,1);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
+
+test('edits supersede incomplete initial scene and context loss replays only latest meshes', () => {
+  const {canvas,now,emit} = fakeCanvas();
+  const view = new WebGLVoxelView(canvas);
+  view.setMeshes([mesh('a'),mesh('b'),mesh('c')]);
+  view.replaceMeshes(new Set(['b']),[mesh('b')]);
+  view.replaceMeshes(new Set(['c']),[]);
+  assert.equal(view.uploadQueueStatistics.sceneChunks,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,120);
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,1);
+  emit('webglcontextlost');
+  emit('webglcontextrestored');
+  assert.equal(view.uploadQueueStatistics.sceneChunks,0);
+  assert.equal(view.uploadQueueStatistics.recoveryChunks,2);
+  drain(view,now);
+  assert.equal(view.statistics.drawCalls,2);
+  assert.equal(view.uploadQueueStatistics.pendingBytes,0);
+  view.dispose();
+});
