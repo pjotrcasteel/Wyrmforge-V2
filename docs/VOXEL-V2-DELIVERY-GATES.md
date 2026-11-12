@@ -66,3 +66,37 @@ The standalone lab includes a **hunt-load** scene (96×96 horizontal cells, 32 c
 ### V2-native ambush terrain stress benchmark
 
 The lab's **Run V2 ambush stress (3 × 18)** action resets to the 96×96 hunt-load scene with 32³ chunks, Hunt camera and background worker meshing. It submits three waves of 18 deterministic terrain damage targets at 650 ms intervals, with a 3.5-second wave boundary, and waits for the final worker and GPU queues to drain before exporting the JSON benchmark. The export contains `ambushScenario`, frame metrics, worker state, queue peaks and sustained telemetry. Backgrounding, renderer failure or loss of worker mode stops the run without a pass claim. This is **terrain-only**: no enemy AI, crowd rendering, fissure VFX, particles or lighting; the actual V1 ambush must be measured separately before declaring full-game acceptance. 96×96 is a lab stress size, not the locked production Hunt dimensions.
+
+## V2.7 async world-presentation safety batch — 2026-11-12
+
+This batch extends the existing foundation; it does **not** declare V2.7 or the
+mobile foundation complete.
+
+- WebGL's `sceneEpoch` changes on every validated full-scene activation,
+  including reset and verified checkpoint restoration. Worker-derived GPU
+  replacements may supply the epoch captured when work started; stale updates
+  then fail closed without changing queues or drawing old-world geometry.
+  Worker jobs still use their separate host-owned **terrain event epoch**.
+- An invalid full-scene activation is atomic: it leaves the preceding live
+  scene and its queued replacements intact instead of erasing valid work.
+- The external terrain host passes its renderer generation into delayed
+  localized worker completions. WebGL context restoration no longer erases an
+  existing worker/replay error, and the diagnostic status exposes rejected
+  stale GPU updates.
+- Each background mesh result is bounded to 16 MiB of actual typed-array
+  payload, validated against declared per-mesh and whole-reply byte counts.
+  The external scene bridge additionally bounds its accumulated CPU-side
+  staging to 64 MiB before publishing a complete scene; overflow fails
+  closed rather than partially replacing the visible world.
+- Automated tests cover equal chunk IDs across distinct worlds, recovery
+  interrupted by replacement, rejection without queue mutation, invalid
+  scene activation, retained partial worker staging and malformed output
+  accounting, plus real 32³ high-surface-area mesh expansion.
+
+**Still required before foundation acceptance:** production-size sustained
+physical iPhone Safari / Android Chrome evidence, performance and memory
+trend under repeated destructible impacts, GPU context-loss/recovery on
+physical devices, and the original outstanding V2.2–V2.7 delivery gates.
+The per-worker and scene staging bounds are protective limits, not measured
+frame-rate guarantees. The lab remains a diagnostic host; these changes do
+not introduce additional game engines or V1 runtime assets.
