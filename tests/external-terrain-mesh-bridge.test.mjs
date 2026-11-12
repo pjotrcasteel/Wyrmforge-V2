@@ -6,7 +6,8 @@ import { createExternalSiteFixture } from '../src/diagnostics/external-site-fixt
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 import { processTerrainMeshJob } from '../src/terrain-mesh-protocol.mjs';
 import {
-  V2ExternalTerrainMeshBridge, EXTERNAL_MESH_BATCH_CHUNKS
+  V2ExternalTerrainMeshBridge, EXTERNAL_MESH_BATCH_CHUNKS,
+  EXTERNAL_MESH_STAGING_BYTES
 } from '../src/external-terrain-mesh-bridge.mjs';
 
 function fakeWorker() {
@@ -315,6 +316,45 @@ test('dirty IDs are bounded and canonical before any worker is started',()=>{
   const many=Array.from({length:129},(_,i)=>i+',0,0');
   assert.throws(()=>runner.replace(loader.terrain.world,many),RangeError);
   assert.equal(workers.length,0);
+  runner.close();
+  loader.unload();
+});
+
+test('external worker staging measures live CPU bytes and clears them on cancellation',()=>{
+  assert.equal(EXTERNAL_MESH_STAGING_BYTES,64*1024*1024);
+  const loader=loaded(32);
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  runner.begin(loader.terrain.world);
+  warm(workers[0]);
+  const first=workers[0].sent.find(row=>row.payload.type==='build').payload;
+  workers[0].message(processTerrainMeshJob(first));
+  assert.equal(runner.status.busy,true);
+  assert.ok(runner.status.stagedMeshBytes>0);
+  assert.ok(runner.status.stagedMeshBytes<=EXTERNAL_MESH_STAGING_BYTES);
+  assert.equal(ready.length,0,'partial scene must not publish');
+  runner.cancel();
+  assert.equal(runner.status.stagedMeshBytes,0);
+  assert.equal(runner.status.busy,false);
+  assert.deepEqual(errors,[]);
+  runner.close();
+  loader.unload();
+});
+
+test('forged worker output size fails closed before publishing derived geometry',()=>{
+  const loader=loaded(16);
+  const workers=[],ready=[],errors=[];
+  const runner=bridge(workers,ready,errors);
+  runner.begin(loader.terrain.world);
+  warm(workers[0]);
+  const job=workers[0].sent.find(row=>row.payload.type==='build').payload;
+  const reply=processTerrainMeshJob(job);
+  workers[0].message({...reply,meshBytes:reply.meshBytes+1});
+  assert.equal(ready.length,0);
+  assert.equal(errors.length,1);
+  assert.match(errors[0].reason,/Stale or invalid/);
+  assert.equal(runner.status.busy,false);
+  assert.equal(runner.status.stagedMeshBytes,0);
   runner.close();
   loader.unload();
 });
