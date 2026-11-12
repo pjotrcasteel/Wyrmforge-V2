@@ -48,3 +48,29 @@ partial damage, V2.6 notifications and localized worker output at 16³/32³.
 visible timing and sustained mobile memory/frame metrics. These tests close
 a missing implementation capability; they do not certify the V2.3 or V2.7
 release gates in full.
+
+## V2.7 worker watchdog and V2-only asset audit — 2026-11-12
+
+Implemented protection against two concrete acceptance blockers:
+
+- Both V2 browser hosts now check the existing single-in-flight worker
+  controller once per animation frame. Warmup must complete within 15 s and
+  individual meshing jobs within 30 s of **foreground** activity. A silent
+  worker is terminated, queued state is released, late replies remain inert,
+  and the existing failure path is used. Hidden-tab time is excluded via a
+  visibility-driven pause/resume clock; this does not introduce polling
+  timers, extra worker pools, or a second terrain writer.
+- Clean-room dependency auditing now resolves literal `new URL(...)`
+  module assets, standalone CSS `url(...)`/`@import`, inline CSS and HTML
+  responsive `srcset` paths. It also checks every browser entrypoint against
+  importing Node builtins and rejects private package imports beginning with
+  `#`. No V1 assets or shaders are imported for this change.
+- Deterministic tests cover both watchdog deadlines, no false timeouts
+  during backgrounding, late-job rejection and worker recovery, plus
+  mismatched/missing/out-of-repository static assets.
+
+**Still not accepted:** p95/p99 and measured memory on physical iPhone Safari
+and Android Chrome, real GPU context-loss recovery, representative Hunt
+workload, pixel-readability screenshots and owner-approved material visuals.
+The watchdog thresholds are conservative failure limits, not promised
+edit-to-visible latency or universal performance guarantees.
