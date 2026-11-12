@@ -11,6 +11,7 @@ import {
 } from './src/diagnostics/external-site-fixture.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
+import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
@@ -32,6 +33,9 @@ let lastImpactRemoved=0;
 let lastStatusAt=-Infinity;
 let errorMessage=null;
 let renderer=null;
+let meshBridge=null;
+let pendingMesh=null;
+let meshSource='worker';
 
 function resizeCanvas() {
   const pixelRatio=Math.min(window.devicePixelRatio || 1,2);
@@ -48,6 +52,13 @@ function updateStatus(now=performance.now()) {
   lastStatusAt=now;
   if(errorMessage) {
     status.textContent='V2.6 error: '+errorMessage;
+    return;
+  }
+  if(pendingMesh) {
+    const progress=meshBridge.status;
+    status.textContent='V2.7 worker meshing · '+progress.completedChunks+
+      '/'+progress.totalChunks+' chunks · '+pendingMesh.kind+
+      ' · original scene remains visible until ready';
     return;
   }
   if(restoring) {
@@ -67,7 +78,8 @@ function updateStatus(now=performance.now()) {
       ' · '+(viewCamera.value==='inspection' ? '3D inspection' : 'Hunt camera')+
       (breachCount ? ' · '+breachCount+' span impacts'+
         ' · last removed '+lastImpactRemoved+' voxels' : '')+
-      (savedCheckpoint ? ' · saved state available' : '')
+      (savedCheckpoint ? ' · saved state available' : '')+
+      ' · mesh source: '+meshSource
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
 }
@@ -80,6 +92,8 @@ function resetSite() {
     breachButton.disabled=true;
     saveButton.disabled=true;
     restoreButton.disabled=true;
+    meshBridge?.cancel();
+    pendingMesh=null;
     restoring?.unload();
     restoring=null;
     restoredSession?.unload();
@@ -112,7 +126,8 @@ function impactSpan() {
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {
-      // Only changed chunk meshes are recreated, never the entire scene.
+      // Small localized edits remain on the existing current meshing path.
+      // Full import/replay geometry never runs synchronously in this host.
       const meshes=buildExposedFaceMeshes(active.world,{chunkIds:dirty});
       renderer.queueReplacementMeshes(dirty,meshes);
       breachButton.disabled=true;
@@ -156,32 +171,58 @@ function restoreState() {
   }
 }
 
+function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
+  if(!pendingMesh || pendingMesh.terrain!==terrain ||
+      pendingMesh.epoch!==epoch) return;
+  // Only a complete revision-consistent mesh from this world can replace
+  // the active GPU scene. No old voxel world is unloaded before this point.
+  renderer.setMeshes(meshes);
+  if(kind==='restore') {
+    loader?.unload();
+    restoredSession?.unload();
+    loader=null;
+    restoredSession=restoring;
+    restoring=null;
+    breachCount=savedCheckpoint.journal.commands.length;
+    lastImpactRemoved=0;
+  }
+  active=terrain;
+  pendingMesh=null;
+  meshSource=source;
+  lastStatusAt=-Infinity;
+}
+
+function stageTerrainMeshes(terrain,kind) {
+  if(pendingMesh) throw new Error('An external terrain mesh build is already pending');
+  if(typeof Worker!=='function') {
+    // Explicit bounded compatibility path for the eight-chunk lab fixture.
+    // Larger future sites cannot silently fall back to blocking the UI.
+    if(terrain.world.chunkCount>8) throw new Error('Web Worker required for large sites');
+    pendingMesh={terrain,kind,epoch:-1};
+    const meshes=buildExposedFaceMeshes(terrain.world);
+    showMeshedTerrain(terrain,kind,-1,meshes,'small-site sync fallback');
+    return;
+  }
+  // The worker bridge takes bounded 4-chunk batches, independently of
+  // initial terrain construction and replay verification.
+  pendingMesh={terrain,kind,epoch:meshBridge.begin(terrain.world)};
+  lastStatusAt=-Infinity;
+}
+
 function frame(now) {
   try {
-    if(restoring) {
-      restoring.step({maxCells:192,maxEdits:1});
+    if(restoring && !pendingMesh) {
+      if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
       if(restoring.progress.done) {
-        const replacement=restoring.terrain;
-        const meshes=buildExposedFaceMeshes(replacement.world);
-        // Switch the renderer only after exact world and damage verification.
-        renderer.setMeshes(meshes);
-        loader?.unload();
-        restoredSession?.unload();
-        loader=null;
-        restoredSession=restoring;
-        restoring=null;
-        active=replacement;
-        breachCount=savedCheckpoint.journal.commands.length;
-        lastImpactRemoved=0;
-        lastStatusAt=-Infinity;
+        // Keep the previous world visible until *both* replay and worker
+        // geometry complete; GPU uploads stay frame-budgeted as before.
+        stageTerrainMeshes(restoring.terrain,'restore');
       }
     }
     if(loader && !loader.progress.done) {
       loader.loadStep(192); // bounded cells per animation frame, not CPU milliseconds
       if(loader.progress.done) {
-        active=loader.terrain;
-        // This is the real V2 renderer, not a separate 2D approximation.
-        renderer.setMeshes(buildExposedFaceMeshes(active.world));
+        stageTerrainMeshes(loader.terrain,'initial');
       }
     }
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
@@ -200,12 +241,14 @@ function frame(now) {
       });
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
-      Boolean(errorMessage) || Boolean(restoring);
+      Boolean(errorMessage) || Boolean(restoring) || Boolean(pendingMesh);
     breachButton.disabled=blocked;
     saveButton.disabled=blocked;
     restoreButton.disabled=blocked || !savedCheckpoint;
     updateStatus(now);
   } catch(error) {
+    meshBridge?.cancel();
+    pendingMesh=null;
     restoring?.unload();
     restoring=null;
     errorMessage=error.message;
@@ -227,6 +270,7 @@ breachButton.addEventListener('click',impactSpan);
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
 window.addEventListener('pagehide',()=>{
+  meshBridge?.close();
   restoring?.unload();
   restoredSession?.unload();
   loader?.unload();
@@ -238,6 +282,26 @@ try {
       errorMessage=ready ? null : (error?.message ?? 'WebGL context lost');
       lastStatusAt=-Infinity;
       updateStatus();
+    }
+  });
+  meshBridge=new V2ExternalTerrainMeshBridge({
+    createWorker:()=>new Worker(new URL('./src/terrain-mesh.worker.mjs',import.meta.url),
+      {type:'module'}),
+    now:()=>performance.now(),
+    onReady:(world,meshes,epoch)=>{
+      if(!pendingMesh || pendingMesh.terrain.world!==world ||
+          pendingMesh.epoch!==epoch) return;
+      try {
+        showMeshedTerrain(pendingMesh.terrain,pendingMesh.kind,epoch,meshes);
+      } catch(error) {
+        errorMessage=error.message;
+        lastStatusAt=-Infinity;
+      }
+    },
+    onFailure:message=>{
+      pendingMesh=null;
+      errorMessage='External mesh worker: '+message;
+      lastStatusAt=-Infinity;
     }
   });
   resetSite();
