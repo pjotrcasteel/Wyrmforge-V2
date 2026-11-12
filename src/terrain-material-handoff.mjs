@@ -25,14 +25,42 @@ export function terrainArtKey(slot,channel) {
   return key;
 }
 
-/** Fail closed before any GPU queue mutation or source-image retention. */
-export function validateTerrainArtInput(file,image,slot,channel) {
-  const key=terrainArtKey(slot,channel);
+export function validateTerrainArtFile(file) {
   if (!file || file.type!=='image/png' ||
-      !Number.isSafeInteger(file.size) || file.size<1 ||
+      !Number.isSafeInteger(file.size) || file.size<24 ||
       file.size>MAX_TERRAIN_ART_PNG_BYTES) {
     throw new TypeError('Expected a 64×64 PNG under the upload size limit');
   }
+  return true;
+}
+
+// Read 24 bytes before decoding. A tiny compressed PNG can otherwise declare
+// enormous dimensions and trigger a large browser-side image allocation.
+export async function inspectTerrainArtPngHeader(file) {
+  validateTerrainArtFile(file);
+  if (typeof file.slice !== 'function') {
+    throw new TypeError('Expected a browser PNG File');
+  }
+  const buffer=await file.slice(0,24).arrayBuffer();
+  const bytes=new Uint8Array(buffer);
+  const signature=[137,80,78,71,13,10,26,10];
+  if (bytes.length!==24 || !signature.every((part,i)=>bytes[i]===part) ||
+      bytes[8]!==0 || bytes[9]!==0 || bytes[10]!==0 || bytes[11]!==13 ||
+      bytes[12]!==73 || bytes[13]!==72 || bytes[14]!==68 || bytes[15]!==82) {
+    throw new TypeError('Invalid PNG header or missing IHDR chunk');
+  }
+  const view=new DataView(buffer);
+  if (view.getUint32(16,false)!==TERRAIN_ART_TILE_SIZE ||
+      view.getUint32(20,false)!==TERRAIN_ART_TILE_SIZE) {
+    throw new RangeError('Terrain artwork must declare exactly 64×64 pixels');
+  }
+  return true;
+}
+
+/** Fail closed before any GPU queue mutation or source-image retention. */
+export function validateTerrainArtInput(file,image,slot,channel) {
+  const key=terrainArtKey(slot,channel);
+  validateTerrainArtFile(file);
   if (!image || image.width!==TERRAIN_ART_TILE_SIZE ||
       image.height!==TERRAIN_ART_TILE_SIZE) {
     throw new RangeError('Terrain artwork must be exactly 64×64 pixels');
