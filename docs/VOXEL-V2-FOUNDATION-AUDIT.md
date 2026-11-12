@@ -143,3 +143,39 @@ headless/unit validation is not itself evidence of a working iPhone GPU
 upload. Verify the new immutable build on the user's phone before claiming
 end-to-end WebGL2 success. Do not request another benchmark until the
 visible terrain issue is settled.
+
+## iPhone Safari GPU/material results — 2026-11-12
+
+The owner supplied **six real iPhone screenshots of the immutable
+`2ab27df9` build**. The first shows untextured 3D WebGL terrain (3,600
+triangles / 8 draw calls). Other screenshots confirm that reference
+albedo/normal/ORM textures can load, inspection and Hunt cameras work, and
+localized destructive edits expose dirt and stone. Two worker completions
+reported an edit-to-visible delay of approximately **14 ms**; the six
+screenshots are not a sustained benchmark or iOS performance certification.
+
+The GPU scene itself is now functioning. A newly exposed **material color
+bug** remains: enabled reference albedo is far darker than the procedural
+fallback, especially in the Hunt camera. Investigation found that the
+WebGL2 albedo array uses `SRGB8_ALPHA8`, so the hardware converts sampled
+sRGB pixels to **linear** values, but the shader previously wrote those
+linear values directly to the canvas without a return sRGB transfer.
+
+### V2 material color fix
+
+- Keep `SRGB8_ALPHA8` for albedo, `RGBA8` for normal and ORM channels.
+- Treat array albedo samples as linear, but explicitly decode the existing
+  sRGB procedural swatches and the legacy Grass 002 RGBA8 sampler.
+- Apply the existing simple directional lighting factor in linear space,
+  then encode the output to sRGB for the default WebGL drawing buffer.
+- Do **not** brighten, alter, accept, or commit any art assets, change voxel
+  material IDs, introduce dynamic lights, or depend on V1.
+- Unit tests cover the piecewise sRGB transfer, the actual 64px grass
+  reference palette, brightness ordering, shader integration and the
+  sRGB-versus-linear channel contract.
+
+**Visual acceptance remains open:** a corrected build must be viewed once
+on iPhone Safari before claiming material brightness fixed. The Hunt camera
+view angle, texture style, and material palettes are still candidates rather
+than approved game art. Do not turn the pixel-level fix into a new Lighting
+Engine V2 milestone.
