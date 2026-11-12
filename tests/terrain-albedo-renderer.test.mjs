@@ -24,8 +24,8 @@ test('all four terrain surfaces resolve to registered albedo assets', () => {
 
 test('context restoration retains authored tiles and rebuilds GPU cache', () => {
   assert.match(source, /this\.#terrainCache\?\.contextLost\(\)/);
-  assert.match(source, /for \(const \{ channel, key, image \} of this\.#terrainTileImages\.values\(\)\)/);
-  assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\)/);
+  assert.match(source, /this\.#pendingTerrainTiles = new Map\(this\.#terrainTileImages\)/);
+  assert.match(source, /this\.#terrainCache\.upload\(tile\.channel, tile\.key, tile\.image\)/);
 });
 
 test('material shader samples normal and ORM arrays with explicit fallback', () => {
@@ -57,7 +57,18 @@ test('retained decoded terrain images are budgeted before upload and released on
   assert.match(source, /nextBytes > this\.#terrainTileStagingMaxBytes/);
   assert.match(source, /throw new RangeError\('Terrain decoded tile staging budget exceeded'\)/);
   assert.match(source, /this\.#terrainTileStagingBytes - \(previous\?\.bytes \?\? 0\) \+ bytes/);
-  assert.match(source, /this\.#terrainCache\.upload\(channel, key, image\);[\s\S]*?this\.#terrainTileImages\.set\(identity/);
+  assert.match(source, /this\.#terrainTileImages\.set\(identity/);
+  assert.match(source, /this\.#pendingTerrainTiles\.set\(identity/);
   assert.match(source, /clearTerrainAlbedoTiles\(\) \{[\s\S]*?this\.#terrainTileStagingBytes = 0/);
-  assert.match(source, /dispose\(\) \{[\s\S]*?this\.#terrainTileImages\.clear\(\);\s*this\.#terrainTileStagingBytes = 0/);
+  assert.match(source, /dispose\(\) \{[\s\S]*?this\.#terrainTileImages\.clear\(\);\s*this\.#pendingTerrainTiles\.clear\(\);\s*this\.#terrainTileStagingBytes = 0/);
+});
+
+
+test('terrain tile GPU uploads use the frame budget and context restore requeues them', () => {
+  assert.match(source, /get pendingUploads\(\) \{ return this\.#queuedUploads\.size \+ this\.#recoveryQueue\.size \+ this\.#pendingTerrainTiles\.size/);
+  assert.match(source, /while \(this\.pendingUploads && \(chunks === 0 \|\| now\(\) - start < budgetMs\)\)/);
+  assert.match(source, /if \(this\.#pendingTerrainTiles\.size\) \{/);
+  assert.match(source, /this\.#terrainCache\.upload\(tile\.channel, tile\.key, tile\.image\)/);
+  assert.match(source, /this\.#pendingTerrainTiles = new Map\(this\.#terrainTileImages\)/);
+  assert.match(source, /this\.#pendingTerrainTiles\.clear\(\)/);
 });
