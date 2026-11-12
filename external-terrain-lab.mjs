@@ -205,7 +205,11 @@ function stageTerrainMeshes(terrain,kind) {
   }
   // The worker bridge takes bounded 4-chunk batches, independently of
   // initial terrain construction and replay verification.
-  pendingMesh={terrain,kind,epoch:meshBridge.begin(terrain.world)};
+  const epoch=meshBridge.begin(terrain.world);
+  if(!meshBridge.status.busy) {
+    throw new Error('External terrain worker could not start');
+  }
+  pendingMesh={terrain,kind,epoch};
   lastStatusAt=-Infinity;
 }
 
@@ -294,12 +298,19 @@ try {
       try {
         showMeshedTerrain(pendingMesh.terrain,pendingMesh.kind,epoch,meshes);
       } catch(error) {
+        pendingMesh=null;
+        restoring?.unload();
+        restoring=null;
         errorMessage=error.message;
         lastStatusAt=-Infinity;
       }
     },
     onFailure:message=>{
       pendingMesh=null;
+      // Never retry a failed restore every animation frame or leave an
+      // unverified temporary world allocated behind the existing scene.
+      restoring?.unload();
+      restoring=null;
       errorMessage='External mesh worker: '+message;
       lastStatusAt=-Infinity;
     }
