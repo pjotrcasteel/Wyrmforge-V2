@@ -229,7 +229,7 @@ test('context restore prioritizes terrain geometry over retained material maps',
   view.dispose();
 });
 
-test('real renderer's mip allocation stays bounded during material uploads and context restore',()=>{
+test('real renderer mip allocation stays bounded during material uploads and context restore',()=>{
   const runtime=fakeCanvas();
   const view=new WebGLVoxelView(runtime.canvas);
   const mips=compileTerrainTextureManifest(undefined,{tileSize:64,mipLevels:7});
