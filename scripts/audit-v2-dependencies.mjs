@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 const CODE_EXTENSIONS=new Set(['.mjs','.js']);
 const SCAN_DIRS=['src','tests','scripts'];
-const ENTRY_FILES=['main.mjs'];
+const ENTRY_FILES=['main.mjs','external-terrain-lab.mjs'];
 // Match import/export declarations at the beginning of a source line; do not
 // interpret fixture strings or regex literals as executable imports.
 const IMPORT_PATTERN=/^\s*(?:import\s+(?:[^'"\r\n]*?\s+from\s*)?|export\s+[^'"\r\n]*?\s+from\s*)['"]([^'"\r\n]+)['"]/gm;

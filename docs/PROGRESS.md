@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.6 — Real WebGL external-terrain handoff proof (2026-11-12)
+
+**Built:** an independent `external-terrain-lab.html` route and versioned Pages copy. It consumes the existing V2.6 `V2ExternalTerrainLoader` with a **fixed authored engineering fixture**, rather than regenerating terrain inside Voxel V2. A 3D stone span with real walkable air underneath and layered ground is initialized in bounded 192-cell steps, then meshed by the existing exposed-face mesher, and uploaded using the existing **WebGL2 frame-budgeted GPU queue**. The route has an explicit break-span action committing to the existing `V2TerrainPort`; only dirty chunk meshes are queued for replacement, never a parallel collision state or fake canvas approximation. The route also supports 16³/32³ chunk pitch and explicit unload/reset.
+
+**Automated proof:** same real fixture is exercised on both chunk pitches through (1) initial hidden/incomplete loading, (2) committed material and raycast queries, (3) real derived GPU meshes and drawing, (4) a spell carve that changes authoritative collision before GPU uploads and updates only dirty meshes, and (5) complete renderer resource retirement/unloading. Separate tests ensure the immutable Pages build contains the entire new route and the clean-room audit scans its actual root JS entrypoint.
+
+**Limits:** this is **not** World Generation V2, a biome, terrain art, actual Hunt, device-level rendering proof or V2.7 performance acceptance. The authored fixture uses procedural fallback colors and one small static 3D object. Full scene meshing for this tiny fixture is currently synchronous on completion; a future generated larger site must be routed through the bounded worker mesher after its own performance study. No additional ten-minute phone test requested. Android Firefox sustained pacing remains open.
+
+**Next roadmap work:** remaining V2.6/V2.7 correctness, snapshot/replay and device acceptance; then V2.8 starts genuinely seed-driven forest map generation with river, trails, bridge site, vegetation and collision-aware object placements.
+
+
 ## V2.6 — Externally generated 3D world handoff (2026-11-12)
 
 **Purpose:** Voxel V2 can now accept terrain data produced by a future independent, platform-neutral World Generation V2 engine, without adopting map generation inside the voxel engine. New `voxel-v2.terrain-initialization.v1` source contracts include `siteId`, `generatorVersion`, deterministic seed, chosen chunk size, and bounded X-directed 3D material runs. Runs preserve overhangs, caves and negative coordinates; unlike a heightmap, they represent the real signed 3D cells.

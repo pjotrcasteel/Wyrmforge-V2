@@ -30,7 +30,7 @@ jobs:
       - name: Audit clean-room V2 dependencies
         run: node scripts/audit-v2-dependencies.mjs
       - name: Verify static entry
-        run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs
+        run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs && test -s external-terrain-lab.html && test -s external-terrain-lab.mjs
       - name: Syntax-check every V2 JavaScript module
         run: |
           set -eu
@@ -69,6 +69,9 @@ jobs:
         run: |
           test -s "builds/$GITHUB_SHA/index.html"
           test -s "builds/$GITHUB_SHA/main.mjs"
+          test -s "builds/$GITHUB_SHA/external-terrain-lab.html"
+          test -s "builds/$GITHUB_SHA/external-terrain-lab.mjs"
+          grep -q 'external-terrain-lab.mjs' "builds/$GITHUB_SHA/external-terrain-lab.html"
           test -s "builds/$GITHUB_SHA/src/build-info.mjs"
           grep -q "$GITHUB_SHA" "builds/$GITHUB_SHA/src/build-info.mjs"
           grep -q 'grass-texture-file' "builds/$GITHUB_SHA/index.html"

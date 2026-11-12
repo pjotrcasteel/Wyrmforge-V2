@@ -14,7 +14,8 @@ export function createVersionedLab(root, sha) {
   }
 
   const directory = resolve(root);
-  const files = ['index.html', 'main.mjs'];
+  const files = ['index.html', 'main.mjs',
+    'external-terrain-lab.html', 'external-terrain-lab.mjs'];
   const sourcePath = join(directory, 'src');
   for (const file of files) {
     if (!existsSync(join(directory, file))) {

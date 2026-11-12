@@ -14,6 +14,10 @@ function withRoot(run, sha = COMMIT) {
     writeFileSync(join(root,'index.html'),'<script type="module" src="./main.mjs"></script>');
     writeFileSync(join(root,'main.mjs'),
       "import { VERSION } from './src/build-info.mjs';\nimport './src/terrain-actor.mjs';\n");
+    writeFileSync(join(root,'external-terrain-lab.html'),
+      '<script type="module" src="./external-terrain-lab.mjs"></script>');
+    writeFileSync(join(root,'external-terrain-lab.mjs'),
+      "import { VERSION } from './src/build-info.mjs';\n");
     writeFileSync(join(root,'src','build-info.mjs'),
       `export const VERSION = "0.0.028";\nexport const COMMIT = "${sha}";\n`);
     writeFileSync(join(root,'src','terrain-actor.mjs'),'export const ACTOR = true;\n');
@@ -30,6 +34,10 @@ test('versioned lab keeps complete module graph together at a fresh URL', () => 
     assert.equal(result.route,`builds/${COMMIT}/`);
     assert.ok(existsSync(join(result.path,'index.html')));
     assert.ok(existsSync(join(result.path,'main.mjs')));
+    assert.ok(existsSync(join(result.path,'external-terrain-lab.html')));
+    assert.ok(existsSync(join(result.path,'external-terrain-lab.mjs')));
+    assert.match(readFileSync(join(result.path,'external-terrain-lab.html'),'utf8'),
+      /src="\.\/external-terrain-lab\.mjs"/);
     assert.ok(existsSync(join(result.path,'src','build-info.mjs')));
     assert.ok(existsSync(join(result.path,'src','terrain-actor.mjs')));
     assert.match(readFileSync(join(result.path,'index.html'),'utf8'),

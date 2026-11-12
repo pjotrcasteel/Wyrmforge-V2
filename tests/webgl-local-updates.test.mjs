@@ -4,6 +4,10 @@ import { VoxelWorld } from '../src/voxel-world.mjs';
 import { markDirtyForEditedVoxel } from '../src/chunk-dirty.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
+import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
+import {
+  createExternalSiteFixture, EXTERNAL_SITE_BREACH
+} from '../src/diagnostics/external-site-fixture.mjs';
 
 function fakeCanvas() {
   let nextId = 0;
@@ -172,4 +176,74 @@ test('Grass 002 is uploaded once, density changes do not rebuild GPU meshes', ()
   assert.equal(view.render({ width: 400, height: 600, scale: 11, panX: 0, panY: 0, camera: 'hunt' }), true);
   assert.throws(() => view.setGrassMaterial({ width: 512, height: 512 }), /1024/);
   view.dispose();
+});
+
+test('externally initialized V2 site renders and updates actual GPU meshes after a committed spell edit', () => {
+  for(const chunkEdge of [16,32]) {
+    const source=createExternalSiteFixture({chunkEdge});
+    const loader=new V2ExternalTerrainLoader(source);
+    assert.throws(()=>loader.terrain,/not fully initialized/);
+    while(!loader.progress.done) loader.loadStep(192);
+    const {world,port}=loader.terrain;
+    assert.equal(world.get(0,6,0),3);
+    assert.equal(world.get(0,3,0),0,'stone roof spans genuine 3D air');
+    assert.equal(port.raycast({
+      origin:[.5,12,.5],direction:[0,-1,0],maxDistance:20
+    }).cell.y,6);
+
+    const {canvas,stats}=fakeCanvas();
+    const view=new WebGLVoxelView(canvas);
+    view.setMeshes(buildExposedFaceMeshes(world));
+    assert.equal(view.statistics.drawCalls,0,'initial scene GPU uploads are deferred');
+    assert.ok(view.uploadQueueStatistics.sceneChunks>0);
+    while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2});
+    const before=view.statistics;
+    assert.ok(before.drawCalls>=4,'signed quadrants produce multiple GPU chunks');
+    assert.ok(before.triangles>0);
+    assert.equal(view.render({
+      width:390,height:720,scale:11,panX:0,panY:0,camera:'hunt'
+    }),true);
+    assert.equal(stats.draws.length,before.drawCalls);
+
+    const changes=[];
+    const unsubscribe=port.subscribe('physics',change=>changes.push(change));
+    const edit=port.apply({
+      id:'external-site-breach',type:'carve-sphere',
+      ...EXTERNAL_SITE_BREACH,expectedRevision:world.revision
+    });
+    assert.equal(edit.status,'accepted');
+    assert.ok(edit.removedVoxels>0);
+    assert.equal(changes.length,1);
+    assert.equal(changes[0].geometryChanged,true);
+    assert.equal(port.materialAt(0,6,0),0);
+    assert.equal(port.raycast({
+      origin:[.5,12,.5],direction:[0,-1,0],maxDistance:20
+    }).cell.y,0,'collision truth changes before any GPU mesh update');
+    const dirty=new Set(edit.dirtyChunks);
+    const replacements=buildExposedFaceMeshes(world,{chunkIds:dirty});
+    view.queueReplacementMeshes(dirty,replacements);
+    assert.ok(view.pendingUploads>0,'updated meshes remain frame-budgeted');
+    assert.equal(view.statistics.triangles,before.triangles,
+      'GPU stays on the previous mesh until the queued upload is drained');
+    while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2});
+    assert.notEqual(view.statistics.triangles,before.triangles,
+      'the actual GPU geometry must change after the breach');
+    const rendered=view.render({
+      width:390,height:720,scale:11,panX:0,panY:0,camera:'hunt'
+    });
+    assert.equal(rendered,true);
+    assert.equal(view.pendingUploads,0);
+    unsubscribe();
+
+    // Unloading retires old resources; no stale external geometry survives.
+    view.setMeshes([]);
+    loader.unload();
+    while(view.pendingUploads) view.flushQueuedUploads({budgetMs:2});
+    assert.equal(view.statistics.drawCalls,0);
+    assert.equal(world.chunkCount,0);
+    assert.throws(()=>port.materialAt(0,0,0),/disposed/);
+    view.dispose();
+    assert.equal(stats.createdBuffers.length,stats.deletedBuffers.length);
+    assert.equal(stats.createdArrays.length,stats.deletedArrays.length);
+  }
 });
