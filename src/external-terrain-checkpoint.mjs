@@ -165,6 +165,12 @@ export class V2ExternalTerrainReplaySession {
     return this.#loader.terrain;
   }
 
+  saveCheckpoint() {
+    if(this.#closed) throw new Error('External V2 replay session is closed');
+    if(!this.#verified) throw new Error('External V2 replay is not verified');
+    return createExternalTerrainCheckpoint(this.#loader);
+  }
+
   unload() {
     if(this.#closed) return;
     this.#closed=true;
