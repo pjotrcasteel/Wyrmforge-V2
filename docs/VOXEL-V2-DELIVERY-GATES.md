@@ -100,3 +100,25 @@ physical devices, and the original outstanding V2.2–V2.7 delivery gates.
 The per-worker and scene staging bounds are protective limits, not measured
 frame-rate guarantees. The lab remains a diagnostic host; these changes do
 not introduce additional game engines or V1 runtime assets.
+
+## V2 native 64×64 terrain material handoff — 2026-11-12
+
+An actual user-preview integration is available in the independent lab, not
+another deferred registry: users can select six surface variants and upload
+local 64×64 albedo, normal or packed ORM PNGs. These are decoded only after
+validating the PNG header, assigned to known manifest keys and uploaded to
+the existing WebGL texture arrays under the frame queue budget. Reference
+maps remain optional, and procedural fallback remains the default.
+
+The active renderer now uses 64×64 texture-array layers (1/16 of the
+previous 256×256 base-layer allocation), while the offline configurable
+manifest and legacy Grass 002 comparator remain available. Weighted grass
+and dirt secondary variants share albedo, normal and ORM blending weights.
+Context recovery and replacement are covered by automated tests; world IDs,
+replay and destructive geometry are unchanged.
+
+**This is a usable technical handoff, not an approved asset or material
+acceptance certificate.** Do not commit or merge actual material image art
+without first presenting its native 64×64 image and repeated tile-grid
+proof and obtaining the owner's explicit approval for that asset.
+Await measured iPhone/Android visual and performance evidence separately.
