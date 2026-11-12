@@ -8,6 +8,9 @@ import {
 import { TerrainWorkerSession } from './terrain-worker-session.mjs';
 
 export const EXTERNAL_MESH_BATCH_CHUNKS = 4;
+// Upper bound for CPU-side meshes retained while a complete scene is staged.
+// Worker replies are independently limited to 16 MiB in terrain-mesh-protocol.
+export const EXTERNAL_MESH_STAGING_BYTES = 64 * 1024 * 1024;
 
 export class V2ExternalTerrainMeshBridge {
   #session;
@@ -39,6 +42,7 @@ export class V2ExternalTerrainMeshBridge {
       epoch:this.#epoch,
       completedChunks:pending?.completedChunks ?? 0,
       totalChunks:pending?.totalChunks ?? 0,
+      stagedMeshBytes:pending?.meshBytes ?? 0,
       closed:this.#closed
     });
   }
@@ -58,7 +62,7 @@ export class V2ExternalTerrainMeshBridge {
     const target={
       epoch:this.#epoch,world,revision:world.revision,kind,
       dirtyIds:kind==='edit' ? [...ids] : null,
-      remaining:ids,meshes:[],completedChunks:0,totalChunks:ids.length
+      remaining:ids,meshes:[],meshBytes:0,completedChunks:0,totalChunks:ids.length
     };
     this.#active=target;
     this.#dispatch();
@@ -160,6 +164,11 @@ export class V2ExternalTerrainMeshBridge {
       this.#abort('Stale or invalid external terrain mesh result');
       return;
     }
+    if(target.meshBytes+reply.meshBytes>EXTERNAL_MESH_STAGING_BYTES) {
+      this.#abort('External terrain mesh staging byte budget exceeded');
+      return;
+    }
+    target.meshBytes+=reply.meshBytes;
     target.meshes.push(...reply.meshes);
     target.completedChunks+=job.dirtyIds.length;
     this.#dispatch();
