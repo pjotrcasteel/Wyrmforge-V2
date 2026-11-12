@@ -29,6 +29,10 @@ export function auditV2Dependencies(root) {
   function checkPath(from,specifier,kind) {
     dependencies++;
     if(kind==='asset' && specifier.startsWith('#')) return; // Local fragment.
+    if(kind==='import' && specifier.startsWith('#')) {
+      issues.push(from+': non-local import '+specifier);
+      return;
+    }
     if(/^(?:https?:|data:|blob:|\/\/)/i.test(specifier)) {
       issues.push(from+': non-local '+kind+' '+specifier);
       return;
