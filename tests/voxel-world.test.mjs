@@ -205,3 +205,21 @@ test('hunt-load fixture is larger, bounded, deterministic and independent of leg
   assert.equal(a.get(47,0,47),2);
   assert.equal(a.get(48,0,0),0);
 });
+
+test('chunk ID enumeration is deterministic and never exposes voxel payload buffers',()=>{
+  for(const chunkEdge of [16,32]) {
+    const world=new VoxelWorld({chunkEdge});
+    world.set(chunkEdge,0,0,3);
+    world.set(-1,0,0,3);
+    world.set(0,0,0,1);
+    const first=world.chunkIds();
+    assert.deepEqual(first,['-1,0,0','0,0,0','1,0,0']);
+    assert.ok(first.every(value=>typeof value==='string'));
+    first.splice(0);
+    assert.equal(world.chunkCount,3);
+    assert.equal(world.chunkIds().length,3);
+    world.set(-1,0,0,0);
+    assert.deepEqual(world.chunkIds(),['0,0,0','1,0,0']);
+    assert.equal(world.get(chunkEdge,0,0),3);
+  }
+});
