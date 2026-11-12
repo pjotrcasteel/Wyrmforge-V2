@@ -1,5 +1,16 @@
 # Voxel Engine V2 — implementation status
 
+## V2.7 physical older-Android 10-minute soak — sustained frame-pacing regression (2026-11-12)
+
+**Device/build:** User-reported older Android phone, Android 17 / **Firefox 159** (not Android Chrome); build `fd5456faf6a22e93d762f13335699267d3a4e752`, Hill/seed 7/32³ and worker meshing. The session completed **600.024 s**, including **594/594 successful terrain impacts**, **0 rejected**, **8,732 removed voxels**, **9/9 controlled scene resets**, drained CPU/GPU queues, and **no renderer error**. This is solid correctness/resource-lifecycle evidence.
+
+**Sustained frame-pacing issue — open blocker:** rolling frame p95 begins near 8.34–16.68 ms, crosses approximately 41.7 ms at ~48 s, and remains near **41.7 ms (approximately 24 FPS) from about 2 minutes through the end**. Final rolling 1,800-frame p50/p95/p99: **41.66 / 41.68 / 41.72 ms**, with 1 >50 ms hitch **in the rolling window only**. The rolling window showed up to 2 >50 ms hitches earlier; full-session totals were unavailable in this prior build. This is materially worse than the Android device's earlier ~8 ms short fissure test and iPhone Safari's 17 ms ending cadence. The reason is **not established**: browser scheduling/display refresh policy, device thermal/power constraints, and engine load remain possible. Never infer the handset's exact model from the UA.
+
+**Resource/memory context:** peak pending GPU disposals 8, estimated retired buffers 220,880 bytes; peak estimated GPU mesh bytes 220,880; all queues zero on completion, and mesh estimate resets to the same baseline (~158,400 bytes). No evidence of accumulating retained GPU mesh allocations, but JS heap and actual GPU-driver memory are unavailable. 586 sustained samples across 600 seconds show no large >=3 s gap in the one-second rounded timestamps. A limited sampled cadence does not explain the persistent slowdown.
+
+**Action:** keep **V2.7 mobile performance gate OPEN**. Add main-thread frame-work duration distinct from RAF interval pacing, full-session hitch counts, and sampling/frame-gap continuity diagnostics in the next build. Repeat on the same Android Firefox device, then separately on Android Chrome to isolate browser differences. Do not undertake speculative physics, artwork, or broad renderer rewrites before collecting discriminating evidence.
+
+
 ## V2.7 physical iPhone 10-minute soak — evidence review (2026-11-12)
 
 **Device/build:** iPhone Safari; `fd5456faf6a22e93d762f13335699267d3a4e752`; Hill/seed 7/32³, worker meshing. The physical run completed the full **600.007 s**, including **605 accepted/605 changed terrain impacts, 0 rejected, 8,880 removed voxels, 9/9 controlled scene resets, and drained upload/retirement queues**. No renderer error was reported.
