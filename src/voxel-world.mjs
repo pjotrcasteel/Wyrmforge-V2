@@ -81,6 +81,12 @@ export class VoxelWorld {
     return data ? { id, revision: this.#chunkRevisions.get(id), data: data.slice() } : null;
   }
 
+  // Enumerate only stable identifiers for chunk-batched worker scheduling.
+  // Unlike snapshots(), this allocates no voxel payload copies.
+  chunkIds() {
+    return [...this.#chunks.keys()].sort((a,b)=>a.localeCompare(b));
+  }
+
   // Consumer receives copies: no mutable access to the authoritative store.
   snapshots() {
     return [...this.#chunks.entries()].sort(([a], [b]) => a.localeCompare(b))
