@@ -55,7 +55,7 @@ test('lab preserves real frame and sustained samples across soak resets', () => 
   assert.match(html, /id="soak-run"/);
   assert.match(source, /soakRunButton\.addEventListener\('click', \(\) => startPreset\(SOAK_PROFILES\.sustained\)\)/);
   assert.match(source, /chooseScene\(\{ preserveMeasurements: true \}\)/);
-  assert.match(source, /if \(!preserveMeasurements\) \{\s*frameMetrics\.reset\(\);\s*sustainedTelemetry\.reset\(\);\s*previous = null/);
+  assert.match(source, /if \(!preserveMeasurements\) \{\s*frameMetrics\.reset\(\);\s*frameWorkMetrics\.reset\(\);\s*sustainedTelemetry\.reset\(\);\s*previous = null/);
   assert.match(source, /const queuesDrained = !activeTerrainJob && pendingTerrainDirty\.size === 0 &&/);
   assert.match(source, /completedSceneResets: run\.cycleResets, expectedSceneResets/);
   assert.match(source, /document\.hidden \|\| gpuError \|\| terrainMeshMode\.value !== 'worker'/);
@@ -68,4 +68,12 @@ test('mobile soak report includes full-session frame and sampling continuity evi
   assert.match(source, /timingQuality: timingReviewNeeded \? 'review-gaps'/);
   assert.match(source, /sessionFrameHitchesOver50Ms: frameSession\.hitchesOver50Ms/);
   assert.match(source, /largestSamplingGapMs: telemetryContinuity\.largestSamplingGapMs/);
+});
+
+test('frame execution cost is sampled separately from RAF scheduling cadence', () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  assert.match(source, /const frameWorkStartedAt = performance\.now\(\)/);
+  assert.match(source, /frameWorkMetrics\.record\(performance\.now\(\) - frameWorkStartedAt\)/);
+  assert.match(source, /frameWork:frameWorkMetrics\.summary\(\)/);
+  assert.match(source, /frameWorkSession:frameWorkMetrics\.sessionSummary\(\)/);
 });
