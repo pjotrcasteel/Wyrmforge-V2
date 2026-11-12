@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import { createExternalSiteFixture } from '../src/diagnostics/external-site-fixture.mjs';
 import { worldDigest, damageDigest } from '../src/replay-checkpoint.mjs';
@@ -88,6 +89,12 @@ test('restored source preserves stable site and distinct future command stream',
   assert.equal(result.status,'accepted');
   assert.equal(notified.length,1,'only new edits publish to listeners');
   assert.equal(result.editRevision,4);
+  const nextCheckpoint=replay.saveCheckpoint();
+  assert.equal(nextCheckpoint.editRevision,4);
+  const again=restoreAll(JSON.parse(JSON.stringify(nextCheckpoint)));
+  assert.equal(again.terrain.port.editRevision,4);
+  assert.equal(worldDigest(again.terrain.world),worldDigest(replay.terrain.world));
+  again.unload();
   unsubscribe();
   replay.unload();
   original.unload();
@@ -182,4 +189,18 @@ test('empty edit journal survives replay, and oversized snapshot exports fail',(
   const huge={...checkpoint,extra:'x'.repeat(1024*1024)};
   assert.throws(()=>new V2ExternalTerrainReplaySession(huge),
     /1 MiB portable limit/);
+});
+
+test('browser proof restores only verified terrain and keeps the old scene during staging',()=>{
+  const source=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  const html=readFileSync(new URL('../external-terrain-lab.html',import.meta.url),'utf8');
+  assert.match(html,/id="save-site"/);
+  assert.match(html,/id="restore-site"/);
+  assert.match(source,/savedCheckpoint=JSON\.parse\(JSON\.stringify\(checkpoint\)\)/);
+  assert.match(source,/restoring=new V2ExternalTerrainReplaySession\(savedCheckpoint\)/);
+  assert.match(source,/restoring\.step\(\{maxCells:192,maxEdits:1\}\)/);
+  assert.match(source,/if\(restoring\.progress\.done\) \{/);
+  assert.match(source,/const replacement=restoring\.terrain/);
+  assert.match(source,/renderer\.setMeshes\(meshes\);\s*loader\?\.unload\(\)/,
+    'only a verified replay can replace the old GPU scene and authority');
 });
