@@ -65,7 +65,7 @@ test('retained decoded terrain images are budgeted before upload and released on
 
 
 test('terrain tile GPU uploads use the frame budget and context restore requeues them', () => {
-  assert.match(source, /get pendingUploads\(\) \{ return this\.#queuedUploads\.size \+ this\.#recoveryQueue\.size \+ this\.#pendingTerrainTiles\.size/);
+  assert.match(source, /get pendingUploads\(\) \{[\s\S]*?this\.#queuedUploads\.size \+ this\.#sceneQueue\.size \+ this\.#recoveryQueue\.size \+ this\.#pendingTerrainTiles\.size/);
   assert.match(source, /while \(this\.pendingUploads && \(chunks === 0 \|\| now\(\) - start < budgetMs\)\)/);
   assert.match(source, /if \(this\.#pendingTerrainTiles\.size\) \{/);
   assert.match(source, /this\.#terrainCache\.upload\(tile\.channel, tile\.key, tile\.image\)/);
