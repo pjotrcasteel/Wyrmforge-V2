@@ -200,7 +200,9 @@ test('browser proof restores only verified terrain and keeps the old scene durin
   assert.match(source,/restoring=new V2ExternalTerrainReplaySession\(savedCheckpoint\)/);
   assert.match(source,/restoring\.step\(\{maxCells:192,maxEdits:1\}\)/);
   assert.match(source,/if\(restoring\.progress\.done\) \{/);
-  assert.match(source,/const replacement=restoring\.terrain/);
-  assert.match(source,/renderer\.setMeshes\(meshes\);\s*loader\?\.unload\(\)/,
-    'only a verified replay can replace the old GPU scene and authority');
+  assert.match(source,/stageTerrainMeshes\(restoring\.terrain,'restore'\)/);
+  assert.match(source,/renderer\.setMeshes\(meshes\);\s*if\(kind==='restore'\)/,
+    'only complete worker geometry can replace the current GPU scene');
+  assert.match(source,/if\(kind==='restore'\) \{\s*loader\?\.unload\(\)/,
+    'the previous authority remains intact until ready geometry exists');
 });
