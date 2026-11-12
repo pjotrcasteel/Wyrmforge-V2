@@ -32,7 +32,7 @@ export class SustainedTelemetry {
       queue.retiredGpuBytesEstimate ?? 0);
   }
   due(now) { return Number.isFinite(now) && (this.#last === null || now - this.#last >= this.intervalMs); }
-  record(now, { frames, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
+  record(now, { frames, frameWork = null, queue, renderer, voxelBytes, edits, pendingTerrainChunks,
     heapBytes = null }, { force = false } = {}) {
     if (!Number.isFinite(now)) return false;
     if (this.#start === null) this.#start = now;
@@ -57,6 +57,8 @@ export class SustainedTelemetry {
     const sample = {
       elapsedSeconds: Math.round((now - this.#start) / 1000),
       p95Ms: frames.p95, p99Ms: frames.p99,
+      frameWorkP95Ms: frameWork?.p95 ?? null,
+      frameWorkP99Ms: frameWork?.p99 ?? null,
       hitchesOver50Ms: frames.hitchesOver50Ms,
       pendingChunks: queue?.pendingChunks ?? null,
       pendingBytes: queue?.pendingBytes ?? null,
