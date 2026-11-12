@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | V2-only isolation | CI checks a list of forbidden import path patterns | Audit *all* source/static asset provenance and transitive imports; current grep is not a comprehensive dependency audit |
 | Authoritative voxel store | voxel-world.mjs; voxel-world.test.mjs; chunk-local-remesh.test.mjs | Consolidate deterministic cross-chunk stress evidence against original thresholds |
-| Destruction and replay | terrain-edit-ledger.mjs; replay-checkpoint.mjs; replay-file.mjs; tests | Verify long-running repeated edits/replay on both mobile browsers and after reload |
+| Destruction and replay | terrain-edit-ledger.mjs supports sphere, tunnel, crater and bounded area damage; replay-checkpoint.mjs; replay-file.mjs; tests/terrain-spatial-shapes.test.mjs | Complete physical cliff/crater/replay verification and long-running repeated edits on both mobile browsers |
 | Worker meshing | terrain-worker-session.mjs; terrain-mesh.worker.mjs; protocol tests | Verify actual worker-mode use and bounded queues under sustained device workload; latest 0.0.047 report used **sync** meshing |
 | GPU uploads/recovery | webgl-voxel-view.mjs; gpu-upload-budget.test.mjs; webgl-local-updates.test.mjs | Physical device context-loss/recovery evidence and peak memory under long sessions; latest report has zero context losses, not a recovery test |
 | Collision | collision-fixtures, dynamic-collision-benchmark, terrain-actor tests | **0.0.047 iPhone 3/3 dynamic cases passed**, zero overlaps/errors, 4-voxel drop and stable landing at 16/32 chunk boundaries; this does not prove every future prop/collision scenario |
@@ -28,3 +28,23 @@
 4. Follow docs/VOXEL-V2-DELIVERY-GATES.md for physical objects, destruction, site generation and mobile release.
 
 **Course guardrail:** a lab build number is not a milestone acceptance certificate. Only mark a gate complete with code tests plus required physical-device evidence. No V1 code or assets.
+
+## Updated V2.3 implementation evidence — 2026-11-12
+
+The same synchronous TerrainEditLedger now accepts *real* 3D downward crater
+excavation (`carve-crater`, maximum depth six) and bounded cuboid material
+damage (`damage-area`, maximum 9×9×9 scanned voxels), alongside existing
+spheres and tunnels. The world store remains the sole collision/raycast and
+meshing authority. Both new shapes retain the single-command preflight,
+material resistance/bedrock protection, dirty-neighbor invalidation, duplicate
+ID safeguards and replay-compatible canonical edit journal.
+
+A **Carve crater** control in the independent V2 lab runs the existing worker
+and GPU path; per-scene targets are deterministic fixtures, not a procedural
+world generator. The V2.3 shape acceptance tests cover geometry, replay,
+partial damage, V2.6 notifications and localized worker output at 16³/32³.
+
+**Acceptance still open:** device-confirmed appearance, destruction edit-to-
+visible timing and sustained mobile memory/frame metrics. These tests close
+a missing implementation capability; they do not certify the V2.3 or V2.7
+release gates in full.

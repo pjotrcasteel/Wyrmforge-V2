@@ -18,6 +18,7 @@ import { runCollisionProbe } from './src/collision-benchmark.mjs';
 import { runCollisionFixtureSuite } from './src/collision-fixtures.mjs';
 import { runDynamicCollisionSuite } from './src/dynamic-collision-benchmark.mjs';
 import { demoTunnelTarget } from './src/demo-tunnel.mjs';
+import { demoCraterTarget } from './src/demo-crater.mjs';
 import { TerrainEditLedger, MATERIAL_RESISTANCE } from './src/terrain-edit-ledger.mjs';
 import { applyDemoBurst } from './src/demo-burst.mjs';
 import { createReplayCheckpoint, restoreReplayCheckpoint } from './src/replay-checkpoint.mjs';
@@ -380,6 +381,7 @@ let lastMeshComparison = null;
 let lastMeshWorker = null;
 let compareWorker = null, compareJob = null, compareJobId = 0;
 let lastCarve = null;
+let lastCrater = null;
 let lastTunnel = null;
 let lastBurst = null, nextBurstId = 0;
 let lastDamage = null;
@@ -1120,6 +1122,7 @@ function chooseScene({ preserveMeasurements = false } = {}) {
   nextDamageId = 0;
   nextBurstId = 0;
   lastCarve = null;
+  lastCrater = null;
   lastTunnel = null;
   lastBurst = null;
   lastDamage = null;
@@ -1189,6 +1192,7 @@ document.querySelector('#carve').addEventListener('click', () => {
   });
   const { removedVoxels } = edit;
   lastDamage = null;
+  lastCrater = null;
   lastTunnel = null;
   const dirtyChunks = new Set(edit.dirtyChunks);
   lastCarve = {
@@ -1233,6 +1237,7 @@ document.querySelector('#tunnel').addEventListener('click', () => {
     editCpuMs:performance.now()-startedAt
   };
   lastCarve = null;
+  lastCrater = null;
   lastBurst = null;
   lastDamage = null;
   if (!edit.dirtyChunks.length) {
@@ -1248,6 +1253,44 @@ document.querySelector('#tunnel').addEventListener('click', () => {
     ' voxels in one authoritative edit. ' +
     edit.dirtyChunks.length + ' chunks invalidated; ' +
     (activeTerrainJob ? 'background geometry pending.' : 'geometry updated.');
+  dirty = true;
+});
+
+document.querySelector('#crater').addEventListener('click', () => {
+  const target = demoCraterTarget(activeScene);
+  const startedAt = performance.now();
+  let edit;
+  try {
+    edit = terrainEdits.apply({
+      id:`lab-hit-${++nextTerrainEditId}`, type:'carve-crater',
+      ...target,expectedRevision:world.revision,
+      expectedEditRevision:terrainEdits.editRevision
+    });
+  } catch (error) {
+    meshAuditStatus.textContent = 'Crater rejected: ' + error.message;
+    return;
+  }
+  lastCrater = {
+    scene:activeScene, ...target, ...edit,
+    editCpuMs:performance.now()-startedAt
+  };
+  lastCarve = null;
+  lastTunnel = null;
+  lastBurst = null;
+  lastDamage = null;
+  if (!edit.dirtyChunks.length) {
+    meshAuditStatus.textContent = 'No destructible terrain remains at the crater target. ' +
+      'Choose Reset or another scene.';
+    return;
+  }
+  cancelTerrainWorker();
+  invalidateMeshAudit();
+  // Keep earlier canceled worker dirty IDs in the same bounded remesh batch.
+  for (const id of edit.dirtyChunks) pendingTerrainDirty.add(id);
+  updateTerrainMeshes();
+  meshAuditStatus.textContent = 'Real 3D crater removed ' + edit.removedVoxels +
+    ' voxels; ' + edit.dirtyChunks.length + ' dirty chunks; ' +
+    (activeTerrainJob ? 'worker geometry pending.' : 'mesh updated.');
   dirty = true;
 });
 
@@ -1269,6 +1312,7 @@ document.querySelector('#damage').addEventListener('click', () => {
   lastDamage = { ...target, power: 1, ...damage,
     editCpuMs: performance.now() - startedAt };
   lastCarve = null;
+  lastCrater = null;
   lastTunnel = null;
   lastBurst = null;
 
@@ -1315,6 +1359,7 @@ document.querySelector('#burst').addEventListener('click', () => {
   const editCpuMs = performance.now() - startedAt;
   lastBurst = { ...result, editCpuMs };
   lastCarve = null;
+  lastCrater = null;
   lastTunnel = null;
   lastDamage = null;
   invalidateMeshAudit();
@@ -1386,6 +1431,7 @@ function installVerifiedReplay(checkpoint, restored, counters, operation, starte
   replayCounters = { ...counters };
   restoreReplayButton.disabled = false;
   lastCarve = null;
+  lastCrater = null;
   lastTunnel = null;
   lastBurst = null;
   lastDamage = null;
@@ -1618,7 +1664,7 @@ document.querySelector('#report').addEventListener('click', () => {
     presetScenario:lastPresetReport ?? (preset ? {schema:'voxel-v2.preset.v1',status:'running',impacts:preset.impacts,elapsedMs:Math.round(performance.now()-preset.startedAt)} : null),
     chunkEdge:world.chunkEdge, chunks:world.chunkCount,
     voxelPayloadBytes:world.allocatedVoxelBytes, revision:world.revision,
-    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastTunnel, lastBurst,
+    meshAudit:lastMeshAudit, meshComparison:lastMeshComparison, meshWorker:lastMeshWorker, lastCarve, lastCrater, lastTunnel, lastBurst,
     lastDamage, lastTargetedImpact, terrainInteractionMode:terrainTargetMode.value,
     labControlsOpen: !controlsPanel.hidden,
     actorPilot:{schema:ACTOR_PHYSICS_SCHEMA,enabled:actorEnabled,
