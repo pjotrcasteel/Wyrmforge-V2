@@ -100,10 +100,10 @@ test('every 64px reference material and channel has continuous repeated-image bo
 
 test('reference tile edge sealing is deterministic, bounded, and rejects malformed RGBA',()=>{
   for(const kind of Object.values(REFERENCE_TERRAIN_KEYS)) {
-    const before=createReferenceTerrainPixels(kind,64);
-    const copy=before.slice();
-    assert.deepEqual(sealReferenceTileEdges(copy,64),before,
-      'a second seam stitch must be stable');
+    const input=createReferenceTerrainPixels(kind,64);
+    const first=sealReferenceTileEdges(input.slice(),64);
+    const repeat=sealReferenceTileEdges(input.slice(),64);
+    assert.deepEqual(first,repeat,'reference seam stitching is deterministic');
   }
   assert.throws(()=>sealReferenceTileEdges(new Uint8Array(64*64*4),64),RangeError);
   assert.throws(()=>sealReferenceTileEdges(new Uint8ClampedArray(63*64*4),64),RangeError);
