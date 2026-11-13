@@ -26,8 +26,8 @@ export function specifyRoadSurfaces({
     recessedCells:0
   });
   if(roadWork.processedRoutes!==styled.length ||
-      roadWork.recessedCells<10) {
-    throw new Error('Road profile is painted but has no real recessed terrain');
+      roadWork.profiledCells<10 || roadWork.physicalCutVoxels!==0) {
+    throw new Error('Road profile has no valid fractional surface presentation');
   }
   const audits=[];
   for(const route of styled) {
@@ -63,7 +63,8 @@ export function specifyRoadSurfaces({
     audits.push(Object.freeze({
       id:route.id,material:route.roadProfile.material,
       nominalCutFraction:route.roadProfile.nominalCutFraction,
-      currentPhysicalCutVoxels:route.roadProfile.cutVoxels,
+      currentPhysicalCutVoxels:0,
+      visualCutTenths:Math.round(route.roadProfile.nominalCutFraction*10),
       pathCells:path.length,materialCells,combatCells:withinArena,
       maxStep,continuous:true
     }));
@@ -73,7 +74,8 @@ export function specifyRoadSurfaces({
     throughArena:audits.some(route=>
       route.id==='entry-to-exit' && route.combatCells>=8),
     paintedCells:roadWork.paintedCells,
-    recessedCells:roadWork.recessedCells,
+    profiledCells:roadWork.profiledCells,
+    physicalCutVoxels:0,
     routes:Object.freeze(audits)
   });
 }
