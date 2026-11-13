@@ -14,10 +14,10 @@ test('visible V2.6 proof uses real terrain loader, authority, mesher and WebGL r
   assert.match(entry,/loader\.loadStep\(192\)/);
   assert.match(entry,/stageTerrainMeshes\(loader\.terrain,'initial'\)/);
   assert.match(entry,/new V2ExternalTerrainMeshBridge\(\{/);
-  assert.match(entry,/renderer\.setMeshes\(meshes\)/);
+  assert.match(entry,/renderer\.setMeshes\(presentSiteMeshes\(terrain\.world,meshes\)\)/);
   assert.doesNotMatch(entry,/renderer\.setMeshes\(buildExposedFaceMeshes\(/);
   assert.match(entry,/const result=active\.port\.apply\(/);
-  assert.match(entry,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),meshes,/);
+  assert.match(entry,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),\s*presentSiteMeshes\(world,meshes\),/);
   assert.match(entry,/meshBridge\.replace\(active\.world,dirty\)/);
   assert.match(entry,/renderer\.flushQueuedUploads\(\{budgetMs:2\}\)/);
   assert.match(entry,/loader\.unload\(\)/);
@@ -80,7 +80,7 @@ test('localized edits stay in the V2 worker queue and block saves until GPU sync
   assert.match(host,/pendingEdit=\{world:active\.world,epoch,dirty:\[\.\.\.dirty\],\s*rendererSceneEpoch:renderer\.sceneEpoch\}/);
   assert.match(host,/if\(kind==='edit'\) \{/);
   assert.match(host,/if\(!pendingEdit \|\| pendingEdit\.world!==world \|\|/);
-  assert.match(host,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),meshes,/);
+  assert.match(host,/renderer\.queueReplacementMeshes\(new Set\(dirtyIds\),\s*presentSiteMeshes\(world,meshes\),/);
   assert.match(host,/Boolean\(pendingMesh\) \|\| Boolean\(pendingEdit\)/);
   assert.match(host,/meshBridge\?\.cancel\(\);\s*pendingMesh=null;\s*pendingEdit=null/);
   assert.match(host,/if\(typeof Worker!=='function' && active\.world\.chunkCount>8\)/,
