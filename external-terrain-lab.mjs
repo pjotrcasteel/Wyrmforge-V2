@@ -21,7 +21,7 @@ import {
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import { analyzeCharacterReachability } from './src/character-reachability.mjs';
-import { projectVoxel } from './src/camera-presets.mjs';
+import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
@@ -58,6 +58,10 @@ const expeditionMode=document.querySelector('#expedition-mode');
 const expeditionRegion=document.querySelector('#expedition-region');
 const expeditionRegionField=document.querySelector('#expedition-region-field');
 const viewCamera=document.querySelector('#view-camera');
+// Play Hunt's authoritative camera is always the game-facing 2.5D preset
+// at startup, independent of the diagnostic World Generation lab default.
+// This only controls projection: the 3D Voxel V2 world stays unchanged.
+if(playMode) viewCamera.value=PLAY_HUNT_CAMERA;
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
 const saveButton=document.querySelector('#save-site');
@@ -876,7 +880,7 @@ function frame(now) {
       // Default to the already-tested diagonal inspection basis so the actual
       // underside, stone walls and vertical height are legible on mobile.
       // This is presentation-only: switching views never remeshes terrain.
-      const camera=viewCamera.value; // Play Hunt defaults to north-up in its own page
+      const camera=viewCamera.value; // 2.5D north-up Hunt; 3D inspector opt-in only
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
       const inspected=generatedSite??expeditionSite;
       const fit=!playMode && inspected
@@ -1148,9 +1152,10 @@ if(playMode) {
     setTimeout(()=>URL.revokeObjectURL(url),3000);
   });
   playCameraToggle.addEventListener('click',()=>{
-    viewCamera.value=viewCamera.value==='inspection'?'hunt':'inspection';
-    playCameraToggle.textContent=viewCamera.value==='inspection'
-      ?'WorldGen 3D':'Top-down candidate';
+    viewCamera.value=viewCamera.value===PLAY_HUNT_CAMERA
+      ?'inspection':PLAY_HUNT_CAMERA;
+    playCameraToggle.textContent=viewCamera.value===PLAY_HUNT_CAMERA
+      ?'2.5D Hunt':'Voxel 3D inspect';
     resetPlayInput();
   });
   playRespawn.addEventListener('click',resetPlayActor);
@@ -1175,9 +1180,8 @@ window.addEventListener('pagehide',()=>{
 });
 try {
   renderer=new WebGLVoxelView(canvas,{
-    // Equal material shading to WorldGen's established preview is the
-    // acceptance reference. Cheap simplified shading may only return
-    // after explicit side-by-side approval and mobile profiling.
+    // Use the actual WorldGen V2 material pipeline for BOTH camera
+    // projections. The 2.5D game camera does not require 2D fake terrain.
     fastHuntMode:false,
     onAvailabilityChange(ready,error) {
       // A restored GL context cannot clear an unrelated worker or replay failure.

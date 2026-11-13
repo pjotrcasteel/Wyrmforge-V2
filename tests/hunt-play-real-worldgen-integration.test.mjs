@@ -130,17 +130,21 @@ test('real WorldGen grass, dirt, slopes and 10cm surface stay collider-safe thro
   }
 });
 
-test('Play Hunt matches WorldGen inspection camera AND material shader by default',()=>{
+test('Play Hunt uses Wyrmforge 2.5D camera and the SAME real WorldGen material engine',()=>{
   const play=readFileSync(new URL('../play-hunt.html',import.meta.url),'utf8');
   const lab=readFileSync(new URL('../external-terrain-lab.html',import.meta.url),'utf8');
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
-  assert.match(play,/value="inspection" selected/);
+  assert.match(play,/value="hunt" selected/);
   assert.match(lab,/value="inspection" selected/);
-  assert.doesNotMatch(play,/value="hunt" selected/);
+  assert.doesNotMatch(play,/value="inspection" selected/);
+  assert.match(play,/Wyrmforge 2\.5D Hunt \(game\)/);
+  assert.match(host,/if\(playMode\) viewCamera\.value=PLAY_HUNT_CAMERA/);
+  assert.match(host,/PLAY_HUNT_CAMERA/);
   assert.match(host,/fastHuntMode:false/);
   assert.match(host,/playMode && viewCamera\.value==='inspection'/);
   assert.match(host,/const diagonal=Math\.SQRT1_2/);
   assert.match(host,/playCameraToggle\.addEventListener\('click'/);
+  assert.match(host,/viewCamera\.value===PLAY_HUNT_CAMERA/);
   assert.match(play,/id="play-camera-toggle"/);
   assert.match(play,/<details id="play-hud">/);
   assert.match(host,/playHudDetails\.textContent=/);
