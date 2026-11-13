@@ -1,3 +1,5 @@
+import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
+
 // World Generation V2 - road geometry composer. This is ACTUAL integer
 // terrain shaping. A 0.12-0.30 voxel intent cannot be faithfully represented
 // by current Voxel V2 integer solids, so one-voxel beds are an explicit
@@ -30,6 +32,29 @@ export function composeRoadSurfaces({
       processedRoutes:0,paintedCells:0,recessedCells:0,
       combatRoadCells:0,minimumPhysicalCutVoxels:0
     });
+  }
+  // Some original road spurs were never required to be walkable. Grade
+  // their actual cardinal centerlines before laying down the bed. This
+  // repairs occasional pre-existing two-voxel steps at a site edge without
+  // changing the authored entry/exit anchors or flattening all landmarks.
+  for(const route of roadRoutes) {
+    const path=rasterizeEscapeRoute(route.nodes);
+    const targets=path.map(point=>heights[index(radius,point.x,point.z)]);
+    if(Math.abs(targets.at(-1)-targets[0])>path.length-1) {
+      throw new Error('Road cannot meet entry and exit elevations: '+route.id);
+    }
+    for(let pass=0;pass<2;pass++) {
+      for(let i=1;i<targets.length-1;i++) {
+        targets[i]=clamp(targets[i],targets[i-1]-1,targets[i-1]+1);
+      }
+      for(let i=targets.length-2;i>0;i--) {
+        targets[i]=clamp(targets[i],targets[i+1]-1,targets[i+1]+1);
+      }
+    }
+    for(let i=0;i<path.length;i++) {
+      const point=path[i];
+      heights[index(radius,point.x,point.z)]=targets[i];
+    }
   }
   let paintedCells=0,recessedCells=0,combatRoadCells=0;
   const original=heights.slice();
