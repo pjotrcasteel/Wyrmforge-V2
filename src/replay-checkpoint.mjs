@@ -50,6 +50,19 @@ export function worldDigest(world) {
       for (let i = 0; i < chunk.data.length; i++) byte(chunk.data[i]);
       byte(254);
     }
+    // Existing whole-voxel checkpoint digests remain byte-for-byte
+    // compatible. A world with physical microtiles additionally fingerprints
+    // every occupied 10cm cell, including its location and depth.
+    if(world.microSurfaceCount>0) {
+      const tiles=world.microSurfaceTiles();
+      token('voxel-v2-micro-surface-v1');
+      token(tiles.length);
+      for(const tile of tiles) {
+        token(tile.x);token(tile.y);token(tile.z);
+        for(const level of tile.levels) byte(level);
+        byte(253);
+      }
+    }
   });
 }
 
