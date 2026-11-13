@@ -35,8 +35,15 @@ or alternate collision authority.
 | **Builder** | \`SitePlanBuilder\` | Bounded, named route and clearing composition with deliberate landmarks; no random scattered geometry |
 | **Specification** | \`specifySiteTopology\` | Reject incomplete or unreachable sites before returning geometry |
 | **Adapter** | \`voxel-terrain-adapter.mjs\` | **Only** worldgen module importing the public voxel terrain-definition validator |
-| **Dependency injection** | \`new WorldGeneratorV2({registry})\` | Replace all kind strategies or the entire engine without touching terrain consumers |
+| **Dependency injection** | \`new WorldGeneratorV2({registry,terrainAdapter})\` | Replace map-kind strategies **and** the receiving terrain engine independently |
 | **Deterministic pipeline** | \`WorldGeneratorV2.generate(recipe)\` | Separate site planning, landform shaping, topology audit, canonical run encoding, and hash |
+
+The standalone core **requires an injected terrain adapter**. The optional
+`src/world-generation/index.mjs` composition root wires the built-in Voxel V2
+adapter for the current demo. Replacing Voxel V2 means supplying another
+`terrainAdapter` to `WorldGeneratorV2`; the generated-site layout strategies
+and topology checker stay unchanged. An automated test runs the core using a
+fully synthetic replacement output format.
 
 Dependency direction: World Map / game orchestration → World Generation V2 →
 **versioned external terrain definition** → Voxel V2 loader. World Objects,
