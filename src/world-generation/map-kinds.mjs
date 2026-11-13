@@ -107,6 +107,45 @@ function addEscapeLayout(builder,kind) {
   }
 }
 
+// Separate tactical circulation identities per biome. The fight can spill
+// into these short connected spaces without turning every clearing into a
+// second encounter/spawn point. All geometry is part of the terrain Strategy.
+const COMBAT_FLOW_LAYOUTS=Object.freeze({
+  'wet-forest':Object.freeze([
+    {id:'mossy-bend',kind:'woodland-glade',x:-10,z:9,
+      nodes:[[1,2],[-5,6],[-10,9]],width:3},
+    {id:'fern-gully',kind:'wetland-ledge',x:10,z:-9,
+      nodes:[[1,2],[6,-4],[10,-9]],width:2}
+  ]),
+  'forest-highland':Object.freeze([
+    {id:'lower-terrace',kind:'foothill-terrace',x:-10,z:9,
+      nodes:[[1,2],[-5,7],[-10,9]],width:3},
+    {id:'ridge-turn',kind:'rocky-shelf',x:10,z:-9,
+      nodes:[[1,2],[7,-4],[10,-9]],width:2}
+  ]),
+  'mountain-pass':Object.freeze([
+    {id:'western-shelf',kind:'stone-terrace',x:-10,z:-6,
+      nodes:[[1,2],[-4,-2],[-10,-6]],width:2},
+    {id:'eastern-overlook',kind:'cliff-overlook',x:10,z:9,
+      nodes:[[1,2],[6,7],[10,9]],width:3}
+  ])
+});
+
+function addManeuverFlow(builder,kind) {
+  const layouts=COMBAT_FLOW_LAYOUTS[kind];
+  if(!layouts) throw new RangeError('Missing authored combat flow layout: '+kind);
+  for(const area of layouts) {
+    builder.addManeuverPocket({
+      id:area.id,kind:area.kind,x:area.x,z:area.z,radius:4
+    });
+    builder.addFlowLink({
+      id:area.id+'-link',kind:area.kind,pocketId:area.id,
+      width:area.width,
+      nodes:area.nodes.map(([x,z])=>({x,z}))
+    });
+  }
+}
+
 function forest(builder, context) {
   const seed = context.seed;
   builder.setTerrain({
@@ -120,6 +159,7 @@ function forest(builder, context) {
   });
   addNarrativePaths(builder,'forest-ruin');
   addEscapeLayout(builder,'wet-forest');
+  addManeuverFlow(builder,'wet-forest');
   builder.addFeature({id:'wetland',kind:'water-basin',x:-12,z:7,radius:5});
   builder.addFeature({id:'northern-grove',kind:'woodland',
     x:-10,z:-9,radius:7});
@@ -138,6 +178,7 @@ function transition(builder, context) {
   });
   addNarrativePaths(builder,'mountain-watch');
   addEscapeLayout(builder,'forest-highland');
+  addManeuverFlow(builder,'forest-highland');
   builder.addFeature({id:'lower-forest',kind:'woodland',
     x:-12,z:10,radius:6});
   builder.addFeature({id:'foothills',kind:'rocky-slope',
@@ -158,6 +199,7 @@ function mountains(builder, context) {
   });
   addNarrativePaths(builder,'mountain-shrine');
   addEscapeLayout(builder,'mountain-pass');
+  addManeuverFlow(builder,'mountain-pass');
   builder.addFeature({id:'western-escarpment',kind:'cliff',
     x:-13,z:-4,radius:7});
   builder.addFeature({id:'eastern-ridge',kind:'rocky-slope',
