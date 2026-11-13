@@ -124,8 +124,8 @@ const COMBAT_FLOW_LAYOUTS=Object.freeze({
       nodes:[[1,2],[7,-4],[10,-9]],width:2}
   ]),
   'mountain-pass':Object.freeze([
-    {id:'western-shelf',kind:'stone-terrace',x:-10,z:-9,
-      nodes:[[1,2],[-4,-4],[-10,-9]],width:2},
+    {id:'western-shelf',kind:'stone-terrace',x:-10,z:-6,
+      nodes:[[1,2],[-4,-2],[-10,-6]],width:2},
     {id:'eastern-overlook',kind:'cliff-overlook',x:10,z:9,
       nodes:[[1,2],[6,7],[10,9]],width:3}
   ])
