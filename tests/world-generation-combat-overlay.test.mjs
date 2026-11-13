@@ -46,7 +46,7 @@ test('horde overlays are optional diagnostics and do not expose hidden discovery
   assert.match(html,/id="combat-layout" type="checkbox"/);
   assert.match(html,/id="combat-guide" aria-hidden="true"/);
   assert.match(html,/#combat-guide\{position:absolute;inset:0;pointer-events:none/);
-  assert.match(host,/if\(!combatLayout\.checked \|\| !generatedSite \|\| !active\?\.world\) return/);
+  assert.match(host,/if\(!combatLayout\.checked \|\| !generatedSite \|\| !active\?\.world\) \{/);
   assert.match(host,/projectEncounterGuides\(generatedSite,active\.world,view\)/);
   assert.match(host,/paintEncounterGuide\(\{/);
   assert.doesNotMatch(helper,/\.discoveryCandidates|\.chests|\.lootTable/);
