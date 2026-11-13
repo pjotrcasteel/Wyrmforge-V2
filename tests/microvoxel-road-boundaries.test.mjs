@@ -127,8 +127,14 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         if(!selected) {
           assert.ok(inCirculation(tile.x,tile.z)||kind==='mountain-pass',
             'a grass micro-landing must belong to an authored movement corridor');
-          if(kind!=='mountain-pass')assert.ok(tile.levels.every(level=>level===5),
-            'a connector cell must be a physical 50cm landing');
+          const graded=gradeMap.get(tile.x+','+tile.z);
+          if(graded!==undefined) {
+            assert.ok(tile.levels.every(level=>level===graded-tile.y*10),
+              'connector cells must match their authored 10cm physical grades');
+          } else if(kind!=='mountain-pass') {
+            assert.ok(tile.levels.every(level=>level===5),
+              'remaining connector cells use a physical half-metre landing');
+          }
           continue;
         }
         authoredRoadTiles++;
