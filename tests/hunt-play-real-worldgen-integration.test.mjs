@@ -92,3 +92,57 @@ test('H08-01 Play Hunt cannot fall back to the simplified expedition generator',
   // A true WorldGen-generated site must be visible in the lab as well.
   assert.match(host,/const recipe=createWorldSiteRecipe\(/);
 });
+
+
+test('real WorldGen grass, dirt, slopes and 10cm surface stay collider-safe throughout a long walk',()=>{
+  const generated=generateWorldSite(canonicalWetForestRecipe());
+  const loader=new V2ExternalTerrainLoader(generated.definition);
+  try {
+    while(!loader.progress.done)loader.loadStep(4096);
+    const world=loader.terrain.world;
+    const entry=generated.layout.topology.entry;
+    const region={
+      origin:{x:0,z:0},bounds:generated.layout.footprint
+    };
+    let actor=spawnHuntExplorer(world,region,{
+      direction:'south',at:{x:entry.x,z:entry.z}
+    });
+    assert.ok(actor);
+    const start={...actor};
+    let moved=0;
+    for(let i=0;i<400;i++){
+      const controls=i<180?{moveX:-.25,moveZ:-1}:
+        i<260?{moveX:1,moveZ:-.2}:
+        i<320?{moveX:-1,moveZ:.3}:{moveX:0,moveZ:1};
+      const after=stepHuntExplorer(world,actor,
+        generated.layout.footprint,controls,HUNT_FIXED_STEP);
+      assert.notEqual(after.error,'actor-overlap',
+        'Play Hunt must never brick the Wizard on real authored microterrain');
+      assert.equal(actorOverlapsTerrain(world,after),false,
+        'the real microvoxel collider cannot be penetrated by game controls');
+      if(Math.hypot(after.x-actor.x,after.z-actor.z)>0.001)moved++;
+      actor=after;
+    }
+    assert.ok(moved>30,'the physical Wizard should make progress, not freeze at spawn');
+    assert.ok(Math.hypot(actor.x-start.x,actor.z-start.z)>0.1);
+  } finally {
+    loader.unload();
+  }
+});
+
+test('Play Hunt matches WorldGen inspection camera AND material shader by default',()=>{
+  const play=readFileSync(new URL('../play-hunt.html',import.meta.url),'utf8');
+  const lab=readFileSync(new URL('../external-terrain-lab.html',import.meta.url),'utf8');
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  assert.match(play,/value="inspection" selected/);
+  assert.match(lab,/value="inspection" selected/);
+  assert.doesNotMatch(play,/value="hunt" selected/);
+  assert.match(host,/fastHuntMode:false/);
+  assert.match(host,/playMode && viewCamera\.value==='inspection'/);
+  assert.match(host,/const diagonal=Math\.SQRT1_2/);
+  assert.match(host,/playCameraToggle\.addEventListener\('click'/);
+  assert.match(play,/id="play-camera-toggle"/);
+  assert.match(play,/<details id="play-hud">/);
+  assert.match(host,/playHudDetails\.textContent=/);
+  assert.doesNotMatch(play,/<details id="play-hud" open/);
+});
