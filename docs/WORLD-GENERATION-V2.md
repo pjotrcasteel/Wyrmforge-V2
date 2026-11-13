@@ -772,7 +772,7 @@ narrative implementation, enemy AI, or a playable Hunt.
 - `composeHuntExpeditionPlan`: standard plan has 11 connected
   32m regions spanning a **96m × 160m geographical envelope**.
   Extended scope adds three spaces/alternate paths, with a
-  **160m × 160m envelope** depending on seed mirror. Includes central
+  **128m × 160m envelope** (mirrored between seeds). Includes central
   through-route, linked side loops, horde-compatible clearings,
   investigation/discovery location opportunities, retreat/flank space
   and extraction. This is a **spatial adventure skeleton**, not
