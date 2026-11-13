@@ -41,10 +41,14 @@ button:disabled{opacity:.5;cursor:default}
 #control-body label{font-size:12px;color:#c8dce3;align-self:end}
 #control-body label[for="site-kind"],#control-body #site-kind,
 #control-body #status,#control-body .control-note,
-#control-body #reachability-report{grid-column:1 / -1}
+#control-body #reachability-report,
+#control-body #dummy-actor-status{grid-column:1 / -1}
 #reachability-report{font:11px/1.45 ui-monospace,monospace;color:#bde9d5;
   border:1px solid #4d6d66;border-radius:7px;padding:9px;white-space:pre-wrap}
 #control-body select,#control-body input,#control-body button{min-width:0;width:100%}
+#control-body input[type="checkbox"]{width:auto}
+#dummy-actor-status{font:11px/1.4 ui-monospace,monospace;
+  color:#ffe6a0;min-height:2.5em}
 #control-body .control-field{min-width:0;display:flex;flex-direction:column;gap:5px}
 #control-body .control-note{color:#bdced3;font-size:11px;line-height:1.4;margin:0}
 #status{margin:0;min-height:30px;max-height:90px;overflow:auto;color:#b8dec7;
@@ -94,6 +98,17 @@ body.focus-mode #site-summary{max-width:46%}
         <label><input id="traversal-layout" type="checkbox" style="width:auto" /> Show reachable terrain and fall hazards</label>
       </div>
       <div id="reachability-report" role="status" hidden>Generate a map to trace reachability.</div>
+      <label for="dummy-actor">Character scale (1 voxel = 1 m)</label>
+      <div class="control-field">
+        <label><input id="dummy-actor" type="checkbox" checked />
+          Show actual-size 1.6 m dummy</label>
+      </div>
+      <label for="dummy-route-progress">Place dummy along the reachable route</label>
+      <input id="dummy-route-progress" type="range" min="0" max="100"
+        step="1" value="40" aria-label="Dummy actor route progress" />
+      <div id="dummy-actor-status" aria-live="off">
+        Dummy 1.6 m tall · 0.56 m wide · loading route…
+      </div>
       <label for="site-kind">Site kind</label>
       <select id="site-kind" aria-label="World Generation V2 map kind">
         <option value="fixture">Fixed arch (voxel diagnostic)</option>
