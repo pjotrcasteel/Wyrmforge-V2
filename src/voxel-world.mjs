@@ -1,4 +1,8 @@
 // Voxel V2: independent, deterministic terrain authority. No legacy imports.
+import {
+  MICRO_VOXEL_EDGE, MICRO_VOXEL_COUNT, MAX_MICRO_SURFACE_TILES,
+  validateMicroSurfaceTile
+} from './microvoxel-surface.mjs';
 // World coordinates are signed integers; chunk dimensions are a V2 choice.
 // 16 and 32 are explicit V2 experiment configurations, not inherited V1 constants.
 export const CHUNK_EDGE = 16;
@@ -14,6 +18,7 @@ export class VoxelWorld {
   #chunkRevisions = new Map();
   #occupied = new Map();
   #chunkEdge;
+  #microSurfaces=new Map();
 
   constructor({ chunkEdge = CHUNK_EDGE } = {}) {
     if (!CHUNK_EDGE_CANDIDATES.includes(chunkEdge)) {
@@ -27,7 +32,11 @@ export class VoxelWorld {
   get chunkEdge() { return this.#chunkEdge; }
 
   // Voxel payload only; excludes Map/object overhead and renderer/worker memory.
-  get allocatedVoxelBytes() { return this.chunkCount * this.#chunkEdge ** 3; }
+  get allocatedVoxelBytes() {
+    return this.chunkCount*this.#chunkEdge**3+
+      this.#microSurfaces.size*MICRO_VOXEL_COUNT;
+  }
+  get microSurfaceCount() {return this.#microSurfaces.size;}
 
   chunkRevision(cx, cy, cz) {
     this.#validate(cx, cy, cz);
@@ -39,6 +48,60 @@ export class VoxelWorld {
     const edge = this.#chunkEdge;
     const chunk = this.#chunks.get(key(floorDiv(x, edge), floorDiv(y, edge), floorDiv(z, edge)));
     return chunk ? chunk[index(local(x, edge), local(y, edge), local(z, edge), edge)] : 0;
+  }
+
+  // Read-only copy. Each unit is 10cm; values 1..10 mean *occupied*
+  // 10cm vertical cells above the voxel's integer bottom, not a shader warp.
+  microSurfaceTile(x,y,z) {
+    this.#validate(x,y,z);
+    const tile=this.#microSurfaces.get(key(x,y,z));
+    return tile ? tile.slice() : null;
+  }
+
+  microSurfaceTiles() {
+    return [...this.#microSurfaces].sort(([a],[b])=>a.localeCompare(b))
+      .map(([id,levels])=>{
+        const [x,y,z]=id.split(',').map(Number);
+        return {x,y,z,levels:Array.from(levels)};
+      });
+  }
+
+  // A sparse optional detail layer is owned by this very same world.
+  // Defining it changes the authoritative revision and is replayable.
+  setMicroSurfaceTile(x,y,z,levels) {
+    const tile=validateMicroSurfaceTile({x,y,z,levels});
+    if(this.get(x,y,z)===0 || this.get(x,y+1,z)!==0) {
+      throw new Error('Microvoxels require an exposed solid top voxel');
+    }
+    const id=key(x,y,z);
+    const previous=this.#microSurfaces.get(id);
+    if(previous?.every((value,i)=>value===tile.levels[i])) return false;
+    if(!previous && this.#microSurfaces.size>=MAX_MICRO_SURFACE_TILES) {
+      throw new RangeError('Micro surface tile budget exceeded');
+    }
+    this.#microSurfaces.set(id,Uint8Array.from(tile.levels));
+    this.#revision++;
+    this.#chunkRevisions.set(key(floorDiv(x,this.#chunkEdge),
+      floorDiv(y,this.#chunkEdge),floorDiv(z,this.#chunkEdge)),this.#revision);
+    return true;
+  }
+
+  // Physical material at a continuous world coordinate. On a refined top
+  // voxel, this queries the exact 10x10x10 occupied microcells.
+  materialAtPoint(x,y,z) {
+    if(![x,y,z].every(Number.isFinite) ||
+        [x,y,z].some(n=>Math.abs(n)>1e6)) {
+      throw new TypeError('Expected finite bounded physical coordinates');
+    }
+    const bx=Math.floor(x),by=Math.floor(y),bz=Math.floor(z);
+    const material=this.get(bx,by,bz);
+    if(!material) return 0;
+    const tile=this.#microSurfaces.get(key(bx,by,bz));
+    if(!tile) return material;
+    const mx=Math.min(9,Math.floor((x-bx)*MICRO_VOXEL_EDGE));
+    const mz=Math.min(9,Math.floor((z-bz)*MICRO_VOXEL_EDGE));
+    const my=Math.floor((y-by)*MICRO_VOXEL_EDGE);
+    return my<tile[mz*10+mx] ? material : 0;
   }
 
   set(x, y, z, material) {
@@ -58,6 +121,10 @@ export class VoxelWorld {
     }
     const offset = index(local(x, edge), local(y, edge), local(z, edge), edge);
     if (chunk[offset] === material) return false;
+    // Destruction/replace invalidates micro detail with the parent voxel.
+    // No detached visual/physical mask can outlive its authoritative solid.
+    this.#microSurfaces.delete(key(x,y,z));
+    this.#microSurfaces.delete(key(x,y-1,z));
     const wasSolid = chunk[offset] !== 0;
     chunk[offset] = material;
     const count = this.#occupied.get(id) + (material !== 0 ? 1 : 0) - (wasSolid ? 1 : 0);
@@ -95,6 +162,7 @@ export class VoxelWorld {
 
   clear() {
     this.#chunks.clear();
+    this.#microSurfaces.clear();
     this.#occupied.clear();
     this.#chunkRevisions.clear();
     this.#revision++;
