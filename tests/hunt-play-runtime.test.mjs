@@ -102,7 +102,7 @@ test('H08-01 Play Hunt is its own route with mobile input and follow camera',()=
   assert.match(html,/id="play-hud"/);
   assert.doesNotMatch(html,/id="expedition-mode"[^>]*checked/);
   assert.match(html,/id="view-camera"/);
-  assert.match(html,/value="hunt" selected/);
+  assert.match(html,/value="inspection" selected/);
   assert.match(host,/spawnHuntExplorer\(active\.world,region,\{/);
   assert.match(host,/stepHuntExplorer\(active\.world,playActor,/);
   assert.match(host,/playJoystick\.addEventListener\('pointerdown'/);
@@ -138,7 +138,7 @@ test('H08-01 mobile visual/performance fix changes only the playable route',()=>
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
   const renderer=readFileSync(new URL('../src/webgl-voxel-view.mjs',import.meta.url),'utf8');
   assert.match(host,/const pixelRatio=playMode\s*\?\s*Math\.min\(1,Math\.sqrt\(700000\/cssPixels\)\)/);
-  assert.match(host,/fastHuntMode:playMode/);
+  assert.match(host,/fastHuntMode:false/);
   assert.match(renderer,/uniform bool uFastHuntMode/);
   assert.match(renderer,/if \(uFastHuntMode\) \{/);
   assert.match(host,/const fit=!playMode && inspected/);
