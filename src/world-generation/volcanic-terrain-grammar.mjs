@@ -82,7 +82,8 @@ export function composeVolcanicTerrain({plan,seed,heights,surfaces}) {
           selectRoadCell(x,z,plan.routes))continue;
       // Slight seed-linked displacement gives recognizable but different
       // fault outlines without independently random pixels.
-      const wobble=0.33*Math.sin((x+z)*0.52+(seed%41)*0.13);
+      const phase=((x+z+(seed%23))%7+7)%7;
+      const wobble=(phase-3)*0.1;
       const d=segmentDistance(x,z,fault.from,fault.to);
       if(d>fault.width*scale+wobble)continue;
       const i=index(radius,x,z);
