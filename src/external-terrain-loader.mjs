@@ -4,8 +4,10 @@
 import { VoxelWorld, CHUNK_EDGE_CANDIDATES, MAX_SCENE_SEED } from './voxel-world.mjs';
 import { TerrainEditLedger } from './terrain-edit-ledger.mjs';
 import { V2TerrainPort } from './terrain-integration-port.mjs';
+import { validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
 
 export const TERRAIN_INITIALIZATION_SCHEMA = 'voxel-v2.terrain-initialization.v1';
+export const TERRAIN_INITIALIZATION_MICRO_SCHEMA='voxel-v2.terrain-initialization.v2';
 export const MAX_INITIAL_TERRAIN_RUNS = 8192;
 export const MAX_INITIAL_TERRAIN_CELLS = 1048576;
 export const MAX_INITIAL_TERRAIN_COORDINATE = 8192;
@@ -31,7 +33,8 @@ function boundedCoordinate(value) {
  */
 export function validateExternalTerrainDefinition(definition) {
   if (!definition || typeof definition !== 'object' ||
-      definition.schema !== TERRAIN_INITIALIZATION_SCHEMA) {
+      ![TERRAIN_INITIALIZATION_SCHEMA,TERRAIN_INITIALIZATION_MICRO_SCHEMA]
+        .includes(definition.schema)) {
     throw new TypeError('Unsupported V2 external terrain initialization schema');
   }
   validateName(definition.siteId, 'Site ID');
@@ -72,14 +75,19 @@ export function validateExternalTerrainDefinition(definition) {
       throw new RangeError('External terrain contains overlapping 3D runs');
     }
   }
+  const surfaceTiles=definition.schema===TERRAIN_INITIALIZATION_MICRO_SCHEMA
+    ? validateMicroSurfaceTiles(definition.surfaceTiles)
+    : Object.freeze([]);
   return Object.freeze({
-    schema:TERRAIN_INITIALIZATION_SCHEMA,
+    schema:definition.schema,
     siteId:definition.siteId,
     generatorVersion:definition.generatorVersion,
     seed:definition.seed,
     chunkEdge:definition.chunkEdge,
     totalCells:cells,
-    runs:Object.freeze(runs)
+    runs:Object.freeze(runs),
+    ...(definition.schema===TERRAIN_INITIALIZATION_MICRO_SCHEMA
+      ? {surfaceTiles} : {})
   });
 }
 
@@ -97,6 +105,7 @@ export class V2ExternalTerrainLoader {
   #port=null;
   #runIndex=0;
   #runOffset=0;
+  #surfaceIndex=0;
   #loaded=0;
   #closed=false;
 
@@ -114,7 +123,11 @@ export class V2ExternalTerrainLoader {
       siteId:this.#definition.siteId,
       loadedCells:this.#loaded,
       totalCells:this.#definition.totalCells,
-      done:this.#runIndex===this.#definition.runs.length && !this.#closed,
+      done:this.#runIndex===this.#definition.runs.length &&
+        this.#surfaceIndex===(this.#definition.surfaceTiles?.length??0) &&
+        !this.#closed,
+      surfaceTilesLoaded:this.#surfaceIndex,
+      surfaceTilesTotal:this.#definition.surfaceTiles?.length??0,
       closed:this.#closed
     });
   }
@@ -140,7 +153,17 @@ export class V2ExternalTerrainLoader {
         this.#runOffset=0;
       }
     }
-    if(this.#runIndex===this.#definition.runs.length && !this.#port) {
+    if(this.#runIndex===this.#definition.runs.length &&
+        this.#definition.surfaceTiles) {
+      // Microtile occupancy is budgeted alongside coarse voxel writes.
+      while(remaining>0 &&
+          this.#surfaceIndex<this.#definition.surfaceTiles.length) {
+        const tile=this.#definition.surfaceTiles[this.#surfaceIndex++];
+        this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
+        remaining--;
+      }
+    }
+    if(this.progress.done && !this.#port) {
       this.#ledger=new TerrainEditLedger(this.#world);
       this.#port=new V2TerrainPort(this.#world,this.#ledger,{epoch:this.#epoch});
     }
@@ -157,7 +180,11 @@ export class V2ExternalTerrainLoader {
       generatorVersion:this.#definition.generatorVersion,
       seed:this.#definition.seed,
       chunkEdge:this.#definition.chunkEdge,
-      runs:this.#definition.runs.map(run=>({...run}))
+      runs:this.#definition.runs.map(run=>({...run})),
+      ...(this.#definition.surfaceTiles
+        ? {surfaceTiles:this.#definition.surfaceTiles.map(tile=>({
+          x:tile.x,y:tile.y,z:tile.z,levels:[...tile.levels]
+        }))} : {})
     };
   }
 
