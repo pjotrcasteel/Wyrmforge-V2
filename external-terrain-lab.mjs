@@ -13,7 +13,7 @@ import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
-import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
+import { createWorldSiteRecipe, siteRadiusForKind } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
@@ -87,9 +87,11 @@ function resetPreviewView() {
 function updateSiteSummary() {
   const selected=siteKind.selectedOptions[0]?.textContent ?? siteKind.value;
   const percent=Number(siteInfluence.value);
+  const width=siteRadiusForKind(siteKind.value)*2;
   siteSummary.textContent=selected.split(' — ')[0]+
     (siteKind.value==='fixture' ? ' · diagnostic' :
-      ' · seed '+siteSeed.value+(percent ? ' · influence '+percent+'%' : ''));
+      ' · '+width+'×'+width+' m · seed '+siteSeed.value+
+      (percent ? ' · influence '+percent+'%' : ''));
 }
 
 function setPreviewStatus(message,brief) {
