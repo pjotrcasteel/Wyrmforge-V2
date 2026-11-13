@@ -136,6 +136,35 @@ function paintEncounterGuide(view) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  // Muted white paths and blue maneuver rings are diagnostic geography.
+  // They are not spawn points, scenery objects, or hidden loot spoilers.
+  for(const link of guide.links) {
+    const pocket=guide.maneuvers.find(item=>item.id===link.pocketId);
+    if(!pocket || !link.points.length) continue;
+    ctx.beginPath();
+    link.points.forEach((point,i)=>{
+      if(i===0) ctx.moveTo(point.x,point.y);
+      else ctx.lineTo(point.x,point.y);
+    });
+    ctx.strokeStyle='rgba(226,239,247,0.8)';
+    ctx.lineWidth=3*pixelRatio;
+    ctx.setLineDash([5*pixelRatio,4*pixelRatio]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  for(const pocket of guide.maneuvers) {
+    ctx.beginPath();
+    pocket.ring.forEach((point,i)=>{
+      if(i===0) ctx.moveTo(point.x,point.y);
+      else ctx.lineTo(point.x,point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle='rgba(111,188,232,0.13)';
+    ctx.fill();
+    ctx.strokeStyle='rgba(149,212,246,0.9)';
+    ctx.lineWidth=2*pixelRatio;
+    ctx.stroke();
+  }
   for(const approach of guide.approaches) {
     const combat=guide.combat.find(space=>space.id===approach.centerId);
     if(!combat) continue;
