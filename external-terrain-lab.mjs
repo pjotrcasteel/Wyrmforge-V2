@@ -36,6 +36,9 @@ const canvas=document.querySelector('#site-view');
 const playJoystick=document.querySelector('#play-joystick');
 const playStick=document.querySelector('#play-stick');
 const playHud=document.querySelector('#play-hud');
+const playHudDetails=document.querySelector('#play-hud-details');
+const playHudSummary=document.querySelector('#play-hud-summary');
+const playCameraToggle=document.querySelector('#play-camera-toggle');
 const playRespawn=document.querySelector('#play-respawn');
 const playReport=document.querySelector('#play-report');
 const combatGuide=document.querySelector('#combat-guide');
@@ -457,10 +460,19 @@ function playMovementInput() {
     (pressed('KeyA')||pressed('ArrowLeft')?1:0);
   const z=(pressed('KeyS')||pressed('ArrowDown')?1:0)-
     (pressed('KeyW')||pressed('ArrowUp')?1:0);
-  return {
-    moveX:Math.max(-1,Math.min(1,x+playPointer.x)),
-    moveZ:Math.max(-1,Math.min(1,z+playPointer.z))
-  };
+  const right=Math.max(-1,Math.min(1,x+playPointer.x));
+  const down=Math.max(-1,Math.min(1,z+playPointer.z));
+  if(playMode && viewCamera.value==='inspection') {
+    // WorldGen's real camera is rotated. The joystick acts in SCREEN
+    // directions, so "right" moves right on screen, not diagonally into
+    // the cliffs. Same transform for keyboard/WASD.
+    const diagonal=Math.SQRT1_2;
+    return {
+      moveX:(right+down)*diagonal,
+      moveZ:(down-right)*diagonal
+    };
+  }
+  return {moveX:right,moveZ:down};
 }
 function resetPlayInput() {
   playKeys.clear();
@@ -512,7 +524,10 @@ function updatePlayFrame(now) {
     const p=playActor?[
       playActor.x.toFixed(1),playActor.y.toFixed(1),
       playActor.z.toFixed(1)].join(', '):'—';
-    playHud.textContent='WIZARD · '+(playActor?'walkable':'loading')+
+    playHudSummary.textContent=
+      (playActor?.error?'Collision issue':playActor?'WorldGen 3D':'Loading')+
+      ' · p95 '+ms(metrics.p95Ms)+' · details';
+    playHudDetails.textContent='WIZARD · '+(playActor?'walkable':'loading')+
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
       '\nVoxel source: '+(generatedSite?.hash??'—')+
       '\n10cm terrain tiles: '+(generatedSite?.layout.microSurface.tileCount??0)+
@@ -1097,6 +1112,8 @@ if(playMode) {
         generatorSchema:generatedSite?.schema??null,
         generatorVersion:generatedSite?.generatorVersion??null,
         generatorHash:generatedSite?.hash??null,
+        cameraPreset:viewCamera.value,
+        fullWorldGenMaterialShading:true,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
         microSurfaceTiles:generatedSite?.layout.microSurface.tileCount??null
       },
@@ -1130,6 +1147,12 @@ if(playMode) {
     link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
   });
+  playCameraToggle.addEventListener('click',()=>{
+    viewCamera.value=viewCamera.value==='inspection'?'hunt':'inspection';
+    playCameraToggle.textContent=viewCamera.value==='inspection'
+      ?'WorldGen 3D':'Top-down candidate';
+    resetPlayInput();
+  });
   playRespawn.addEventListener('click',resetPlayActor);
   window.addEventListener('blur',()=>{
     resetPlayInput();
@@ -1152,7 +1175,10 @@ window.addEventListener('pagehide',()=>{
 });
 try {
   renderer=new WebGLVoxelView(canvas,{
-    fastHuntMode:playMode,
+    // Equal material shading to WorldGen's established preview is the
+    // acceptance reference. Cheap simplified shading may only return
+    // after explicit side-by-side approval and mobile profiling.
+    fastHuntMode:false,
     onAvailabilityChange(ready,error) {
       // A restored GL context cannot clear an unrelated worker or replay failure.
       rendererErrorMessage=ready ? null : (error?.message ?? 'WebGL context lost');

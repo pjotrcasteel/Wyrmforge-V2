@@ -174,3 +174,26 @@ test('world changes are authoritative immediately; actor simulation never writes
   assert.equal(world.revision,revision);
   assert.deepEqual(world.snapshots(),snapshots);
 });
+
+
+test('physical 10cm height differences inside a single 1m tile cannot trap the actor',()=>{
+  // Integer-plane-only collision missed this: a character could move a few
+  // centimetres through an unbroken metre cell but enter a higher microtile.
+  const world=new VoxelWorld();
+  world.set(0,0,0,1);
+  const tile=Array.from({length:100},(_,i)=>i%10<5?2:9);
+  world.setMicroSurfaceTile(0,0,0,tile);
+  let current=spawnTerrainActor(world,{x:0.21,z:0.5});
+  assert.ok(current?.grounded);
+  assert.equal(actorOverlapsTerrain(world,current),false);
+  let collisions=0;
+  for(let i=0;i<90;i++) {
+    current=simulateTerrainActor(world,current,{moveX:1,dt:1/60});
+    assert.notEqual(current.error,'actor-overlap',
+      'horizontal motion must not enter a raised 10cm physical tile');
+    assert.equal(actorOverlapsTerrain(world,current),false,
+      'the actor may block or hop, but must never overlap the real voxel floor');
+    if(current.wallContact || current.autoHopStarted)collisions++;
+  }
+  assert.ok(collisions>0,'raised microterrain must participate in actual collision');
+});

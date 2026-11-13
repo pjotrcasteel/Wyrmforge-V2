@@ -66,6 +66,11 @@ body[data-play-hunt] #preview-stage{
   touch-action:none;overscroll-behavior:none;
 }
 body[data-play-hunt] #controls,body[data-play-hunt] #view-actions{display:none}
+body[data-play-hunt] #play-camera-toggle{
+  display:block;position:absolute;z-index:5;right:16px;
+  bottom:calc(167px + env(safe-area-inset-bottom,0px));
+  padding:8px 12px;font-size:12px;min-height:40px;background:#365363;
+}
 body[data-play-hunt] #site-summary{max-width:58%;background:rgba(18,38,34,.9);border-color:#577f64}
 #play-joystick,#play-hud,#play-respawn,#play-report{display:none}
 body[data-play-hunt] #play-joystick{
@@ -79,10 +84,20 @@ body[data-play-hunt] #play-stick{
   transform:translate(0,0);pointer-events:none
 }
 body[data-play-hunt] #play-hud{
-  display:block;position:absolute;z-index:4;right:12px;top:66px;max-width:48%;
-  color:#e4f5de;background:rgba(17,35,39,.88);padding:10px;border:1px solid #678c7a;
-  border-radius:8px;font:11px/1.5 ui-monospace,monospace;white-space:pre-line
+  display:block;position:absolute;z-index:4;right:12px;top:66px;
+  max-width:min(84%,340px);color:#e4f5de;background:rgba(17,35,39,.88);
+  padding:8px 10px;border:1px solid #678c7a;border-radius:8px;
+  font:11px/1.5 ui-monospace,monospace;
 }
+body[data-play-hunt] #play-hud summary{
+  cursor:pointer;font-weight:700;user-select:none;
+  touch-action:manipulation;
+}
+body[data-play-hunt] #play-hud-details{
+  white-space:pre-line;max-height:55dvh;overflow:auto;
+  padding-top:8px;
+}
+body[data-play-hunt] #play-hud:not([open]){background:rgba(17,35,39,.77)}
 body[data-play-hunt] #play-respawn{
   display:block;position:absolute;right:16px;bottom:calc(45px + env(safe-area-inset-bottom,0px));
   z-index:5;background:#275548;font-weight:700;min-width:100px;min-height:47px
@@ -133,12 +148,16 @@ body.focus-mode #site-summary{max-width:46%}
     </div>
   </div>
   <p id="preview-message" role="status" aria-live="polite">Preparing playable Wet Forest terrain…</p>
-  <div id="play-hud" role="status" aria-live="off">Loading real Voxel V2 terrain...</div>
+  <details id="play-hud">
+    <summary id="play-hud-summary">Loading WorldGen V2…</summary>
+    <div id="play-hud-details" role="status" aria-live="off">Loading real Voxel V2 terrain...</div>
+  </details>
   <div id="play-joystick" aria-label="Move the Wizard with touch joystick">
     <div id="play-stick"></div>
   </div>
   <button id="play-respawn" type="button">Respawn</button>
   <button id="play-report" type="button">Save report</button>
+  <button id="play-camera-toggle" type="button" aria-label="Switch camera view">WorldGen 3D</button>
   <details id="controls" aria-label="World generation settings">
     <summary>Map settings &amp; actions</summary>
     <div id="control-body">
@@ -200,8 +219,8 @@ body.focus-mode #site-summary{max-width:46%}
       <div class="control-field">
         <label for="view-camera">View</label>
         <select id="view-camera" aria-label="Terrain viewing angle">
-          <option value="inspection">3D inspection (default)</option>
-          <option value="hunt" selected>Hunt camera (candidate)</option>
+          <option value="inspection" selected>WorldGen 3D camera (verified)</option>
+          <option value="hunt">Legacy top-down candidate (not approved)</option>
         </select>
       </div>
       <div class="control-field">
