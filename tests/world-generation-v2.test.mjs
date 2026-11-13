@@ -10,9 +10,10 @@ import {
 } from '../src/world-generation/map-kinds.mjs';
 import { SitePlanBuilder } from '../src/world-generation/site-plan-builder.mjs';
 import { specifySiteTopology } from '../src/world-generation/site-topology-specification.mjs';
+import { WorldGeneratorV2 } from '../src/world-generation/world-generator.mjs';
 import {
-  WorldGeneratorV2, generateWorldSite
-} from '../src/world-generation/world-generator.mjs';
+  createDefaultWorldGeneratorV2, generateWorldSite
+} from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import { worldDigest } from '../src/replay-checkpoint.mjs';
 
@@ -38,7 +39,7 @@ function topAt(world,x,z) {
 }
 
 test('World Generation is a separate engine with injected Strategy, Builder, Specification and Adapter',()=>{
-  const generator=new WorldGeneratorV2();
+  const generator=createDefaultWorldGeneratorV2();
   assert.deepEqual(generator.kinds,MAP_KIND_IDS);
   for(const kind of MAP_KIND_IDS) {
     const result=generator.generate(recipe(kind));
@@ -64,7 +65,7 @@ test('World Generation is a separate engine with injected Strategy, Builder, Spe
 test('same site, seed and revision give identical canonical runs, topology and hash',()=>{
   for(const kind of MAP_KIND_IDS)for(const pitch of [16,32]) {
     const input=recipe(kind,77,pitch);
-    const generator=new WorldGeneratorV2();
+    const generator=createDefaultWorldGeneratorV2();
     const first=generator.generate(input);
     const second=generateWorldSite({...input});
     assert.deepEqual(first,second);
@@ -156,7 +157,7 @@ test('new map kinds register via Strategy without modifying engine, terrain cont
       builder.addLandmark({id:'frost-shrine',kind:'frost-shrine',x:0,z:0,clearance:3});
     }
   });
-  const generated=new WorldGeneratorV2({registry}).generate(recipe('frost-basin'));
+  const generated=createDefaultWorldGeneratorV2({registry}).generate(recipe('frost-basin'));
   assert.equal(generated.layout.topology.reachable,true);
   const loader=load(generated.definition);
   assert.ok(loader.terrain.world.chunkCount>1);
@@ -181,7 +182,7 @@ test('invalid recipes and malformed strategies are rejected without activating a
       builder.addRoute('entry-to-exit',[{x:0,z:18},{x:0,z:-18}],2);
     }
   });
-  assert.throws(()=>new WorldGeneratorV2({registry:badRegistry})
+  assert.throws(()=>createDefaultWorldGeneratorV2({registry:badRegistry})
     .generate(recipe('broken-site')),/landmark/);
   assert.throws(()=>new WorldGeneratorV2({registry:{}}),/injected/);
 });
@@ -215,4 +216,28 @@ test('world generator core has no imports of private voxel, renderer, physics, o
     new URL('../src/world-generation/voxel-terrain-adapter.mjs',import.meta.url),'utf8');
   assert.match(adapter,/from '\.\.\/external-terrain-loader\.mjs'/);
   assert.doesNotMatch(adapter,/new VoxelWorld|\.set\(/);
+});
+
+test('injected Adapter can replace Voxel V2 without changing strategies or core generation',()=>{
+  let adapted=0;
+  const substitute=new WorldGeneratorV2({
+    terrainAdapter:({siteId,seed,chunkEdge,runs})=>{
+      adapted++;
+      return Object.freeze({
+        schema:'replaceable-terrain-engine.v1',siteId,seed,chunkEdge,
+        originalRuns:runs.length
+      });
+    }
+  });
+  const output=substitute.generate(recipe('wet-forest'));
+  assert.equal(output.definition.schema,'replaceable-terrain-engine.v1');
+  assert.equal(output.definition.originalRuns>0,true);
+  assert.equal(output.layout.topology.reachable,true);
+  assert.equal(adapted,1);
+  assert.throws(()=>new WorldGeneratorV2(),/output adapter/);
+  // No internal voxel storage calls are needed by the generator.
+  const core=readFileSync(new URL('../src/world-generation/world-generator.mjs',import.meta.url),'utf8');
+  assert.doesNotMatch(core,/voxel-terrain-adapter|external-terrain-loader|VoxelWorld/);
+  const root=readFileSync(new URL('../src/world-generation/index.mjs',import.meta.url),'utf8');
+  assert.match(root,/terrainAdapter:toVoxelTerrainDefinition/);
 });
