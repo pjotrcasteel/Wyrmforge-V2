@@ -5,7 +5,6 @@ import { validateWorldSiteRecipe, WORLD_GENERATOR_VERSION } from './site-recipe.
 import { createDefaultMapKindRegistry, siteNoise } from './map-kinds.mjs';
 import { SitePlanBuilder } from './site-plan-builder.mjs';
 import { specifySiteTopology } from './site-topology-specification.mjs';
-import { toVoxelTerrainDefinition } from './voxel-terrain-adapter.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -122,11 +121,16 @@ function boundedSiteSeed(recipe) {
 
 export class WorldGeneratorV2 {
   #registry;
-  constructor({registry=createDefaultMapKindRegistry()}={}) {
+  #terrainAdapter;
+  constructor({registry=createDefaultMapKindRegistry(),terrainAdapter}={}) {
     if(!registry || typeof registry.resolve!=='function') {
       throw new TypeError('World generator needs an injected map-kind registry');
     }
+    if(typeof terrainAdapter!=='function') {
+      throw new TypeError('World generator needs an injected terrain output adapter');
+    }
     this.#registry=registry;
+    this.#terrainAdapter=terrainAdapter;
   }
   get kinds(){return this.#registry.kinds;}
 
@@ -143,7 +147,7 @@ export class WorldGeneratorV2 {
       routes:plan.routes,landmarks:plan.landmarks,clearings:plan.clearings
     });
     const {runs,totalCells}=generateRuns(recipe.radius,heights,surfaces);
-    const definition=toVoxelTerrainDefinition({
+    const definition=this.#terrainAdapter({
       siteId:recipe.siteId,seed:recipe.seed,
       chunkEdge:recipe.chunkEdge,runs
     });
@@ -171,6 +175,3 @@ export class WorldGeneratorV2 {
   }
 }
 
-export function generateWorldSite(recipe,{registry}={}) {
-  return new WorldGeneratorV2({registry}).generate(recipe);
-}
