@@ -112,3 +112,23 @@ test('H08-01 Play Hunt is its own route with mobile input and follow camera',()=
   assert.match(host,/playFrameAt=null/);
   assert.doesNotMatch(host,/new VoxelWorld\(/);
 });
+
+
+test('H08-01 iOS Safari downward joystick drag cannot scroll the game page',()=>{
+  const html=readFileSync(new URL('../play-hunt.html',import.meta.url),'utf8');
+  const lab=readFileSync(new URL('../external-terrain-lab.html',import.meta.url),'utf8');
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  // Fixed viewport and both scroll-chain + touch-action suppression are
+  // restricted to Play Hunt; external terrain inspector stays unchanged.
+  assert.match(html,/html\{overflow:hidden;overscroll-behavior:none\}/);
+  assert.match(html,/body\[data-play-hunt\]\{[\s\S]*?position:fixed;inset:0/);
+  assert.match(html,/body\[data-play-hunt\] #preview-stage\{[\s\S]*?touch-action:none/);
+  assert.match(html,/#play-joystick\{[\s\S]*?touch-action:none/);
+  assert.doesNotMatch(lab,/body\[data-play-hunt\]\{[\s\S]*?position:fixed/);
+  // iOS rubber-banding can ignore CSS alone. The document-level listener
+  // must be non-passive or preventDefault would silently do nothing.
+  assert.match(host,/if\(playMode\) \{[\s\S]*?document\.addEventListener\('touchmove',event=>\{/);
+  assert.match(host,/event\.cancelable && \(playPointer\.id!==null \|\|/);
+  assert.match(host,/playStage\.contains\(event\.target\)/);
+  assert.match(host,/\},\{passive:false\}\);/);
+});
