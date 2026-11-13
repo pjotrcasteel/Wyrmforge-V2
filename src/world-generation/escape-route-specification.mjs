@@ -71,7 +71,15 @@ export function specifyEscapeRoutes({
       if(j>0 && j<path.length-1) {
         const k=key(point);
         if(interior.has(k)) {
-          throw new Error('Escape detours overlap and lose route independence');
+          // Both alternatives necessarily share their final rejoin neck.
+          // One cardinal cell next to a common anchor is acceptable; any
+          // actual overlap deeper inside the map defeats the escape choice.
+          const entry=paths[0][0],exit=paths[0].at(-1);
+          const near=anchor=>Math.abs(point.x-anchor.x)+
+            Math.abs(point.z-anchor.z)<=1;
+          if(!near(entry) && !near(exit)) {
+            throw new Error('Escape detours overlap and lose route independence');
+          }
         }
         interior.add(k);
       }
