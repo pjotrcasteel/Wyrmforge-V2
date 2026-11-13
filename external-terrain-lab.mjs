@@ -23,11 +23,20 @@ import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overla
 import { analyzeCharacterReachability } from './src/character-reachability.mjs';
 import { projectVoxel } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
+import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
+import {
+  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HUNT_FIXED_STEP
+} from './src/hunt-play-runtime.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
 
+const playMode=document.body.dataset.playHunt==='true';
 const canvas=document.querySelector('#site-view');
+const playJoystick=document.querySelector('#play-joystick');
+const playStick=document.querySelector('#play-stick');
+const playHud=document.querySelector('#play-hud');
+const playRespawn=document.querySelector('#play-respawn');
 const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
 const traversalLayout=document.querySelector('#traversal-layout');
@@ -78,6 +87,13 @@ let generatedSite=null;
 let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
+let playActor=null;
+let playStepAccumulator=0;
+let playFrameAt=null;
+const playFrameStats=new HuntPlayPerformance();
+const playKeys=new Set();
+const playPointer={id:null,x:0,z:0};
+let lastHudAt=-Infinity;
 
 // Viewer-only navigation. Positions are CSS pixels so DPR changes do not
 // change the user's pan; neither controls nor camera touch the voxel world.
@@ -93,6 +109,11 @@ function resetPreviewView() {
 }
 
 function updateSiteSummary() {
+  if(playMode) {
+    siteSummary.textContent='Wet Forest Hunt · seed '+siteSeed.value+
+      ' · '+(expeditionSite?.regionId.replace('region-','')??'loading');
+    return;
+  }
   if(expeditionPlan && expeditionSite) {
     const region=expeditionPlan.regions.find(item=>
       item.id===expeditionSite.regionId);
@@ -135,6 +156,7 @@ function paintEncounterGuide(view) {
   if(!combatLayout.checked || !generatedSite || !active?.world) {
     paintTraversalOverlay(ctx,view);
     paintDummyActor(ctx,view);
+    paintPlayActor(ctx,view);
     return;
   }
   const guide=projectEncounterGuides(generatedSite,active.world,view);
@@ -219,6 +241,7 @@ function paintEncounterGuide(view) {
   }
   paintTraversalOverlay(ctx,view);
   paintDummyActor(ctx,view);
+  paintPlayActor(ctx,view);
 }
 
 // Navigation is a separate derived consumer of the current Voxel V2 Terrain
@@ -372,6 +395,117 @@ function paintDummyActor(ctx,view) {
   }
 }
 
+// Temporary physical-size Wizard proxy. Drawn from the exact Voxel V2
+// collider position: no fake 2D character location or scaled collision.
+function paintPlayActor(ctx,view) {
+  if(!playMode || !playActor || !active?.world)return;
+  const graphic=projectActorDiagnostic(playActor,view);
+  const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
+  const {foot,top}=graphic;
+  const pixel=value=>Math.round(value);
+  const bodyWidth=Math.max(3,graphic.projectedHeight*0.3);
+  const headRadius=Math.max(2,graphic.projectedHeight*0.11);
+  const hatY=top.y-4*pixelRatio;
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  ctx.fillStyle='rgba(0,0,0,.45)';
+  ctx.beginPath();
+  ctx.ellipse(foot.x,foot.y+2*pixelRatio,
+    bodyWidth*.85,Math.max(2,bodyWidth*.33),0,0,Math.PI*2);
+  ctx.fill();
+  // Blocky charcoal-blue robes, hood, golden brim and simple staff.
+  ctx.fillStyle='#37466e';
+  ctx.fillRect(pixel(foot.x-bodyWidth/2),pixel(top.y+graphic.projectedHeight*.32),
+    pixel(bodyWidth),pixel(graphic.projectedHeight*.68));
+  ctx.fillStyle='#647493';
+  ctx.fillRect(pixel(foot.x-bodyWidth*.22),pixel(top.y+graphic.projectedHeight*.42),
+    pixel(bodyWidth*.4),pixel(graphic.projectedHeight*.53));
+  ctx.fillStyle='#d8bb91';
+  ctx.fillRect(pixel(top.x-headRadius*.65),pixel(top.y+headRadius*1.3),
+    pixel(headRadius*1.3),pixel(headRadius*1.3));
+  ctx.fillStyle='#263451';
+  ctx.beginPath();
+  ctx.moveTo(top.x,hatY);
+  ctx.lineTo(top.x-bodyWidth*.48,top.y+headRadius*1.9);
+  ctx.lineTo(top.x+bodyWidth*.48,top.y+headRadius*1.9);
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#a98145';ctx.lineWidth=Math.max(1.4,1.7*pixelRatio);
+  ctx.beginPath();
+  ctx.moveTo(foot.x+bodyWidth*.7,foot.y);
+  ctx.lineTo(top.x+bodyWidth*.8,top.y+headRadius*.25);
+  ctx.stroke();
+  ctx.fillStyle='#f7bd57';
+  ctx.fillRect(pixel(top.x+bodyWidth*.8-2*pixelRatio),
+    pixel(top.y+headRadius*.25-3*pixelRatio),4*pixelRatio,4*pixelRatio);
+  ctx.restore();
+}
+
+function playMovementInput() {
+  const pressed=code=>playKeys.has(code);
+  const x=(pressed('KeyD')||pressed('ArrowRight')?1:0)-
+    (pressed('KeyA')||pressed('ArrowLeft')?1:0);
+  const z=(pressed('KeyS')||pressed('ArrowDown')?1:0)-
+    (pressed('KeyW')||pressed('ArrowUp')?1:0);
+  return {
+    moveX:Math.max(-1,Math.min(1,x+playPointer.x)),
+    moveZ:Math.max(-1,Math.min(1,z+playPointer.z))
+  };
+}
+function resetPlayInput() {
+  playKeys.clear();
+  playPointer.id=null;
+  playPointer.x=0;playPointer.z=0;
+  if(playStick)playStick.style.transform='translate(0,0)';
+}
+function resetPlayActor() {
+  if(!playMode || !expeditionSite || !active?.world)return;
+  const region=expeditionPlan.regions.find(
+    item=>item.id===expeditionSite.regionId);
+  playActor=spawnHuntExplorer(active.world,region);
+  playStepAccumulator=0;
+  resetPlayInput();
+}
+function updatePlayFrame(now) {
+  if(!playMode)return;
+  if(playFrameAt!==null && !document.hidden) {
+    const delta=now-playFrameAt;
+    if(delta>0 && delta<=1000)playFrameStats.recordFrame(delta);
+    if(playActor && active?.world && !pendingMesh && !restoring) {
+      playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
+      const input=playMovementInput();
+      let steps=0;
+      while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
+        playActor=stepHuntExplorer(active.world,playActor,
+          expeditionSite.layout.footprint,input);
+        playStepAccumulator-=HUNT_FIXED_STEP;steps++;
+      }
+      if(playActor.error){
+        previewMessage.textContent='Physics: '+playActor.error+' · Respawn to recover';
+      }
+    }
+  }
+  playFrameAt=now;
+  if(playHud && now-lastHudAt>=350){
+    lastHudAt=now;
+    const metrics=playFrameStats.snapshot;
+    const ms=value=>value===null?'—':value.toFixed(1)+'ms';
+    const p=playActor?[
+      playActor.x.toFixed(1),playActor.y.toFixed(1),
+      playActor.z.toFixed(1)].join(', '):'—';
+    playHud.textContent='WIZARD · '+(playActor?'walkable':'loading')+
+      '\\nWorld: '+(expeditionSite?.regionId??'—')+
+      '\\nPosition: '+p+
+      '\\nFrame p50: '+ms(metrics.p50Ms)+
+      '\\nFrame p95: '+ms(metrics.p95Ms)+
+      '\\nFrame p99: '+ms(metrics.p99Ms)+
+      '\\nHitches >33ms: '+metrics.hitchesOver33ms+
+      '\\nVoxel memory ~'+(active?.world?
+        (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
+      ' · GPU jobs '+(renderer?.pendingUploads??0)+
+      '\\nTouch joystick / WASD · no enemies yet';
+  }
+}
+
 function updateStatus(now=performance.now()) {
   if(now-lastStatusAt<200 && !errorMessage) return;
   lastStatusAt=now;
@@ -457,12 +591,15 @@ function resetSite() {
     active=null;
     renderer.setMeshes([]);
     generatedSite=null;
+    playActor=null;
+    resetPlayInput();
     expeditionSite=null;
     expeditionPlan=null;
     reachabilityCache=null;
     dummyStatus.textContent='Preparing a 1.6m actor-scale route…';
     reachabilityReport.textContent='Generating terrain before actor reachability can be traced.';
-    const inspectExpedition=expeditionMode.checked && siteKind.value!=='fixture';
+    const inspectExpedition=(playMode || expeditionMode.checked) &&
+      siteKind.value!=='fixture';
     expeditionRegionField.hidden=!inspectExpedition;
     if(siteKind.value==='fixture') {
       loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
@@ -631,6 +768,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
     lastImpactRemoved=0;
   }
   active=terrain;
+  if(playMode)resetPlayActor();
   pendingMesh=null;
   meshSource=source;
   lastStatusAt=-Infinity;
@@ -659,6 +797,7 @@ function stageTerrainMeshes(terrain,kind) {
 
 function frame(now) {
   try {
+    updatePlayFrame(now);
     if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
@@ -681,7 +820,7 @@ function frame(now) {
       // Default to the already-tested diagonal inspection basis so the actual
       // underside, stone walls and vertical height are legible on mobile.
       // This is presentation-only: switching views never remeshes terrain.
-      const camera=viewCamera.value;
+      const camera=viewCamera.value; // Play Hunt defaults to north-up in its own page
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
       const inspected=generatedSite??expeditionSite;
       const fit=inspected
@@ -690,12 +829,21 @@ function frame(now) {
           footprint:inspected.layout.footprint,camera
         })
         : null;
-      const scale=fit
-        ? fit.scale*viewZoom
+      const scale=playMode
+        ? 22*pixelRatio*viewZoom
+        : fit ? fit.scale*viewZoom
         : Math.max(9,Math.min(20,
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
-      const panX=(fit?.panX ?? 0)*viewZoom+viewPanX*pixelRatio;
-      const panY=(fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
+      const followed=playMode && playActor
+        ? projectVoxel(playActor.x,playActor.y+0.85,playActor.z,{
+          width:canvas.width,height:canvas.height,scale,camera})
+        : null;
+      const panX=followed
+        ? canvas.width/2-followed.x
+        : (fit?.panX ?? 0)*viewZoom+viewPanX*pixelRatio;
+      const panY=followed
+        ? canvas.height*.51-followed.y
+        : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
       renderer.render({
         width:canvas.width,height:canvas.height,
         scale,panX,panY,camera
@@ -819,8 +967,10 @@ canvas.addEventListener('pointermove',event=>{
   activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
   const after=[...activePointers.values()];
   if(before.length===1) {
-    viewPanX+=after[0].x-before[0].x;
-    viewPanY+=after[0].y-before[0].y;
+    if(!playMode) {
+      viewPanX+=after[0].x-before[0].x;
+      viewPanY+=after[0].y-before[0].y;
+    }
   } else if(before.length>=2) {
     const distance=points=>Math.hypot(points[0].x-points[1].x,
       points[0].y-points[1].y);
@@ -840,8 +990,57 @@ canvas.addEventListener('lostpointercapture',releasePointer);
 breachButton.addEventListener('click',impactSpan);
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
-document.addEventListener('visibilitychange',()=>
-  meshBridge?.setPaused(document.hidden));
+if(playMode) {
+  const directions=new Set([
+    'KeyW','KeyA','KeyS','KeyD',
+    'ArrowUp','ArrowLeft','ArrowDown','ArrowRight'
+  ]);
+  document.addEventListener('keydown',event=>{
+    if(!directions.has(event.code) || event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLSelectElement) return;
+    playKeys.add(event.code);event.preventDefault();
+  });
+  document.addEventListener('keyup',event=>{
+    playKeys.delete(event.code);
+    if(directions.has(event.code))event.preventDefault();
+  });
+  const moveStick=event=>{
+    if(playPointer.id!==event.pointerId)return;
+    const rect=playJoystick.getBoundingClientRect();
+    const x=(event.clientX-rect.left-rect.width/2)/(rect.width*.34);
+    const z=(event.clientY-rect.top-rect.height/2)/(rect.height*.34);
+    const d=Math.max(1,Math.hypot(x,z));
+    playPointer.x=x/d;playPointer.z=z/d;
+    playStick.style.transform='translate('+
+      (playPointer.x*rect.width*.26).toFixed(1)+'px,'+
+      (playPointer.z*rect.height*.26).toFixed(1)+'px)';
+    event.preventDefault();
+  };
+  playJoystick.addEventListener('pointerdown',event=>{
+    if(playPointer.id!==null)return;
+    playPointer.id=event.pointerId;
+    playJoystick.setPointerCapture?.(event.pointerId);
+    moveStick(event);
+  });
+  playJoystick.addEventListener('pointermove',moveStick);
+  for(const name of ['pointerup','pointercancel','lostpointercapture']) {
+    playJoystick.addEventListener(name,event=>{
+      if(playPointer.id===event.pointerId)resetPlayInput();
+    });
+  }
+  playRespawn.addEventListener('click',resetPlayActor);
+  window.addEventListener('blur',()=>{
+    resetPlayInput();
+    playFrameAt=null;
+  });
+}
+document.addEventListener('visibilitychange',()=>{
+  meshBridge?.setPaused(document.hidden);
+  if(document.hidden){
+    resetPlayInput();
+    playFrameAt=null;
+  }
+});
 window.addEventListener('pagehide',()=>{
   meshBridge?.close();
   restoring?.unload();
