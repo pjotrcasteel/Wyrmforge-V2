@@ -30,7 +30,11 @@ export function specifyDedicatedArena({plan,heights}) {
   }
   // Off-axis samples examine actual circular cliffs without treating the
   // two authored entrances and enemy lanes as walls.
-  const offsets=[[-10,-10],[10,-10],[-10,10],[10,10]];
+  // Measure the stable inner rock ring rather than the outer fault
+  // corridors around +/-10m where intentional volcanic fissures break it.
+  // The ring can have entrances and irregular outer cracks but must remain
+  // physically raised in at least two diagonal quadrants.
+  const offsets=[[-8,-8],[8,-8],[-8,8],[8,8]];
   const rises=offsets.map(([x,z])=>
     heights[index(radius,space.x+x,space.z+z)]-centerY);
   const raisedQuadrants=rises.filter(rise=>rise>=2).length;
