@@ -112,8 +112,10 @@ function resetPreviewView() {
 
 function updateSiteSummary() {
   if(playMode) {
-    siteSummary.textContent='Wet Forest Hunt · seed '+siteSeed.value+
-      ' · '+(expeditionSite?.regionId.replace('region-','')??'loading');
+    siteSummary.textContent='Wet Forest · '+(
+      generatedSite ? generatedSite.generatorVersion+' · '+generatedSite.hash :
+        'World Generation V2 loading'
+    )+' · seed '+siteSeed.value;
     return;
   }
   if(expeditionPlan && expeditionSite) {
@@ -467,10 +469,18 @@ function resetPlayInput() {
   if(playStick)playStick.style.transform='translate(0,0)';
 }
 function resetPlayActor() {
-  if(!playMode || !expeditionSite || !active?.world)return;
-  const region=expeditionPlan.regions.find(
-    item=>item.id===expeditionSite.regionId);
-  playActor=spawnHuntExplorer(active.world,region);
+  if(!playMode || !generatedSite || !active?.world)return;
+  // Use the EXACT authored entry and physical footprint returned by the
+  // same WorldGeneratorV2 that powers the WorldGen lab. The Voxel V2 actor
+  // never spawns inside a synthetic expedition-region flat-height fixture.
+  const footprint=generatedSite.layout.footprint;
+  const entry=generatedSite.layout.topology.entry;
+  const region={
+    bounds:footprint,origin:{x:0,z:0}
+  };
+  playActor=spawnHuntExplorer(active.world,region,{
+    direction:'south',at:{x:entry.x,z:entry.z}
+  });
   playStepAccumulator=0;
   resetPlayInput();
 }
@@ -479,13 +489,14 @@ function updatePlayFrame(now) {
   if(playFrameAt!==null && !document.hidden) {
     const delta=now-playFrameAt;
     if(delta>0 && delta<=1000)playFrameStats.recordFrame(delta);
-    if(playActor && active?.world && !pendingMesh && !restoring) {
+    if(playActor && generatedSite && active?.world &&
+        !pendingMesh && !restoring) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
       const input=playMovementInput();
       let steps=0;
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
         playActor=stepHuntExplorer(active.world,playActor,
-          expeditionSite.layout.footprint,input);
+          generatedSite.layout.footprint,input);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -502,7 +513,9 @@ function updatePlayFrame(now) {
       playActor.x.toFixed(1),playActor.y.toFixed(1),
       playActor.z.toFixed(1)].join(', '):'—';
     playHud.textContent='WIZARD · '+(playActor?'walkable':'loading')+
-      '\nWorld: '+(expeditionSite?.regionId??'—')+
+      '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
+      '\nVoxel source: '+(generatedSite?.hash??'—')+
+      '\n10cm terrain tiles: '+(generatedSite?.layout.microSurface.tileCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
       '\nFrame p95: '+ms(metrics.p95Ms)+
@@ -609,10 +622,14 @@ function resetSite() {
     reachabilityCache=null;
     dummyStatus.textContent='Preparing a 1.6m actor-scale route…';
     reachabilityReport.textContent='Generating terrain before actor reachability can be traced.';
-    const inspectExpedition=(playMode || expeditionMode.checked) &&
+    // Play Hunt MUST use the authored WorldGeneratorV2 site composition
+    // (including routes, geology and 10cm microvoxel surfaces). The separate
+    // experimental region generator remains a lab-only inspector until it
+    // actually composes those same authored WorldGen outputs.
+    const inspectExpedition=!playMode && expeditionMode.checked &&
       siteKind.value!=='fixture';
     expeditionRegionField.hidden=!inspectExpedition;
-    if(siteKind.value==='fixture') {
+    if(!playMode && siteKind.value==='fixture') {
       loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
         chunkEdge:Number(pitch.value),seed:7
       }),{epoch:terrainEpochs.next()});
@@ -647,13 +664,25 @@ function resetSite() {
     } else {
       // The World Generation engine knows only site recipes and the public
       // terrain initialization contract; this host owns the adapter lifecycle.
+      const kind=playMode?'wet-forest':siteKind.value;
       const recipe=createWorldSiteRecipe({
-        regionId:'starter-region',siteId:'preview-'+siteKind.value,
-        encounterId:'preview-001',kind:siteKind.value,
+        regionId:'starter-region',siteId:'preview-'+kind,
+        encounterId:'preview-001',kind,
         seed:Number(siteSeed.value),worldRevision:0,
         chunkEdge:Number(pitch.value),corruption:Number(siteInfluence.value)/100
       });
       generatedSite=generateWorldSite(recipe);
+      // Fail closed if a future refactor accidentally feeds Play Hunt the
+      // old simplified region instead of the same site as the WorldGen lab.
+      if(playMode && (
+        generatedSite.schema!=='wyrmforge.generated-site.v2' ||
+        generatedSite.definition.generatorVersion!==generatedSite.generatorVersion ||
+        generatedSite.definition.schema!=='voxel-v2.terrain-initialization.v2' ||
+        generatedSite.layout.microSurface.tileCount<1 ||
+        !generatedSite.layout.topology.reachable
+      )) {
+        throw new Error('Play Hunt requires authored WorldGen V2 and Voxel V2 microterrain');
+      }
       loader=new V2ExternalTerrainLoader(generatedSite.definition,
         {epoch:terrainEpochs.next()});
     }
@@ -1062,9 +1091,14 @@ if(playMode) {
       build:{version:VERSION,commit:COMMIT},
       capturedAtUtc:new Date().toISOString(),
       site:{
-        seed:expeditionPlan?.recipe.seed??null,
-        regionId:expeditionSite?.regionId??null,
-        generatorVersion:expeditionSite?.definition.generatorVersion??null
+        seed:generatedSite?.recipe.seed??null,
+        siteId:generatedSite?.recipe.siteId??null,
+        regionId:generatedSite?.recipe.regionId??null,
+        generatorSchema:generatedSite?.schema??null,
+        generatorVersion:generatedSite?.generatorVersion??null,
+        generatorHash:generatedSite?.hash??null,
+        terrainDefinitionSchema:generatedSite?.definition.schema??null,
+        microSurfaceTiles:generatedSite?.layout.microSurface.tileCount??null
       },
       device:{
         userAgent:navigator.userAgent,

@@ -100,10 +100,10 @@ test('H08-01 Play Hunt is its own route with mobile input and follow camera',()=
   assert.match(html,/id="play-joystick"/);
   assert.match(html,/id="play-respawn"/);
   assert.match(html,/id="play-hud"/);
-  assert.match(html,/id="expedition-mode"[^>]*checked/);
+  assert.doesNotMatch(html,/id="expedition-mode"[^>]*checked/);
   assert.match(html,/id="view-camera"/);
   assert.match(html,/value="hunt" selected/);
-  assert.match(host,/spawnHuntExplorer\(active\.world,region\)/);
+  assert.match(host,/spawnHuntExplorer\(active\.world,region,\{/);
   assert.match(host,/stepHuntExplorer\(active\.world,playActor,/);
   assert.match(host,/playJoystick\.addEventListener\('pointerdown'/);
   assert.match(host,/document\.addEventListener\('keydown'/);
