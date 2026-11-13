@@ -5,6 +5,7 @@
 // This module owns geography only. No actor/physics/Voxel imports.
 import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
 import { selectRoadCell } from './road-footprint.mjs';
+import { composeRoadBoundaryAprons } from './road-boundary-apron.mjs';
 
 const index=(radius,x,z)=>(z+radius)*radius*2+x+radius;
 const GRADE_LIMIT_TENTHS=5; // 0.5m max physical rise between route cells
@@ -25,7 +26,14 @@ export function gradeNavigableRoads({
   const sampled=new Int16Array(heights.length);
   const used=new Set();
   const edges=[],edgeIds=new Set();
+  const aprons=composeRoadBoundaryAprons({radius,routes});
   const authored=[...routes,...escapeRoutes,...flowLinks];
+  // A road must not visually terminate in a full-height, ungraded block
+  // one or two cells before the terrain boundary. Grade short extensions
+  // and their painted shoulders in the SAME joint constraint graph.
+  for(const apron of aprons) {
+    authored.push(apron.spine,...apron.shoulders);
+  }
   const hub=combatSpaces[0];
   if(hub)for(const approach of approaches) {
     authored.push({nodes:[
@@ -106,6 +114,10 @@ export function gradeNavigableRoads({
     gradedTopTenths:sampled,cells:used.size,
     centers:Object.freeze(centers),
     maximumGradeTenths:maxGradeTenths,
-    iterations,edgeCount:edges.length
+    iterations,edgeCount:edges.length,
+    boundaryAprons:Object.freeze(aprons.map(apron=>Object.freeze({
+      routeId:apron.routeId,end:apron.end,boundary:apron.boundary,
+      shoulderLinks:apron.shoulders.length
+    })))
   });
 }
