@@ -25,28 +25,35 @@ export function specifyDedicatedArena({plan,heights}) {
       }
     }
   }
-  if(cells<75 || usable/cells<0.8) {
-    throw new Error('Boss arena has insufficient usable physical fighting floor');
+  const minimum=arena.kind==='wyrm'?500:260;
+  if(cells<minimum || usable/cells<0.88) {
+    throw new Error('Boss terrain lacks the required wide, traversable fighting floor');
   }
-  // Off-axis samples examine actual circular cliffs without treating the
-  // two authored entrances and enemy lanes as walls.
-  // Measure the stable inner rock ring rather than the outer fault
-  // corridors around +/-10m where intentional volcanic fissures break it.
-  // The ring can have entrances and irregular outer cracks but must remain
-  // physically raised in at least two diagonal quadrants.
-  const offsets=[[-8,-8],[8,-8],[-8,8],[8,8]];
+  const pockets=plan.maneuverPockets;
+  if(pockets.length<(arena.kind==='wyrm'?3:2) ||
+      plan.flowLinks.length!==pockets.length) {
+    throw new Error('Boss lair needs connected secondary maneuver chambers');
+  }
+  // Sample outside the broad central fighting area, diagonally away from
+  // the deliberate entry and exit. This measures irregular REAL cliff
+  // geography rather than demanding a perfectly circular enclosing wall.
+  const offset=Math.round((space.radius+9)/Math.SQRT2);
+  const offsets=[[-offset,-offset],[offset,-offset],
+    [-offset,offset],[offset,offset]];
   const rises=offsets.map(([x,z])=>
     heights[index(radius,space.x+x,space.z+z)]-centerY);
   const raisedQuadrants=rises.filter(rise=>rise>=2).length;
   if(raisedQuadrants<2) {
-    throw new Error('Boss arena has no distinct physical enclosing stone rim');
+    throw new Error('Boss lair lacks raised natural rock masses');
   }
   return Object.freeze({
     schema:DEDICATED_ARENA_SCHEMA,kind:arena.kind,
     combatSpaceId:space.id,
     center:Object.freeze({x:space.x,y:centerY,z:space.z}),
     floorRadius:space.radius,
+    siteWidthMetres:radius*2,
     usableFloorCells:usable,
+    connectedManeuverSpaces:pockets.length,
     raisedQuadrants,
     rimRiseMetres:Object.freeze(rises),
     entryKind:arena.entryKind,exitKind:arena.exitKind,
