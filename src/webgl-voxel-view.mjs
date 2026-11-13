@@ -55,6 +55,7 @@ uniform vec4 uTerrainSecondaryNormalLayers;
 uniform vec4 uTerrainSecondaryOrmLayers;
 uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
+uniform bool uFastHuntMode;
 uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
 
@@ -91,6 +92,22 @@ vec3 grassAlbedo(vec3 world) {
 }
 
 void main() {
+  // The early mobile Play Hunt has no authored texture atlas, lighting,
+  // normal or ORM assets. Do not shade every phone pixel with the entire
+  // optional material pipeline when exploring this terrain prototype.
+  // Full V2 material rendering remains the default for all other hosts.
+  if (uFastHuntMode) {
+    vec3 base=terrainAlbedo(vMaterial);
+    if (abs(vMaterial-1.0)<0.5 && vNormal.y>0.5) {
+      float patch=soilHash(floor(vWorld.xz*0.43)+vec2(31.0,14.0))-0.5;
+      base*=1.0+patch*0.12;
+    }
+    float light=vNormal.y>0.5?1.0:
+      vNormal.y< -0.5?0.52:vNormal.x>0.5?0.84:
+      vNormal.z>0.5?0.78:0.70;
+    outColor=vec4(clamp(base*sqrt(light),0.0,1.0),1.0);
+    return;
+  }
   vec3 albedo = terrainAlbedo(vMaterial);
   if (abs(vMaterial - 2.0) < 0.5) {
     albedo = soilAlbedo(vWorld, vNormal);
@@ -273,8 +290,15 @@ export class WebGLVoxelView {
   #lost = false;
   #losses = 0;
   #onAvailabilityChange;
+  #fastHuntMode;
 
-  constructor(canvas, { onAvailabilityChange = () => {} } = {}) {
+  constructor(canvas, {
+    onAvailabilityChange = () => {},fastHuntMode=false
+  } = {}) {
+    if(typeof fastHuntMode!=='boolean') {
+      throw new TypeError('fastHuntMode must be a boolean');
+    }
+    this.#fastHuntMode=fastHuntMode;
     this.#onAvailabilityChange = onAvailabilityChange;
     const gl = canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: true, stencil: false, preserveDrawingBuffer: false
@@ -576,6 +600,7 @@ export class WebGLVoxelView {
       cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth'),
       grassTexture: gl.getUniformLocation(this.#program, 'uGrassTexture'),
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
+      fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
       terrainNormal: gl.getUniformLocation(this.#program, 'uTerrainNormal'),
@@ -769,6 +794,7 @@ export class WebGLVoxelView {
     gl.bindTexture(gl.TEXTURE_2D, this.#grassTexture);
     gl.uniform1i(this.#uniforms.grassTexture, 0);
     gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
+    gl.uniform1i(this.#uniforms.fastHuntMode,this.#fastHuntMode?1:0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];
     const layers = keys.map(key => {

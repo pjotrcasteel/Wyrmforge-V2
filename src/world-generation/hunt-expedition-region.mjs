@@ -9,8 +9,11 @@ import {
 } from './hunt-expedition-plan.mjs';
 
 export const HUNT_EXPEDITION_REGION_SCHEMA='wyrmforge.hunt-expedition-region.v1';
-export const HUNT_EXPEDITION_GEOMETRY_VERSION='worldgen-expedition-v0.1';
-const FLOOR=-3,PORT_Y=6,HALF=HUNT_REGION_EDGE/2;
+export const HUNT_EXPEDITION_GEOMETRY_VERSION='worldgen-expedition-v0.2';
+// The original -3m bottom forced a whole second negative-Y chunk layer for
+// every 16m chunk even though this early walking slice has no caves. Keep
+// seven metres of real destructible strata under the 6m routes instead.
+const FLOOR=0,PORT_Y=6,HALF=HUNT_REGION_EDGE/2;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const smooth=v=>v*v*(3-2*v);
 function fnv32(source) {
@@ -82,16 +85,30 @@ function cellHeight(plan,region,x,z,ports,seed) {
   // Full-width 1m voxel tops remain genuine solid materials.
   return Math.round(nature*(1-level)+PORT_Y*level);
 }
-function materials(plan,x,z,y,top,seed) {
+// Surface intent is computed ONCE per X/Z column. The old meshing adapter
+// repeatedly sampled seeded noise for each of 7-10 interior voxel layers.
+// Forest soil paths are now visible on the actual physical travel corridors;
+// this is geological/material intent, not an instantiated World Object.
+function topMaterial(plan,region,x,z,ports,seed) {
   const kind=plan.recipe.kind;
-  const stone=['mountain-pass','scorched-approach','mini-boss-arena',
-    'wyrm-lair'].includes(kind);
-  const exposed=stone || siteNoise(seed,x,z,14,21) >
-    (kind==='forest-highland'?0.65:0.9);
-  if(y===top)return exposed?3:1;
-  if(exposed)return 3;
-  if(y>=top-2)return 2;
-  return 3;
+  if(['mountain-pass','scorched-approach','mini-boss-arena',
+    'wyrm-lair'].includes(kind))return 3;
+  let trail=Infinity;
+  for(const port of ports) {
+    trail=Math.min(trail,segmentDistance(x,z,region.origin,port.at));
+  }
+  const drift=(siteNoise(seed,x,z,9,22)-0.5)*0.8;
+  if(trail<1.25+drift)return 2;
+  // A few naturally clustered exposed stones off the actual corridors.
+  // Avoid isolated per-voxel salt-and-pepper grass squares.
+  if(trail>4.5 && siteNoise(seed,x,z,15,21)>
+    (kind==='forest-highland'?0.89:0.967))return 3;
+  return 1;
+}
+function belowSurface(material,y,top) {
+  if(y===top)return material;
+  if(material===3)return 3;
+  return y>=top-2?2:3;
 }
 
 export function generateHuntExpeditionRegion(plan,regionId,{terrainAdapter}={}) {
@@ -117,6 +134,13 @@ export function generateHuntExpeditionRegion(plan,regionId,{terrainAdapter}={}) 
     maxY=Math.max(maxY,height);
   }
   const at=(x,z)=>heights[(z-minZ)*side+x-minX];
+  const surfaces=new Uint8Array(side*side);
+  for(let z=minZ;z<=maxZ;z++)for(let x=minX;x<=maxX;x++) {
+    surfaces[(z-minZ)*side+x-minX]=topMaterial(
+      plan,region,x,z,ports,seed);
+  }
+  const materialAt=(x,z,y)=>belowSurface(
+    surfaces[(z-minZ)*side+x-minX],y,at(x,z));
   const audits=[];
   for(const port of ports) {
     const {x,z}=port.at;
@@ -150,10 +174,10 @@ export function generateHuntExpeditionRegion(plan,regionId,{terrainAdapter}={}) 
     while(x<=maxX) {
       const top=at(x,z);
       if(y>top) {x++;continue;}
-      const material=materials(plan,x,z,y,top,seed);
+      const material=materialAt(x,z,y);
       let end=x+1;
       while(end<=maxX && y<=at(end,z) &&
-          materials(plan,end,z,y,at(end,z),seed)===material)end++;
+          materialAt(end,z,y)===material)end++;
       runs.push({x,y,z,length:end-x,material});
       x=end;
     }
@@ -171,6 +195,8 @@ export function generateHuntExpeditionRegion(plan,regionId,{terrainAdapter}={}) 
     center:Object.freeze({...region.origin,surfaceY:at(
       region.origin.x,region.origin.z)+1}),
     ports:Object.freeze(audits),opportunities:region.opportunities,
+    // Explicit stage limitations: prettier terrain alone is not a forest.
+    sceneContent:'terrain-and-paths-only',
     hasLiveEnemies:false,hasInvestigations:false,
     physicalRoutePortsReady:audits.every(item=>item.ready)
   });

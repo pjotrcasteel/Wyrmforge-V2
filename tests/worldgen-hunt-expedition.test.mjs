@@ -108,7 +108,7 @@ test('each region generates its own bounded genuine 3D Voxel V2 definition',()=>
     signatures.push(result.hash);
     assert.equal(result.regionId,region.id);
     assert.equal(result.definition.siteId,plan.recipe.huntId+'-'+region.id);
-    assert.equal(result.definition.generatorVersion,'worldgen-expedition-v0.1');
+    assert.equal(result.definition.generatorVersion,'worldgen-expedition-v0.2');
     assert.equal(result.definition.chunkEdge,16);
     assert.equal(result.layout.physicalRoutePortsReady,true);
     assert.deepEqual(result.layout.footprint.minX,region.bounds.minX);
@@ -122,6 +122,26 @@ test('each region generates its own bounded genuine 3D Voxel V2 definition',()=>
   assert.equal(new Set(signatures).size,plan.regions.length);
   assert.equal(plan.regionDefinitionsLoaded,0,
     'planning does not create persistent regional voxel worlds');
+});
+
+test('Wet Forest arrival has real dirt footpaths and fewer underground chunks',()=>{
+  const plan=expedition(7);
+  const region=plan.regions.find(r=>r.id===plan.entryRegionId);
+  const generated=generateWorldExpeditionRegion(plan,region.id);
+  assert.equal(generated.layout.sceneContent,'terrain-and-paths-only');
+  assert.equal(generated.layout.footprint.minY,0,
+    'the old -3m lower plane allocated needless negative-Y chunks');
+  assert.ok(generated.definition.runs.every(run=>run.y>=0));
+  const loader=load(generated);
+  try {
+    const world=loader.terrain.world;
+    assert.equal(world.get(region.origin.x,6,region.origin.z),2,
+      'the central walking track must be physical dirt material');
+    assert.notEqual(world.get(region.origin.x+8,6,region.origin.z),2,
+      'the surrounding clearing cannot all be painted brown');
+    assert.ok(world.chunkCount<=4,
+      'a single 32m region should not allocate negative-Y terrain chunks');
+  } finally {loader.unload();}
 });
 
 test('two on-demand neighboring regions have physical flat 7m seams and no duplicate XY cells',()=>{
