@@ -92,8 +92,8 @@ test('expedition region links form shared cardinal ports in continuous world coo
     const dx=Math.abs(link.fromPort.at.x-link.toPort.at.x);
     const dz=Math.abs(link.fromPort.at.z-link.toPort.at.z);
     assert.equal(dx+dz,1,'ports must be adjacent 1m physical surfaces');
-    assert.equal(link.fromPort.widthMetres,6);
-    assert.equal(link.toPort.widthMetres,6);
+    assert.equal(link.fromPort.widthMetres,7);
+    assert.equal(link.toPort.widthMetres,7);
     allPorts.add(link.fromPort.id);allPorts.add(link.toPort.id);
   }
   assert.equal(allPorts.size,plan.links.length*2);
