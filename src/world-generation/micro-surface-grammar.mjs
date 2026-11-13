@@ -2,7 +2,7 @@
 // 10x10 height values encode 10x10x10 individual solid microcells. This
 // produces crisp cuboid steps, never sheared triangles or displaced vertices.
 // Voxel V2 only understands the resulting public initialization data.
-import { selectRoadCell, roadMicroCut } from './road-footprint.mjs';
+import { selectRoadCell, roadMicroCut, microCellCenter } from './road-footprint.mjs';
 export const MICRO_SURFACE_GRAMMAR_SCHEMA='wyrmforge.micro-surface-grammar.v1';
 export const MAX_GENERATED_MICRO_TILES=384;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -52,7 +52,7 @@ export function composeMicroSurfaceTiles({
     const levels=[];
     let changed=false;
     for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++) {
-      const px=x+(ix+0.5)*0.1,pz=z+(iz+0.5)*0.1;
+      const px=microCellCenter(x,ix),pz=microCellCenter(z,iz);
       let cut=0;
       if(profile) {
         // The same selected 1m road cell owns its material AND its physical
