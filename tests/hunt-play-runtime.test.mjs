@@ -132,3 +132,21 @@ test('H08-01 iOS Safari downward joystick drag cannot scroll the game page',()=>
   assert.match(host,/playStage\.contains\(event\.target\)/);
   assert.match(host,/\},\{passive:false\}\);/);
 });
+
+test('H08-01 mobile visual/performance fix changes only the playable route',()=>{
+  const html=readFileSync(new URL('../play-hunt.html',import.meta.url),'utf8');
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  const renderer=readFileSync(new URL('../src/webgl-voxel-view.mjs',import.meta.url),'utf8');
+  assert.match(host,/const pixelRatio=playMode\s*\?\s*Math\.min\(1,Math\.sqrt\(700000\/cssPixels\)\)/);
+  assert.match(host,/fastHuntMode:playMode/);
+  assert.match(renderer,/uniform bool uFastHuntMode/);
+  assert.match(renderer,/if \(uFastHuntMode\) \{/);
+  assert.match(host,/const fit=!playMode && inspected/);
+  assert.match(host,/playCpuStats\.recordFrame/);
+  assert.match(host,/const playCpuBegin=playMode\?performance\.now\(\):0/);
+  assert.match(html,/id="play-report"/);
+  assert.match(host,/playReport\.addEventListener\('click'/);
+  assert.match(host,/wyrmforge\.hunt-play-report\.v1/);
+  assert.match(host,/source:'request-animation-frame-local'|frameIntervals:playFrameStats\.snapshot/);
+  assert.match(host,/gpuQueue:renderer\?\.uploadQueueStatistics/);
+});
