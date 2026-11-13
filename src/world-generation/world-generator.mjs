@@ -14,6 +14,7 @@ import { composeRoadSurfaces } from './road-surface-geometry.mjs';
 import { specifyRoadSurfaces } from './road-surface-specification.mjs';
 import { classifySurfaceStrata } from './terrain-strata.mjs';
 import { composeMicroSurfaceTiles } from './micro-surface-grammar.mjs';
+import { gradeNavigableRoads } from './navigable-road-grades.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -134,10 +135,13 @@ function prepareGeometry(plan,seed) {
   const roadWork=composeRoadSurfaces({
     radius,heights,surfaces,routes:plan.routes,combatSpaces:plan.combatSpaces
   });
+  const roadGrades=gradeNavigableRoads({
+    radius,heights,routes:plan.routes
+  });
   const geology=classifySurfaceStrata({
     radius,heights,surfaces,terrain:plan.terrain
   });
-  return {heights,surfaces,roadWork,geology};
+  return {heights,surfaces,roadWork,geology,roadGrades};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
@@ -215,7 +219,7 @@ export class WorldGeneratorV2 {
     const builder=new SitePlanBuilder(recipe);
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
-    const {heights,surfaces,roadWork,geology}=prepareGeometry(plan,seed);
+    const {heights,surfaces,roadWork,geology,roadGrades}=prepareGeometry(plan,seed);
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
       routes:plan.routes,landmarks:plan.landmarks,
@@ -250,6 +254,7 @@ export class WorldGeneratorV2 {
     const microSurface=composeMicroSurfaceTiles({
       radius:recipe.radius,seed,
       heights,surfaces,routes:plan.routes,
+      gradedTopTenths:roadGrades.gradedTopTenths,
       flowLinks:plan.flowLinks,escapeRoutes:plan.escapeRoutes,
       approaches:plan.approaches,combatSpaces:plan.combatSpaces,
       rockFaceThreshold:plan.terrain.rockFaceThreshold
@@ -260,7 +265,12 @@ export class WorldGeneratorV2 {
       surfaceTiles:microSurface.tiles
     });
     const layout=Object.freeze({
-      routes:plan.routes,roads,geology,microSurface:Object.freeze({
+      routes:plan.routes,roads,geology,
+      roadGrades:Object.freeze({
+        schema:roadGrades.schema,cells:roadGrades.cells,
+        maximumGradeTenths:roadGrades.maximumGradeTenths
+      }),
+      microSurface:Object.freeze({
         schema:microSurface.schema,tileCount:microSurface.tileCount,
         roadTiles:microSurface.roadTiles,
         connectorTiles:microSurface.connectorTiles,
