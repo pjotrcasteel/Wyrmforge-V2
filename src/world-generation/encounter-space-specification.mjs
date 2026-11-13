@@ -27,7 +27,7 @@ function verifyApproach(heights,radius,space,approach) {
 export function specifyEncounterSpaces({
   radius,heights,combatSpaces=[],approaches=[],discoveryCandidates=[]
 }) {
-  if(!Number.isSafeInteger(radius) || radius<8 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<8 || radius>32 ||
       !(heights instanceof Int16Array) ||
       heights.length!==(radius*2)**2 ||
       !Array.isArray(combatSpaces) || !Array.isArray(approaches) ||
