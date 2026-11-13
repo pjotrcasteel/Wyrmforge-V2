@@ -2,6 +2,24 @@
 
 **Status:** product-facing integration target agreed 2026-11-10; NOT an implemented biome generator or a playable V2 Hunt. This specification is subordinate to the single [V2 roadmap](ROADMAP.md), not a new roadmap. No V1 code is imported into the clean-room V2 engine.
 
+## Expedition scale and connected Hunt narrative (2026-11-13)
+
+**Authoritative correction:** [ADR-0002 — Hunts are complete expeditions](architecture/ADR-0002-hunt-expeditions-and-journey.md).
+An individual Hunt is a **larger, populated adventure**, not one tiny
+combat clearing. The current 40m/56m/64m V2 generator footprints are
+diagnostic fixtures, not target gameplay sizes. One Hunt must contain
+distinct explorative spaces, investigations/secret discoveries, horde
+pressure and meaningful extraction. Several Hunts must form a coherent
+story progression from the first forest through Wyrm-influenced geography
+to the lair, with node count varying by map and Wyrm tier.
+
+Scale by deterministic **multi-region composition and bounded streaming**
+rather than arbitrary increased full-site array/run limits or massive
+empty maps. Gameplay/Narrative owns clue semantics and waves; WorldGen
+owns the reachable physical sites and placement opportunities. Final
+dimensions will be validated with actual mobile Hunt density and
+playtesting, not accepted from the lab UI alone.
+
 ## Why this engine exists
 
 Wyrmforge is a **mobile-first, fixed-camera, pixel-first 2.5D dark-fantasy action roguelite**, not a free-camera voxel sandbox. Terrain is volumetric and genuinely destructible beneath its 2.5D presentation. A player chooses an actual world-map location, enters a seeded Hunt arena themed to that location, battles enemies, modifies terrain and physical objects through magic, and exits through a valid mapped route.
