@@ -14,6 +14,7 @@ export class SitePlanBuilder {
   #combatSpaces=[];
   #approaches=[];
   #discoveryCandidates=[];
+  #escapeRoutes=[];
   #ids=new Set();
   #built=false;
 
@@ -109,6 +110,23 @@ export class SitePlanBuilder {
     }));
     return this;
   }
+  // A second way around the combat space. Geography owns these corridors,
+  // not the enemy AI, steering system, or player controls. Both sides share
+  // entry and exit anchors but have different actual terrain footprints.
+  addEscapeRoute({id,side,style,nodes,width=2}) {
+    this.#checkOpen(id);
+    if(!['west','east'].includes(side) ||
+        typeof style!=='string' || !IDENTIFIER.test(style) ||
+        !Array.isArray(nodes) || nodes.length<3 || nodes.length>10 ||
+        !integer(width) || width<1 || width>3) {
+      throw new RangeError('Escape route needs side, style and bounded waypoints');
+    }
+    this.#escapeRoutes.push(Object.freeze({
+      id,side,style,width,
+      nodes:Object.freeze(nodes.map(point=>this.#point(point)))
+    }));
+    return this;
+  }
   // Only a possible buried *location*. No chest/object/reward is instantiated.
   addDiscoveryCandidate({id,x,z,coverDepth=2,kind='buried-cache'}) {
     this.#checkOpen(id);
@@ -128,6 +146,19 @@ export class SitePlanBuilder {
         this.#landmarks.length===0 || this.#clearings.length===0) {
       throw new Error('Site strategy must define landform, entry-to-exit route, and landmark');
     }
+    if(this.#escapeRoutes.length>0) {
+      const sides=this.#escapeRoutes.map(route=>route.side);
+      if(this.#escapeRoutes.length!==2 ||
+          !sides.includes('west') || !sides.includes('east')) {
+        throw new Error('Escape layout requires one east and one west detour');
+      }
+      const [west,east]=this.#escapeRoutes;
+      if(!['x','z'].every(axis=>
+        west.nodes[0][axis]===east.nodes[0][axis] &&
+        west.nodes.at(-1)[axis]===east.nodes.at(-1)[axis])) {
+        throw new Error('Escape routes must rejoin at the same endpoints');
+      }
+    }
     for(const approach of this.#approaches) {
       if(!this.#combatSpaces.some(space=>space.id===approach.combatSpaceId)) {
         throw new Error('Encounter approach references a missing combat space');
@@ -141,6 +172,7 @@ export class SitePlanBuilder {
       features:Object.freeze([...this.#features]),
       combatSpaces:Object.freeze([...this.#combatSpaces]),
       approaches:Object.freeze([...this.#approaches]),
+      escapeRoutes:Object.freeze([...this.#escapeRoutes]),
       discoveryCandidates:Object.freeze([...this.#discoveryCandidates])
     });
   }
