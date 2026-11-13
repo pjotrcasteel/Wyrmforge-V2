@@ -1,5 +1,6 @@
 # Voxel Engine V2 — implementation status
 
+**Play Hunt integration H08-01 (2026-11-13):** PR #143 merged as commit \`a1960ce\` and GitHub Pages deployed. The separate [Play Hunt route](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?v=a1960ce) uses a physical-size Wizard proxy controlled by touch joystick/WASD with the existing Voxel V2 grounded collider, follow camera and live local frame p50/p95/p99/hitch/voxel-memory/worker-queue diagnostics. Automated tests and CI pass; real-device input, visual and performance acceptance **pending**, and only one 32m region is loadable at once. Task status and next gates live in [Delivery Tasks](DELIVERY-TASKS.md).\n\n
 **Current cross-chat task tracker:** [Delivery Tasks](DELIVERY-TASKS.md). The next integrated task is **H08-01 (Play Hunt movement)**. A source module, green test or lab screenshot never substitutes for hands-on game acceptance; record actual frame/queue/device measurements when available. Last verified merged multi-region baseline: PR #141, commit `27b1c02`.
 
 ## V2.6 — Distinct runtime epochs across external world load and restore (2026-11-12)
