@@ -671,3 +671,47 @@ World Map owns world-state advancement; generation is deterministic from a
 recipe and must never mutate an active Hunt without the separate save/replay
 and live-terrain authority. Objects, fire, ash and lava are future engines.
 This V2.7 step does not mark the whole voxel V2.7 acceptance gate complete.
+
+ 
+## Dedicated Fire-tier geography — WorldGen V2.7.1
+
+**World Map intent vs Wyrm influence are different axes.** The stage and
+encounter determine the terrain *type*. A high corruption value never
+converts an ordinary Wet Forest into an actual miniboss encounter, and the
+Wyrm lair is never represented by a randomly scored horde field.
+
+Three independent Fire-tier Strategies have now been registered:
+
+- `scorched-approach` — ravaged volcanic valley with narrow, genuinely
+  excavated fissures along its walls, but a protected through-road;
+- `mini-boss-arena` — an enclosed, smaller stone-ring combat floor with
+  its own ingress routes and arena identity; and
+- `wyrm-lair` — a distinct, larger caldera fight floor with a high rocky
+  rim, multi-direction approaches, fissures off the boss floor and
+  multiple geographically anchored lava-fall locations.
+
+These are generator Strategies registered with the existing map-kind
+registry. The Builder validates an explicit encounter identity and volcanic
+geology stage. The dedicated-arena Specification rejects tagged sites if
+their *actual physical terrain* lacks a usable fighting floor and raised
+stone rim. A protected fissure grammar carves genuine 3D voxel trenches
+**outside** roads, approaches, mandatory exits, clearings and boss arenas.
+All run encoding, collision, destruction and later replay stay in the
+existing Voxel V2 authority; no moved triangles, texture overlays or
+runtime mesh-only fissures. Existing three map kinds remain selectable.
+
+**Lava-fall boundary:** the World Generator reserves only **cliff-validated
+vertical placement anchors** with a real high rim and lower solid landing.
+No animated lava waterfall, glowing material, flowing liquid, heat,
+damage or particle effects are implemented in this milestone. Those need
+separate V2 material, environmental hazard, Lighting, VFX and Gameplay
+interfaces. The player must not be told that playable lava exists yet.
+
+The miniboss and Wyrm sites remain distinct even at corruption 0. Wyrm
+influence still affects natural landscape within a site without changing
+its encounter identity. The existing map generator stress suite and new
+physical tests cover independent seeds, actual terrain cuts, intact
+boss fight floors, reachable required routes, real cliff faces and
+unmodified voxel/actor boundaries. Final iPhone visual acceptance remains
+an open gate. This is **not** completion of the overall V2.8 Hunt
+integration milestone.
