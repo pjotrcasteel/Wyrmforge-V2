@@ -11,6 +11,10 @@ internal contracts or assets are reused. The existing game remains playable
 and unchanged during standalone engine development. Any future game-side
 integration must use newly authored V2 contracts and a guarded rollout.
 
+## Current task and playable-Hunt development
+
+**[Delivery Tasks](docs/DELIVERY-TASKS.md)** is the version-controlled task backlog under the original V2.0–V2.10 milestone structure. Start with **H08-01 — Play Hunt movement**, then connected region travel, natural terrain, trees/boulders, exploration, enemies and extraction. Every task has a visible effect, technical owner, verification and mobile performance gates. Use the stable task ID in future chats and PRs; the backlog can evolve without making another competing roadmap.
+
 ## One authoritative roadmap
 
 **[docs/ROADMAP.md](docs/ROADMAP.md)** is the single source of truth. It

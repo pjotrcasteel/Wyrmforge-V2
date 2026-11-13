@@ -1,5 +1,7 @@
 # Voxel Engine V2 — implementation status
 
+**Current cross-chat task tracker:** [Delivery Tasks](DELIVERY-TASKS.md). The next integrated task is **H08-01 (Play Hunt movement)**. A source module, green test or lab screenshot never substitutes for hands-on game acceptance; record actual frame/queue/device measurements when available. Last verified merged multi-region baseline: PR #141, commit `27b1c02`.
+
 ## V2.6 — Distinct runtime epochs across external world load and restore (2026-11-12)
 
 **Integration correctness:** V2 terrain change notifications already carried an `epoch`, but every `V2ExternalTerrainLoader` created its `V2TerrainPort` using the default `epoch=1`. Repeated loads and verified checkpoint restores therefore reused the same epoch, even if they had identical voxel revisions and edit sequence numbers. A future Physics V2, Lighting V2 or VFX V2 subscriber needs a reliable distinction between separate world activations.
