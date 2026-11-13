@@ -9,6 +9,9 @@ test('existing external 3D lab previews World Generation V2 without implementing
   assert.match(html,/value="wet-forest" selected/);
   assert.match(html,/value="forest-highland"/);
   assert.match(html,/value="mountain-pass"/);
+  assert.match(html,/value="scorched-approach"/);
+  assert.match(html,/value="mini-boss-arena"/);
+  assert.match(html,/value="wyrm-lair"/);
   assert.match(html,/value="fixture"/);
   assert.match(html,/id="site-seed"/);
   assert.match(html,/id="site-influence"/);
