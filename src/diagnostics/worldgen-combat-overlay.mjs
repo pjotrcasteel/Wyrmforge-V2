@@ -58,9 +58,30 @@ export function projectEncounterGuides(site,world,view) {
       points:Object.freeze(path)
     });
   });
+  const maneuvers=(site.layout.maneuverPockets ?? []).map(pocket=>{
+    const ring=[];
+    for(let i=0;i<=32;i++) {
+      const angle=2*Math.PI*i/32;
+      ring.push(project(
+        pocket.x+Math.cos(angle)*pocket.radius,
+        pocket.z+Math.sin(angle)*pocket.radius
+      ));
+    }
+    return Object.freeze({
+      id:pocket.id,kind:pocket.kind,
+      center:project(pocket.x,pocket.z),
+      ring:Object.freeze(ring)
+    });
+  });
+  const links=(site.layout.flowLinks ?? []).map(link=>Object.freeze({
+    id:link.id,pocketId:link.pocketId,
+    points:Object.freeze(link.nodes.map(point=>project(point.x,point.z)))
+  }));
   return Object.freeze({
     combat:Object.freeze(combat),
     approaches:Object.freeze(approaches),
-    escapes:Object.freeze(escapes)
+    escapes:Object.freeze(escapes),
+    maneuvers:Object.freeze(maneuvers),
+    links:Object.freeze(links)
   });
 }
