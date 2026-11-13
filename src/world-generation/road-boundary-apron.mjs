@@ -46,6 +46,7 @@ export function composeRoadBoundaryAprons({radius,routes}) {
         x:candidate.axis==='x'?candidate.edge:endpoint.x,
         z:candidate.axis==='z'?candidate.edge:endpoint.z
       };
+      if(endpoint.x===boundary.x && endpoint.z===boundary.z)continue;
       const extension=rasterizeEscapeRoute([endpoint,boundary]);
       // Honor only painted cells of this very road. Never grade a grass
       // strip just to connect a fictitious segment outside the map.
