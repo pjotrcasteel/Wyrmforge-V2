@@ -8,6 +8,21 @@
 
 **Roadmap identity:** `0.0.032` is a *laboratory build version*, **not** milestone `V2.24`. Similarly a completed V2.5 raycast feature does not complete the whole V2.5 milestone. This roadmap is the single source of truth for remaining work and final delivery.
 
+## Hunt-sized expeditions and story continuity — owner correction (2026-11-13)
+
+**Governing decision:** [ADR-0002 — Hunt expeditions and journey](architecture/ADR-0002-hunt-expeditions-and-journey.md).
+A Hunt is a large, location-aware adventure with exploration, investigations,
+destructible secrets, a sequence of enemy-horde encounters, multiple traversable
+areas and an extraction outcome. Successive Hunts form a World-Map-directed
+narrative that moves toward the Wyrm; the number of nodes depends on journey,
+choices and Wyrm tier. The existing 40m normal sites and 56m/64m boss sites
+are **technical laboratory fixtures, not approved final playable Hunt dimensions**.
+Increasing only a site radius or polishing isolated boss rings does not
+satisfy Hunt progression. The next WorldGen boundary is seed-stable,
+streamable multi-region expedition planning with story/landmark placement
+contracts and bounded mobile load budgets. Do not claim that today's
+standalone generator represents a playable Hunt.
+
 ## World-led procedural Hunt target — owner clarification (2026-11-10)
 
 **The lab is not the game.** Wyrmforge is a fixed-camera, pixel-first
