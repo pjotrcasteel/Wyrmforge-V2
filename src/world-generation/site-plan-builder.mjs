@@ -15,6 +15,8 @@ export class SitePlanBuilder {
   #approaches=[];
   #discoveryCandidates=[];
   #escapeRoutes=[];
+  #maneuverPockets=[];
+  #flowLinks=[];
   #ids=new Set();
   #built=false;
 
@@ -127,6 +129,31 @@ export class SitePlanBuilder {
     }));
     return this;
   }
+  // Secondary maneuvering areas are terrain design, NOT enemy arenas.
+  // Map kinds choose their geometry; Enemy/AI owns crowd pressure and spawns.
+  addManeuverPocket({id,kind,x,z,radius=4}) {
+    this.#checkOpen(id);
+    if(!IDENTIFIER.test(kind) || !integer(radius) || radius<3 || radius>5) {
+      throw new RangeError('Maneuver pocket requires a kind and bounded radius');
+    }
+    this.#maneuverPockets.push(Object.freeze({
+      id,kind,...this.#point({x,z},radius+2),radius
+    }));
+    return this;
+  }
+  addFlowLink({id,kind,pocketId,nodes,width=2}) {
+    this.#checkOpen(id);
+    if(!IDENTIFIER.test(kind) || !IDENTIFIER.test(pocketId) ||
+        !Array.isArray(nodes) || nodes.length<2 || nodes.length>6 ||
+        !integer(width) || width<2 || width>3) {
+      throw new RangeError('Circulation link needs a bounded width and waypoints');
+    }
+    this.#flowLinks.push(Object.freeze({
+      id,kind,pocketId,width,
+      nodes:Object.freeze(nodes.map(point=>this.#point(point)))
+    }));
+    return this;
+  }
   // Only a possible buried *location*. No chest/object/reward is instantiated.
   addDiscoveryCandidate({id,x,z,coverDepth=2,kind='buried-cache'}) {
     this.#checkOpen(id);
@@ -159,6 +186,25 @@ export class SitePlanBuilder {
         throw new Error('Escape routes must rejoin at the same endpoints');
       }
     }
+    for(const pocket of this.#maneuverPockets) {
+      if(this.#combatSpaces.some(space=>
+        Math.hypot(space.x-pocket.x,space.z-pocket.z) <
+          space.radius+pocket.radius-1)) {
+        throw new Error('Maneuver pocket overlaps the central fighting floor');
+      }
+      const links=this.#flowLinks.filter(link=>link.pocketId===pocket.id);
+      if(links.length!==1 ||
+          !['x','z'].every(axis=>links[0].nodes.at(-1)[axis]===pocket[axis])) {
+        throw new Error('Every maneuver pocket needs one connected flow link');
+      }
+    }
+    for(const link of this.#flowLinks) {
+      if(!this.#maneuverPockets.some(pocket=>pocket.id===link.pocketId) ||
+          !this.#combatSpaces.some(space=>
+            ['x','z'].every(axis=>space[axis]===link.nodes[0][axis]))) {
+        throw new Error('Flow links must connect the central combat floor to a pocket');
+      }
+    }
     for(const approach of this.#approaches) {
       if(!this.#combatSpaces.some(space=>space.id===approach.combatSpaceId)) {
         throw new Error('Encounter approach references a missing combat space');
@@ -173,6 +219,8 @@ export class SitePlanBuilder {
       combatSpaces:Object.freeze([...this.#combatSpaces]),
       approaches:Object.freeze([...this.#approaches]),
       escapeRoutes:Object.freeze([...this.#escapeRoutes]),
+      maneuverPockets:Object.freeze([...this.#maneuverPockets]),
+      flowLinks:Object.freeze([...this.#flowLinks]),
       discoveryCandidates:Object.freeze([...this.#discoveryCandidates])
     });
   }
