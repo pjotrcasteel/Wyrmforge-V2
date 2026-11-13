@@ -44,7 +44,7 @@ test('no jump input; automatic 1m hop follows a visible ballistic arc, not a pos
   assert.ok(actor.y>1.9);
   assert.equal(actor.fallDamage,0,'a small auto-hop cannot inflict fall injury');
   assert.equal(AUTO_HOP_HEIGHT,1.05);
-  assert.equal(AUTO_HOP_UPWARD_SPEED,8);
+  assert.equal(AUTO_HOP_UPWARD_SPEED,7.4);
 });
 
 test('small 10cm ledges auto-step, do not launch a hop',()=>{
