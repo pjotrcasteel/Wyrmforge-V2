@@ -285,3 +285,65 @@ baseline. These checks do not certify mobile gameplay load or final art.
 Encounter/AI and navigation must consume the **current** destructible world,
 not assume initial geography is unchanged. No enemy spawn schedule or steering
 logic belongs in World Generation.
+
+## WorldGen v2.3 — continuous inset roads and physically supported rock strata
+
+The user's Mountain Pass screenshots identified three defects in the previous
+generated terrain: visually unsupported dirt layers between rocky cliffs,
+brown route markings that disappeared underneath flattened combat floors,
+and roads that were merely different materials at identical elevation.
+
+**Strategy:** Every built-in map kind now chooses a `roadProfile` for its
+main entry-to-exit corridor and landmark spur:
+
+| Kind | Road surface | Fractional-depth design intent |
+| --- | --- | --- |
+| Wet Forest | Worn earthy trail (material 2) | 0.12 voxel |
+| Forest → Highland | Graded dirt track (material 2) | 0.20 voxel |
+| Mountain Pass | Exposed stone-cut pass (material 3) | 0.30 voxel |
+
+**IMPORTANT RESOLUTION LIMITATION:** The Voxel V2 public initialization
+format encodes solids at *integer* X/Y/Z coordinates. The current renderer and
+collision engine cannot honestly represent a 0.12–0.30 voxel surface depression.
+The Strategy therefore keeps the fractional design intent as metadata, and
+the **World Generation geometry composer temporarily carves a real one-voxel
+inset bed** in a narrow central line, retaining the surrounding shoulder at
+its original height. This is deliberately more pronounced than the final
+desired road, not an implementation of fractional geometry. A future
+replaceable Surface/Materials renderer may interpret the nominal fraction
+without changing World Generation or Voxel V2 internals.
+
+**Geometry Composer:** The road pass runs *after* the central horde arena,
+maneuver-pocket, flank and escape-route shaping. It reapplies the physically
+inset central road and the correct biome surface material, including where
+the road crosses the wide combat floor. Primary roads win over spurs at
+intersections. No secondary road is an alternate collision source.
+
+**Geological Strategy:** `setTerrain` now accepts `soilDepth` and optional
+`rockFaceThreshold`. Mountain Pass declares one thin layer of soil and
+stone faces on sufficiently steep terrain; a stone top and the material
+beneath it are all contiguous bedrock. Wet Forest and the highlands retain
+their softer soil treatment. Geological classification is performed only
+after terrain shaping, so cliff exposure follows the actual map.
+
+**Specifications:** `specifyRoadSurfaces` rejects discontinuous roads,
+impassable road steps, and a main road that stops at the combat area.
+Existing site topology, combat floor, enemy ingress, escape-loop, maneuver
+width and buried-discovery gates still run on the final, changed landscape.
+
+**Engine ownership:** The work changes only World Generation Strategy,
+Builder, geometry, geology and Specification, plus its versioned layout
+metadata and tests. Voxel V2 storage, external terrain initialization,
+meshing, WebGL, Camera, Enemy/AI, World Objects and Loot stay unchanged.
+
+Generation semantics are versioned as `worldgen-v2.3.0`. The public output
+continues to use `wyrmforge.generated-site.v2` and the existing
+`voxel-v2.terrain-initialization.v1` adapter. The new `layout.roads` and
+`layout.geology` audit objects make physical limitations and acceptance
+results explicit. CI verifies the actual loaded voxel top materials and
+stone strata over multiple map seeds and chunk pitches.
+
+**Visual acceptance outstanding:** user compares Mountain Pass, Wet Forest
+and Forest → Highland at a mobile scale; a future fractional-height surface
+engine must be tested separately before claiming the requested 0.1–0.3
+voxel trench depth.
