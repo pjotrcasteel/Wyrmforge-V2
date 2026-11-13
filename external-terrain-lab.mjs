@@ -122,6 +122,20 @@ function paintEncounterGuide(view) {
     ctx.fillStyle='#bdf8dc';
     ctx.fill();
   }
+  for(const escape of guide.escapes) {
+    if(escape.points.length<2) continue;
+    ctx.beginPath();
+    escape.points.forEach((point,index)=>{
+      if(index===0) ctx.moveTo(point.x,point.y);
+      else ctx.lineTo(point.x,point.y);
+    });
+    ctx.setLineDash([9*pixelRatio,4*pixelRatio]);
+    ctx.strokeStyle=escape.side==='west'
+      ? 'rgba(119,215,255,0.95)' : 'rgba(243,166,251,0.95)';
+    ctx.lineWidth=3*pixelRatio;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   for(const approach of guide.approaches) {
     const combat=guide.combat.find(space=>space.id===approach.centerId);
     if(!combat) continue;

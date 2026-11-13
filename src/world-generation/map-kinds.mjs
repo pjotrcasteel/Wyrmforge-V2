@@ -70,8 +70,41 @@ function addNarrativePaths(builder, kind) {
   // Merely an excavatable future discovery location. World Objects / Loot
   // can later place a hidden cache if progression rules select it.
   builder.addDiscoveryCandidate({
-    id:'buried-nook',kind:'buried-cache',x:-11,z:-12,coverDepth:2
+    id:'buried-nook',kind:'buried-cache',x:-16,z:-15,coverDepth:2
   });
+}
+
+// Deliberate alternatives to the central combat lane: wide forest loops,
+// staggered highland switchbacks and narrow cliffside mountain shelves.
+// Strategies own their layout, not the world generator's terrain implementation.
+const ESCAPE_LAYOUTS=Object.freeze({
+  'wet-forest':Object.freeze({
+    style:'woodland-loop',
+    west:[[-16,12],[-16,3],[-16,-10]],
+    east:[[16,12],[16,1],[16,-9]]
+  }),
+  'forest-highland':Object.freeze({
+    style:'foothill-switchback',
+    west:[[-15,12],[-17,6],[-16,-7],[-15,-11]],
+    east:[[15,11],[16,2],[16,-11]]
+  }),
+  'mountain-pass':Object.freeze({
+    style:'cliffside-shelf',
+    west:[[-15,12],[-17,5],[-17,-4],[-15,-11]],
+    east:[[15,12],[17,3],[17,-5],[15,-11]]
+  })
+});
+
+function addEscapeLayout(builder,kind) {
+  const layout=ESCAPE_LAYOUTS[kind];
+  if(!layout) throw new RangeError('No authored escape layout for '+kind);
+  const anchor=xz=>({x:xz[0],z:xz[1]});
+  for(const side of ['west','east']) {
+    builder.addEscapeRoute({
+      id:side+'-escape',side,style:layout.style,width:2,
+      nodes:[[0,15],...layout[side],[0,-15]].map(anchor)
+    });
+  }
 }
 
 function forest(builder, context) {
@@ -86,6 +119,7 @@ function forest(builder, context) {
     exposedStone: 0.94
   });
   addNarrativePaths(builder,'forest-ruin');
+  addEscapeLayout(builder,'wet-forest');
   builder.addFeature({id:'wetland',kind:'water-basin',x:-12,z:7,radius:5});
   builder.addFeature({id:'northern-grove',kind:'woodland',
     x:-10,z:-9,radius:7});
@@ -103,6 +137,7 @@ function transition(builder, context) {
     exposedStone: 0.68
   });
   addNarrativePaths(builder,'mountain-watch');
+  addEscapeLayout(builder,'forest-highland');
   builder.addFeature({id:'lower-forest',kind:'woodland',
     x:-12,z:10,radius:6});
   builder.addFeature({id:'foothills',kind:'rocky-slope',
@@ -122,6 +157,7 @@ function mountains(builder, context) {
     exposedStone:0.24
   });
   addNarrativePaths(builder,'mountain-shrine');
+  addEscapeLayout(builder,'mountain-pass');
   builder.addFeature({id:'western-escarpment',kind:'cliff',
     x:-13,z:-4,radius:7});
   builder.addFeature({id:'eastern-ridge',kind:'rocky-slope',

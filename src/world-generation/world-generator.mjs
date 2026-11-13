@@ -6,6 +6,8 @@ import { createDefaultMapKindRegistry, siteNoise } from './map-kinds.mjs';
 import { SitePlanBuilder } from './site-plan-builder.mjs';
 import { specifySiteTopology } from './site-topology-specification.mjs';
 import { specifyEncounterSpaces } from './encounter-space-specification.mjs';
+import { gradeEscapeRoutes } from './escape-route-geometry.mjs';
+import { specifyEscapeRoutes } from './escape-route-specification.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -113,6 +115,9 @@ function prepareGeometry(plan,seed) {
     // Never paint the whole arena brown as though it were a narrow footpath.
     surfaces[i]=inCombat ? (stony ? 3 : 1) : onTrail ? 2 : stony ? 3 : 1;
   }
+  // Late, geometry-only pass: the new escape routes must be playable across
+  // seeded mountain slopes. They never rewrite voxel data or material IDs.
+  gradeEscapeRoutes({radius,heights,escapeRoutes:plan.escapeRoutes});
   return {heights,surfaces};
 }
 
@@ -192,7 +197,13 @@ export class WorldGeneratorV2 {
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
       routes:plan.routes,landmarks:plan.landmarks,
-      clearings:[...plan.clearings,...plan.combatSpaces,...plan.approaches]
+      clearings:[...plan.clearings,...plan.combatSpaces,...plan.approaches,
+        ...plan.escapeRoutes.map(route=>route.nodes[0]),
+        ...plan.escapeRoutes.map(route=>route.nodes.at(-1))]
+    });
+    const escapeAudit=specifyEscapeRoutes({
+      radius:recipe.radius,heights,
+      escapeRoutes:plan.escapeRoutes,combatSpaces:plan.combatSpaces
     });
     const encounter=specifyEncounterSpaces({
       radius:recipe.radius,heights,
@@ -210,6 +221,7 @@ export class WorldGeneratorV2 {
       landmarks:plan.landmarks,features:plan.features,
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
+      escapeRoutes:plan.escapeRoutes,escapeAudit,
       discoveryCandidates:Object.freeze(plan.discoveryCandidates.map(candidate=>{
         const surfaceY=heights[gridIndex(recipe.radius,candidate.x,candidate.z)];
         return Object.freeze({
