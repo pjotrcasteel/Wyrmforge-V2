@@ -3,57 +3,115 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Wyrmforge V2 — External 3D Terrain Handoff</title>
+<title>Wyrmforge V2 — World Generation Site Preview</title>
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;background:#101820;color:#e7edf1;font:14px system-ui}
-body{display:flex;flex-direction:column;min-height:0;height:100dvh}
-header{padding:10px 12px;background:#1d2b35;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-h1{font-size:16px;margin:0}a{color:#c4ddec}small{color:#abc3ce}
-#build{margin-left:auto;font:11px ui-monospace,monospace}
-main{flex:1;min-height:0;position:relative}
+body{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+header{min-height:46px;padding:7px 12px;background:#1d2b35;display:flex;align-items:center;gap:12px}
+h1{font-size:15px;white-space:nowrap;margin:0}
+a{color:#c4ddec;white-space:nowrap;font-size:12px}
+#build{margin-left:auto;font:11px ui-monospace,monospace;color:#abc3ce;white-space:nowrap}
+#preview-stage{flex:1;min-height:0;position:relative;overflow:hidden;isolation:isolate}
 canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}
-#controls{padding:12px;background:#1c2e38;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-button,select{border:1px solid #748e9e;border-radius:7px;background:#355264;color:#fff;padding:10px;font:inherit}
-button:disabled{opacity:.5}
-#status{margin:0;flex:1 1 100%;min-height:18px;font:12px ui-monospace,monospace;color:#b8dec7}
-footer{padding:6px 12px;color:#b6cbd8;font-size:11px;background:#101820}
+#view-toolbar{position:absolute;z-index:2;top:calc(10px + env(safe-area-inset-top, 0px));left:12px;right:12px;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:8px;pointer-events:none}
+#site-summary{max-width:55%;font-size:12px;line-height:1.35;padding:9px 11px;border-radius:8px;
+  color:#e8f5e9;background:rgba(21,38,43,.88);border:1px solid #516e71;pointer-events:auto}
+#view-actions{display:flex;gap:5px;pointer-events:auto}
+button,select,input{border:1px solid #748e9e;border-radius:7px;background:#355264;color:#fff;padding:10px;font:inherit}
+input{background:#14212a}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+#view-actions button{min-height:40px;padding:7px 10px;background:rgba(38,61,73,.95);font-weight:600}
+#view-actions button:focus-visible,#controls summary:focus-visible{outline:3px solid #9bd8db;outline-offset:2px}
+#preview-message{position:absolute;z-index:2;bottom:calc(71px + env(safe-area-inset-bottom, 0px));
+  left:12px;right:12px;margin:0;max-width:720px;padding:8px 10px;border-radius:8px;
+  border:1px solid #415c60;background:rgba(17,35,41,.9);color:#d3e6df;
+  font:11px/1.4 ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#controls{position:absolute;z-index:3;bottom:calc(10px + env(safe-area-inset-bottom, 0px));
+  left:12px;width:min(448px,calc(100% - 24px));margin:0;background:rgba(29,46,56,.97);
+  border:1px solid #67828c;border-radius:10px;box-shadow:0 6px 24px #0007}
+#controls summary{padding:12px 15px;min-height:48px;cursor:pointer;font-weight:700;list-style-position:inside}
+#controls[open]{max-height:min(76dvh,570px);display:flex;flex-direction:column}
+#controls[open] summary{flex:none;border-bottom:1px solid #536c76}
+#control-body{overflow:auto;overscroll-behavior:contain;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+#control-body label{font-size:12px;color:#c8dce3;align-self:end}
+#control-body label[for="site-kind"],#control-body #site-kind,
+#control-body #status,#control-body .control-note{grid-column:1 / -1}
+#control-body select,#control-body input,#control-body button{min-width:0;width:100%}
+#control-body .control-field{min-width:0;display:flex;flex-direction:column;gap:5px}
+#control-body .control-note{color:#bdced3;font-size:11px;line-height:1.4;margin:0}
+#status{margin:0;min-height:30px;max-height:90px;overflow:auto;color:#b8dec7;
+  font:11px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
+body.focus-mode header{display:none}
+body.focus-mode #preview-stage{height:100dvh}
+body.focus-mode #site-summary{max-width:46%}
+@media(max-width:520px){
+  header{padding:6px 10px;gap:8px}
+  h1{font-size:14px}
+  #build{font-size:10px}
+  header a{font-size:11px}
+  #site-summary{font-size:11px;max-width:48%;padding:9px}
+  #view-actions button{padding:6px 9px}
+}
+@media(max-width:360px){#build{display:none}#site-summary{max-width:43%}}
 </style>
 </head>
 <body>
 <header>
-<h1>World Generation V2 — real site preview</h1>
-<small>Replaceable generator → validated terrain definition → Voxel V2</small>
+<h1>World Generation V2</h1>
 <span id="build">Build loading…</span>
-<a href="./index.html">Main voxel lab</a>
+<a href="./index.html">Voxel lab</a>
 </header>
-<main><canvas id="site-view" aria-label="Real externally initialized voxel site with stone span and grassy ground"></canvas></main>
-<section id="controls" aria-label="External terrain demonstration">
-<label for="site-kind">Site kind</label>
-<select id="site-kind" aria-label="World Generation V2 map kind">
-  <option value="fixture">Fixed arch (voxel diagnostic)</option>
-  <option value="wet-forest" selected>Wet forest — living woods</option>
-  <option value="forest-highland">Forest to mountains — foothills</option>
-  <option value="mountain-pass">Mountain pass — rocky valley</option>
-</select>
-<label for="site-seed">Terrain seed</label>
-<input id="site-seed" type="number" min="0" max="4294967295" step="1"
-  value="7" inputmode="numeric" style="width:90px">
-<label for="view-camera">View</label>
-<select id="view-camera" aria-label="Terrain viewing angle">
-  <option value="inspection" selected>3D inspection (default)</option>
-  <option value="hunt">Hunt camera (candidate)</option>
-</select>
-<label for="chunk-edge">Chunk pitch</label>
-<select id="chunk-edge"><option value="16">16³</option><option value="32" selected>32³</option></select>
-<button id="reset-site" type="button">Reload external site</button>
-<button id="breach-site" type="button" disabled>Break stone span</button>
-<button id="save-site" type="button" disabled>Save terrain state</button>
-<button id="restore-site" type="button" disabled>Restore saved state</button>
-<p id="status" role="status" aria-live="polite">Preparing bounded V2 terrain initialization…</p>
-</section>
-<footer>Real seeded World Generation V2 terrain; routes, clearings and landforms are generated. Objects, authored art, and in-game integration belong to other engines.</footer>
+<main id="preview-stage">
+  <canvas id="site-view" aria-label="Real generated 3D terrain; drag to pan, pinch to zoom"></canvas>
+  <div id="view-toolbar">
+    <span id="site-summary">Wet forest · seed 7</span>
+    <div id="view-actions" aria-label="Map view controls">
+      <button id="fit-view" type="button" title="Center and fit the entire map">Fit</button>
+      <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button id="focus-view" type="button" aria-pressed="false" title="Hide the header to inspect the map">Focus</button>
+    </div>
+  </div>
+  <p id="preview-message" role="status" aria-live="polite">Preparing World Generation V2 terrain…</p>
+  <details id="controls" aria-label="World generation settings">
+    <summary>Map settings &amp; actions</summary>
+    <div id="control-body">
+      <label for="site-kind">Site kind</label>
+      <select id="site-kind" aria-label="World Generation V2 map kind">
+        <option value="fixture">Fixed arch (voxel diagnostic)</option>
+        <option value="wet-forest" selected>Wet forest — living woods</option>
+        <option value="forest-highland">Forest to mountains — foothills</option>
+        <option value="mountain-pass">Mountain pass — rocky valley</option>
+      </select>
+      <div class="control-field">
+        <label for="site-seed">Terrain seed</label>
+        <input id="site-seed" type="number" min="0" max="4294967295" step="1"
+          value="7" inputmode="numeric">
+      </div>
+      <div class="control-field">
+        <label for="view-camera">View</label>
+        <select id="view-camera" aria-label="Terrain viewing angle">
+          <option value="inspection" selected>3D inspection (default)</option>
+          <option value="hunt">Hunt camera (candidate)</option>
+        </select>
+      </div>
+      <div class="control-field">
+        <label for="chunk-edge">Chunk pitch</label>
+        <select id="chunk-edge"><option value="16">16³</option><option value="32" selected>32³</option></select>
+      </div>
+      <button id="reset-site" type="button">Reload site</button>
+      <button id="breach-site" type="button" disabled>Carve generated terrain</button>
+      <button id="save-site" type="button" disabled>Save terrain state</button>
+      <button id="restore-site" type="button" disabled>Restore saved state</button>
+      <p id="status" role="status" aria-live="off">Preparing bounded V2 terrain initialization…</p>
+      <p class="control-note">Drag to pan; pinch or use +/− to zoom. Focus hides the header. Terrain generation stays independent of Voxel V2, objects and rendering.</p>
+    </div>
+  </details>
+</main>
 <script type="module" src="./external-terrain-lab.mjs"></script>
 </body>
 </html>
