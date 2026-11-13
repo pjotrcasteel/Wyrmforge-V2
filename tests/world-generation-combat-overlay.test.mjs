@@ -19,6 +19,12 @@ test('optional overlay projects actual generated combat surfaces and all four in
     assert.equal(overlay.combat[0].ring.length,49);
     assert.equal(overlay.approaches.length,4);
     assert.equal(overlay.approaches.every(a=>a.centerId==='central-arena'),true);
+    assert.equal(overlay.escapes.length,2);
+    assert.deepEqual(overlay.escapes.map(x=>x.side),['west','east']);
+    assert.equal(new Set(overlay.escapes.map(x=>x.id)).size,2);
+    assert.ok(overlay.escapes.every(x=>x.points.length>=35));
+    assert.ok(overlay.escapes.every(x=>x.points.every(p=>
+      Number.isFinite(p.x) && Number.isFinite(p.y))));
     assert.ok(overlay.combat[0].ring.every(p=>Number.isFinite(p.x) &&
       Number.isFinite(p.y)));
     assert.deepEqual(projectEncounterGuides(site,loader.terrain.world,view),overlay);
