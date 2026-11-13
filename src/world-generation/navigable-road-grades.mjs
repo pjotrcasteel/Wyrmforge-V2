@@ -16,6 +16,7 @@ export function gradeNavigableRoads({radius,heights,routes=[]}) {
   const gradedTopTenths=new Int16Array(heights.length);
   const before=heights.slice();
   let cells=0,maximumGradeTenths=0;
+  const centers=[];
   // The authored primary route is the skeleton of an accessible site.
   // Later spurs may share nodes, but must not overwrite its main spine.
   for(const route of routes.filter(item=>item.roadProfile)) {
@@ -46,6 +47,7 @@ export function gradeNavigableRoads({radius,heights,routes=[]}) {
         }
         heights[i]=parent;
         gradedTopTenths[i]=desired;
+        centers.push(Object.freeze({x:point.x,z:point.z,topTenths:desired}));
         cells++;
         if(j>0) {
           const previous=Math.round(
@@ -59,6 +61,6 @@ export function gradeNavigableRoads({radius,heights,routes=[]}) {
   return Object.freeze({
     schema:'wyrmforge.road-tenths-grade.v1',
     gradedTopTenths,
-    cells,maximumGradeTenths
+    cells,maximumGradeTenths,centers:Object.freeze(centers)
   });
 }
