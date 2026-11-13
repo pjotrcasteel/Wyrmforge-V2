@@ -33,23 +33,25 @@ function surface(world,x,z) {
 }
 
 test('Roads remain continuous through the actual combat arena across biome kinds and seeds',()=>{
-  const nominalFractions=[0.12,0.2,0.3];
+  const nominalFractions=[0.1,0.2,0.3];
   for(const [k,kind] of kinds.entries())for(const seed of [7,19,101,267]) {
     const generated=generateWorldSite(recipe(kind,seed));
     const {roads,routes,geology}=generated.layout;
-    assert.equal(generated.generatorVersion,'worldgen-v2.3.0');
+    assert.equal(generated.generatorVersion,'worldgen-v2.4.0');
     assert.equal(roads.schema,'wyrmforge.road-surface-audit.v1');
     assert.equal(roads.ready,true);
     assert.equal(roads.throughArena,true);
     assert.equal(roads.routes.length,2);
-    assert.ok(roads.recessedCells>10);
-    assert.ok(roads.paintedCells>roads.recessedCells);
+    assert.ok(roads.profiledCells>10);
+    assert.ok(roads.paintedCells>roads.profiledCells);
+    assert.equal(roads.physicalCutVoxels,0);
     assert.ok(roads.routes[0].combatCells>=8);
     assert.ok(roads.routes.every(item=>item.continuous &&
       item.materialCells===item.pathCells && item.maxStep<=1));
     assert.equal(routes[0].roadProfile.nominalCutFraction,nominalFractions[k]);
     assert.equal(routes[0].roadProfile.material,kind==='mountain-pass'?3:2);
-    assert.equal(roads.routes[0].currentPhysicalCutVoxels,1);
+    assert.equal(roads.routes[0].currentPhysicalCutVoxels,0);
+    assert.equal(roads.routes[0].visualCutTenths,k+1);
     assert.equal(geology.continuousBedrockBelowStone,true);
     assert.equal(geology.soilDepth,kind==='mountain-pass'?1:2);
     assert.equal(generated.hash,generateWorldSite(recipe(kind,seed)).hash);
@@ -86,21 +88,24 @@ test('real voxel terrain contains an uninterrupted dirt/stone road through both 
   }
 });
 
-test('road compositor physically lowers centerlines and retains a full-height shoulder',()=>{
+test('road compositor preserves walkable voxel geometry and marks a fractional surface profile',()=>{
   const radius=20;
   const heights=new Int16Array(40*40).fill(10);
   const surfaces=new Uint8Array(40*40).fill(1);
   const profile={kind:'test-track',nominalCutFraction:0.2,
-    material:2,cutVoxels:1};
+    material:2,cutVoxels:0};
   const routes=[{id:'entry-to-exit',width:2,roadProfile:profile,
     nodes:[{x:0,z:18},{x:0,z:-18}]}];
   const combatSpaces=[{id:'central-arena',x:0,z:0,radius:7}];
   const result=composeRoadSurfaces({radius,heights,surfaces,routes,combatSpaces});
   assert.equal(result.processedRoutes,1);
   assert.ok(result.combatRoadCells>=14);
-  assert.ok(result.recessedCells>=35);
-  assert.equal(heights[index(radius,0,0)],9,'road actually excavates the authoritative top');
-  assert.equal(heights[index(radius,3,0)],10,'a nearby shoulder remains full height');
+  assert.ok(result.profiledCells>=35);
+  assert.equal(result.physicalCutVoxels,0);
+  assert.equal(heights[index(radius,0,0)],10,
+    'surface adapter must not excavate an entire voxel from the road');
+  assert.equal(heights[index(radius,3,0)],10,
+    'surrounding shoulder retains the original collision surface');
   assert.equal(surfaces[index(radius,0,0)],2);
   assert.equal(surfaces[index(radius,0,-12)],2);
   const audit=specifyRoadSurfaces({
@@ -108,6 +113,7 @@ test('road compositor physically lowers centerlines and retains a full-height sh
   });
   assert.equal(audit.throughArena,true);
   assert.equal(audit.routes[0].maxStep,0);
+  assert.equal(audit.routes[0].visualCutTenths,2);
   assert.equal(audit.routes[0].materialCells,audit.routes[0].pathCells);
   surfaces[index(radius,0,0)]=1;
   assert.throws(()=>specifyRoadSurfaces({
