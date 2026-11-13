@@ -39,8 +39,28 @@ export function projectEncounterGuides(site,world,view) {
     id:approach.id,centerId:approach.combatSpaceId,
     point:project(approach.x,approach.z)
   }));
+  // Escape routes are versioned site-layout metadata. The viewer can consume
+  // them without knowing which generator Strategy carved the actual corridor.
+  const escapes=(site.layout.escapeRoutes ?? []).map(route=>{
+    const path=[];
+    for(let i=1;i<route.nodes.length;i++) {
+      const a=route.nodes[i-1],b=route.nodes[i];
+      const steps=Math.max(Math.abs(a.x-b.x),Math.abs(a.z-b.z));
+      for(let j=i===1?0:1;j<=steps;j++) {
+        path.push(project(
+          Math.round(a.x+(b.x-a.x)*j/steps),
+          Math.round(a.z+(b.z-a.z)*j/steps)
+        ));
+      }
+    }
+    return Object.freeze({
+      id:route.id,side:route.side,style:route.style,
+      points:Object.freeze(path)
+    });
+  });
   return Object.freeze({
     combat:Object.freeze(combat),
-    approaches:Object.freeze(approaches)
+    approaches:Object.freeze(approaches),
+    escapes:Object.freeze(escapes)
   });
 }
