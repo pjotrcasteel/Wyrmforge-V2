@@ -55,13 +55,23 @@ button:disabled{opacity:.5;cursor:default}
 #status{margin:0;min-height:30px;max-height:90px;overflow:auto;color:#b8dec7;
   font:11px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
 body.focus-mode header{display:none}
+/* H08-01 iOS Safari: the game is a fixed viewport, never the scrollable page.
+   touch-action alone does not suppress Safari's viewport rubber-band. */
+html{overflow:hidden;overscroll-behavior:none}
+body[data-play-hunt]{
+  position:fixed;inset:0;height:100dvh;max-height:100dvh;
+  overflow:hidden;overscroll-behavior:none;touch-action:none;
+}
+body[data-play-hunt] #preview-stage{
+  touch-action:none;overscroll-behavior:none;
+}
 body[data-play-hunt] #controls,body[data-play-hunt] #view-actions{display:none}
 body[data-play-hunt] #site-summary{max-width:58%;background:rgba(18,38,34,.9);border-color:#577f64}
 #play-joystick,#play-hud,#play-respawn{display:none}
 body[data-play-hunt] #play-joystick{
   display:block;position:absolute;z-index:5;left:22px;bottom:calc(27px + env(safe-area-inset-bottom,0px));
   width:136px;height:136px;border:2px solid rgba(169,231,199,.65);
-  border-radius:50%;background:rgba(19,39,43,.5);touch-action:none;user-select:none
+  border-radius:50%;background:rgba(19,39,43,.5);touch-action:none;user-select:none;\n  -webkit-user-select:none;-webkit-touch-callout:none
 }
 body[data-play-hunt] #play-stick{
   position:absolute;width:57px;height:57px;left:calc(50% - 28.5px);top:calc(50% - 28.5px);
