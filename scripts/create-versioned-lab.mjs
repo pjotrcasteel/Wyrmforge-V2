@@ -49,7 +49,7 @@ export function createVersionedLab(root, sha) {
   const huntHtml=readFileSync(huntPath,'utf8');
   const buildLabel='<span id="build">Build loading…</span>';
   if(!huntHtml.includes(buildLabel) ||
-      !huntHtml.includes('src="./external-terrain-lab.mjs"')) {
+      !huntHtml.includes('src="' + '.' + '/external-terrain-lab.mjs"')) {
     throw new Error('Play Hunt entry must include version display and local module');
   }
   const actualLabel='<span id="build">Build '+sha.slice(0,7)+
