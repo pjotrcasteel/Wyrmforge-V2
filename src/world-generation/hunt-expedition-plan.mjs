@@ -87,7 +87,7 @@ function portFor(region,side,peerId) {
     side==='east'?{x:x+edge-1,z}:{x:x-edge,z};
   return Object.freeze({
     id:region.id+'-'+side,direction:side,
-    at:Object.freeze(point),peerRegionId:peerId,widthMetres:6
+    at:Object.freeze(point),peerRegionId:peerId,widthMetres:7
   });
 }
 
