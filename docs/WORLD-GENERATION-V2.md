@@ -127,3 +127,46 @@ Automated tests cover every built-in generated kind at phone and landscape
 sizes, both camera presets, world-corner clipping, zoom bounds and the
 collapsed/focus UI contracts. This is a **viewer usability change**, not
 new terrain generation or a new camera engine.
+
+## Horde-survival arena grammar and excavatable discoveries — 2026-11-13
+
+The player confirmed that the generated Mountain Pass looks promising, but the
+main experience must remain a **Vampire Survivors-style horde survivor**,
+not a narrow linear exploration map. The three existing map-kind Strategies
+now add a compact `central-arena` and four distinct flank approaches, keeping
+their authored terrain silhouettes, route landmarks and geographical themes.
+
+- **Combat floor:** A broad, grade-smoothed central space (7 voxel radius)
+  is large enough for kiting, dodging, and movement around groups of enemies,
+  while steep cliffs and wetland shapes still frame the map outside it.
+- **Approach routes:** Four authored terrain-grade corridors arrive from
+  north/east/south/west. They are not enemy paths or automatic spawn points.
+  The runtime Enemy/Encounter engine will choose actual spawn positions,
+  enemy density, timing, escalation, and dynamic avoidance based on the
+  **current** world after player destruction.
+- **Specification pattern:** the new `encounter-space-specification.mjs`
+  validates a mostly level movement footprint, sufficient distinct ingress
+  directions, walkable ingress grades, and separation between the arena and
+  hidden discovery envelopes. Incomplete/unwalkable plans fail generation.
+- **Buried discovery candidate:** each map kind reserves a covered diggable
+  location outside the main fighting floor and includes its surface height,
+  planned burial depth and location identity. It is only a *potential site*
+  for a hidden chest or other secret later. Nothing generates a chest,
+  reward, enemy, object, or loot table today. Player spell destruction still
+  uses Voxel V2 through the existing terrain command API.
+- **Optional overlay:** The existing external map viewer can show translucent
+  arena bounds and four ingress guides. This is diagnostic visualization
+  only, defaults off, and never reveals buried discovery sites.
+
+**Strict ownership boundaries:** World Generation V2 owns geographical
+intent, traversability and discovery candidates. Voxel V2 owns actual solids,
+destruction and collision. World Objects V2 may eventually instantiate
+discoverable physical chests in eligible buried sites. Loot/Progression owns
+their rewards; Encounter/AI owns hordes, difficulty and spawn scheduling.
+Camera/Renderer only draws the world. The generator cannot import any of
+those implementations or assume its candidate survives a later terrain edit.
+
+The 40x40 test site is a bounded first arena sample, not final Hunt size.
+Next World Generation development should refine encounter flow and themed
+arena composition with mobile stress measurements, while preserving each
+map kind as a separately replaceable Strategy.
