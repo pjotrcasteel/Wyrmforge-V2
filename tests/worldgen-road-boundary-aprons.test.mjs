@@ -80,7 +80,7 @@ test('all three map kinds grade and physically render entrance and exit to the m
       [{x:0,z:18},{x:-1,z:18}],[{x:0,z:18},{x:1,z:18}]
     ]) {
       assert.ok(centers.has(key(a)) && centers.has(key(b)));
-      assert.ok(Math.abs(centers.get(key(a))-centers.get(key(b))<=halfMetre,
+      assert.ok(Math.abs(centers.get(key(a))-centers.get(key(b)))<=halfMetre,
         kind+' seed '+seed+' has an oversized block lip at '+key(a)+
         ' / '+key(b));
     }
