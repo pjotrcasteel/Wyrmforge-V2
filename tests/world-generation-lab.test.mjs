@@ -11,6 +11,9 @@ test('existing external 3D lab previews World Generation V2 without implementing
   assert.match(html,/value="mountain-pass"/);
   assert.match(html,/value="fixture"/);
   assert.match(html,/id="site-seed"/);
+  assert.match(html,/id="site-influence"/);
+  assert.match(host,/corruption:Number\(siteInfluence\.value\)\/100/);
+  assert.match(host,/siteInfluence\.addEventListener\('change'/);
   assert.match(host,/import \{ generateWorldSite \} from '\.\/src\/world-generation\/index\.mjs'/);
   assert.match(host,/generatedSite=generateWorldSite\(recipe\)/);
   assert.match(host,/new V2ExternalTerrainLoader\(generatedSite\.definition,/);
