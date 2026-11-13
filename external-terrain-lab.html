@@ -122,6 +122,16 @@ body.focus-mode #site-summary{max-width:46%}
           value="7" inputmode="numeric">
       </div>
       <div class="control-field">
+        <label for="site-influence">Wyrm influence (terrain)</label>
+        <select id="site-influence" aria-label="Wyrm influence progression">
+          <option value="0" selected>0% — Living</option>
+          <option value="25">25% — Distant</option>
+          <option value="50">50% — Approaching</option>
+          <option value="75">75% — Weathered</option>
+          <option value="100">100% — Near Wyrm</option>
+        </select>
+      </div>
+      <div class="control-field">
         <label for="view-camera">View</label>
         <select id="view-camera" aria-label="Terrain viewing angle">
           <option value="inspection" selected>3D inspection (default)</option>
