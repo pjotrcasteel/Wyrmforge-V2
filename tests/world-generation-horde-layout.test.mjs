@@ -92,6 +92,7 @@ test('invalid horde geometries are rejected before the terrain adapter receives 
   assert.throws(()=>specifyEncounterSpaces(wrongDirections),/too concentrated/);
   const steep=heights.slice();
   for(let z=-4;z<=4;z++)for(let x=-4;x<=4;x++)steep[(z+20)*40+x+20]=15;
+  steep[20*40+20]=0; // A deep central pit invalidates the dodgeable floor.
   assert.throws(()=>specifyEncounterSpaces({
     ...sample,heights:steep,
     approaches:[...sample.approaches,{id:'west',x:-12,z:0,combatSpaceId:'center'}]
