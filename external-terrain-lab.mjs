@@ -15,11 +15,15 @@ import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
+import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
 
 const canvas=document.querySelector('#site-view');
+const combatGuide=document.querySelector('#combat-guide');
+const combatLayout=document.querySelector('#combat-layout');
+const combatGuideContext=combatGuide.getContext('2d');
 const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
 const siteKind=document.querySelector('#site-kind');
@@ -87,6 +91,52 @@ function resizeCanvas() {
   if(canvas.width!==width || canvas.height!==height) {
     canvas.width=width;
     canvas.height=height;
+    combatGuide.width=width;
+    combatGuide.height=height;
+  }
+}
+
+function paintEncounterGuide(view) {
+  if(!combatGuideContext) return;
+  const ctx=combatGuideContext;
+  ctx.clearRect(0,0,combatGuide.width,combatGuide.height);
+  if(!combatLayout.checked || !generatedSite || !active?.world) return;
+  const guide=projectEncounterGuides(generatedSite,active.world,view);
+  const pixelRatio=combatGuide.width/Math.max(1,combatGuide.clientWidth);
+  for(const space of guide.combat) {
+    ctx.beginPath();
+    space.ring.forEach((point,index)=>{
+      if(index===0) ctx.moveTo(point.x,point.y);
+      else ctx.lineTo(point.x,point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle='rgba(32,200,164,0.12)';
+    ctx.fill();
+    ctx.setLineDash([6*pixelRatio,5*pixelRatio]);
+    ctx.strokeStyle='rgba(99,243,195,0.95)';
+    ctx.lineWidth=2*pixelRatio;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(space.center.x,space.center.y,4*pixelRatio,0,Math.PI*2);
+    ctx.fillStyle='#bdf8dc';
+    ctx.fill();
+  }
+  for(const approach of guide.approaches) {
+    const combat=guide.combat.find(space=>space.id===approach.centerId);
+    if(!combat) continue;
+    ctx.beginPath();
+    ctx.moveTo(approach.point.x,approach.point.y);
+    ctx.lineTo(combat.center.x,combat.center.y);
+    ctx.setLineDash([4*pixelRatio,7*pixelRatio]);
+    ctx.strokeStyle='rgba(252,197,87,0.9)';
+    ctx.lineWidth=2*pixelRatio;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(approach.point.x,approach.point.y,5*pixelRatio,0,Math.PI*2);
+    ctx.fillStyle='#ffca6f';
+    ctx.fill();
   }
 }
 
@@ -368,6 +418,10 @@ function frame(now) {
         width:canvas.width,height:canvas.height,
         scale,panX,panY,camera
       });
+      paintEncounterGuide({
+        width:canvas.width,height:canvas.height,
+        scale,panX,panY,camera
+      });
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
       Boolean(errorMessage) || Boolean(rendererErrorMessage) || Boolean(restoring) ||
@@ -410,6 +464,11 @@ siteSeed.addEventListener('change',()=>{
   resetPreviewView();
   controls.open=false;
   resetSite();
+});
+combatLayout.addEventListener('change',()=>{
+  if(!combatLayout.checked && combatGuideContext) {
+    combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
+  }
 });
 viewCamera.addEventListener('change',()=>{
   resetPreviewView();
