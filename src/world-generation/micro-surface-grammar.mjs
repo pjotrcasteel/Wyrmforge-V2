@@ -119,9 +119,16 @@ export function composeMicroSurfaceTiles({
     }
     if(changed) {
       const tile={x,y:top,z,levels};
-      (profile ? roads : heightTransition ? connectors : cliffs).push(tile);
+      // Shared traversal grades are mandatory geometry even when they land
+      // on grass beside a boundary road. Cliffs are optional decoration and
+      // can be budget-trimmed; dropping a required graded shoulder leaves
+      // a full-height voxel in place and recreates the brown entrance lip.
+      (profile ? roads : authoredTop || heightTransition ? connectors : cliffs)
+        .push(tile);
     }
   }
+  // Roads and ALL shared physical grade tiles (including grass aprons) are
+  // mandatory. Only incidental cliff detail may be trimmed by the budget.
   // Keep every authored road first; reserve remaining sparse tile budget for
   // cliff edges. This is an intentionally bounded mobile-memory experiment.
   if(roads.length>MAX_GENERATED_MICRO_TILES) {

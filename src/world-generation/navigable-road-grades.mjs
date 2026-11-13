@@ -32,7 +32,7 @@ export function gradeNavigableRoads({
   // one or two cells before the terrain boundary. Grade short extensions
   // and their painted shoulders in the SAME joint constraint graph.
   for(const apron of aprons) {
-    authored.push(apron.spine,...apron.shoulders);
+    authored.push(apron.spine,...apron.shoulders,...apron.grassShoulders);
   }
   const hub=combatSpaces[0];
   if(hub)for(const approach of approaches) {
@@ -117,7 +117,8 @@ export function gradeNavigableRoads({
     iterations,edgeCount:edges.length,
     boundaryAprons:Object.freeze(aprons.map(apron=>Object.freeze({
       routeId:apron.routeId,end:apron.end,boundary:apron.boundary,
-      shoulderLinks:apron.shoulders.length
+      shoulderLinks:apron.shoulders.length,
+      grassShoulderLinks:apron.grassShoulders.length
     })))
   });
 }

@@ -28,6 +28,63 @@ function boundaryCandidate(radius,endpoint,neighbor,width) {
   return candidates[0]??null;
 }
 
+
+/*
+ * Finish the boundary apron in the nearby natural terrain, not only in the
+ * painted track. The prior apron physically graded the road itself but left
+ * the very next grass columns at their independently rounded 1m elevations:
+ * that exposed a jagged brown wall at the finite site's entrance.
+ *
+ * Two grass columns on either side of the road, for only the first few
+ * entrance/exit cells, participate in the SAME height-constraint graph.
+ * No material is repainted, no cliff elsewhere is altered and no rendering
+ * or Voxel system is imported. Links are cardinal physical neighbors.
+ */
+function composeGrassShoulderLinks({radius,route,routes,candidate,points}) {
+  const sideAxis=candidate.axis==='z'?'x':'z';
+  const maxDepth=Math.ceil(route.width)+2;
+  const links=[],seen=new Set(),grassCells=new Map();
+  const add=(a,b)=>{
+    const id=[key(a),key(b)].sort().join('|');
+    if(id===key(a)+'|'+key(a) || seen.has(id))return;
+    seen.add(id);
+    links.push(Object.freeze({
+      nodes:Object.freeze([Object.freeze({...a}),Object.freeze({...b})])
+    }));
+  };
+  for(const point of points) {
+    if(Math.abs(point[candidate.axis]-candidate.edge)>maxDepth ||
+        selectRoadCell(point.x,point.z,routes)?.route!==route)continue;
+    for(const sign of [-1,1]) {
+      let previous=point,grassColumns=0;
+      for(let offset=1;offset<=Math.ceil(route.width)+3;offset++) {
+        const next={x:point.x,z:point.z};
+        next[sideAxis]+=offset*sign;
+        if(!inside(radius,next.x,next.z))break;
+        const selected=selectRoadCell(next.x,next.z,routes);
+        if(selected?.route===route) {
+          if(grassColumns)break;
+          previous=next;
+          continue;
+        }
+        // Never run the taper into a separate authored road.
+        if(selected)break;
+        add(previous,next);
+        grassCells.set(key(next),next);
+        previous=next;
+        if(++grassColumns===2)break;
+      }
+    }
+  }
+  // Neighboring grass columns are one connected physical surface, rather
+  // than independently solved strips that create fresh longitudinal teeth.
+  for(const p of grassCells.values())for(const [dx,dz] of [[1,0],[0,1]]) {
+    const neighbor=grassCells.get((p.x+dx)+','+(p.z+dz));
+    if(neighbor)add(p,neighbor);
+  }
+  return Object.freeze(links);
+}
+
 export function composeRoadBoundaryAprons({radius,routes}) {
   if(!Number.isSafeInteger(radius)||radius<2||radius>24 ||
       !Array.isArray(routes)) {
@@ -73,6 +130,9 @@ export function composeRoadBoundaryAprons({radius,routes}) {
           }));
         }
       }
+      const grassShoulders=composeGrassShoulderLinks({
+        radius,route,routes,candidate,points:unique
+      });
       aprons.push(Object.freeze({
         schema:ROAD_BOUNDARY_APRON_SCHEMA,
         routeId:route.id,end,
@@ -81,7 +141,8 @@ export function composeRoadBoundaryAprons({radius,routes}) {
           nodes:Object.freeze([Object.freeze({...endpoint}),
             Object.freeze({...boundary})])
         }),
-        shoulders:Object.freeze(links)
+        shoulders:Object.freeze(links),
+        grassShoulders
       }));
     }
   }

@@ -26,9 +26,23 @@ test('road boundary apron joins authored road endpoints to actual site edges and
   assert.deepEqual(departure.boundary,exit);
   assert.ok(entry.shoulders.length>=3);
   assert.ok(departure.shoulders.length>=2);
+  assert.ok(entry.grassShoulders.length>=8);
+  assert.ok(departure.grassShoulders.length>=8);
   for(const apron of aprons) {
     assert.equal(apron.routeId,road.id);
     assert.equal(apron.schema,'wyrmforge.road-boundary-apron.v1');
+    const grass=new Set();
+    for(const pair of apron.grassShoulders) {
+      assert.equal(pair.nodes.length,2);
+      for(const point of pair.nodes) {
+        assert.ok(point.x>=-20 && point.x<20);
+        assert.ok(point.z>=-20 && point.z<20);
+        if(!selectRoadCell(point.x,point.z,routes)) {
+          grass.add(key(point));
+        }
+      }
+    }
+    assert.ok(grass.size>=8,'the first painted-road neighbor must blend into grass');
     for(const pair of apron.shoulders) {
       for(const point of pair.nodes) {
         assert.equal(selectRoadCell(point.x,point.z,routes)?.route,road,
@@ -59,7 +73,7 @@ test('all three map kinds grade and physically render entrance and exit to the m
     }));
     const road=generated.layout.routes.find(r=>r.id==='entry-to-exit');
     const grades=generated.layout.roadGrades;
-    assert.equal(generated.generatorVersion,'worldgen-v2.6.1');
+    assert.equal(generated.generatorVersion,'worldgen-v2.6.2');
     assert.ok(grades.maximumGradeTenths<=halfMetre);
     assert.equal(grades.boundaryAprons.length,2);
     assert.deepEqual(grades.boundaryAprons.find(a=>a.end==='entry').boundary,
@@ -67,6 +81,25 @@ test('all three map kinds grade and physically render entrance and exit to the m
     assert.deepEqual(grades.boundaryAprons.find(a=>a.end==='exit').boundary,
       exit);
     const centers=new Map(grades.centers.map(point=>[key(point),point.topTenths]));
+    // Check the actual *unpainted* shoulder too: V2.6.1 tested only brown
+    // road cells, so it missed the tall exposed grass-to-road cliff.
+    const grassBoundary=new Set();
+    for(const apron of composeRoadBoundaryAprons({radius:20,routes:generated.layout.routes})) {
+      assert.ok(apron.grassShoulders.length>=8);
+      for(const {nodes:[a,b]} of apron.grassShoulders) {
+        const ha=centers.get(key(a)),hb=centers.get(key(b));
+        assert.ok(ha!==undefined && hb!==undefined);
+        assert.ok(Math.abs(ha-hb)<=halfMetre,
+          kind+' seed '+seed+' leaves a physical road/grass lip at '+key(a));
+        for(const point of [a,b]) {
+          if(!selectRoadCell(point.x,point.z,generated.layout.routes)) {
+            grassBoundary.add(key(point));
+          }
+        }
+      }
+    }
+    assert.ok(grassBoundary.size>=12,
+      'boundary grass must share grade constraints without repainting the road');
     for(const point of [entrance,exit,{x:0,z:18},{x:0,z:-19},
       {x:-1,z:19},{x:1,z:19}]) {
       assert.ok(centers.has(key(point)),kind+' seed '+seed+
@@ -94,6 +127,13 @@ test('all three map kinds grade and physically render entrance and exit to the m
           road.roadProfile.material,'physical road top must match brown/stone material');
         assert.equal(world.materialAtPoint(point.x+0.5,top+0.05,point.z+0.5),0,
           'no leftover 1m voxel face may remain above the visible 10cm apron');
+      }
+      for(const coord of grassBoundary) {
+        const [x,z]=coord.split(',').map(Number),top=centers.get(coord)/10;
+        assert.notEqual(world.materialAtPoint(x+0.5,top-0.05,z+0.5),0,
+          'the feathered grass shoulder must have genuine 10cm solid occupancy');
+        assert.equal(world.materialAtPoint(x+0.5,top+0.05,z+0.5),0,
+          'no old 1m grass block may remain above the feathered shoulder');
       }
       assert.equal(generated.layout.escapeAudit.ready,true);
       assert.equal(generated.layout.combatFlow.ready,true);

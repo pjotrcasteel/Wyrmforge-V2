@@ -625,3 +625,22 @@ are tested for exact physical entry/exit heights, shoulder alignment,
 material-to-geometry consistency and ongoing arena/escape connectivity.
 No per-vertex bending, camera scaling, special-case hardcoded seed, or
 new second source of collision truth was introduced.
+
+
+## Natural roadside transition at the finite boundary — V2.6.2
+
+Real iPhone review of the V2.6.1 build showed the same brown, stepped
+entrance even though its painted road had a valid 10cm grade to the edge.
+The unpainted grass immediately beside the track was *not* in that graph;
+its independently rounded 1m top still formed a ragged, elevated lip.
+
+V2.6.2 extends each boundary-apron's joint physical grade only two
+unpainted grass columns outward and only through the nearby entrance/exit
+section. These grass columns retain their existing grass/stone material,
+produce actual 10cm microvoxel occupancy and connect longitudinally so no
+new teeth appear between consecutive shoulder rows. The road footprint,
+authored map geometry, ordinary cliffs away from the boundary, actor scale,
+jump limit and renderer are unchanged. A specific regression now checks
+the road-to-grass 50cm adjacency on both edges across three map kinds
+and four seeds, as well as physical collision/occupancy above each
+grass shoulder. Visual acceptance still requires an actual phone screenshot.

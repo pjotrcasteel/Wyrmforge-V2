@@ -37,7 +37,7 @@ test('Roads remain continuous through the actual combat arena across biome kinds
   for(const [k,kind] of kinds.entries())for(const seed of [7,19,101,267]) {
     const generated=generateWorldSite(recipe(kind,seed));
     const {roads,routes,geology}=generated.layout;
-    assert.equal(generated.generatorVersion,'worldgen-v2.6.1');
+    assert.equal(generated.generatorVersion,'worldgen-v2.6.2');
     assert.equal(roads.schema,'wyrmforge.road-surface-audit.v1');
     assert.equal(roads.ready,true);
     assert.equal(roads.throughArena,true);
