@@ -212,7 +212,11 @@ function mountains(builder, context) {
       return 3 + northward*7 + 0.65*valley + cliff +
         2.0*siteNoise(seed,x,z,11,4);
     },
-    exposedStone:0.24
+    // Mountain cliffs should expose continuous bedrock instead of repeating
+    // brown soil sandwiches between grey stone ledges.
+    exposedStone:0.24,
+    soilDepth:1,
+    rockFaceThreshold:2
   });
   addNarrativePaths(builder,'mountain-shrine','mountain-pass');
   addEscapeLayout(builder,'mountain-pass');
