@@ -7,10 +7,11 @@ import {
 test('World Generation V2 stress samples all authored kinds through real bounded terrain activation',()=>{
   const report=benchmarkWorldGeneration({seeds:[7,101]});
   assert.equal(report.schema,'wyrmforge.worldgen-stress-report.v1');
-  assert.equal(report.count,3*2*2);
-  assert.deepEqual(report.kinds,['wet-forest','forest-highland','mountain-pass']);
+  assert.equal(report.count,6*2*2);
+  assert.deepEqual(report.kinds,['wet-forest','forest-highland','mountain-pass',
+    'scorched-approach','mini-boss-arena','wyrm-lair']);
   assert.deepEqual(report.pitches,[16,32]);
-  assert.equal(report.samples.length,12);
+  assert.equal(report.samples.length,24);
   assert.ok(report.peakRuns>0 && report.peakRuns<=8192);
   assert.ok(report.peakCells>0 && report.peakCells<=1048576);
   assert.ok(report.peakChunks>1);
