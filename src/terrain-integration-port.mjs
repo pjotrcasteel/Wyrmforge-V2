@@ -93,6 +93,16 @@ export class V2TerrainPort {
 
   // Read-only V2 contracts. Data does not depend on a mesh upload or worker.
   materialAt(x,y,z) { this.#active(); return this.#world.get(x,y,z); }
+  // Fine-resolution, authoritative physical occupancy query. Unlike get()
+  // this checks ten-centimeter microvoxels wherever the world has them.
+  materialAtPoint(x,y,z) {
+    this.#active();
+    return this.#world.materialAtPoint(x,y,z);
+  }
+  microSurfaceTiles() {
+    this.#active();
+    return this.#world.microSurfaceTiles();
+  }
   damageAt(x,y,z) { this.#active(); return this.#ledger.damageAt(x,y,z); }
   snapshots() { this.#active(); return this.#world.snapshots(); }
   chunkSnapshot(cx,cy,cz) {
