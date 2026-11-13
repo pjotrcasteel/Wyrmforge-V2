@@ -34,6 +34,31 @@ function validateRay(origin, direction, maxDistance) {
   return normalize(direction);
 }
 
+// Refined top voxels are physically 10x10x10 occupied cells. Traverse only
+// those selected coarse cells at the ten-centimeter grid, preserving the
+// ordinary fast whole-voxel DDA everywhere else.
+function firstMicroContact(world,cell,origin,unit,start,end,entryNormal) {
+  let t=start,normal=entryNormal;
+  for(let visited=0;visited<=34 && t<=end+EPSILON;visited++) {
+    const p=origin.map((value,i)=>value+unit[i]*(t+EPSILON*10));
+    if(world.materialAtPoint(...p)) return {distance:t,normal};
+    let best=Infinity,axis=-1;
+    for(let i=0;i<3;i++) {
+      if(unit[i]===0)continue;
+      const coordinate=p[i]*10;
+      const boundary=unit[i]>0 ? (Math.floor(coordinate)+1)/10
+        : (Math.ceil(coordinate)-1)/10;
+      const dt=(boundary-p[i])/unit[i];
+      if(dt>0 && dt<best) {best=dt;axis=i;}
+    }
+    if(axis<0 || !Number.isFinite(best))break;
+    t+=best+EPSILON*10;
+    normal=[0,0,0];
+    normal[axis]=-Math.sign(unit[axis]);
+  }
+  return null;
+}
+
 // Amanatides-Woo grid traversal, using the exact signed V2 voxel convention.
 // Each query is bounded by distance and an explicit cell-visit budget.
 // The first solid voxel encountered is the closest hit along the ray.
@@ -57,19 +82,28 @@ export function raycastTerrain(world, {
   for (let visits = 0; visits < maxVisits && t <= maxDistance+EPSILON; visits++) {
     const material = world.get(...cell);
     if (material) {
-      return {
-        cell:{x:cell[0],y:cell[1],z:cell[2]},
-        material, distance:t,
-        point:{
-          x:origin[0]+unit[0]*t,
-          y:origin[1]+unit[1]*t,
-          z:origin[2]+unit[2]*t
-        },
-        normal:entryNormal ? {
-          x:entryNormal[0],y:entryNormal[1],z:entryNormal[2]
-        } : null,
-        worldRevision:world.revision
-      };
+      let hit={distance:t,normal:entryNormal};
+      if(typeof world.microSurfaceTile==='function' &&
+          world.microSurfaceTile(...cell)) {
+        hit=firstMicroContact(world,cell,origin,unit,t,
+          Math.min(maxDistance,...next),entryNormal);
+      }
+      if(hit) {
+        const distance=hit.distance;
+        return {
+          cell:{x:cell[0],y:cell[1],z:cell[2]},
+          material,distance,
+          point:{
+            x:origin[0]+unit[0]*distance,
+            y:origin[1]+unit[1]*distance,
+            z:origin[2]+unit[2]*distance
+          },
+          normal:hit.normal ? {
+            x:hit.normal[0],y:hit.normal[1],z:hit.normal[2]
+          } : null,
+          worldRevision:world.revision
+        };
+      }
     }
     // Deterministic X/Y/Z order at identical boundary intersections.
     // The next voxel is checked after exactly one grid plane is crossed.
