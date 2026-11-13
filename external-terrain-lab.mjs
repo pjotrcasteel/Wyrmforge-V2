@@ -14,7 +14,7 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
-import { generateWorldSite } from './src/world-generation/world-generator.mjs';
+import { generateWorldSite } from './src/world-generation/index.mjs';
 
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
