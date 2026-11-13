@@ -8,6 +8,8 @@ import { specifySiteTopology } from './site-topology-specification.mjs';
 import { specifyEncounterSpaces } from './encounter-space-specification.mjs';
 import { gradeEscapeRoutes } from './escape-route-geometry.mjs';
 import { specifyEscapeRoutes } from './escape-route-specification.mjs';
+import { composeCombatFlow } from './combat-flow-geometry.mjs';
+import { specifyCombatFlow } from './combat-flow-specification.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -115,8 +117,13 @@ function prepareGeometry(plan,seed) {
     // Never paint the whole arena brown as though it were a narrow footpath.
     surfaces[i]=inCombat ? (stony ? 3 : 1) : onTrail ? 2 : stony ? 3 : 1;
   }
-  // Late, geometry-only pass: the new escape routes must be playable across
-  // seeded mountain slopes. They never rewrite voxel data or material IDs.
+  // Secondary maneuvering spaces are authored terrain, not additional spawn
+  // arenas. Grade their wide connections before escape-loop finalization so
+  // the established east/west detours remain authoritative and walkable.
+  composeCombatFlow({
+    radius,heights,combatSpaces:plan.combatSpaces,
+    maneuverPockets:plan.maneuverPockets,flowLinks:plan.flowLinks
+  });
   gradeEscapeRoutes({radius,heights,escapeRoutes:plan.escapeRoutes});
   return {heights,surfaces};
 }
@@ -199,7 +206,8 @@ export class WorldGeneratorV2 {
       routes:plan.routes,landmarks:plan.landmarks,
       clearings:[...plan.clearings,...plan.combatSpaces,...plan.approaches,
         ...plan.escapeRoutes.map(route=>route.nodes[0]),
-        ...plan.escapeRoutes.map(route=>route.nodes.at(-1))]
+        ...plan.escapeRoutes.map(route=>route.nodes.at(-1)),
+        ...plan.maneuverPockets]
     });
     const escapeAudit=specifyEscapeRoutes({
       radius:recipe.radius,heights,
@@ -210,6 +218,12 @@ export class WorldGeneratorV2 {
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
       discoveryCandidates:plan.discoveryCandidates
+    });
+    const combatFlow=specifyCombatFlow({
+      radius:recipe.radius,heights,
+      combatSpaces:plan.combatSpaces,
+      maneuverPockets:plan.maneuverPockets,
+      flowLinks:plan.flowLinks
     });
     const {runs,totalCells}=generateRuns(recipe.radius,heights,surfaces);
     const definition=this.#terrainAdapter({
@@ -222,6 +236,8 @@ export class WorldGeneratorV2 {
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
       escapeRoutes:plan.escapeRoutes,escapeAudit,
+      maneuverPockets:plan.maneuverPockets,
+      flowLinks:plan.flowLinks,combatFlow,
       discoveryCandidates:Object.freeze(plan.discoveryCandidates.map(candidate=>{
         const surfaceY=heights[gridIndex(recipe.radius,candidate.x,candidate.z)];
         return Object.freeze({
