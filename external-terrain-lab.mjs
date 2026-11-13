@@ -13,10 +13,14 @@ import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
+import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
+import { generateWorldSite } from './src/world-generation/index.mjs';
 
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
+const siteKind=document.querySelector('#site-kind');
+const siteSeed=document.querySelector('#site-seed');
 const viewCamera=document.querySelector('#view-camera');
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
@@ -40,6 +44,7 @@ let meshBridge=null;
 let pendingMesh=null;
 let pendingEdit=null;
 let meshSource='worker';
+let generatedSite=null;
 
 function resizeCanvas() {
   const pixelRatio=Math.min(window.devicePixelRatio || 1,2);
@@ -94,7 +99,9 @@ function updateStatus(now=performance.now()) {
         ' · last removed '+lastImpactRemoved+' voxels' : '')+
       (savedCheckpoint ? ' · saved state available' : '')+
       ' · stale GPU replies blocked: '+renderer.uploadQueueStatistics.staleUploadRejections+
-      ' · mesh source: '+meshSource
+      ' · mesh source: '+meshSource+
+      (generatedSite ? ' · WorldGen '+generatedSite.recipe.kind+
+        ' · plan '+generatedSite.hash : '')
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
 }
@@ -119,9 +126,25 @@ function resetSite() {
     if(loader) loader.unload();
     active=null;
     renderer.setMeshes([]);
-    loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
-      chunkEdge:Number(pitch.value),seed:7
-    }),{epoch:terrainEpochs.next()});
+    generatedSite=null;
+    if(siteKind.value==='fixture') {
+      loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
+        chunkEdge:Number(pitch.value),seed:7
+      }),{epoch:terrainEpochs.next()});
+    } else {
+      // The World Generation engine knows only site recipes and the public
+      // terrain initialization contract; this host owns the adapter lifecycle.
+      const recipe=createWorldSiteRecipe({
+        regionId:'starter-region',siteId:'preview-'+siteKind.value,
+        encounterId:'preview-001',kind:siteKind.value,
+        seed:Number(siteSeed.value),worldRevision:0,
+        chunkEdge:Number(pitch.value),corruption:0
+      });
+      generatedSite=generateWorldSite(recipe);
+      loader=new V2ExternalTerrainLoader(generatedSite.definition,
+        {epoch:terrainEpochs.next()});
+    }
+    breachButton.textContent=generatedSite ? 'Carve generated terrain' : 'Break stone span';
     lastStatusAt=-Infinity;
     updateStatus();
   } catch(error) {
@@ -141,9 +164,19 @@ function impactSpan() {
     return;
   }
   try {
+    let target=EXTERNAL_SITE_BREACH;
+    if(generatedSite) {
+      const spot=generatedSite.layout.clearings[0];
+      let top=null;
+      for(let y=30;y>=-3;y--) {
+        if(active.world.get(spot.x,y,spot.z)!==0) {top=y;break;}
+      }
+      if(top===null) throw new Error('Generated landmark has no terrain surface');
+      target={x:spot.x,y:top,z:spot.z,radius:2.3};
+    }
     const result=active.port.apply({
       id:'v26-site-breach-'+(++breachCount),
-      type:'carve-sphere',...EXTERNAL_SITE_BREACH,
+      type:'carve-sphere',...target,
       expectedRevision:active.world.revision
     });
     lastImpactRemoved=result.removedVoxels;
@@ -274,8 +307,11 @@ function frame(now) {
       // underside, stone walls and vertical height are legible on mobile.
       // This is presentation-only: switching views never remeshes terrain.
       const camera=viewCamera.value;
-      const scale=Math.max(9,Math.min(20,
-        canvas.width/(camera==='inspection' ? 37 : 34)));
+      const scale=generatedSite
+        ? Math.max(4,Math.min(12,canvas.width/
+          (camera==='inspection' ? 78 : 57)))
+        : Math.max(9,Math.min(20,
+          canvas.width/(camera==='inspection' ? 37 : 34)));
       renderer.render({
         width:canvas.width,height:canvas.height,
         scale,panX:0,panY:0,camera
@@ -305,6 +341,8 @@ function frame(now) {
 
 resetButton.addEventListener('click',resetSite);
 pitch.addEventListener('change',resetSite);
+siteKind.addEventListener('change',resetSite);
+siteSeed.addEventListener('change',resetSite);
 viewCamera.addEventListener('change',()=>{
   lastStatusAt=-Infinity;
   updateStatus();

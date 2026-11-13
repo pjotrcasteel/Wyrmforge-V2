@@ -46,6 +46,8 @@ jobs:
         run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
       - name: Compare greedy and exposed meshing on V2 fixtures
         run: node scripts/benchmark-meshes.mjs > mesh-comparison.json
+      - name: Stress World Generation V2 across authored kinds and seeded site variants
+        run: node scripts/benchmark-world-generation.mjs > worldgen-stress.json
 
   deploy:
     if: github.event_name != 'pull_request'

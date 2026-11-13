@@ -23,13 +23,23 @@ footer{padding:6px 12px;color:#b6cbd8;font-size:11px;background:#101820}
 </head>
 <body>
 <header>
-<h1>V2.6 — External 3D terrain</h1>
-<small>Actual WebGL2 / voxel authority · fixed engineering fixture</small>
+<h1>World Generation V2 — real site preview</h1>
+<small>Replaceable generator → validated terrain definition → Voxel V2</small>
 <span id="build">Build loading…</span>
 <a href="./index.html">Main voxel lab</a>
 </header>
 <main><canvas id="site-view" aria-label="Real externally initialized voxel site with stone span and grassy ground"></canvas></main>
 <section id="controls" aria-label="External terrain demonstration">
+<label for="site-kind">Site kind</label>
+<select id="site-kind" aria-label="World Generation V2 map kind">
+  <option value="fixture">Fixed arch (voxel diagnostic)</option>
+  <option value="wet-forest" selected>Wet forest — living woods</option>
+  <option value="forest-highland">Forest to mountains — foothills</option>
+  <option value="mountain-pass">Mountain pass — rocky valley</option>
+</select>
+<label for="site-seed">Terrain seed</label>
+<input id="site-seed" type="number" min="0" max="4294967295" step="1"
+  value="7" inputmode="numeric" style="width:90px">
 <label for="view-camera">View</label>
 <select id="view-camera" aria-label="Terrain viewing angle">
   <option value="inspection" selected>3D inspection (default)</option>
@@ -43,7 +53,7 @@ footer{padding:6px 12px;color:#b6cbd8;font-size:11px;background:#101820}
 <button id="restore-site" type="button" disabled>Restore saved state</button>
 <p id="status" role="status" aria-live="polite">Preparing bounded V2 terrain initialization…</p>
 </section>
-<footer>V2.6 integration proof only: deterministic input, placeholder colors, no V2.8 biome generation or game art.</footer>
+<footer>Real seeded World Generation V2 terrain; routes, clearings and landforms are generated. Objects, authored art, and in-game integration belong to other engines.</footer>
 <script type="module" src="./external-terrain-lab.mjs"></script>
 </body>
 </html>
