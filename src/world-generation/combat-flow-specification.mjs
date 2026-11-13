@@ -11,7 +11,7 @@ const height=(r,h,x,z)=>h[index(r,x,z)];
 export function specifyCombatFlow({
   radius,heights,combatSpaces=[],maneuverPockets=[],flowLinks=[]
 }) {
-  if(!Number.isSafeInteger(radius) || radius<8 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<8 || radius>32 ||
       !(heights instanceof Int16Array) || heights.length!==(radius*2)**2 ||
       !Array.isArray(combatSpaces) || !Array.isArray(maneuverPockets) ||
       !Array.isArray(flowLinks)) {
