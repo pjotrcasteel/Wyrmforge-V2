@@ -21,9 +21,12 @@ function tick(world,actor,moveX=0) {
   return next;
 }
 
-test('no jump input; automatic 1m hop follows a visible ballistic arc, not a position teleport',()=>{
+test('no jump input; automatic 50cm hop follows an arc, never a 1m teleport',()=>{
   const world=flat();
-  for(let x=2;x<=5;x++)for(let z=-1;z<=1;z++)world.set(x,1,z,3);
+  for(let x=2;x<=5;x++)for(let z=-1;z<=1;z++) {
+    world.set(x,1,z,3);
+    world.setMicroSurfaceTile(x,1,z,Array(100).fill(5));
+  }
   let actor=spawnTerrainActor(world,{x:0.5,z:0.5,searchTopY:10});
   let hops=0,highest=actor.y,movedUp=0;
   let previousY=actor.y;
@@ -39,12 +42,12 @@ test('no jump input; automatic 1m hop follows a visible ballistic arc, not a pos
   }
   assert.equal(hops,1,'one automatic hop per reachable ledge');
   assert.ok(movedUp>=8,'hop is visible over multiple frames');
-  assert.ok(highest>2.05,'the collision swept arc clears the one-metre ledge');
+  assert.ok(highest>1.55,'the arc clears a physical 50cm ledge');
   assert.ok(actor.x>3);
-  assert.ok(actor.y>1.9);
+  assert.ok(actor.y>1.48);
   assert.equal(actor.fallDamage,0,'a small auto-hop cannot inflict fall injury');
-  assert.equal(AUTO_HOP_HEIGHT,1.05);
-  assert.equal(AUTO_HOP_UPWARD_SPEED,7.4);
+  assert.equal(AUTO_HOP_HEIGHT,0.55);
+  assert.equal(AUTO_HOP_UPWARD_SPEED,5.1);
 });
 
 test('small 10cm ledges auto-step, do not launch a hop',()=>{
@@ -134,7 +137,8 @@ test('fall policy distinguishes harmless short drops, damaging falls, and lethal
   assert.equal(describeFallImpact({distance:1.5,speed:4}).severity,'safe');
   assert.equal(describeFallImpact({distance:3,speed:11}).severity,'injury');
   assert.equal(describeFallImpact({distance:7,speed:20}).severity,'fatal');
-  assert.equal(classifyTraversalHeight(1,2).type,'auto-hop');
+  assert.equal(classifyTraversalHeight(1,2).type,'blocked-uphill');
+  assert.equal(classifyTraversalHeight(1,1.5).type,'auto-hop');
   assert.equal(classifyTraversalHeight(1,1.2).type,'auto-step');
   assert.equal(classifyTraversalHeight(2,0).type,'safe-descent');
   assert.equal(classifyTraversalHeight(5,1).type,'damaging-drop');
