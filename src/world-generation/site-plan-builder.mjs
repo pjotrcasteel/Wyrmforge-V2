@@ -60,17 +60,16 @@ export class SitePlanBuilder {
         !integer(width) || width<1 || width>3) {
       throw new RangeError('Routes need bounded nodes and width');
     }
-    // User-authored road intent remains independent of Voxel V2 resolution.
-    // 0.1-0.3 voxel is a future surface-detail target: integer solids can
-    // currently encode only a full-voxel recessed bed, never fractional Y.
+    // Quantized 10 cm road intent is realized by a detachable mesh-surface
+    // adapter. Voxel storage remains integer, while visible surfaces need not.
     let profile=null;
     if(roadProfile!==null) {
       const {kind,nominalCutFraction,material,cutVoxels}=roadProfile;
       if(typeof kind!=='string' || !IDENTIFIER.test(kind) ||
           !Number.isFinite(nominalCutFraction) ||
           nominalCutFraction<0.1 || nominalCutFraction>0.3 ||
-          ![2,3].includes(material) || cutVoxels!==1) {
-        throw new RangeError('Road profile requires valid material and a 0.1-0.3 cut intent');
+          ![2,3].includes(material) || cutVoxels!==0) {
+        throw new RangeError('Road profile needs 0 integer cut and a 0.1-0.3 visual depth');
       }
       profile=Object.freeze({kind,nominalCutFraction,material,cutVoxels});
     }

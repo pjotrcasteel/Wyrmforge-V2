@@ -347,3 +347,63 @@ stone strata over multiple map seeds and chunk pitches.
 and Forest → Highland at a mobile scale; a future fractional-height surface
 engine must be tested separately before claiming the requested 0.1–0.3
 voxel trench depth.
+
+## WorldGen v2.4 — 10 cm surface details and jagged cliff geometry
+
+Mobile visual acceptance of V2.3 rejected its full-block road trenches and
+perfectly even mountain/hill staircases. **A road 1/10 voxel lower is not a
+one-block trench**. V2.4 implements a detachable, real vertex-level surface
+presentation pass while leaving the Voxel V2 storage/collision engine intact.
+
+### Road depth: actual rendered tenths, not full-voxel excavation
+
+| Biome | Visible road depression | Integer voxel excavation |
+| --- | --- | --- |
+| Wet Forest | 0.1 voxel (10 cm at 1 m/voxel) | 0 |
+| Forest → Highland | 0.2 voxel (20 cm) | 0 |
+| Mountain Pass | 0.3 voxel (30 cm) | 0 |
+
+The World Generation **Strategy** retains material and cut-depth intent;
+the **Builder** requires `cutVoxels:0`. The Road Geometry Composer keeps
+the continuous route and correct material, but no longer removes a full
+voxel. Its Specification verifies that the route still crosses the arena
+and is traversable. The separate `terrain-surface-detail.mjs` adapter
+reads the **public generated site** and Voxel `get()` interface, deforms
+visible mesh surface vertices in increments of **0.1 voxel**, and does not
+write back to the world, snapshots, save state, or meshing worker.
+
+Surface corners are sampled by their global coordinates and shared by all
+faces/chunks. The presenter also deforms wall-to-top boundary vertices, so
+adjacent meshes don't split at local chunk boundaries. It runs after worker
+meshing before the existing renderer GPU queue, both on the initial world and
+on localized carving updates. The existing fixture remains unchanged.
+
+### Cliffs, ridges and natural slopes
+
+The highland Strategy has seeded lateral cliff-lip variation and steeper
+foothill escarpments. The Mountain Pass Strategy creates rugged, meandering
+rock-wall lips with abrupt stone faces and broad outer terraces, instead of
+two perfectly uniform ramps. Existing combat, escape-route, pocket-width,
+discovery and terrain-connectivity Specifications still gate all authored
+sites before Voxel initialization.
+
+The presentation adapter also adds small deterministic local variations
+(quantized to tenths) to the visible surface. It is a **replaceable
+presentation layer**, not a second source of voxel solidity. Materials and
+stone strata still derive from the authoritative terrain and its surface IDs.
+
+### Crucial engine boundary: collision follows integer voxels
+
+**Visible top elevations have 10 cm precision. Collision remains voxel
+resolution.** The existing voxel world, raycasting, destruction and physics
+have not secretly gained sub-voxel solids. A future Movement/Collision
+surface adapter must consume the same presentation-height contract or
+explicitly decide that the minor visual discrepancy is acceptable. This
+limitation must be addressed before a gameplay movement acceptance gate;
+it is not a certification of 10 cm collision precision.
+
+The WorldGen generator version is `worldgen-v2.4.0`, and the external
+terrain initialization schema remains unchanged. Tests cover quantized
+tenths, fractional road depths, seed determinism, real mesh positions,
+cross-chunk seam vertices, retained voxel revisions, localized edits,
+real layered stone, and the existing 24-world integration stress baseline.
