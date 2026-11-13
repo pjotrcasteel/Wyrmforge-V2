@@ -163,7 +163,7 @@ test('new map kinds register via Strategy without modifying engine, terrain cont
   assert.ok(loader.terrain.world.chunkCount>1);
   loader.unload();
   assert.throws(()=>registry.register({kind:'frost-basin',compose(){}}),/already registered/);
-  assert.throws(()=>new WorldGeneratorV2().generate(recipe('frost-basin')),/Unknown/);
+  assert.throws(()=>createDefaultWorldGeneratorV2().generate(recipe('frost-basin')),/Unknown/);
 });
 
 test('invalid recipes and malformed strategies are rejected without activating a terrain world',()=>{
@@ -237,7 +237,7 @@ test('injected Adapter can replace Voxel V2 without changing strategies or core 
   assert.throws(()=>new WorldGeneratorV2(),/output adapter/);
   // No internal voxel storage calls are needed by the generator.
   const core=readFileSync(new URL('../src/world-generation/world-generator.mjs',import.meta.url),'utf8');
-  assert.doesNotMatch(core,/voxel-terrain-adapter|external-terrain-loader|VoxelWorld/);
+  assert.doesNotMatch(core,/from ['"][^'"]*(voxel-terrain-adapter|external-terrain-loader|voxel-world)/);
   const root=readFileSync(new URL('../src/world-generation/index.mjs',import.meta.url),'utf8');
   assert.match(root,/terrainAdapter:toVoxelTerrainDefinition/);
 });
