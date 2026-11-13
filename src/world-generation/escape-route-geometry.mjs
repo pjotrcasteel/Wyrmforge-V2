@@ -58,21 +58,35 @@ export function gradeEscapeRoutes({radius,heights,escapeRoutes}) {
     if(!path.every(point=>valid(radius,point.x,point.z))) {
       throw new RangeError('Escape path outside generated terrain');
     }
-    const a=original[index(radius,path[0].x,path[0].z)];
-    const b=original[index(radius,path.at(-1).x,path.at(-1).z)];
-    if(Math.abs(b-a)>path.length-1) {
+    const source=path.map(point=>original[index(radius,point.x,point.z)]);
+    if(Math.abs(source.at(-1)-source[0])>path.length-1) {
       throw new Error('Escape path cannot meet its endpoint grade');
+    }
+    // Terrain-preserving slope limiter: keep as much authored ridge and
+    // mountain-approach height as possible while correcting sharp steps.
+    // Unlike a straight end-to-end interpolation, this does not excavate a
+    // deep trench through existing horde ingress routes.
+    const grades=[...source];
+    for(let pass=0;pass<2;pass++) {
+      for(let i=1;i<grades.length;i++) {
+        grades[i]=Math.max(grades[i-1]-1,Math.min(grades[i-1]+1,grades[i]));
+      }
+      for(let i=grades.length-2;i>=0;i--) {
+        grades[i]=Math.max(grades[i+1]-1,Math.min(grades[i+1]+1,grades[i]));
+      }
+    }
+    if(grades[0]!==source[0] || grades.at(-1)!==source.at(-1)) {
+      throw new Error('Escape route grades cannot preserve its entry anchors');
     }
     paths.push(path);
     for(let i=0;i<path.length;i++) {
-      const point=path[i];
-      const elevation=Math.round(a+(b-a)*i/(path.length-1));
+      const point=path[i],elevation=grades[i];
       const k=key(point.x,point.z);
       if(centerHeights.has(k) &&
           Math.abs(centerHeights.get(k)-elevation)>1) {
         throw new Error('Conflicting authored escape route grades');
       }
-      centerHeights.set(k,elevation);
+      if(!centerHeights.has(k)) centerHeights.set(k,elevation);
     }
   }
   // Shape the shoulders first, then impose exact centerline grades.
@@ -84,7 +98,8 @@ export function gradeEscapeRoutes({radius,heights,escapeRoutes}) {
       const nx=x+dx,nz=z+dz;
       if(!valid(radius,nx,nz) || centerHeights.has(key(nx,nz))) continue;
       const pos=index(radius,nx,nz);
-      heights[pos]=Math.round(original[pos]*0.45+elevation*0.55);
+      // Keep existing intersecting horde corridors and main routes intact.
+      heights[pos]=Math.round(original[pos]*0.8+elevation*0.2);
     }
   }
   for(const [k,elevation] of centerHeights) {
