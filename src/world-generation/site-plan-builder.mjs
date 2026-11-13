@@ -17,6 +17,8 @@ export class SitePlanBuilder {
   #escapeRoutes=[];
   #maneuverPockets=[];
   #flowLinks=[];
+  #dedicatedArena=null;
+  #volcanicTerrain=null;
   #ids=new Set();
   #built=false;
 
@@ -177,6 +179,26 @@ export class SitePlanBuilder {
     return this;
   }
   // Only a possible buried *location*. No chest/object/reward is instantiated.
+  // Encounter identity is explicit World Map intent, never inferred from
+  // corruption percent. Boss AI, phases and rewards are not authored here.
+  setDedicatedArena({kind,combatSpaceId,entryKind,exitKind}) {
+    if(this.#built || this.#dedicatedArena ||
+        !['mini-boss','wyrm'].includes(kind) ||
+        ![combatSpaceId,entryKind,exitKind].every(value=>
+          typeof value==='string' && IDENTIFIER.test(value))) {
+      throw new TypeError('Dedicated arena requires a unique boss type and linked combat floor');
+    }
+    this.#dedicatedArena=Object.freeze({kind,combatSpaceId,entryKind,exitKind});
+    return this;
+  }
+  setVolcanicTerrain({stage}) {
+    if(this.#built || this.#volcanicTerrain ||
+        !['approach','mini-boss','lair'].includes(stage)) {
+      throw new TypeError('Volcanic geography needs a unique authored stage');
+    }
+    this.#volcanicTerrain=Object.freeze({stage});
+    return this;
+  }
   addDiscoveryCandidate({id,x,z,coverDepth=2,kind='buried-cache'}) {
     this.#checkOpen(id);
     if(!IDENTIFIER.test(kind) || !integer(coverDepth) ||
@@ -206,6 +228,19 @@ export class SitePlanBuilder {
         west.nodes[0][axis]===east.nodes[0][axis] &&
         west.nodes.at(-1)[axis]===east.nodes.at(-1)[axis])) {
         throw new Error('Escape routes must rejoin at the same endpoints');
+      }
+    }
+    if(this.#dedicatedArena) {
+      const floor=this.#combatSpaces.find(space=>
+        space.id===this.#dedicatedArena.combatSpaceId);
+      if(!floor || this.#combatSpaces.length!==1 ||
+          (this.#dedicatedArena.kind==='wyrm' && floor.radius!==8) ||
+          (this.#dedicatedArena.kind==='mini-boss' && floor.radius!==7)) {
+        throw new Error('Dedicated arena requires its own correct-size fighting floor');
+      }
+      if(this.#volcanicTerrain?.stage!==
+          (this.#dedicatedArena.kind==='wyrm'?'lair':'mini-boss')) {
+        throw new Error('Dedicated arena geology must match its authored boss identity');
       }
     }
     for(const pocket of this.#maneuverPockets) {
@@ -243,7 +278,9 @@ export class SitePlanBuilder {
       escapeRoutes:Object.freeze([...this.#escapeRoutes]),
       maneuverPockets:Object.freeze([...this.#maneuverPockets]),
       flowLinks:Object.freeze([...this.#flowLinks]),
-      discoveryCandidates:Object.freeze([...this.#discoveryCandidates])
+      discoveryCandidates:Object.freeze([...this.#discoveryCandidates]),
+      dedicatedArena:this.#dedicatedArena,
+      volcanicTerrain:this.#volcanicTerrain
     });
   }
 }
