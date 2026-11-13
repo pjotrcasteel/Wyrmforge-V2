@@ -32,6 +32,10 @@ Read [the gravity design](docs/VOXEL-GRAVITY-V2.md),
 Build numbers such as `0.0.024` are **laboratory increments**, not completed
 roadmap milestones.
 
+## Play Hunt — playable exploration candidate (H08-01)
+
+**[Open Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html)** to walk one real Voxel V2 Wet Forest region with a touch joystick (or WASD/arrows), fixed-step physical collision, north-up follow camera and a live frame-time HUD. This is a deliberately minimal **playable exploration preview**: no enemies, trees, investigation or seamless region transitions yet. The route is **NEEDS PLAYER REVIEW**, not accepted as a full Hunt; see [H08-01 in the Delivery Tasks](docs/DELIVERY-TASKS.md).
+
 ## Playable standalone V2 lab
 
 https://pjotrcasteel.github.io/Wyrmforge-V2/
