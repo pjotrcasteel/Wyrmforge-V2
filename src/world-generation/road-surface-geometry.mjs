@@ -1,9 +1,8 @@
 import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
 
-// World Generation V2 - road geometry composer. This is ACTUAL integer
-// terrain shaping. A 0.12-0.30 voxel intent cannot be faithfully represented
-// by current Voxel V2 integer solids, so one-voxel beds are an explicit
-// temporary approximation, not a claim of fractional-height rendering.
+// World Generation V2: route material and walkable centerline geometry.
+// No one-block excavations. Presentation of 0.1-voxel road beds is delegated
+// through a replaceable public mesh-presentation adapter.
 const index=(radius,x,z)=>(z+radius)*2*radius+x+radius;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 
@@ -29,8 +28,8 @@ export function composeRoadSurfaces({
   const roadRoutes=routes.filter(route=>route.roadProfile);
   if(!roadRoutes.length) {
     return Object.freeze({
-      processedRoutes:0,paintedCells:0,recessedCells:0,
-      combatRoadCells:0,minimumPhysicalCutVoxels:0
+      processedRoutes:0,paintedCells:0,profiledCells:0,
+      combatRoadCells:0,physicalCutVoxels:0
     });
   }
   // Some original road spurs were never required to be walkable. Grade
@@ -56,8 +55,7 @@ export function composeRoadSurfaces({
       heights[index(radius,point.x,point.z)]=targets[i];
     }
   }
-  let paintedCells=0,recessedCells=0,combatRoadCells=0;
-  const original=heights.slice();
+  let paintedCells=0,profiledCells=0,combatRoadCells=0;
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     // Road priority follows the authored route order: the continuous entry-
     // to-exit spine wins over narrower landmark spurs at intersections.
@@ -81,27 +79,12 @@ export function composeRoadSurfaces({
     paintedCells++;
     if(combatSpaces.some(space=>
       Math.hypot(x-space.x,z-space.z)<=space.radius)) combatRoadCells++;
-    // Carve a narrow inset and leave a full-height terrain shoulder.
-    // No shader-only dark stripe: this changes the real voxel top Y.
-    const centerWidth=Math.min(1.2,route.width*0.6);
-    const current=original[i];
-    const canRecess=distance<=centerWidth &&
-      current>=profile.cutVoxels &&
-      // A one-voxel depression must never turn a previously walkable
-      // approach or pocket corridor into a two-voxel impassable ledge.
-      [[-1,0],[1,0],[0,-1],[0,1]].every(([dx,dz])=>{
-        const nx=x+dx,nz=z+dz;
-        if(nx<-radius || nx>=radius || nz<-radius || nz>=radius) return true;
-        const neighbor=original[index(radius,nx,nz)];
-        return Math.abs((current-profile.cutVoxels)-neighbor)<=1;
-      });
-    if(canRecess) {
-      heights[i]=current-profile.cutVoxels;
-      recessedCells++;
-    }
+    // Quantized 10 cm visual cut lives in the independent surface adapter.
+    // The authoritative integer height remains unchanged at road centers.
+    if(distance<=Math.min(1.2,route.width*0.6)) profiledCells++;
   }
   return Object.freeze({
-    processedRoutes:roadRoutes.length,paintedCells,recessedCells,
-    combatRoadCells,minimumPhysicalCutVoxels:1
+    processedRoutes:roadRoutes.length,paintedCells,profiledCells,
+    combatRoadCells,physicalCutVoxels:0
   });
 }
