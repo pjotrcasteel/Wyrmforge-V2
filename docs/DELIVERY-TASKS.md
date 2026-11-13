@@ -77,6 +77,21 @@ change**, plus functional and performance evidence relevant to its scope.
   further improvements under that task, and continue to the next task that
   adds more to the Hunt. **Future polish is not a blocker.**
 
+### Milestone stop lines (never confuse one engine with a finished game)
+
+| Milestone | Enough to close this milestone | Not required for this milestone |
+| --- | --- | --- |
+| **Voxel V2 foundation (V2.0–V2.7)** | Its original correctness/contract/device gates are evidenced in the moving Hunt; terrain authority is stable and safe for dependent engines | World Object art, lava, complete boss behavior |
+| **First Play Hunt movement (H08-01)** | User walks a single region comfortably and responsive input, correct collision and measured phone performance are acceptable | Full region streaming, enemies, objectives, trees, polished art |
+| **First complete Hunt (V2.8 / H08-11)** | One actual Wet Forest adventure is traversable, populated and finishable, with tested game integration and mobile evidence | Production visual fidelity, hybrid gravity and launch readiness |
+| **Structural gravity (V2.9)** | Player can see reliable bounded collapse/settling and verified collision/replay in the playable Hunt | Cinematic debris, every possible material reaction |
+| **Production quality (V2.10)** | Required real-device endurance, regression, presentation, rollback and gameplay criteria pass | Hypothetical improvements without a user-validated benefit |
+
+**Milestone closure requires its own acceptance evidence, not all possible
+feature ideas and not just a sum of merged PRs.** If a new gameplay need
+later requires extending an accepted engine, add a new dependent task with
+a distinct ID. Keep the current playable build as the regression baseline.
+
 ### Reopening, splitting and scope changes
 
 Reopen the same task **only** for a reproducible defect or a violated
@@ -121,7 +136,7 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted because a diagnostic viewer can generate several regions. Missing enemies, objectives, trees and lighting must **not block movement-first playtests**. Each task thereafter improves this **same page/session**.
 
 ### H08-00 — Seed-stable multi-region expedition geometry
-- **Status:** `IMPLEMENTED` (technical only; not experience-accepted)
+- **Status:** `DONE FOR NOW` — scoped generator/seam contract completed; not a playable expedition
 - **Delivers:** 11–14 geographically connected Hunt regions, world-coordinate voxel definitions, protected 7m ports, investigation/horde/extraction location descriptors.
 - **Evidence:** [PR #141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`, 531 automated tests; preview loads one region at a time. **No continuous player travel yet.**
 - **Done for now:** Multi-region deterministic plan, links and two loaded physical seam contracts pass tests; then **freeze the planning foundation**. Gameplay traversal belongs to H08-02, not a reason to endlessly extend this planner.
