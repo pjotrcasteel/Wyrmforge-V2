@@ -119,12 +119,15 @@ test('sparse surface meshes agree across signed chunk boundaries',()=>{
     for(let i=0;i<mesh.positions.length;i+=3) {
       const x=mesh.positions[i]+mesh.origin[0];
       const z=mesh.positions[i+2]+mesh.origin[2];
-      if(Math.abs(x)<1e-6 && Math.abs(z)<1e-6) {
-        seam.push(mesh.positions[i+1]+mesh.origin[1]);
+      const y=mesh.positions[i+1]+mesh.origin[1];
+      if(Math.abs(x)<1e-6 && Math.abs(z)<1e-6 &&
+          y>0.65 && y<0.75) {
+        seam.push(y);
       }
     }
   }
-  assert.ok(seam.length>=4);
+  assert.ok(seam.length>=4,
+    'each signed chunk must have a matching 70cm shared top corner');
   assert.ok(seam.every(height=>Math.abs(height-seam[0])<1e-6),
     'all chunk mesh copies meet at exactly the same physical micro height');
 });
