@@ -18,6 +18,9 @@ function withRoot(run, sha = COMMIT) {
       '<script type="module" src="./external-terrain-lab.mjs"></script>');
     writeFileSync(join(root,'external-terrain-lab.mjs'),
       "import { VERSION } from './src/build-info.mjs';\n");
+    writeFileSync(join(root,'play-hunt.html'),
+      '<title>Play Hunt</title>\n<span id="build">Build loading…</span>\n'+
+      '<script type="module" src="./external-terrain-lab.mjs"></script>');
     writeFileSync(join(root,'src','build-info.mjs'),
       `export const VERSION = "0.0.028";\nexport const COMMIT = "${sha}";\n`);
     writeFileSync(join(root,'src','terrain-actor.mjs'),'export const ACTOR = true;\n');
@@ -36,6 +39,11 @@ test('versioned lab keeps complete module graph together at a fresh URL', () => 
     assert.ok(existsSync(join(result.path,'main.mjs')));
     assert.ok(existsSync(join(result.path,'external-terrain-lab.html')));
     assert.ok(existsSync(join(result.path,'external-terrain-lab.mjs')));
+    assert.ok(existsSync(join(result.path,'play-hunt.html')));
+    const hunt=readFileSync(join(result.path,'play-hunt.html'),'utf8');
+    assert.match(hunt,/Build fffffff · initializing/);
+    assert.ok(hunt.includes('src="./external-terrain-lab.mjs"'));
+    assert.doesNotMatch(hunt,/Build loading/);
     assert.match(readFileSync(join(result.path,'external-terrain-lab.html'),'utf8'),
       /src="\.\/external-terrain-lab\.mjs"/);
     assert.ok(existsSync(join(result.path,'src','build-info.mjs')));
@@ -51,10 +59,10 @@ test('versioned lab keeps complete module graph together at a fresh URL', () => 
 
 test('the canonical root site stays intact and keeps its relative imports', () => {
   withRoot(root => {
-    const before=['index.html','main.mjs','src/build-info.mjs'].map(p=>
+    const before=['index.html','play-hunt.html','main.mjs','src/build-info.mjs'].map(p=>
       readFileSync(join(root,p),'utf8'));
     createVersionedLab(root,COMMIT);
-    const after=['index.html','main.mjs','src/build-info.mjs'].map(p=>
+    const after=['index.html','play-hunt.html','main.mjs','src/build-info.mjs'].map(p=>
       readFileSync(join(root,p),'utf8'));
     assert.deepEqual(after,before);
   });
@@ -74,5 +82,23 @@ test('invalid release identifiers are rejected', () => {
       assert.throws(()=>createVersionedLab(root,sha),TypeError);
     }
     assert.throws(()=>createVersionedLab('',COMMIT),TypeError);
+  });
+});
+
+test('missing Play Hunt HTML blocks immutable release packaging',()=>{
+  withRoot(root=>{
+    rmSync(join(root,'play-hunt.html'));
+    assert.throws(()=>createVersionedLab(root,COMMIT),
+      /Missing V2 lab entry: play-hunt.html/);
+  });
+});
+
+test('immutable Hunt page cannot silently load an external root module',()=>{
+  withRoot(root=>{
+    writeFileSync(join(root,'play-hunt.html'),
+      '<span id="build">Build loading…</span>'+
+      '<script type="module" src="/external-terrain-lab.mjs"></script>');
+    assert.throws(()=>createVersionedLab(root,COMMIT),
+      /local module/);
   });
 });

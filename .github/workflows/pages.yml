@@ -79,6 +79,9 @@ jobs:
           test -s "builds/$GITHUB_SHA/main.mjs"
           test -s "builds/$GITHUB_SHA/external-terrain-lab.html"
           test -s "builds/$GITHUB_SHA/external-terrain-lab.mjs"
+          test -s "builds/$GITHUB_SHA/play-hunt.html"
+          grep -Fq "Build ${GITHUB_SHA:0:7} · initializing" "builds/$GITHUB_SHA/play-hunt.html"
+          grep -Fq 'src="./external-terrain-lab.mjs"' "builds/$GITHUB_SHA/play-hunt.html"
           grep -q 'external-terrain-lab.mjs' "builds/$GITHUB_SHA/external-terrain-lab.html"
           test -s "builds/$GITHUB_SHA/src/build-info.mjs"
           grep -q "$GITHUB_SHA" "builds/$GITHUB_SHA/src/build-info.mjs"
@@ -90,3 +93,25 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify publicly served immutable Play Hunt and module graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://pjotrcasteel.github.io/Wyrmforge-V2/builds/$GITHUB_SHA"
+          fetch() {
+            curl --fail --silent --show-error --location --retry 5               --retry-delay 2 --retry-all-errors "$url/$1"
+          }
+          fetch play-hunt.html > /tmp/wyrmforge-play-hunt.html
+          fetch external-terrain-lab.mjs > /tmp/wyrmforge-play-host.mjs
+          fetch src/build-info.mjs > /tmp/wyrmforge-build-info.mjs
+          fetch src/webgl-voxel-view.mjs > /tmp/wyrmforge-webgl.mjs
+          grep -Fq "Build ${GITHUB_SHA:0:7} · initializing" /tmp/wyrmforge-play-hunt.html
+          grep -Fq 'src="./external-terrain-lab.mjs"' /tmp/wyrmforge-play-hunt.html
+          grep -Fq "COMMIT = \"$GITHUB_SHA\";" /tmp/wyrmforge-build-info.mjs
+          grep -Fq "from './src/build-info.mjs'" /tmp/wyrmforge-play-host.mjs
+          grep -Fq 'float grassVariation=' /tmp/wyrmforge-webgl.mjs
+          if grep -Fq 'float patch=' /tmp/wyrmforge-webgl.mjs; then
+            echo "ERROR: deployed Play Hunt still includes reserved GLSL token"
+            exit 1
+          fi
+          echo "Verified live build-specific Play Hunt: $url/play-hunt.html"

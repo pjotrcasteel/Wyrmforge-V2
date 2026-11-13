@@ -1,7 +1,7 @@
 // GitHub Pages uses immutable per-commit URLs for reliable mobile validation.
 // The canonical root URL stays unchanged, but the build-specific directory
 // avoids reusing cached HTML and ES modules from a previous release.
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -15,7 +15,8 @@ export function createVersionedLab(root, sha) {
 
   const directory = resolve(root);
   const files = ['index.html', 'main.mjs',
-    'external-terrain-lab.html', 'external-terrain-lab.mjs'];
+    'external-terrain-lab.html', 'external-terrain-lab.mjs',
+    'play-hunt.html'];
   const sourcePath = join(directory, 'src');
   for (const file of files) {
     if (!existsSync(join(directory, file))) {
@@ -41,6 +42,19 @@ export function createVersionedLab(root, sha) {
   const dest = join(directory, 'builds', sha.toLowerCase());
   mkdirSync(dest, {recursive:true});
   for (const file of files) cpSync(join(directory,file),join(dest,file));
+  // Make the immutable Play Hunt HTML self-identifying BEFORE JS executes.
+  // A stale in-app browser page will display its old commit, rather than
+  // appearing to be the newer deployment just because the URL has ?v=.
+  const huntPath=join(dest,'play-hunt.html');
+  const huntHtml=readFileSync(huntPath,'utf8');
+  const buildLabel='<span id="build">Build loading…</span>';
+  if(!huntHtml.includes(buildLabel) ||
+      !huntHtml.includes('src="' + '.' + '/external-terrain-lab.mjs"')) {
+    throw new Error('Play Hunt entry must include version display and local module');
+  }
+  const actualLabel='<span id="build">Build '+sha.slice(0,7)+
+    ' · initializing…</span>';
+  writeFileSync(huntPath,huntHtml.replace(buildLabel,actualLabel));
   cpSync(sourcePath,join(dest,'src'),{recursive:true});
   if (!existsSync(join(dest,'src','build-info.mjs'))) {
     throw new Error('Versioned Pages artifact is incomplete');
