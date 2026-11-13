@@ -102,7 +102,8 @@ test('mobile page gives map full flex height, collapses controls and has accessi
 test('viewer fits actual site footprint and handles touch gestures without regenerating maps',()=>{
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
   assert.match(host,/import \{[\s\S]*?fitWorldgenSiteView, clampWorldgenViewZoom/);
-  assert.match(host,/footprint:generatedSite\.layout\.footprint,camera/);
+  assert.match(host,/const inspected=generatedSite\?\?expeditionSite/);
+  assert.match(host,/footprint:inspected\.layout\.footprint,camera/);
   assert.match(host,/scale,panX,panY,camera/);
   assert.match(host,/const activePointers=new Map\(\)/);
   assert.match(host,/canvas\.addEventListener\('pointerdown'/);
