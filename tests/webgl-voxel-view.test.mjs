@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectVoxel, WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
+import {
+  projectVoxel,WebGLVoxelView,
+  WEBGL_V2_VERTEX_SHADER_SOURCE,WEBGL_V2_FRAGMENT_SHADER_SOURCE
+} from '../src/webgl-voxel-view.mjs';
 import { VoxelWorld } from '../src/voxel-world.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 
@@ -62,4 +65,14 @@ test('mesher arrays have correct WebGL2-compatible typed formats and index range
     assert.ok(mesh.indices.every(index => index < mesh.vertexCount));
   }
   assert.equal(meshes.reduce((sum, mesh) => sum + mesh.triangleCount, 0), 20);
+});
+
+test('WebGL2 shader exports include the complete fast Hunt and legacy paths',()=>{
+  assert.match(WEBGL_V2_VERTEX_SHADER_SOURCE,/^#version 300 es/);
+  assert.match(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/^#version 300 es/);
+  assert.match(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/if \(uFastHuntMode\)/);
+  assert.match(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/float grassVariation=/);
+  // GLSL ES reserves "patch" for tessellation. It is not a JavaScript
+  // syntax error, so the real shader compiler runs separately in CI.
+  assert.doesNotMatch(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/\bpatch\b/);
 });

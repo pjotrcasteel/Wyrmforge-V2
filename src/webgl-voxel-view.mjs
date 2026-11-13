@@ -99,8 +99,8 @@ void main() {
   if (uFastHuntMode) {
     vec3 base=terrainAlbedo(vMaterial);
     if (abs(vMaterial-1.0)<0.5 && vNormal.y>0.5) {
-      float patch=soilHash(floor(vWorld.xz*0.43)+vec2(31.0,14.0))-0.5;
-      base*=1.0+patch*0.12;
+      float grassVariation=soilHash(floor(vWorld.xz*0.43)+vec2(31.0,14.0))-0.5;
+      base*=1.0+grassVariation*0.12;
     }
     float light=vNormal.y>0.5?1.0:
       vNormal.y< -0.5?0.52:vNormal.x>0.5?0.84:
@@ -221,6 +221,11 @@ void main() {
   outColor = vec4(linearToSrgbColor(linearAlbedo * lighting), 1.0);
 }
 `;
+
+// Public shader sources allow *real GLSL ES compiler validation* in CI.
+// Node syntax tests alone cannot detect reserved words inside GLSL strings.
+export const WEBGL_V2_VERTEX_SHADER_SOURCE = VERTEX_SHADER;
+export const WEBGL_V2_FRAGMENT_SHADER_SOURCE = FRAGMENT_SHADER;
 
 function createShader(gl, type, source) {
   const shader = gl.createShader(type);
