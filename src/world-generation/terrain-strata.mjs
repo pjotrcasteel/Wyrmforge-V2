@@ -4,7 +4,7 @@
 export function classifySurfaceStrata({
   radius,heights,surfaces,terrain
 }) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !(heights instanceof Int16Array) ||
       !(surfaces instanceof Uint8Array) ||
       heights.length!==(radius*2)**2 ||

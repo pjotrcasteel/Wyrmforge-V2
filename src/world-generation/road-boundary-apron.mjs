@@ -86,7 +86,7 @@ function composeGrassShoulderLinks({radius,route,routes,candidate,points}) {
 }
 
 export function composeRoadBoundaryAprons({radius,routes}) {
-  if(!Number.isSafeInteger(radius)||radius<2||radius>24 ||
+  if(!Number.isSafeInteger(radius)||radius<2||radius>32 ||
       !Array.isArray(routes)) {
     throw new TypeError('Boundary aprons require bounded site and authored roads');
   }

@@ -715,3 +715,40 @@ boss fight floors, reachable required routes, real cliff faces and
 unmodified voxel/actor boundaries. Final iPhone visual acceptance remains
 an open gate. This is **not** completion of the overall V2.8 Hunt
 integration milestone.
+
+
+## Natural cavern rework — WorldGen V2.7.2 (spacious bosses)
+
+A mobile visual review found that V2.7.1's 40×40m boss sites and 7–8m
+fight radii looked like artificially enclosed circular platforms, with
+insufficient room to maneuver around the boss.
+
+This revision changes actual site geometry, **not** camera scale:
+
+| Site kind | Bounded terrain extent | Central fight radius | Connected side terrain |
+| --- | --- | --- | --- |
+| Wet Forest / Highland / Mountain / Scorched approach | 40×40m | Existing 7m ordinary space | Unchanged |
+| Mini-boss arena | **56×56m** | **12m** | 2 separate 5m natural alcoves |
+| Wyrm lair | **64×64m** | **16m** | 3 separate 5m alcoves/shelves |
+
+Instead of an even-height circular rim, cavern strategies now construct
+coherent warped rock massifs, irregular rock cliffs, an enlarged natural
+entrance and distinct side shelves. A dedicated boss route still has
+mandatory ingress/egress and landmark topology but **no painted track**
+across the battle chamber. Route floors and side chambers use the existing
+physical 10cm movement grades and are verified through the normal terrain
+topology and maneuvering specifications; authored road material elsewhere
+is unaffected.
+
+Physical volcanic faults are relocated toward the *outer* rock, based on
+the site's actual radius. Fissures are prohibited from removing required
+combat floors, entry/exit connections or maneuver chambers. Existing lava
+fall anchors still describe only potential cliff locations—not animated
+lava, molten materials, hazards or boss scripting.
+
+Validation allows only these site-kind-specific bounded sizes; arbitrary
+large WorldGen recipes remain rejected. The independent Voxel V2 loader
+keeps its original 8192 run / 1048576 voxel / 384 generated microtile
+budgets, with generation stress and actual loaded-world tests enforcing
+them. Browser device measurements and visual acceptance are separate
+gates; this does **not** complete V2.8 playable Hunt integration.

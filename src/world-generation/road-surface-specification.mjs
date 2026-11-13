@@ -11,7 +11,7 @@ const inside=(radius,p)=>p.x>=-radius && p.x<radius &&
 export function specifyRoadSurfaces({
   radius,heights,surfaces,routes=[],combatSpaces=[],roadWork
 }) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !(heights instanceof Int16Array) ||
       !(surfaces instanceof Uint8Array) ||
       heights.length!==(radius*2)**2 ||

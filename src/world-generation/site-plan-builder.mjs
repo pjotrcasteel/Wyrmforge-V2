@@ -117,7 +117,8 @@ export class SitePlanBuilder {
   // Combat simulation and actual spawn timing are owned by other engines.
   addCombatSpace({id,x,z,radius}) {
     this.#checkOpen(id);
-    if(!integer(radius) || radius<5 || radius>8) {
+    if(!integer(radius) || radius<5 || radius>16 ||
+        (radius>8 && this.#recipe.radius<=20)) {
       throw new RangeError('Horde combat floor requires a bounded open radius');
     }
     this.#combatSpaces.push(Object.freeze({
@@ -234,9 +235,9 @@ export class SitePlanBuilder {
       const floor=this.#combatSpaces.find(space=>
         space.id===this.#dedicatedArena.combatSpaceId);
       if(!floor || this.#combatSpaces.length!==1 ||
-          (this.#dedicatedArena.kind==='wyrm' && floor.radius!==8) ||
-          (this.#dedicatedArena.kind==='mini-boss' && floor.radius!==7)) {
-        throw new Error('Dedicated arena requires its own correct-size fighting floor');
+          (this.#dedicatedArena.kind==='wyrm' && floor.radius!==16) ||
+          (this.#dedicatedArena.kind==='mini-boss' && floor.radius!==12)) {
+        throw new Error('Dedicated arena requires its own wide fighting floor');
       }
       if(this.#volcanicTerrain?.stage!==
           (this.#dedicatedArena.kind==='wyrm'?'lair':'mini-boss')) {

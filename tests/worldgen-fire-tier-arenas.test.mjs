@@ -18,8 +18,21 @@ test('miniboss and Wyrm are different dedicated site types, not a corruption thr
   assert.equal(approach.layout.dedicatedArena,null);
   assert.equal(mini.layout.dedicatedArena.kind,'mini-boss');
   assert.equal(wyrm.layout.dedicatedArena.kind,'wyrm');
-  assert.equal(mini.layout.dedicatedArena.floorRadius,7);
-  assert.equal(wyrm.layout.dedicatedArena.floorRadius,8);
+  assert.equal(mini.recipe.radius,28);
+  assert.equal(wyrm.recipe.radius,32);
+  assert.equal(mini.layout.dedicatedArena.siteWidthMetres,56);
+  assert.equal(wyrm.layout.dedicatedArena.siteWidthMetres,64);
+  assert.equal(mini.layout.dedicatedArena.floorRadius,12);
+  assert.equal(wyrm.layout.dedicatedArena.floorRadius,16);
+  assert.ok(mini.layout.dedicatedArena.usableFloorCells>=260);
+  assert.ok(wyrm.layout.dedicatedArena.usableFloorCells>=500);
+  assert.ok(mini.layout.combatFlow.pocketCount>=2);
+  assert.ok(wyrm.layout.combatFlow.pocketCount>=3);
+  assert.ok(wyrm.layout.dedicatedArena.connectedManeuverSpaces>=3);
+  assert.equal(mini.layout.roads.routes.length,0,
+    'miniboss chamber cannot contain an artificial painted road');
+  assert.equal(wyrm.layout.roads.routes.length,0,
+    'a genuine lair must not have a straight painted roadway');
   assert.ok(mini.layout.dedicatedArena.raisedQuadrants>=2);
   assert.ok(wyrm.layout.dedicatedArena.raisedQuadrants>=2);
   assert.notEqual(mini.layout.dedicatedArena.center.y,
@@ -30,7 +43,8 @@ test('miniboss and Wyrm are different dedicated site types, not a corruption thr
     assert.equal(site.layout.encounter.ready,true);
     assert.equal(site.layout.topology.reachable,true);
     assert.ok(site.layout.roadGrades.maximumGradeTenths<=5);
-    assert.ok(site.layout.dedicatedArena.usableFloorCells>=75);
+    assert.ok(site.layout.dedicatedArena.usableFloorCells>=260);
+    assert.equal(site.layout.combatFlow.ready,true);
     assert.equal(site.layout.volcanicTerrain.lavaSimulationImplemented,false);
   }
 });
@@ -39,13 +53,17 @@ test('authored Fire-tier sites preserve routes and physical topology across seed
   for(const kind of kinds)for(const seed of [7,19,101,267]) {
     const first=generateWorldSite(recipe(kind,seed));
     const second=generateWorldSite(recipe(kind,seed));
-    assert.equal(first.generatorVersion,'worldgen-v2.7.1');
+    assert.equal(first.generatorVersion,'worldgen-v2.7.2');
     assert.equal(first.hash,second.hash);
     assert.deepEqual(first.definition,second.definition);
     assert.ok(first.layout.topology.reachable);
     assert.ok(first.layout.encounter.ready);
     assert.ok(first.layout.roads.ready);
     assert.ok(first.layout.roadGrades.maximumGradeTenths<=5);
+    if(kind!=='scorched-approach') {
+      assert.ok(first.layout.combatFlow.ready);
+      assert.ok(first.layout.combatFlow.linkCount>=2);
+    }
     assert.equal(first.layout.volcanicTerrain.schema,'wyrmforge.volcanic-terrain.v1');
     assert.ok(first.layout.volcanicTerrain.fissureCells>0,
       kind+' seed '+seed+' should create physical cuts outside required routes');

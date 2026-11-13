@@ -12,7 +12,7 @@ const matches=(a,b)=>a.x===b.x && a.z===b.z;
 export function specifyEscapeRoutes({
   radius,heights,escapeRoutes=[],combatSpaces=[]
 }) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !(heights instanceof Int16Array) ||
       heights.length!==(2*radius)**2 ||
       !Array.isArray(escapeRoutes) || !Array.isArray(combatSpaces)) {

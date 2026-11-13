@@ -24,7 +24,9 @@ function protectedTerrain(plan,radius) {
     for(const point of gradePath(route.nodes))mark(point.x,point.z,
       (route.width??2)+2);
   }
-  for(const space of [...plan.combatSpaces,...plan.clearings]) {
+  for(const space of [
+    ...plan.combatSpaces,...plan.clearings,...(plan.maneuverPockets??[])
+  ]) {
     for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
       if(dist(x,z,space)<=space.radius+2)protectedCells.add(x+','+z);
     }
@@ -48,12 +50,29 @@ function segmentDistance(x,z,a,b) {
 
 // Pre-authored rifts run OUTSIDE navigable causeways and boss floors.
 // The same topology/spawn rules must be preserved after each seed.
-const FAULTS=Object.freeze([
-  Object.freeze({id:'west-rift',from:{x:-13,z:-14},to:{x:-9,z:-3},width:1.65}),
-  Object.freeze({id:'east-rift',from:{x:12,z:-16},to:{x:9,z:-4},width:1.6}),
-  Object.freeze({id:'northwest-rift',from:{x:-14,z:-5},to:{x:-10,z:9},width:1.55}),
-  Object.freeze({id:'northeast-rift',from:{x:13,z:-5},to:{x:10,z:9},width:1.55})
-]);
+function createFaults(radius) {
+  // Place rifts in the OUTER mountains, scaled with the site's extent.
+  // Fixed +/-13m faults cut directly across widened boss maneuver space.
+  const outer=radius-5,inner=radius-10;
+  return Object.freeze([
+    Object.freeze({
+      id:'west-rift',from:{x:-outer,z:-outer+4},
+      to:{x:-inner,z:-8},width:1.65
+    }),
+    Object.freeze({
+      id:'east-rift',from:{x:outer,z:-outer+4},
+      to:{x:inner,z:-8},width:1.6
+    }),
+    Object.freeze({
+      id:'northwest-rift',from:{x:-outer,z:6},
+      to:{x:-inner,z:outer-4},width:1.55
+    }),
+    Object.freeze({
+      id:'northeast-rift',from:{x:outer,z:6},
+      to:{x:inner,z:outer-4},width:1.55
+    })
+  ]);
+}
 
 export function composeVolcanicTerrain({plan,seed,heights,surfaces}) {
   const profile=plan.volcanicTerrain;
@@ -75,7 +94,7 @@ export function composeVolcanicTerrain({plan,seed,heights,surfaces}) {
   const numberOfFaults=stage==='lair'?4:stage==='mini-boss'?3:2;
   const fissures=[];
   let totalFissureCells=0;
-  for(const fault of FAULTS.slice(0,numberOfFaults)) {
+  for(const fault of createFaults(radius).slice(0,numberOfFaults)) {
     let cells=0,deepest=0;
     for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
       if(protectedCells.has(x+','+z) ||

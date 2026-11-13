@@ -24,7 +24,7 @@ export function composeMicroSurfaceTiles({
   gradedTopTenths=null,
   flowLinks=[],escapeRoutes=[],approaches=[],combatSpaces=[]
 }) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !Number.isSafeInteger(seed) || seed<0 || seed>0xffffffff ||
       !(heights instanceof Int16Array) ||
       !(surfaces instanceof Uint8Array) ||

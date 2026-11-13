@@ -49,8 +49,8 @@ test('World Generation is a separate engine with injected Strategy, Builder, Spe
     assert.equal(result.definition.generatorVersion,result.generatorVersion);
     assert.equal(result.definition.siteId,result.recipe.siteId);
     assert.equal(result.layout.topology.reachable,true);
-    assert.equal(result.layout.topology.entry.z,18);
-    assert.equal(result.layout.topology.exit.z,-18);
+    assert.equal(result.layout.topology.entry.z,result.recipe.radius-2);
+    assert.equal(result.layout.topology.exit.z,2-result.recipe.radius);
     assert.ok(result.layout.topology.walkableFromEntry>100);
     assert.ok(result.layout.routes.length>=2);
     assert.ok(result.layout.clearings.length>=2);
