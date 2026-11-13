@@ -407,3 +407,71 @@ terrain initialization schema remains unchanged. Tests cover quantized
 tenths, fractional road depths, seed determinism, real mesh positions,
 cross-chunk seam vertices, retained voxel revisions, localized edits,
 real layered stone, and the existing 24-world integration stress baseline.
+
+## WorldGen v2.5 / Voxel V2 microcells — genuine 10cm pixel-art solids
+
+V2.4 used vertical **vertex displacement** after meshing. That was not
+correct: it distorted existing triangles and gave the actor/raycaster a
+different world from the visible geometry. The standalone
+`terrain-surface-detail.mjs` bending adapter and its tests are removed.
+
+### 1m blocks, optional 10×10×10 fine occupancy
+
+V2.5 adds physical, sparse `voxel-v2.micro-surface.v1` tiles to
+**VoxelWorld**. A single 1m top voxel can opt in to 100 contiguous
+10cm-wide X/Z columns, each containing **1–10 physically occupied 10cm
+cells** in Y. The full tile is only 100 bytes; it does **not** allocate
+1,000 JS objects, nor does it refine the entire map. Other voxels retain
+the exact old 1m storage, meshing and collision fast path.
+
+The public initializer is versioned as
+`voxel-v2.terrain-initialization.v2`, with bounded
+`surfaceTiles: [{x,y,z,levels:[100 integer values]}]`. The old v1
+definition remains supported with byte-for-byte identical whole-voxel
+behavior. A maximum of 384 generated microtiles focuses detail on roads
+and cliff lips; the Voxel V2 hard safety budget is 1,024 tiles.
+
+**World Generation V2** chooses where fine details are warranted:
+Wet Forest roads lower by one microcell (10cm), foothill roads two
+(20cm), mountain roads three (30cm). Exposed stone cliff lips are given
+sparse seeded **axis-aligned microvoxel steps**. The authored 1m
+terrain, primary road continuity, horde arenas, enemy ingress,
+escape loops and existing cliff/strata grammar remain unchanged.
+
+### Physical / rendering semantics
+
+- The voxel world owns microcell heights, their **revision**, material
+  occupancy, copy-safe snapshots and cleanup on destructive voxel edits.
+- The public Terrain Port exposes `materialAtPoint(x,y,z)` for exact
+  physical occupancy and `microSurfaceTiles()` for derived consumers.
+- Terrain raycasts perform bounded 10cm traversal **only inside refined
+  voxels**. Actor overlap, downward support and spawn grounding use the
+  same occupied cells, not visual meshes.
+- `microvoxel-mesher.mjs` removes only the matching coarse top/side
+  faces and builds **horizontal top quads and vertical step walls** from
+  actual microcells. Flat adjacent microcells merge into larger flat
+  quads. No angled top, stretched triangle, bending normal, or mesh
+  displacement is allowed.
+- The new v2 initialization and external checkpoint replay load the
+  **same authoritative microtiles**, with checksums covering their
+  actual occupancy. A destroyed parent voxel automatically removes
+  its microcell tile and local remeshing follows the existing change
+  pipeline. Unrelated V1 tests and old voxel scenes are unchanged.
+
+### Intentional limits
+
+This is a targeted **surface refinement**, not arbitrary 3D microcell
+caves or detached 10cm objects within each cubic meter. Those would
+require a general sparse 3D microvolume representation and additional
+editing API. The current compression assumes contiguous solid columns
+under each top microcell (well suited to shallow tracks, rock ridges and
+walkable hills). Collision on downward support and ray queries is
+microvoxel-aware; the broader physics engine still owns more advanced
+forces and terrain interaction.
+
+The current renderer's shader may smooth pixel colors, but the new
+geometry itself is strictly **pixelated, square and discrete**.
+Continuous block terrain still uses the existing exposed-face worker;
+the microdetail is derived by a bounded adapter from Voxel V2 data.
+Performance and user-facing pixel-art acceptance must be checked with
+the new build before treating this as final.
