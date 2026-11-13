@@ -45,12 +45,15 @@ function prepareGeometry(plan,seed) {
     const dx=center.x-approach.x,dz=center.z-approach.z;
     const distance=Math.hypot(dx,dz);
     const destination=center.target;
-    // Keep every ingress route climbable in one-voxel steps even when the
-    // surrounding authored mountains are very steep.
+    // A corridor stays level across the inner combat floor, then climbs
+    // gently through a bounded hillside approach. The grade is enforced
+    // along the ENTIRE playable corridor, not only its end points.
+    const flatRadius=center.radius-2;
+    const gradeLength=Math.max(1,distance-flatRadius);
     const source=clamp(base(approach.x,approach.z),
-      destination-distance*0.58,destination+distance*0.58);
+      destination-gradeLength*0.42,destination+gradeLength*0.42);
     return {...approach,dx,dz,center,source,destination,
-      distanceSquared:dx*dx+dz*dz};
+      gradeLength,flatRadius,distanceSquared:dx*dx+dz*dz};
   });
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=gridIndex(radius,x,z);
@@ -82,7 +85,12 @@ function prepareGeometry(plan,seed) {
       const distance=Math.hypot(dx-t*segment.dx,dz-t*segment.dz);
       const influence=clamp((segment.width+2-distance)/2,0,1);
       if(influence>0) {
-        const grade=segment.source+(segment.destination-segment.source)*t;
+        const distanceFromCenter=Math.hypot(
+          x-segment.center.x,z-segment.center.z);
+        const gradeProgress=clamp(
+          (distanceFromCenter-segment.flatRadius)/segment.gradeLength,0,1);
+        const grade=segment.destination+
+          (segment.source-segment.destination)*gradeProgress;
         shaped=shaped*(1-smooth(influence))+grade*smooth(influence);
       }
     }
