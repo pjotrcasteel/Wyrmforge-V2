@@ -475,3 +475,35 @@ Continuous block terrain still uses the existing exposed-face worker;
 the microdetail is derived by a bounded adapter from Voxel V2 data.
 Performance and user-facing pixel-art acceptance must be checked with
 the new build before treating this as final.
+
+## Road material / microvoxel seam alignment (V2.5 follow-up)
+
+A real iPhone screenshot of Wet Forest exposed hairline edges that did
+**not** track the brown road. Three issues were identified and fixed:
+
+1. The road-material compositor selected cells using **integer (x,z)**,
+   while the micro-surface grammar independently selected tiles at
+   **(x+0.5,z+0.5)** with a wider distance allowance. This caused micro
+   steps to appear under non-road grass cells and some painted road
+   cells not to have matching 10cm geometry. Both now call the same
+   `selectRoadCell` policy in `road-footprint.mjs`.
+2. When an adjacent unrefined full-height cell was higher than a
+   refined road microcell, the mesher reversed the exposed wall's
+   normal **and moved its coordinate into the road by 0.1m**. It now
+   holds the wall on the actual shared X/Z boundary regardless of which
+   side owns the higher surface.
+3. The legacy coarse-face removal identified the wrong owning voxel
+   for outward **+X/+Z** faces. The old one-meter wall could remain
+   behind the new pixel-art geometry, creating dark/colored lines.
+   Coarse faces are now identified by the voxel on the **inside**
+   of each face; refined top/side faces are replaced exactly once.
+
+Automated regressions assert both positive and negative boundary
+normals; accurate 10cm stepped seams between dirt and grass; removal
+of all old 1m top/side faces; valid material-to-geometry footprints
+across 3 map kinds × 4 seeds; and correct full-height wall restoration
+after destroying a refined road voxel.
+
+No shader masking, vertex bending, material recoloring or arbitrary
+second geometry authority was added. These are fixes to actual physical
+voxels and the existing World Generation output boundary.

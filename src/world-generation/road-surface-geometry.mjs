@@ -1,18 +1,11 @@
 import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
+import { selectRoadCell } from './road-footprint.mjs';
 
 // World Generation V2: route material and walkable centerline geometry.
 // No one-block excavations. Presentation of 0.1-voxel road beds is delegated
 // through a replaceable public mesh-presentation adapter.
 const index=(radius,x,z)=>(z+radius)*2*radius+x+radius;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-
-function distanceToSegment(x,z,a,b) {
-  const dx=b.x-a.x,dz=b.z-a.z;
-  const squared=dx*dx+dz*dz;
-  if(squared===0) throw new RangeError('Road segment has zero length');
-  const t=clamp(((x-a.x)*dx+(z-a.z)*dz)/squared,0,1);
-  return Math.hypot(x-(a.x+t*dx),z-(a.z+t*dz));
-}
 
 export function composeRoadSurfaces({
   radius,heights,surfaces,routes=[],combatSpaces=[]
@@ -57,20 +50,9 @@ export function composeRoadSurfaces({
   }
   let paintedCells=0,profiledCells=0,combatRoadCells=0;
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
-    // Road priority follows the authored route order: the continuous entry-
-    // to-exit spine wins over narrower landmark spurs at intersections.
-    let selected=null;
-    for(const route of roadRoutes) {
-      let closest=Infinity;
-      for(let i=1;i<route.nodes.length;i++) {
-        closest=Math.min(closest,
-          distanceToSegment(x,z,route.nodes[i-1],route.nodes[i]));
-      }
-      if(closest<=route.width+0.01) {
-        selected={route,distance:closest};
-        break;
-      }
-    }
+    // Exactly the same footprint selects microvoxel road geometry below.
+    // A material-2/3 road cell can never lack matching road-cell intent.
+    const selected=selectRoadCell(x,z,roadRoutes);
     if(!selected) continue;
     const i=index(radius,x,z);
     const {route,distance}=selected;

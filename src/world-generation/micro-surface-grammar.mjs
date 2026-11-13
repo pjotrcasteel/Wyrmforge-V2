@@ -2,6 +2,7 @@
 // 10x10 height values encode 10x10x10 individual solid microcells. This
 // produces crisp cuboid steps, never sheared triangles or displaced vertices.
 // Voxel V2 only understands the resulting public initialization data.
+import { selectRoadCell, roadMicroCut, microCellCenter } from './road-footprint.mjs';
 export const MICRO_SURFACE_GRAMMAR_SCHEMA='wyrmforge.micro-surface-grammar.v1';
 export const MAX_GENERATED_MICRO_TILES=384;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -15,14 +16,6 @@ function noise(seed,x,z) {
   v^=v>>>15;
   v=Math.imul(v,0x846ca68b);
   return ((v^(v>>>16))>>>0)/0x100000000;
-}
-
-function distance(x,z,a,b) {
-  const dx=b.x-a.x,dz=b.z-a.z;
-  const sq=dx*dx+dz*dz;
-  if(!sq) throw new RangeError('Micro surface route cannot be zero length');
-  const t=clamp(((x-a.x)*dx+(z-a.z)*dz)/sq,0,1);
-  return Math.hypot(x-a.x-t*dx,z-a.z-t*dz);
 }
 
 export function composeMicroSurfaceTiles({
@@ -40,10 +33,11 @@ export function composeMicroSurfaceTiles({
   const roads=[],cliffs=[];
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=index(radius,x,z),top=heights[i];
-    const profile=tracks.find(route=>route.nodes.some((a,j)=>{
-      if(!j) return false;
-      return distance(x+0.5,z+0.5,route.nodes[j-1],a)<=route.width+0.55;
-    }));
+    const selected=selectRoadCell(x,z,tracks);
+    const profile=selected?.route??null;
+    if(profile && surfaces[i]!==profile.roadProfile.material) {
+      throw new Error('Road surface material disagrees with selected microvoxels');
+    }
     let rockFace=false;
     if(rockFaceThreshold!==null && surfaces[i]===3) {
       for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
@@ -58,18 +52,12 @@ export function composeMicroSurfaceTiles({
     const levels=[];
     let changed=false;
     for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++) {
-      const px=x+(ix+0.5)*0.1,pz=z+(iz+0.5)*0.1;
+      const px=microCellCenter(x,ix),pz=microCellCenter(z,iz);
       let cut=0;
       if(profile) {
-        let nearest=Infinity;
-        for(let j=1;j<profile.nodes.length;j++) {
-          nearest=Math.min(nearest,
-            distance(px,pz,profile.nodes[j-1],profile.nodes[j]));
-        }
-        // Flat-topped micro voxel road bed, graded shoulder *at 10cm steps*.
-        // The authoritative terrain still uses the normal solid material.
-        const influence=clamp(profile.width+0.5-nearest,0,1);
-        cut=Math.round(profile.roadProfile.nominalCutFraction*10*influence);
+        // The same selected 1m road cell owns its material AND its physical
+        // ten-centimeter occupancy. Never carve beyond a painted boundary.
+        cut=roadMicroCut(px,pz,selected);
       } else if(rockFace) {
         // Staggered cliff lips with coarse clusters of tiny steps.
         // No smoothly tilted top quads and no gratuitous 1000-cell

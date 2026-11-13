@@ -82,7 +82,12 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
       const xs=[0,3,6,9].map(k=>mesh.positions[i+k]+origin[0]);
       const ys=[1,4,7,10].map(k=>mesh.positions[i+k]+origin[1]);
       const zs=[2,5,8,11].map(k=>mesh.positions[i+k]+origin[2]);
-      const x=Math.min(...xs),z=Math.min(...zs);
+      // The source quad is on an outward-facing voxel boundary. +X and
+      // +Z positions are one unit beyond the voxel that OWNS the face.
+      // Looking up the neighbor instead leaves the old coarse wall behind
+      // the 10cm road step, visible as a thin misaligned seam.
+      const x=Math.min(...xs)-(name==='+x'?1:0);
+      const z=Math.min(...zs)-(name==='+z'?1:0);
       const y=Math.min(...ys)-(name==='+y'?1:0);
       if(name!=='-y' && lookup.has(tileKey(x,y,z))) continue;
       const verts=[0,3,6,9].map(k=>[
@@ -145,8 +150,15 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
           const side=level>neighbor.level?name:
             name==='+x'?'-x':name==='-x'?'+x':
               name==='+z'?'-z':'+z';
-          face(side,x0,x1,tile.y+lower/10,tile.y+higher/10,
-            z0,z1,level>neighbor.level?material:neighbor.material);
+          // The wall lies on the SHARED boundary, regardless of which
+          // side is physically higher. Reversing its normal must not move
+          // it 10cm inside the low cell (the old blue-line seam).
+          const borderX=dx>0?x1:x0;
+          const borderZ=dz>0?z1:z0;
+          face(side,dx?borderX:x0,dx?borderX:x1,
+            tile.y+lower/10,tile.y+higher/10,
+            dz?borderZ:z0,dz?borderZ:z1,
+            level>neighbor.level?material:neighbor.material);
         }
       }
     }
