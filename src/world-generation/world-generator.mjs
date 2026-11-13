@@ -250,6 +250,8 @@ export class WorldGeneratorV2 {
     const microSurface=composeMicroSurfaceTiles({
       radius:recipe.radius,seed,
       heights,surfaces,routes:plan.routes,
+      flowLinks:plan.flowLinks,escapeRoutes:plan.escapeRoutes,
+      approaches:plan.approaches,combatSpaces:plan.combatSpaces,
       rockFaceThreshold:plan.terrain.rockFaceThreshold
     });
     const definition=this.#terrainAdapter({
@@ -260,7 +262,9 @@ export class WorldGeneratorV2 {
     const layout=Object.freeze({
       routes:plan.routes,roads,geology,microSurface:Object.freeze({
         schema:microSurface.schema,tileCount:microSurface.tileCount,
-        roadTiles:microSurface.roadTiles,rockTiles:microSurface.rockTiles
+        roadTiles:microSurface.roadTiles,
+        connectorTiles:microSurface.connectorTiles,
+        rockTiles:microSurface.rockTiles
       }),clearings:plan.clearings,
       landmarks:plan.landmarks,features:plan.features,
       combatSpaces:plan.combatSpaces,
