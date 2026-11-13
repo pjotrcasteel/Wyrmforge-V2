@@ -104,6 +104,75 @@ export class VoxelWorld {
     return my<tile[mz*10+mx] ? material : 0;
   }
 
+  // Physical AABB overlap uses the 10cm occupied cells in refined top
+  // voxels, and unchanged whole cubes elsewhere. No meshes or materials
+  // shader are involved in collision.
+  intersectsPhysicalBox(bounds) {
+    if(!bounds || !['x','y','z'].every(axis=>
+      Array.isArray(bounds[axis]) && bounds[axis].length===2 &&
+      bounds[axis].every(Number.isFinite) &&
+      bounds[axis][1]>=bounds[axis][0])) {
+      throw new TypeError('Expected bounded physical x/y/z spans');
+    }
+    const span=axis=>[
+      Math.floor(bounds[axis][0]+1e-6),
+      Math.floor(bounds[axis][1]-1e-6)
+    ];
+    const [x0,x1]=span('x'),[y0,y1]=span('y'),[z0,z1]=span('z');
+    for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++) {
+      for(let x=x0;x<=x1;x++) {
+        if(!this.get(x,y,z))continue;
+        const tile=this.#microSurfaces.get(key(x,y,z));
+        if(!tile)return true;
+        const ix0=Math.max(0,Math.floor((bounds.x[0]-x)*10+1e-5));
+        const ix1=Math.min(9,Math.ceil((bounds.x[1]-x)*10-1e-5)-1);
+        const iz0=Math.max(0,Math.floor((bounds.z[0]-z)*10+1e-5));
+        const iz1=Math.min(9,Math.ceil((bounds.z[1]-z)*10-1e-5)-1);
+        for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
+          const top=y+tile[iz*10+ix]/10;
+          if(bounds.y[0]<top-1e-7 && bounds.y[1]>y+1e-7)return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Highest contacted 10cm/full-voxel floor along a bounded downward
+  // sweep. Does not allocate 1000 tiny voxels for unrefined blocks.
+  groundContactHeight(xRange,zRange,feetY,distance) {
+    if(![...xRange,...zRange,feetY,distance].every(Number.isFinite) ||
+        distance>=0 || distance < -32) {
+      throw new RangeError('Invalid bounded downward ground probe');
+    }
+    let best=null;
+    for(let z=Math.floor(zRange[0]+1e-6);
+      z<=Math.floor(zRange[1]-1e-6);z++) {
+      for(let x=Math.floor(xRange[0]+1e-6);
+        x<=Math.floor(xRange[1]-1e-6);x++) {
+        for(let y=Math.floor(feetY+1e-5);
+          y>=Math.floor(feetY+distance-1);y--) {
+          if(!this.get(x,y,z))continue;
+          const tile=this.#microSurfaces.get(key(x,y,z));
+          let top=y+1;
+          if(tile) {
+            top=y;
+            const ix0=Math.max(0,Math.floor((xRange[0]-x)*10+1e-5));
+            const ix1=Math.min(9,Math.ceil((xRange[1]-x)*10-1e-5)-1);
+            const iz0=Math.max(0,Math.floor((zRange[0]-z)*10+1e-5));
+            const iz1=Math.min(9,Math.ceil((zRange[1]-z)*10-1e-5)-1);
+            for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
+              top=Math.max(top,y+tile[iz*10+ix]/10);
+            }
+          }
+          if(top<=feetY+1e-5 &&
+              top>=feetY+distance-1e-5 &&
+              (best===null || top>best))best=top;
+        }
+      }
+    }
+    return best;
+  }
+
   set(x, y, z, material) {
     this.#validate(x, y, z);
     if (!Number.isInteger(material) || material < 0 || material > 255) {
