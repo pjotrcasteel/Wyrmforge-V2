@@ -991,6 +991,18 @@ breachButton.addEventListener('click',impactSpan);
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
 if(playMode) {
+  // Safari can still rubber-band the visual viewport when a joystick
+  // gesture moves down, even if the pointer target uses touch-action:none.
+  // Register a NON-PASSIVE touchmove guard on the document so that a touch
+  // captured by the joystick cannot promote into page scrolling.
+  // Keep the WorldGen lab and the header's normal link interaction intact.
+  const playStage=document.querySelector('#preview-stage');
+  document.addEventListener('touchmove',event=>{
+    if(event.cancelable && (playPointer.id!==null ||
+        playStage.contains(event.target))) {
+      event.preventDefault();
+    }
+  },{passive:false});
   const directions=new Set([
     'KeyW','KeyA','KeyS','KeyD',
     'ArrowUp','ArrowLeft','ArrowDown','ArrowRight'
