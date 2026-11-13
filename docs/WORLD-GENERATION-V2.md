@@ -575,13 +575,18 @@ steps. A full one-metre rise is a **blocked climb**, not a plausible
 passive hop. The Voxel V2 controller uses this same maximum clearance
 rather than keeping a contradictory one-metre step assumption.
 
-World Generation converts existing *single-voxel height changes*
-between adjacent authored main-road cells into actual microvoxel
-landings on the higher cell: five 10 cm layers instead of a full ten,
-so the original 1 m obstacle can be crossed as two **0.5 m** rises.
-The change modifies real microvoxel occupancy, preserving pixel-art
-right angles, terrain material and collision, not bending mesh vertices.
-Unprotected rocky cliffs remain intentionally impassable.
+World Generation V2.6 jointly grades the **authored main road,
+escape loops, enemy approaches, and maneuver-space links** into a shared
+physical 10 cm surface-height network. Its deterministic lower and upper
+grade envelopes bound every adjacent authored movement step to **0.5 m**,
+while preserving as much of the original landforms as possible. These
+heights become actual sparse microvoxel occupancy and real top-voxel
+positions—not shader bending, hidden ramps or a second collision model.
+Independent route crossings therefore agree on a single physical height.
+Deliberately steep cliffs outside the authored movement network remain
+terrain obstacles. Specs still independently enforce escape routes,
+combat-space width, real Voxel traversal, and cross-seed reachability.
+The output semantics are versioned as `worldgen-v2.6.0`.
 
 The World Generation preview adds an opt-in-by-default **1.6 m × 0.56 m
 dummy** projected using the collision volume and the actual unmodified
