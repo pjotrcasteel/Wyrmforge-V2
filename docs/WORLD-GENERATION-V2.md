@@ -170,3 +170,65 @@ The 40x40 test site is a bounded first arena sample, not final Hunt size.
 Next World Generation development should refine encounter flow and themed
 arena composition with mobile stress measurements, while preserving each
 map kind as a separately replaceable Strategy.
+
+## WorldGen v2.1 — authored escape loops and player choice
+
+Vampire-Survivors-like combat must support **movement and escape around hordes**,
+rather than merely place a wide fighting floor between a single entry and exit.
+This version adds **two independent walkable escape loops** around each
+built-in map kind's central arena:
+
+- **Wet Forest:** broad woodland loops around the grassy fighting glade;
+  players can retreat on either side without crossing the main arena.
+- **Forest → Highland:** deliberately staggered foothill switchbacks with
+  graduated side routes, leaving cliffs and forest slopes outside the path.
+- **Mountain Pass:** cliffside-shelf alternatives that let the player
+  navigate around combat pressure without requiring a tunnel or new physics.
+
+All layouts are *authored Strategy decisions*, not random corridors.
+They share south/north rejoin anchors but differ in intermediate waypoints,
+presentation styles and local terrain shape. Seeds vary the surrounding
+landform, while the core route promise remains stable.
+
+### Explicit patterns, public contract and acceptance
+
+**Builder:** each strategy uses `addEscapeRoute({id,side,style,nodes,width})`;
+the Builder requires a matching east/west pair with shared endpoints, but
+an injected custom kind may deliberately omit the optional escape grammar.
+
+**Terrain composition:** `escape-route-geometry.mjs` rasterizes diagonal
+waypoints into cardinally contiguous walkable cells. It grades the existing
+heightfield along each route and softens adjacent shoulders. The Voxel
+adapter and voxel engine remain unchanged; this is still one authored
+layered terrain world, not a second collision or path authority.
+
+**Specification:** `escape-route-specification.mjs` rejects routes with
+steps larger than one voxel, diagonal jumps, shared interior cells,
+passage through the active combat floor, missing cardinal flanks or
+unbounded lengths. It audits actual generated heights, not just the site
+plan. The existing `specifyEncounterSpaces` and `specifySiteTopology`
+audits still run afterward.
+
+**Diagnostics:** when the existing **Horde survival layout** option is
+enabled, the viewer draws two distinct alternate-route guides in addition
+to the combat ring and enemy approach markers. Hidden discovery candidates
+remain invisible, and no new render/voxel API is introduced.
+
+**Versioned determinism:** generation semantics advance to
+`worldgen-v2.1.0`; the public `wyrmforge.generated-site.v2` shape adds
+`layout.escapeRoutes` and `layout.escapeAudit`. The terrain initialization
+contract and engine adapter are unchanged.
+
+**Ownership:** World Generation owns geographic options; Enemy AI and
+horde spawning own tactical use of those options. Camera owns following
+the player; Voxel V2 owns runtime destruction and collision; World Objects
+and Loot own any future hidden chest content. After terrain destruction,
+navigation consumers must re-evaluate the current world, not assume these
+initial routes stay open forever.
+
+Automated tests cover three distinctly composed map kinds, deterministic
+seed variation, 16³/32³ real Voxel initialization and actual traversable
+height steps, explicit route independence and invalid disconnected plans.
+The existing WorldGen 24-site CI stress baseline still applies. Larger
+runtime arenas, mobile horde-load simulation and final camera/gameplay
+acceptance remain separate future work.
