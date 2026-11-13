@@ -53,6 +53,25 @@ function addNarrativePaths(builder, kind) {
   builder.addClearing({id:'landmark-approach',x:8,z:-3,radius:3});
   builder.addLandmark({id:'site-landmark',kind,
     x:8,z:-3,clearance:3});
+
+  // Every handcrafted site must also work as a horde-survival arena:
+  // a broad central fighting floor and multiple genuine flank approaches.
+  // The runtime's enemy system decides if/when/how enemies appear.
+  builder.addCombatSpace({id:'central-arena',x:1,z:2,radius:7});
+  for(const approach of [
+    {id:'north-flank',x:1,z:-13,width:3},
+    {id:'east-flank',x:14,z:2,width:3},
+    {id:'south-flank',x:0,z:15,width:3},
+    {id:'west-flank',x:-13,z:1,width:3}
+  ]) {
+    builder.addApproach({...approach,combatSpaceId:'central-arena'});
+  }
+
+  // Merely an excavatable future discovery location. World Objects / Loot
+  // can later place a hidden cache if progression rules select it.
+  builder.addDiscoveryCandidate({
+    id:'buried-nook',kind:'buried-cache',x:-11,z:-12,coverDepth:2
+  });
 }
 
 function forest(builder, context) {

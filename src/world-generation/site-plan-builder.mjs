@@ -11,6 +11,9 @@ export class SitePlanBuilder {
   #clearings=[];
   #landmarks=[];
   #features=[];
+  #combatSpaces=[];
+  #approaches=[];
+  #discoveryCandidates=[];
   #ids=new Set();
   #built=false;
 
@@ -83,6 +86,41 @@ export class SitePlanBuilder {
     }));
     return this;
   }
+  // Encounter geometry is a World Generation promise, not an enemy spawner.
+  // Combat simulation and actual spawn timing are owned by other engines.
+  addCombatSpace({id,x,z,radius}) {
+    this.#checkOpen(id);
+    if(!integer(radius) || radius<5 || radius>8) {
+      throw new RangeError('Horde combat floor requires a bounded open radius');
+    }
+    this.#combatSpaces.push(Object.freeze({
+      id,...this.#point({x,z},radius+2),radius
+    }));
+    return this;
+  }
+  addApproach({id,x,z,width,combatSpaceId}) {
+    this.#checkOpen(id);
+    if(!integer(width) || width<2 || width>4 ||
+        typeof combatSpaceId!=='string' || !IDENTIFIER.test(combatSpaceId)) {
+      throw new RangeError('Encounter approach needs width and combat destination');
+    }
+    this.#approaches.push(Object.freeze({
+      id,...this.#point({x,z},width+1),width,combatSpaceId
+    }));
+    return this;
+  }
+  // Only a possible buried *location*. No chest/object/reward is instantiated.
+  addDiscoveryCandidate({id,x,z,coverDepth=2,kind='buried-cache'}) {
+    this.#checkOpen(id);
+    if(!IDENTIFIER.test(kind) || !integer(coverDepth) ||
+        coverDepth<2 || coverDepth>3) {
+      throw new RangeError('Invalid buried discovery site');
+    }
+    this.#discoveryCandidates.push(Object.freeze({
+      id,kind,...this.#point({x,z},2),coverDepth
+    }));
+    return this;
+  }
   build() {
     if(this.#built) throw new Error('Site plan already built');
     this.#built=true;
@@ -90,12 +128,20 @@ export class SitePlanBuilder {
         this.#landmarks.length===0 || this.#clearings.length===0) {
       throw new Error('Site strategy must define landform, entry-to-exit route, and landmark');
     }
+    for(const approach of this.#approaches) {
+      if(!this.#combatSpaces.some(space=>space.id===approach.combatSpaceId)) {
+        throw new Error('Encounter approach references a missing combat space');
+      }
+    }
     return Object.freeze({
       recipe:this.#recipe,terrain:this.#terrain,
       routes:Object.freeze([...this.#routes]),
       clearings:Object.freeze([...this.#clearings]),
       landmarks:Object.freeze([...this.#landmarks]),
-      features:Object.freeze([...this.#features])
+      features:Object.freeze([...this.#features]),
+      combatSpaces:Object.freeze([...this.#combatSpaces]),
+      approaches:Object.freeze([...this.#approaches]),
+      discoveryCandidates:Object.freeze([...this.#discoveryCandidates])
     });
   }
 }
