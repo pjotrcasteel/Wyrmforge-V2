@@ -35,8 +35,8 @@ test('World Map corruption affects real terrain while leaving authored routes an
   for(const kind of kinds)for(const seed of [7,19,101,267]) {
     const living=generateWorldSite(recipe(kind,seed,0));
     const weathered=generateWorldSite(recipe(kind,seed,1));
-    assert.equal(living.generatorVersion,'worldgen-v2.7.0');
-    assert.equal(weathered.generatorVersion,'worldgen-v2.7.0');
+    assert.equal(living.generatorVersion,'worldgen-v2.7.1');
+    assert.equal(weathered.generatorVersion,'worldgen-v2.7.1');
     assert.equal(weathered.layout.worldInfluence.schema,WORLD_INFLUENCE_SCHEMA);
     assert.equal(living.layout.worldInfluence.corruption,0);
     assert.equal(living.layout.worldInfluence.alteredNaturalCells,0);
