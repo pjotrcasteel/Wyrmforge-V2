@@ -42,18 +42,18 @@ const routeNodes = Object.freeze([
   Object.freeze({x:0,z:-18})
 ]);
 
-// Each Strategy owns the appearance and desired *sub-voxel* road depth.
-// Integer Voxel V2 terrain can currently carve only one entire voxel;
-// the 0.1-0.3 intent is preserved for a future fractional surface renderer.
+// Road depths are actual quantized mesh presentation, not voxel storage.
+// The independent surface-detail adapter renders tenths of a voxel, while
+// deterministic World Generation still owns the route and material intent.
 const ROAD_PROFILES=Object.freeze({
   'wet-forest':Object.freeze({
-    kind:'worn-forest-track',nominalCutFraction:0.12,material:2,cutVoxels:1
+    kind:'worn-forest-track',nominalCutFraction:0.1,material:2,cutVoxels:0
   }),
   'forest-highland':Object.freeze({
-    kind:'foothill-track',nominalCutFraction:0.2,material:2,cutVoxels:1
+    kind:'foothill-track',nominalCutFraction:0.2,material:2,cutVoxels:0
   }),
   'mountain-pass':Object.freeze({
-    kind:'rock-cut-pass',nominalCutFraction:0.3,material:3,cutVoxels:1
+    kind:'rock-cut-pass',nominalCutFraction:0.3,material:3,cutVoxels:0
   })
 });
 
@@ -187,8 +187,12 @@ function transition(builder, context) {
   builder.setTerrain({
     elevation(x,z) {
       const travel=(18-z)/36;
-      const ridge=Math.max(0,Math.abs(x-5)-5);
-      return 2+travel*8 + 0.25*ridge +
+      // Break the perfectly even staircase with meandering cliff lips.
+      // Escarpments remain outside the authored routes after grading.
+      const lip=1.5*(siteNoise(seed,x,z,9,21)-0.5);
+      const ridge=Math.max(0,Math.abs(x-5+lip)-5);
+      const escarpment=ridge>=6 ? 2.5+0.14*(ridge-6) : 0;
+      return 2+travel*8 + 0.18*ridge + escarpment +
         3*siteNoise(seed,x,z,13,3)-1;
     },
     exposedStone: 0.68
@@ -206,11 +210,15 @@ function mountains(builder, context) {
   const seed=context.seed;
   builder.setTerrain({
     elevation(x,z) {
-      const valley=Math.max(0,Math.abs(x-2)-5);
+      // The pass is cut between broken rock walls, not two mathematical
+      // ramps. Jittered cliff lips form distinct, steep stone faces, with
+      // separate broad terraces beyond the lip for tactical movement.
+      const warpedX=x-2+2.4*(siteNoise(seed,x,z,9,32)-0.5);
+      const valley=Math.max(0,Math.abs(warpedX)-5);
       const northward=(18-z)/36;
-      const cliff=valley > 4 ? (valley-4)*0.85 : 0;
-      return 3 + northward*7 + 0.65*valley + cliff +
-        2.0*siteNoise(seed,x,z,11,4);
+      const wall=valley>=4.5 ? 4.2+0.25*(valley-4.5) : 0.35*valley;
+      return 3+northward*7+wall+
+        1.8*siteNoise(seed,x,z,11,4);
     },
     // Mountain cliffs should expose continuous bedrock instead of repeating
     // brown soil sandwiches between grey stone ledges.
