@@ -91,6 +91,7 @@ let playActor=null;
 let playStepAccumulator=0;
 let playFrameAt=null;
 const playFrameStats=new HuntPlayPerformance();
+const playCpuStats=new HuntPlayPerformance();
 const playKeys=new Set();
 const playPointer={id:null,x:0,z:0};
 let lastHudAt=-Infinity;
@@ -138,7 +139,14 @@ function setPreviewStatus(message,brief) {
 }
 
 function resizeCanvas() {
-  const pixelRatio=Math.min(window.devicePixelRatio || 1,2);
+  // One physical pixel per CSS pixel is intentional for the untextured,
+  // pixel-art Play Hunt on mobile. The previous 2x DPR submitted FOUR
+  // times as many WebGL pixels + Canvas2D overlays with no actual new art.
+  // Keep the 2x diagnostic inspector unchanged. Cap tablet/desktop fill.
+  const cssPixels=Math.max(1,canvas.clientWidth*canvas.clientHeight);
+  const pixelRatio=playMode
+    ? Math.min(1,Math.sqrt(700000/cssPixels))
+    : Math.min(window.devicePixelRatio || 1,2);
   const width=Math.max(1,Math.round(canvas.clientWidth*pixelRatio));
   const height=Math.max(1,Math.round(canvas.clientHeight*pixelRatio));
   if(canvas.width!==width || canvas.height!==height) {
@@ -493,16 +501,18 @@ function updatePlayFrame(now) {
       playActor.x.toFixed(1),playActor.y.toFixed(1),
       playActor.z.toFixed(1)].join(', '):'—';
     playHud.textContent='WIZARD · '+(playActor?'walkable':'loading')+
-      '\\nWorld: '+(expeditionSite?.regionId??'—')+
-      '\\nPosition: '+p+
-      '\\nFrame p50: '+ms(metrics.p50Ms)+
-      '\\nFrame p95: '+ms(metrics.p95Ms)+
-      '\\nFrame p99: '+ms(metrics.p99Ms)+
-      '\\nHitches >33ms: '+metrics.hitchesOver33ms+
-      '\\nVoxel memory ~'+(active?.world?
+      '\nWorld: '+(expeditionSite?.regionId??'—')+
+      '\nPosition: '+p+
+      '\nFrame p50: '+ms(metrics.p50Ms)+
+      '\nFrame p95: '+ms(metrics.p95Ms)+
+      '\nFrame p99: '+ms(metrics.p99Ms)+
+      '\nHitches >33ms: '+metrics.hitchesOver33ms+
+      '\nFrame CPU p95: '+ms(playCpuStats.snapshot.p95Ms)+
+      '\nRender '+canvas.width+'×'+canvas.height+' px'+
+      '\nVoxel memory ~'+(active?.world?
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
-      '\\nTouch joystick / WASD · no enemies yet';
+      '\nTouch joystick / WASD · no enemies yet';
   }
 }
 
@@ -796,6 +806,7 @@ function stageTerrainMeshes(terrain,kind) {
 }
 
 function frame(now) {
+  const playCpuBegin=playMode?performance.now():0;
   try {
     updatePlayFrame(now);
     if (!document.hidden) meshBridge?.pollTimeout();
@@ -823,14 +834,14 @@ function frame(now) {
       const camera=viewCamera.value; // Play Hunt defaults to north-up in its own page
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
       const inspected=generatedSite??expeditionSite;
-      const fit=inspected
+      const fit=!playMode && inspected
         ? fitWorldgenSiteView({
           width:canvas.width,height:canvas.height,
           footprint:inspected.layout.footprint,camera
         })
         : null;
       const scale=playMode
-        ? 22*pixelRatio*viewZoom
+        ? 16*pixelRatio*viewZoom
         : fit ? fit.scale*viewZoom
         : Math.max(9,Math.min(20,
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
@@ -872,6 +883,8 @@ function frame(now) {
     restoreButton.disabled=true;
     updateStatus(now);
   }
+  if(playMode)playCpuStats.recordFrame(
+    Math.max(0,Math.min(1000,performance.now()-playCpuBegin)));
   requestAnimationFrame(frame);
 }
 
@@ -1062,6 +1075,7 @@ window.addEventListener('pagehide',()=>{
 });
 try {
   renderer=new WebGLVoxelView(canvas,{
+    fastHuntMode:playMode,
     onAvailabilityChange(ready,error) {
       // A restored GL context cannot clear an unrelated worker or replay failure.
       rendererErrorMessage=ready ? null : (error?.message ?? 'WebGL context lost');
