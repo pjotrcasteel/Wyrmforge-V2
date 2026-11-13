@@ -37,10 +37,12 @@ function arenaBase(builder,{kind,center,radius,landmark}) {
       id,x,z,width:3,combatSpaceId:'boss-fighting-floor'
     });
   }
-  builder.setDedicatedArena({
-    kind,combatSpaceId:'boss-fighting-floor',
-    entryKind:'authored-causeway',exitKind:'authored-causeway'
-  });
+  if(kind!=='approach-only') {
+    builder.setDedicatedArena({
+      kind,combatSpaceId:'boss-fighting-floor',
+      entryKind:'authored-causeway',exitKind:'authored-causeway'
+    });
+  }
 }
 
 export function createFireArenaStrategies(siteNoise) {
