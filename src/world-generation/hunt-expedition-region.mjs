@@ -32,12 +32,12 @@ function regionPorts(plan,region) {
   const additional=[];
   if(region.id===plan.entryRegionId)additional.push(Object.freeze({
     id:'world-map-entry',direction:'south',
-    at:Object.freeze({x,z:z+HALF-1}),widthMetres:6,
+    at:Object.freeze({x,z:z+HALF-1}),widthMetres:7,
     peerRegionId:null
   }));
   if(region.id===plan.exitRegionId)additional.push(Object.freeze({
     id:'world-map-extraction',direction:'north',
-    at:Object.freeze({x,z:z-HALF}),widthMetres:6,
+    at:Object.freeze({x,z:z-HALF}),widthMetres:7,
     peerRegionId:null
   }));
   return Object.freeze([...region.ports,...additional]);
@@ -135,11 +135,11 @@ export function generateHuntExpeditionRegion(plan,regionId,{terrainAdapter}={}) 
       const point={x,z};point[lateral]+=offset;
       if(point.x<minX||point.x>maxX||
           point.z<minZ||point.z>maxZ || at(point.x,point.z)!==PORT_Y) {
-        throw new Error('Six-metre-wide terrain seam is not physically level: '+port.id);
+        throw new Error('Seven-metre-wide terrain seam is not physically level: '+port.id);
       }
     }
     audits.push(Object.freeze({id:port.id,
-      at:port.at,heightMetres:PORT_Y,passageWidthMetres:6,ready:true}));
+      at:port.at,heightMetres:PORT_Y,passageWidthMetres:7,ready:true}));
   }
   // Canonical world-coordinate X-directed solid runs. Only ONE region's
   // definition is allocated at a time, keeping Voxel V2's original
