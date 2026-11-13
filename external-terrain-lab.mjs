@@ -15,6 +15,9 @@ import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
+import {
+  fitWorldgenSiteView, clampWorldgenViewZoom
+} from './src/diagnostics/worldgen-viewport.mjs';
 
 const canvas=document.querySelector('#site-view');
 const status=document.querySelector('#status');
@@ -26,6 +29,13 @@ const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
 const saveButton=document.querySelector('#save-site');
 const restoreButton=document.querySelector('#restore-site');
+const previewMessage=document.querySelector('#preview-message');
+const siteSummary=document.querySelector('#site-summary');
+const controls=document.querySelector('#controls');
+const focusButton=document.querySelector('#focus-view');
+const fitButton=document.querySelector('#fit-view');
+const zoomInButton=document.querySelector('#zoom-in');
+const zoomOutButton=document.querySelector('#zoom-out');
 document.querySelector('#build').textContent='v'+VERSION+' · '+COMMIT.slice(0,7);
 
 const terrainEpochs=new V2TerrainEpochClock();
@@ -46,6 +56,30 @@ let pendingEdit=null;
 let meshSource='worker';
 let generatedSite=null;
 
+// Viewer-only navigation. Positions are CSS pixels so DPR changes do not
+// change the user's pan; neither controls nor camera touch the voxel world.
+let viewZoom=1;
+let viewPanX=0;
+let viewPanY=0;
+const activePointers=new Map();
+
+function resetPreviewView() {
+  viewZoom=1;
+  viewPanX=0;
+  viewPanY=0;
+}
+
+function updateSiteSummary() {
+  const selected=siteKind.selectedOptions[0]?.textContent ?? siteKind.value;
+  siteSummary.textContent=selected.split(' — ')[0]+
+    (siteKind.value==='fixture' ? ' · diagnostic' : ' · seed '+siteSeed.value);
+}
+
+function setPreviewStatus(message,brief) {
+  status.textContent=message;
+  previewMessage.textContent=brief;
+}
+
 function resizeCanvas() {
   const pixelRatio=Math.min(window.devicePixelRatio || 1,2);
   const width=Math.max(1,Math.round(canvas.clientWidth*pixelRatio));
@@ -61,28 +95,32 @@ function updateStatus(now=performance.now()) {
   lastStatusAt=now;
   const displayedError=errorMessage ?? rendererErrorMessage;
   if(displayedError) {
-    status.textContent='V2.6 error: '+displayedError;
+    setPreviewStatus('V2.6 error: '+displayedError,'Error: '+displayedError);
     return;
   }
   if(pendingEdit) {
     const progress=meshBridge.status;
-    status.textContent='V2.7 localized worker edit · '+
+    setPreviewStatus('V2.7 localized worker edit · '+
       progress.completedChunks+'/'+progress.totalChunks+
-      ' dirty chunks · '+lastImpactRemoved+' voxels removed';
+      ' dirty chunks · '+lastImpactRemoved+' voxels removed',
+      'Updating '+progress.completedChunks+'/'+progress.totalChunks+
+      ' chunks · '+lastImpactRemoved+' voxels removed');
     return;
   }
   if(pendingMesh) {
     const progress=meshBridge.status;
-    status.textContent='V2.7 worker meshing · '+progress.completedChunks+
+    setPreviewStatus('V2.7 worker meshing · '+progress.completedChunks+
       '/'+progress.totalChunks+' chunks · '+pendingMesh.kind+
-      ' · original scene remains visible until ready';
+      ' · original scene remains visible until ready',
+      'Preparing 3D scene · '+progress.completedChunks+'/'+progress.totalChunks+' chunks');
     return;
   }
   if(restoring) {
     const progress=restoring.progress;
-    status.textContent='Restoring verified V2 terrain · '+
+    setPreviewStatus('Restoring verified V2 terrain · '+
       progress.loadedCells+'/'+progress.totalCells+' cells · '+
-      progress.appliedEdits+'/'+progress.totalEdits+' replayed edits';
+      progress.appliedEdits+'/'+progress.totalEdits+' replayed edits',
+      'Restoring terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells');
     return;
   }
   if(!loader && !restoredSession) return;
@@ -104,10 +142,16 @@ function updateStatus(now=performance.now()) {
         ' · plan '+generatedSite.hash : '')
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
+  previewMessage.textContent=progress.done
+    ? (generatedSite ? generatedSite.recipe.kind : 'Fixed voxel fixture')+
+      ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'
+    : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
+      '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
 }
 
 function resetSite() {
   try {
+    updateSiteSummary();
     errorMessage=null;
     breachCount=0;
     lastImpactRemoved=0;
@@ -307,14 +351,22 @@ function frame(now) {
       // underside, stone walls and vertical height are legible on mobile.
       // This is presentation-only: switching views never remeshes terrain.
       const camera=viewCamera.value;
-      const scale=generatedSite
-        ? Math.max(4,Math.min(12,canvas.width/
-          (camera==='inspection' ? 78 : 57)))
+      const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
+      const fit=generatedSite
+        ? fitWorldgenSiteView({
+          width:canvas.width,height:canvas.height,
+          footprint:generatedSite.layout.footprint,camera
+        })
+        : null;
+      const scale=fit
+        ? fit.scale*viewZoom
         : Math.max(9,Math.min(20,
-          canvas.width/(camera==='inspection' ? 37 : 34)));
+          canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
+      const panX=(fit?.panX ?? 0)*viewZoom+viewPanX*pixelRatio;
+      const panY=(fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
       renderer.render({
         width:canvas.width,height:canvas.height,
-        scale,panX:0,panY:0,camera
+        scale,panX,panY,camera
       });
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
@@ -339,14 +391,77 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-resetButton.addEventListener('click',resetSite);
-pitch.addEventListener('change',resetSite);
-siteKind.addEventListener('change',resetSite);
-siteSeed.addEventListener('change',resetSite);
+resetButton.addEventListener('click',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+pitch.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+siteKind.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+siteSeed.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
 viewCamera.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
   lastStatusAt=-Infinity;
   updateStatus();
 });
+fitButton.addEventListener('click',resetPreviewView);
+zoomInButton.addEventListener('click',()=>{
+  viewZoom=clampWorldgenViewZoom(viewZoom*1.25);
+});
+zoomOutButton.addEventListener('click',()=>{
+  viewZoom=clampWorldgenViewZoom(viewZoom/1.25);
+});
+focusButton.addEventListener('click',()=>{
+  const focused=document.body.classList.toggle('focus-mode');
+  focusButton.textContent=focused?'Exit focus':'Focus';
+  focusButton.setAttribute('aria-pressed',String(focused));
+  controls.open=false;
+});
+
+// Two-pointer pinch and single-pointer pan are viewer interactions only.
+// Touch-action:none prevents page scrolling while inspecting a generated map.
+canvas.addEventListener('pointerdown',event=>{
+  if(event.pointerType==='mouse' && event.button!==0) return;
+  canvas.setPointerCapture?.(event.pointerId);
+  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+});
+canvas.addEventListener('pointermove',event=>{
+  if(!activePointers.has(event.pointerId)) return;
+  const before=[...activePointers.values()];
+  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  const after=[...activePointers.values()];
+  if(before.length===1) {
+    viewPanX+=after[0].x-before[0].x;
+    viewPanY+=after[0].y-before[0].y;
+  } else if(before.length>=2) {
+    const distance=points=>Math.hypot(points[0].x-points[1].x,
+      points[0].y-points[1].y);
+    const prior=distance(before);
+    if(prior>1) viewZoom=clampWorldgenViewZoom(viewZoom*distance(after)/prior);
+    viewPanX+=((after[0].x+after[1].x)-(before[0].x+before[1].x))/2;
+    viewPanY+=((after[0].y+after[1].y)-(before[0].y+before[1].y))/2;
+  }
+  event.preventDefault();
+});
+function releasePointer(event) {
+  activePointers.delete(event.pointerId);
+}
+canvas.addEventListener('pointerup',releasePointer);
+canvas.addEventListener('pointercancel',releasePointer);
+canvas.addEventListener('lostpointercapture',releasePointer);
 breachButton.addEventListener('click',impactSpan);
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
