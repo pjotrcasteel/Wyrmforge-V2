@@ -14,7 +14,10 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe, siteRadiusForKind } from './src/world-generation/site-recipe.mjs';
-import { generateWorldSite } from './src/world-generation/index.mjs';
+import {
+  generateWorldSite,generateWorldExpeditionRegion,
+  createHuntExpeditionRecipe,composeHuntExpeditionPlan
+} from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import { analyzeCharacterReachability } from './src/character-reachability.mjs';
@@ -38,6 +41,9 @@ const pitch=document.querySelector('#chunk-edge');
 const siteKind=document.querySelector('#site-kind');
 const siteSeed=document.querySelector('#site-seed');
 const siteInfluence=document.querySelector('#site-influence');
+const expeditionMode=document.querySelector('#expedition-mode');
+const expeditionRegion=document.querySelector('#expedition-region');
+const expeditionRegionField=document.querySelector('#expedition-region-field');
 const viewCamera=document.querySelector('#view-camera');
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
@@ -69,6 +75,8 @@ let pendingMesh=null;
 let pendingEdit=null;
 let meshSource='worker';
 let generatedSite=null;
+let expeditionPlan=null;
+let expeditionSite=null;
 let reachabilityCache=null;
 
 // Viewer-only navigation. Positions are CSS pixels so DPR changes do not
@@ -85,6 +93,15 @@ function resetPreviewView() {
 }
 
 function updateSiteSummary() {
+  if(expeditionPlan && expeditionSite) {
+    const region=expeditionPlan.regions.find(item=>
+      item.id===expeditionSite.regionId);
+    siteSummary.textContent='Hunt '+expeditionPlan.footprint.widthMetres+
+      '×'+expeditionPlan.footprint.depthMetres+' m · '+
+      (region?.id.replace('region-','')??'region')+
+      ' · seed '+siteSeed.value;
+    return;
+  }
   const selected=siteKind.selectedOptions[0]?.textContent ?? siteKind.value;
   const percent=Number(siteInfluence.value);
   const width=siteRadiusForKind(siteKind.value)*2;
@@ -404,11 +421,15 @@ function updateStatus(now=performance.now()) {
       ' · stale GPU replies blocked: '+renderer.uploadQueueStatistics.staleUploadRejections+
       ' · mesh source: '+meshSource+
       (generatedSite ? ' · WorldGen '+generatedSite.recipe.kind+
-        ' · plan '+generatedSite.hash : '')
+        ' · plan '+generatedSite.hash :
+        expeditionSite ? ' · Hunt expedition region '+expeditionSite.regionId+
+          ' · plan '+expeditionPlan.hash : '')
     : 'Loading '+progress.siteId+' · '+progress.loadedCells+
       '/'+progress.totalCells+' voxels · staged (not yet rendered)';
   previewMessage.textContent=progress.done
-    ? (generatedSite ? generatedSite.recipe.kind : 'Fixed voxel fixture')+
+    ? (generatedSite ? generatedSite.recipe.kind :
+        expeditionSite ? 'Expedition '+expeditionSite.regionId :
+        'Fixed voxel fixture')+
       ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'
     : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
       '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
@@ -436,13 +457,45 @@ function resetSite() {
     active=null;
     renderer.setMeshes([]);
     generatedSite=null;
+    expeditionSite=null;
+    expeditionPlan=null;
     reachabilityCache=null;
     dummyStatus.textContent='Preparing a 1.6m actor-scale route…';
     reachabilityReport.textContent='Generating terrain before actor reachability can be traced.';
+    const inspectExpedition=expeditionMode.checked && siteKind.value!=='fixture';
+    expeditionRegionField.hidden=!inspectExpedition;
     if(siteKind.value==='fixture') {
       loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
         chunkEdge:Number(pitch.value),seed:7
       }),{epoch:terrainEpochs.next()});
+    } else if(inspectExpedition) {
+      // This selector loads only ONE bounded world-coordinate region.
+      // It is not an implemented region-streaming manager or playable Hunt.
+      expeditionPlan=composeHuntExpeditionPlan(createHuntExpeditionRecipe({
+        journeyId:'fire-tier-one',huntId:'preview-expedition',chapter:0,
+        kind:siteKind.value,seed:Number(siteSeed.value),worldRevision:0,
+        chunkEdge:Number(pitch.value),
+        corruption:Number(siteInfluence.value)/100,
+        scope:'standard'
+      }));
+      const previous=expeditionRegion.value;
+      expeditionRegion.replaceChildren();
+      for(const region of expeditionPlan.regions) {
+        const option=document.createElement('option');
+        option.value=region.id;
+        option.textContent=region.id.replace('region-','')+
+          ' · '+region.role;
+        expeditionRegion.append(option);
+      }
+      expeditionRegion.value=expeditionPlan.regions.some(item=>item.id===previous)
+        ? previous:expeditionPlan.entryRegionId;
+      expeditionSite=generateWorldExpeditionRegion(
+        expeditionPlan,expeditionRegion.value
+      );
+      loader=new V2ExternalTerrainLoader(expeditionSite.definition,
+        {epoch:terrainEpochs.next()});
+      dummyStatus.textContent=
+        'Regional terrain preview · expedition actor navigation is not integrated';
     } else {
       // The World Generation engine knows only site recipes and the public
       // terrain initialization contract; this host owns the adapter lifecycle.
@@ -456,7 +509,9 @@ function resetSite() {
       loader=new V2ExternalTerrainLoader(generatedSite.definition,
         {epoch:terrainEpochs.next()});
     }
-    breachButton.textContent=generatedSite ? 'Carve generated terrain' : 'Break stone span';
+    breachButton.textContent=generatedSite || expeditionSite
+      ? 'Carve generated terrain' : 'Break stone span';
+    updateSiteSummary();
     lastStatusAt=-Infinity;
     updateStatus();
   } catch(error) {
@@ -477,8 +532,10 @@ function impactSpan() {
   }
   try {
     let target=EXTERNAL_SITE_BREACH;
-    if(generatedSite) {
-      const spot=generatedSite.layout.clearings[0];
+    if(generatedSite || expeditionSite) {
+      const spot=generatedSite
+        ? generatedSite.layout.clearings[0]
+        : expeditionSite.layout.center;
       let top=null;
       for(let y=30;y>=-3;y--) {
         if(active.world.get(spot.x,y,spot.z)!==0) {top=y;break;}
@@ -626,10 +683,11 @@ function frame(now) {
       // This is presentation-only: switching views never remeshes terrain.
       const camera=viewCamera.value;
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
-      const fit=generatedSite
+      const inspected=generatedSite??expeditionSite;
+      const fit=inspected
         ? fitWorldgenSiteView({
           width:canvas.width,height:canvas.height,
-          footprint:generatedSite.layout.footprint,camera
+          footprint:inspected.layout.footprint,camera
         })
         : null;
       const scale=fit
@@ -690,6 +748,16 @@ siteSeed.addEventListener('change',()=>{
   resetSite();
 });
 siteInfluence.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+expeditionMode.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+expeditionRegion.addEventListener('change',()=>{
   resetPreviewView();
   controls.open=false;
   resetSite();
