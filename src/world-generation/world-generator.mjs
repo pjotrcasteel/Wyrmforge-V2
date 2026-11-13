@@ -16,6 +16,8 @@ import { classifySurfaceStrata } from './terrain-strata.mjs';
 import { composeMicroSurfaceTiles } from './micro-surface-grammar.mjs';
 import { gradeNavigableRoads } from './navigable-road-grades.mjs';
 import { sampleWorldInfluence, WORLD_INFLUENCE_SCHEMA } from './world-influence-grammar.mjs';
+import { composeVolcanicTerrain } from './volcanic-terrain-grammar.mjs';
+import { specifyDedicatedArena } from './dedicated-arena-specification.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -155,6 +157,11 @@ function prepareGeometry(plan,seed) {
     escapeRoutes:plan.escapeRoutes,flowLinks:plan.flowLinks,
     approaches:plan.approaches,combatSpaces:plan.combatSpaces
   });
+  // Volcanic fissures are real rock cuts, but must never sever the
+  // already-graded authored routes, protected combat floor or exits.
+  const volcanicTerrain=composeVolcanicTerrain({
+    plan,seed,heights,surfaces
+  });
   const geology=classifySurfaceStrata({
     radius,heights,surfaces,terrain:plan.terrain
   });
@@ -168,7 +175,7 @@ function prepareGeometry(plan,seed) {
     // remain separate engines with their own contracts.
     hasFireSimulation:false
   });
-  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence};
+  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence,volcanicTerrain};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
@@ -246,8 +253,9 @@ export class WorldGeneratorV2 {
     const builder=new SitePlanBuilder(recipe);
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
-    const {heights,surfaces,roadWork,geology,roadGrades,worldInfluence}=
-      prepareGeometry(plan,seed);
+    const {heights,surfaces,roadWork,geology,roadGrades,
+      worldInfluence,volcanicTerrain}=prepareGeometry(plan,seed);
+    const dedicatedArena=specifyDedicatedArena({plan,heights});
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
       routes:plan.routes,landmarks:plan.landmarks,
@@ -294,6 +302,7 @@ export class WorldGeneratorV2 {
     });
     const layout=Object.freeze({
       routes:plan.routes,roads,geology,worldInfluence,
+      dedicatedArena,volcanicTerrain,
       roadGrades:Object.freeze({
         schema:roadGrades.schema,cells:roadGrades.cells,
         maximumGradeTenths:roadGrades.maximumGradeTenths,
