@@ -297,8 +297,8 @@ export function simulateTerrainActor(world,actor,{
   const xMotion=moveHorizontal(world,actor,'x',dx,canStep);
   const zMotion=moveHorizontal(world,xMotion.position,'z',dz,canStep);
   let position=zMotion.position;
-  const autoHopStarted=canStep && (xMotion.hopCandidate || zMotion.hopCandidate) &&
-    (actor.hopCooldown??0)<=0;
+  const autoHopStarted=Boolean(canStep && (xMotion.hopCandidate || zMotion.hopCandidate) &&
+    (actor.hopCooldown??0)<=0);
   const hopCooldown=autoHopStarted?0.32:Math.max(0,(actor.hopCooldown??0)-dt);
   // The player has NO jump command. A real obstacle found by the swept
   // collider starts a ballistic automatic hop, never a 1m position snap.
