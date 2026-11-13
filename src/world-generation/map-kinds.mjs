@@ -80,18 +80,18 @@ function addNarrativePaths(builder, kind) {
 const ESCAPE_LAYOUTS=Object.freeze({
   'wet-forest':Object.freeze({
     style:'woodland-loop',
-    west:[[-10,12],[-12,3],[-10,-10]],
-    east:[[9,12],[11,1],[10,-9]]
+    west:[[-16,12],[-16,3],[-16,-10]],
+    east:[[16,12],[16,1],[16,-9]]
   }),
   'forest-highland':Object.freeze({
     style:'foothill-switchback',
-    west:[[-8,12],[-11,6],[-10,-7],[-7,-11]],
-    east:[[10,11],[11,2],[10,-11]]
+    west:[[-15,12],[-17,6],[-16,-7],[-15,-11]],
+    east:[[15,11],[16,2],[16,-11]]
   }),
   'mountain-pass':Object.freeze({
     style:'cliffside-shelf',
-    west:[[-9,12],[-11,5],[-11,-4],[-9,-11]],
-    east:[[10,12],[12,3],[12,-5],[9,-11]]
+    west:[[-15,12],[-17,5],[-17,-4],[-15,-11]],
+    east:[[15,12],[17,3],[17,-5],[15,-11]]
   })
 });
 
