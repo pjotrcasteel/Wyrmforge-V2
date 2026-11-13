@@ -644,3 +644,30 @@ jump limit and renderer are unchanged. A specific regression now checks
 the road-to-grass 50cm adjacency on both edges across three map kinds
 and four seeds, as well as physical collision/occupancy above each
 grass shoulder. Visual acceptance still requires an actual phone screenshot.
+
+
+## World Generation V2.7 — deterministic Wyrm influence terrain foundation
+
+The V2 world-map recipe already included `corruption` (0–1), but the generator
+previously ignored it and the mobile viewer always used zero. The new pure
+`world-influence-grammar.mjs` applies a northward (toward the authored exit),
+seed-coherent physical terrain progression *before* normal authored road,
+combat, escape and shared 10cm route grading. At zero corruption the grammar
+is mathematically inert, retaining the approved Wet Forest seed-7 geometry.
+
+At higher influence, nearby natural landforms gain bounded height variation
+and coherent exposed stone patches. This is genuine voxel occupancy/material
+work, using the existing 3D geology/strata and adapter; it is **not** painted
+overlay, shader bending, lava, fire, new art, trees, objects, or weather.
+The generator returns `layout.worldInfluence` diagnostics, keeping input
+corruption, seed and physical results fully deterministic. Authored routes,
+landmark identity, combat clearings, reachability and physical voxel collision
+must remain valid. The viewer's World Generation settings now expose a
+0–100% influence selector, leaving zero selected by default. Tests cover
+three map kinds, four seeds, physical voxel changes, zero baseline,
+bounded grammar and consistent route/arena identities.
+
+World Map owns world-state advancement; generation is deterministic from a
+recipe and must never mutate an active Hunt without the separate save/replay
+and live-terrain authority. Objects, fire, ash and lava are future engines.
+This V2.7 step does not mark the whole voxel V2.7 acceptance gate complete.

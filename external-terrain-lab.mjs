@@ -37,6 +37,7 @@ const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
 const siteKind=document.querySelector('#site-kind');
 const siteSeed=document.querySelector('#site-seed');
+const siteInfluence=document.querySelector('#site-influence');
 const viewCamera=document.querySelector('#view-camera');
 const resetButton=document.querySelector('#reset-site');
 const breachButton=document.querySelector('#breach-site');
@@ -85,8 +86,10 @@ function resetPreviewView() {
 
 function updateSiteSummary() {
   const selected=siteKind.selectedOptions[0]?.textContent ?? siteKind.value;
+  const percent=Number(siteInfluence.value);
   siteSummary.textContent=selected.split(' — ')[0]+
-    (siteKind.value==='fixture' ? ' · diagnostic' : ' · seed '+siteSeed.value);
+    (siteKind.value==='fixture' ? ' · diagnostic' :
+      ' · seed '+siteSeed.value+(percent ? ' · influence '+percent+'%' : ''));
 }
 
 function setPreviewStatus(message,brief) {
@@ -445,7 +448,7 @@ function resetSite() {
         regionId:'starter-region',siteId:'preview-'+siteKind.value,
         encounterId:'preview-001',kind:siteKind.value,
         seed:Number(siteSeed.value),worldRevision:0,
-        chunkEdge:Number(pitch.value),corruption:0
+        chunkEdge:Number(pitch.value),corruption:Number(siteInfluence.value)/100
       });
       generatedSite=generateWorldSite(recipe);
       loader=new V2ExternalTerrainLoader(generatedSite.definition,
@@ -680,6 +683,11 @@ siteKind.addEventListener('change',()=>{
   resetSite();
 });
 siteSeed.addEventListener('change',()=>{
+  resetPreviewView();
+  controls.open=false;
+  resetSite();
+});
+siteInfluence.addEventListener('change',()=>{
   resetPreviewView();
   controls.open=false;
   resetSite();

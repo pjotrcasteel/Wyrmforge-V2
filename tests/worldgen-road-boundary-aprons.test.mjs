@@ -73,7 +73,7 @@ test('all three map kinds grade and physically render entrance and exit to the m
     }));
     const road=generated.layout.routes.find(r=>r.id==='entry-to-exit');
     const grades=generated.layout.roadGrades;
-    assert.equal(generated.generatorVersion,'worldgen-v2.6.2');
+    assert.equal(generated.generatorVersion,'worldgen-v2.7.0');
     assert.ok(grades.maximumGradeTenths<=halfMetre);
     assert.equal(grades.boundaryAprons.length,2);
     assert.deepEqual(grades.boundaryAprons.find(a=>a.end==='entry').boundary,
