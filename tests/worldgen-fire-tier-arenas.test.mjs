@@ -29,7 +29,7 @@ test('miniboss and Wyrm are different dedicated site types, not a corruption thr
     assert.equal(site.layout.dedicatedArena.ready,true);
     assert.equal(site.layout.encounter.ready,true);
     assert.equal(site.layout.topology.reachable,true);
-    assert.equal(site.layout.roadGrades.maximumGradeTenths<=5);
+    assert.ok(site.layout.roadGrades.maximumGradeTenths<=5);
     assert.ok(site.layout.dedicatedArena.usableFloorCells>=75);
     assert.equal(site.layout.volcanicTerrain.lavaSimulationImplemented,false);
   }
