@@ -4,7 +4,7 @@
 export const TRAVERSAL_POLICY_SCHEMA='wyrmforge.character-traversal.v1';
 export const AUTO_STEP_HEIGHT=0.35;
 export const AUTO_HOP_HEIGHT=1.05;
-export const AUTO_HOP_UPWARD_SPEED=8;
+export const AUTO_HOP_UPWARD_SPEED=7.4;
 export const SAFE_FALL_HEIGHT=2;
 export const MAX_NAVIGABLE_DROP=6;
 export const FALL_DAMAGE_PER_METRE=20;
