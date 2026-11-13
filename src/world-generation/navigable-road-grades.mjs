@@ -59,27 +59,28 @@ export function gradeNavigableRoads({
       previous=i;
     }
   }
-  // Deterministic local projection to a bounded 50cm grade. Both endpoints
-  // adjust together; paths which cross at the hub cannot disagree on height.
-  // The original whole-voxel terrain is the starting point, minimizing the
-  // amount of work required in easy wetland sites.
+  // Two monotonic Lipschitz envelopes avoid round-off oscillations on
+  // loops. The lower envelope raises only valleys; the upper envelope
+  // lowers only peaks. Their midpoint remains a 50cm-Lipschitz graph,
+  // and changes less terrain than either extreme alone.
+  const lowered=sampled.slice(),raised=sampled.slice();
   let iterations=0,changed=false;
-  for(;iterations<480;iterations++) {
+  for(;iterations<=used.size;iterations++) {
     changed=false;
     for(const [a,b] of edges) {
-      const difference=sampled[a]-sampled[b];
-      const excess=Math.abs(difference)-GRADE_LIMIT_TENTHS;
-      if(excess<=0)continue;
-      const sign=Math.sign(difference);
-      const reduceA=Math.floor(excess/2);
-      const increaseB=excess-reduceA;
-      sampled[a]-=sign*reduceA;
-      sampled[b]+=sign*increaseB;
-      changed=true;
+      const upperA=Math.min(lowered[a],lowered[b]+GRADE_LIMIT_TENTHS);
+      const upperB=Math.min(lowered[b],upperA+GRADE_LIMIT_TENTHS);
+      const lowerA=Math.max(raised[a],raised[b]-GRADE_LIMIT_TENTHS);
+      const lowerB=Math.max(raised[b],lowerA-GRADE_LIMIT_TENTHS);
+      if(lowered[a]!==upperA || lowered[b]!==upperB ||
+          raised[a]!==lowerA || raised[b]!==lowerB)changed=true;
+      lowered[a]=upperA;lowered[b]=upperB;
+      raised[a]=lowerA;raised[b]=lowerB;
     }
     if(!changed)break;
   }
-  if(changed)throw new Error('Authored path grades could not converge to a 50cm step');
+  if(changed)throw new Error('Authored Lipschitz envelopes failed to converge');
+  for(const i of used)sampled[i]=Math.floor((raised[i]+lowered[i])/2);
   let maxGradeTenths=0;
   for(const [a,b] of edges) {
     maxGradeTenths=Math.max(maxGradeTenths,Math.abs(sampled[a]-sampled[b]));
