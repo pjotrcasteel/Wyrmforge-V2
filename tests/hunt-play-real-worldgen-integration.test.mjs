@@ -62,7 +62,7 @@ test('H08-01 game actor can spawn and navigate real WorldGen V2 terrain through 
     let moved=actor;
     for(let i=0;i<24;i++) {
       moved=stepHuntExplorer(world,moved,bounds,{moveZ:-1},HUNT_FIXED_STEP);
-      assert.equal(moved.error,undefined);
+      assert.ok(!moved.error);
       assert.equal(actorOverlapsTerrain(world,moved),false);
     }
     assert.ok(moved.z<actor.z,'movement must happen on the real WorldGen floor');
