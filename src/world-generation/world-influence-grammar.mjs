@@ -13,7 +13,7 @@ const smooth=t=>t*t*(3-2*t);
 // coherent noise creates connected rocky patches, not random pixel speckles.
 // At corruption=0 this policy is exactly inert (the accepted baseline).
 export function sampleWorldInfluence({radius,seed,corruption,x,z}) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !Number.isSafeInteger(seed) || seed<0 || seed>0xffffffff ||
       !Number.isFinite(corruption) || corruption<0 || corruption>1 ||
       !Number.isSafeInteger(x) || !Number.isSafeInteger(z) ||
