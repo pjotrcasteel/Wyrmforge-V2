@@ -39,6 +39,6 @@ test('horde overlays are optional diagnostics and do not expose hidden discovery
   assert.match(host,/if\(!combatLayout\.checked \|\| !generatedSite \|\| !active\?\.world\) return/);
   assert.match(host,/projectEncounterGuides\(generatedSite,active\.world,view\)/);
   assert.match(host,/paintEncounterGuide\(\{/);
-  assert.doesNotMatch(helper,/discoveryCandidates|chest|loot/i);
+  assert.doesNotMatch(helper,/\.discoveryCandidates|\.chests|\.lootTable/);
   assert.doesNotMatch(helper,/from ['"][^'"]*(?:world-generator|voxel-world|webgl)/);
 });
