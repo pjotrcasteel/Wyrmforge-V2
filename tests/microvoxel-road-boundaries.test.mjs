@@ -6,7 +6,7 @@ import { buildPixelMicroSurfaceMeshes } from '../src/microvoxel-mesher.mjs';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from '../src/world-generation/index.mjs';
 import {
-  selectRoadCell,roadMicroCut
+  selectRoadCell,roadMicroCut,microCellCenter
 } from '../src/world-generation/road-footprint.mjs';
 
 const same=(a,b)=>Math.abs(a-b)<1e-6;
@@ -116,7 +116,7 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         assert.equal(top.material,selected.route.roadProfile.material,
           'painted road material and 10cm occupancy must share one cell selector');
         for(let z=0;z<10;z++)for(let x=0;x<10;x++) {
-          const cut=roadMicroCut(tile.x+(x+0.5)/10,tile.z+(z+0.5)/10,selected);
+          const cut=roadMicroCut(microCellCenter(tile.x,x),microCellCenter(tile.z,z),selected);
           assert.equal(tile.levels[z*10+x],10-cut,
             'every subcell height follows its selected painted road profile');
         }
