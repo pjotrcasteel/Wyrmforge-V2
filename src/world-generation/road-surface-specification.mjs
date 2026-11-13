@@ -47,7 +47,8 @@ export function specifyRoadSurfaces({
         const delta=Math.abs(value-previous);
         maxStep=Math.max(maxStep,delta);
         if(delta>1) {
-          throw new Error('Road is not walkable at a terrain grade: '+route.id);
+          throw new Error('Road is not walkable at a terrain grade: '+route.id+
+            ' near '+point.x+','+point.z+' (delta '+delta+')');
         }
       }
       previous=value;
