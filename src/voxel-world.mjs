@@ -1,4 +1,8 @@
 // Voxel V2: independent, deterministic terrain authority. No legacy imports.
+import {
+  MICRO_VOXEL_EDGE, MICRO_VOXEL_COUNT, MAX_MICRO_SURFACE_TILES,
+  validateMicroSurfaceTile
+} from './microvoxel-surface.mjs';
 // World coordinates are signed integers; chunk dimensions are a V2 choice.
 // 16 and 32 are explicit V2 experiment configurations, not inherited V1 constants.
 export const CHUNK_EDGE = 16;
@@ -14,6 +18,7 @@ export class VoxelWorld {
   #chunkRevisions = new Map();
   #occupied = new Map();
   #chunkEdge;
+  #microSurfaces=new Map();
 
   constructor({ chunkEdge = CHUNK_EDGE } = {}) {
     if (!CHUNK_EDGE_CANDIDATES.includes(chunkEdge)) {
@@ -27,7 +32,11 @@ export class VoxelWorld {
   get chunkEdge() { return this.#chunkEdge; }
 
   // Voxel payload only; excludes Map/object overhead and renderer/worker memory.
-  get allocatedVoxelBytes() { return this.chunkCount * this.#chunkEdge ** 3; }
+  get allocatedVoxelBytes() {
+    return this.chunkCount*this.#chunkEdge**3+
+      this.#microSurfaces.size*MICRO_VOXEL_COUNT;
+  }
+  get microSurfaceCount() {return this.#microSurfaces.size;}
 
   chunkRevision(cx, cy, cz) {
     this.#validate(cx, cy, cz);
@@ -39,6 +48,129 @@ export class VoxelWorld {
     const edge = this.#chunkEdge;
     const chunk = this.#chunks.get(key(floorDiv(x, edge), floorDiv(y, edge), floorDiv(z, edge)));
     return chunk ? chunk[index(local(x, edge), local(y, edge), local(z, edge), edge)] : 0;
+  }
+
+  // Read-only copy. Each unit is 10cm; values 1..10 mean *occupied*
+  // 10cm vertical cells above the voxel's integer bottom, not a shader warp.
+  microSurfaceTile(x,y,z) {
+    this.#validate(x,y,z);
+    const tile=this.#microSurfaces.get(key(x,y,z));
+    return tile ? tile.slice() : null;
+  }
+
+  microSurfaceTiles() {
+    return [...this.#microSurfaces].sort(([a],[b])=>a.localeCompare(b))
+      .map(([id,levels])=>{
+        const [x,y,z]=id.split(',').map(Number);
+        return {x,y,z,levels:Array.from(levels)};
+      });
+  }
+
+  // A sparse optional detail layer is owned by this very same world.
+  // Defining it changes the authoritative revision and is replayable.
+  setMicroSurfaceTile(x,y,z,levels) {
+    const tile=validateMicroSurfaceTile({x,y,z,levels});
+    if(this.get(x,y,z)===0 || this.get(x,y+1,z)!==0) {
+      throw new Error('Microvoxels require an exposed solid top voxel');
+    }
+    const id=key(x,y,z);
+    const previous=this.#microSurfaces.get(id);
+    if(previous?.every((value,i)=>value===tile.levels[i])) return false;
+    if(!previous && this.#microSurfaces.size>=MAX_MICRO_SURFACE_TILES) {
+      throw new RangeError('Micro surface tile budget exceeded');
+    }
+    this.#microSurfaces.set(id,Uint8Array.from(tile.levels));
+    this.#revision++;
+    this.#chunkRevisions.set(key(floorDiv(x,this.#chunkEdge),
+      floorDiv(y,this.#chunkEdge),floorDiv(z,this.#chunkEdge)),this.#revision);
+    return true;
+  }
+
+  // Physical material at a continuous world coordinate. On a refined top
+  // voxel, this queries the exact 10x10x10 occupied microcells.
+  materialAtPoint(x,y,z) {
+    if(![x,y,z].every(Number.isFinite) ||
+        [x,y,z].some(n=>Math.abs(n)>1e6)) {
+      throw new TypeError('Expected finite bounded physical coordinates');
+    }
+    const bx=Math.floor(x),by=Math.floor(y),bz=Math.floor(z);
+    const material=this.get(bx,by,bz);
+    if(!material) return 0;
+    const tile=this.#microSurfaces.get(key(bx,by,bz));
+    if(!tile) return material;
+    const mx=Math.min(9,Math.floor((x-bx)*MICRO_VOXEL_EDGE));
+    const mz=Math.min(9,Math.floor((z-bz)*MICRO_VOXEL_EDGE));
+    const my=Math.floor((y-by)*MICRO_VOXEL_EDGE);
+    return my<tile[mz*10+mx] ? material : 0;
+  }
+
+  // Physical AABB overlap uses the 10cm occupied cells in refined top
+  // voxels, and unchanged whole cubes elsewhere. No meshes or materials
+  // shader are involved in collision.
+  intersectsPhysicalBox(bounds) {
+    if(!bounds || !['x','y','z'].every(axis=>
+      Array.isArray(bounds[axis]) && bounds[axis].length===2 &&
+      bounds[axis].every(Number.isFinite) &&
+      bounds[axis][1]>=bounds[axis][0])) {
+      throw new TypeError('Expected bounded physical x/y/z spans');
+    }
+    const span=axis=>[
+      Math.floor(bounds[axis][0]+1e-6),
+      Math.floor(bounds[axis][1]-1e-6)
+    ];
+    const [x0,x1]=span('x'),[y0,y1]=span('y'),[z0,z1]=span('z');
+    for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++) {
+      for(let x=x0;x<=x1;x++) {
+        if(!this.get(x,y,z))continue;
+        const tile=this.#microSurfaces.get(key(x,y,z));
+        if(!tile)return true;
+        const ix0=Math.max(0,Math.floor((bounds.x[0]-x)*10+1e-5));
+        const ix1=Math.min(9,Math.ceil((bounds.x[1]-x)*10-1e-5)-1);
+        const iz0=Math.max(0,Math.floor((bounds.z[0]-z)*10+1e-5));
+        const iz1=Math.min(9,Math.ceil((bounds.z[1]-z)*10-1e-5)-1);
+        for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
+          const top=y+tile[iz*10+ix]/10;
+          if(bounds.y[0]<top-1e-7 && bounds.y[1]>y+1e-7)return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Highest contacted 10cm/full-voxel floor along a bounded downward
+  // sweep. Does not allocate 1000 tiny voxels for unrefined blocks.
+  groundContactHeight(xRange,zRange,feetY,distance) {
+    if(![...xRange,...zRange,feetY,distance].every(Number.isFinite) ||
+        distance>=0 || distance < -32) {
+      throw new RangeError('Invalid bounded downward ground probe');
+    }
+    let best=null;
+    for(let z=Math.floor(zRange[0]+1e-6);
+      z<=Math.floor(zRange[1]-1e-6);z++) {
+      for(let x=Math.floor(xRange[0]+1e-6);
+        x<=Math.floor(xRange[1]-1e-6);x++) {
+        for(let y=Math.floor(feetY+1e-5);
+          y>=Math.floor(feetY+distance-1);y--) {
+          if(!this.get(x,y,z))continue;
+          const tile=this.#microSurfaces.get(key(x,y,z));
+          let top=y+1;
+          if(tile) {
+            top=y;
+            const ix0=Math.max(0,Math.floor((xRange[0]-x)*10+1e-5));
+            const ix1=Math.min(9,Math.ceil((xRange[1]-x)*10-1e-5)-1);
+            const iz0=Math.max(0,Math.floor((zRange[0]-z)*10+1e-5));
+            const iz1=Math.min(9,Math.ceil((zRange[1]-z)*10-1e-5)-1);
+            for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
+              top=Math.max(top,y+tile[iz*10+ix]/10);
+            }
+          }
+          if(top<=feetY+1e-5 &&
+              top>=feetY+distance-1e-5 &&
+              (best===null || top>best))best=top;
+        }
+      }
+    }
+    return best;
   }
 
   set(x, y, z, material) {
@@ -58,6 +190,10 @@ export class VoxelWorld {
     }
     const offset = index(local(x, edge), local(y, edge), local(z, edge), edge);
     if (chunk[offset] === material) return false;
+    // Destruction/replace invalidates micro detail with the parent voxel.
+    // No detached visual/physical mask can outlive its authoritative solid.
+    this.#microSurfaces.delete(key(x,y,z));
+    this.#microSurfaces.delete(key(x,y-1,z));
     const wasSolid = chunk[offset] !== 0;
     chunk[offset] = material;
     const count = this.#occupied.get(id) + (material !== 0 ? 1 : 0) - (wasSolid ? 1 : 0);
@@ -95,6 +231,7 @@ export class VoxelWorld {
 
   clear() {
     this.#chunks.clear();
+    this.#microSurfaces.clear();
     this.#occupied.clear();
     this.#chunkRevisions.clear();
     this.#revision++;

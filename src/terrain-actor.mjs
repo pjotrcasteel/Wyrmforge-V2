@@ -51,6 +51,10 @@ export function actorOverlapsTerrain(world,position) {
   validateWorld(world);
   validatePosition(position);
   const bounds=box(position);
+  if(world.microSurfaceCount>0 &&
+      typeof world.intersectsPhysicalBox==='function') {
+    return world.intersectsPhysicalBox(bounds);
+  }
   const [x0,x1]=voxelSpan(...bounds.x);
   const [y0,y1]=voxelSpan(...bounds.y);
   const [z0,z1]=voxelSpan(...bounds.z);
@@ -66,6 +70,14 @@ export function actorOverlapsTerrain(world,position) {
 }
 
 function occupiedAtBoundary(world,bounds,axis,cellIndex) {
+  if(world.microSurfaceCount>0 &&
+      typeof world.intersectsPhysicalBox==='function') {
+    const refined={
+      x:[...bounds.x],y:[...bounds.y],z:[...bounds.z]
+    };
+    refined[axis]=[cellIndex,cellIndex+1];
+    return world.intersectsPhysicalBox(refined);
+  }
   const ranges=AXES.map(name => name===axis
     ? [cellIndex,cellIndex] : voxelSpan(...bounds[name]));
   for(let y=ranges[1][0];y<=ranges[1][1];y++) {
@@ -91,6 +103,16 @@ export function sweepActorAxis(world,position,axis,distance) {
   }
   if (distance===0) return { position:position[axis],collided:false };
   const bounds=box(position);
+  if(axis==='y' && distance<0 && world.microSurfaceCount>0 &&
+      typeof world.groundContactHeight==='function') {
+    const floor=world.groundContactHeight(
+      bounds.x,bounds.z,position.y,distance
+    );
+    if(floor!==null) return {
+      position:Math.max(position.y+distance,floor+SKIN),collided:true
+    };
+    return {position:position.y+distance,collided:false};
+  }
   const sign=Math.sign(distance);
   const leading = sign>0 ? bounds[axis][1] : bounds[axis][0];
   const extent=axis==='y' ? (sign>0 ? ACTOR_HEIGHT : 0) : ACTOR_HALF_WIDTH;
@@ -171,7 +193,8 @@ export function spawnTerrainActor(world,{
     maxDistance:maxSearchDistance
   });
   if(!hit) return null;
-  const originalY=hit.cell.y+1+SKIN;
+  const originalY=(world.microSurfaceCount>0
+    ? hit.point.y : hit.cell.y+1)+SKIN;
   for(let step=0;step<=24;step++) {
     const actor={schema:ACTOR_PHYSICS_SCHEMA,
       x,y:originalY+step,z,vy:0,grounded:false,

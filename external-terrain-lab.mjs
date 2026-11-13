@@ -15,7 +15,7 @@ import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
-import { presentGeneratedSurfaceMeshes } from './src/terrain-surface-detail.mjs';
+import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
@@ -332,7 +332,7 @@ function impactSpan() {
       } else {
         // Only the existing tiny-site compatibility exception remains.
         const meshes=buildExposedFaceMeshes(active.world,{chunkIds:dirty});
-        renderer.queueReplacementMeshes(dirty,meshes,
+        renderer.queueReplacementMeshes(dirty,presentSiteMeshes(active.world,meshes),
           {sceneEpoch:renderer.sceneEpoch});
         meshSource='small-site sync compatibility';
       }
@@ -379,11 +379,9 @@ function restoreState() {
 }
 
 function presentSiteMeshes(world,meshes) {
-  // Independent surface presentation consumes the public generated-site
-  // contract. All voxel edit authority and worker meshing remain unchanged.
-  return generatedSite
-    ? presentGeneratedSurfaceMeshes({site:generatedSite,world,meshes})
-    : meshes;
+  // Authoritative microvoxels live in Voxel V2 and produce discrete
+  // 10cm boxes. No per-vertex warping or alternate material authority.
+  return buildPixelMicroSurfaceMeshes(world,meshes);
 }
 
 function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {

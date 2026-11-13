@@ -45,7 +45,7 @@ test('World Generation is a separate engine with injected Strategy, Builder, Spe
     const result=generator.generate(recipe(kind));
     assert.equal(result.schema,'wyrmforge.generated-site.v2');
     assert.equal(result.recipe.schema,WORLD_SITE_RECIPE_SCHEMA);
-    assert.equal(result.definition.schema,'voxel-v2.terrain-initialization.v1');
+    assert.equal(result.definition.schema,'voxel-v2.terrain-initialization.v2');
     assert.equal(result.definition.generatorVersion,result.generatorVersion);
     assert.equal(result.definition.siteId,result.recipe.siteId);
     assert.equal(result.layout.topology.reachable,true);
