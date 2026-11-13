@@ -268,7 +268,8 @@ export class WorldGeneratorV2 {
       routes:plan.routes,roads,geology,
       roadGrades:Object.freeze({
         schema:roadGrades.schema,cells:roadGrades.cells,
-        maximumGradeTenths:roadGrades.maximumGradeTenths
+        maximumGradeTenths:roadGrades.maximumGradeTenths,
+        centers:roadGrades.centers
       }),
       microSurface:Object.freeze({
         schema:microSurface.schema,tileCount:microSurface.tileCount,
