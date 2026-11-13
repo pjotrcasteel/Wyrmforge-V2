@@ -1,8 +1,16 @@
 // World Generation V2: immutable input contract. World Map owns the chosen
 // site and allowed exits; this engine owns only deterministic local geography.
 export const WORLD_SITE_RECIPE_SCHEMA='wyrmforge.world-site-recipe.v2';
-export const WORLD_GENERATOR_VERSION='worldgen-v2.7.1';
+export const WORLD_GENERATOR_VERSION='worldgen-v2.7.2';
 export const WORLD_SITE_RADIUS=20;
+export const WORLD_MINIBOSS_RADIUS=28;
+export const WORLD_WYRM_LAIR_RADIUS=32;
+
+export function siteRadiusForKind(kind) {
+  if(kind==='mini-boss-arena')return WORLD_MINIBOSS_RADIUS;
+  if(kind==='wyrm-lair')return WORLD_WYRM_LAIR_RADIUS;
+  return WORLD_SITE_RADIUS;
+}
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/;
 
 export function validateWorldSiteRecipe(recipe) {
@@ -24,7 +32,7 @@ export function validateWorldSiteRecipe(recipe) {
       !Number.isSafeInteger(recipe.worldRevision) ||
       recipe.worldRevision<0 ||
       ![16,32].includes(recipe.chunkEdge) ||
-      recipe.radius!==WORLD_SITE_RADIUS) {
+      recipe.radius!==siteRadiusForKind(recipe.kind)) {
     throw new RangeError('Invalid seed, revision, pitch, or bounded site extent');
   }
   if(!Number.isFinite(recipe.corruption) ||
@@ -45,7 +53,7 @@ export function createWorldSiteRecipe({
   regionId='starter-forest',siteId='site-forest-01',
   encounterId='hunt-001',kind='wet-forest',
   seed=7,worldRevision=0,chunkEdge=16,
-  radius=WORLD_SITE_RADIUS,corruption=0
+  radius=siteRadiusForKind(kind),corruption=0
 }={}) {
   return validateWorldSiteRecipe({
     schema:WORLD_SITE_RECIPE_SCHEMA,regionId,siteId,encounterId,kind,
