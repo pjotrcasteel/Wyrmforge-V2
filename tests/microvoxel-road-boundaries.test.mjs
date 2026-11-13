@@ -8,6 +8,7 @@ import { generateWorldSite } from '../src/world-generation/index.mjs';
 import {
   selectRoadCell,roadMicroCut,microCellCenter
 } from '../src/world-generation/road-footprint.mjs';
+import { rasterizeEscapeRoute } from '../src/world-generation/escape-route-geometry.mjs';
 
 const same=(a,b)=>Math.abs(a-b)<1e-6;
 const cols=height=>Array(100).fill(height);
@@ -99,14 +100,41 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         regionId:'road-material-seam',siteId:'material-'+kind,
         encounterId:'seam-check',kind,seed,chunkEdge:16
       }));
-      const {routes}=generated.layout;
+      const {routes,flowLinks,escapeRoutes,approaches,combatSpaces}=generated.layout;
       const {runs,surfaceTiles}=generated.definition;
+      const circulation=new Set();
+      for(const nodes of [
+        ...routes.map(route=>route.nodes),
+        ...flowLinks.map(link=>link.nodes),
+        ...escapeRoutes.map(route=>route.nodes),
+        ...approaches.map(approach=>[
+          {x:approach.x,z:approach.z},
+          {x:combatSpaces[0].x,z:combatSpaces[0].z}
+        ])
+      ]) {
+        for(const point of rasterizeEscapeRoute(nodes)) {
+          circulation.add(point.x+','+point.z);
+        }
+      }
+      const inCirculation=(x,z)=>circulation.has(x+','+z);
+      const gradeMap=new Map(generated.layout.roadGrades.centers
+        .map(point=>[point.x+','+point.z,point.topTenths]));
+      assert.ok(generated.layout.roadGrades.cells>30);
+      assert.ok(generated.layout.roadGrades.maximumGradeTenths<=5);
       let authoredRoadTiles=0;
       for(const tile of surfaceTiles) {
         const selected=selectRoadCell(tile.x,tile.z,routes);
         if(!selected) {
-          assert.equal(kind,'mountain-pass',
-            'soft terrain must never have detached micro cuts beneath grass');
+          assert.ok(inCirculation(tile.x,tile.z)||kind==='mountain-pass',
+            'a grass micro-landing must belong to an authored movement corridor');
+          const graded=gradeMap.get(tile.x+','+tile.z);
+          if(graded!==undefined) {
+            assert.ok(tile.levels.every(level=>level===graded-tile.y*10),
+              'connector cells must match their authored 10cm physical grades');
+          } else if(kind!=='mountain-pass') {
+            assert.ok(tile.levels.every(level=>level===5),
+              'remaining connector cells use a physical half-metre landing');
+          }
           continue;
         }
         authoredRoadTiles++;
@@ -115,10 +143,23 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         assert.ok(top,'micro step must belong to a real physical top voxel');
         assert.equal(top.material,selected.route.roadProfile.material,
           'painted road material and 10cm occupancy must share one cell selector');
+        const transition=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>{
+          const nx=tile.x+dx,nz=tile.z+dz;
+          const lower=runs.some(run=>run.x<=nx && run.x+run.length>nx &&
+            run.z===nz && run.y===tile.y-1 && run.material!==0);
+          const lowerTop=runs.some(run=>run.x<=nx && run.x+run.length>nx &&
+            run.z===nz && run.y===tile.y && run.material!==0);
+          return lower && !lowerTop &&
+            inCirculation(tile.x,tile.z) && inCirculation(nx,nz);
+        });
+        const graded=gradeMap.get(tile.x+','+tile.z);
         for(let z=0;z<10;z++)for(let x=0;x<10;x++) {
           const cut=roadMicroCut(microCellCenter(tile.x,x),microCellCenter(tile.z,z),selected);
-          assert.equal(tile.levels[z*10+x],10-cut,
-            'every subcell height follows its selected painted road profile');
+          const expected=graded!==undefined
+            ? graded-tile.y*10
+            : 10-Math.max(cut,transition?5:0);
+          assert.equal(tile.levels[z*10+x],expected,
+            'road solid occupancy must match physical 10cm longitudinal grade');
         }
       }
       assert.ok(authoredRoadTiles>=20);

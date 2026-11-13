@@ -560,3 +560,43 @@ landings, one-way dangerous drops, changed-world recalculation, and
 three real generated/loaded map kinds. This is character-level terrain
 reachability, **not yet dynamic crowd-navigation or a final game combat
 controller**.
+
+## Character-scale terrain acceptance — true 1.6 m proxy
+
+Visual feedback from iPhone identified a mismatch between a character's
+scale and the **one-metre terrain ledges** marked traversable by V2.7.
+The white line represents a route, not an animation, but it was permitted to
+cross rises greater than half of the character's height. We do not fix
+this by altering the camera scale or by making a jump animation prettier.
+
+The replaceable Character Traversal Policy now caps an automatically
+triggered hop at **0.55 m**. Small rises up to 0.35 m are still automatic
+steps. A full one-metre rise is a **blocked climb**, not a plausible
+passive hop. The Voxel V2 controller uses this same maximum clearance
+rather than keeping a contradictory one-metre step assumption.
+
+World Generation V2.6 jointly grades the **authored main road,
+escape loops, enemy approaches, and maneuver-space links** into a shared
+physical 10 cm surface-height network. Its deterministic lower and upper
+grade envelopes bound every adjacent authored movement step to **0.5 m**,
+while preserving as much of the original landforms as possible. These
+heights become actual sparse microvoxel occupancy and real top-voxel
+positions—not shader bending, hidden ramps or a second collision model.
+Independent route crossings therefore agree on a single physical height.
+Deliberately steep cliffs outside the authored movement network remain
+terrain obstacles. Specs still independently enforce escape routes,
+combat-space width, real Voxel traversal, and cross-seed reachability.
+The output semantics are versioned as `worldgen-v2.6.0`.
+
+The World Generation preview adds an opt-in-by-default **1.6 m × 0.56 m
+dummy** projected using the collision volume and the actual unmodified
+camera scale. A mobile slider moves it along the real actor-sized
+reachable path. The status shows its next height difference and
+whether that rise is walking, auto-step, auto-hop or blocked.
+The dummy is a diagnostic proxy, **not** a final wizard sprite or
+a new Character engine; it does not alter or load terrain.
+
+CI verifies auto-hop thresholds and actual microvoxel landings, as
+well as all three authored site kinds across multiple seeds. The
+generated site remains a World Generation product, while the Actor
+and Navigation engines own their own independently swappable rules.

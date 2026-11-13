@@ -4,13 +4,13 @@
 // not yet a production player controller or a full rigid-body physics engine.
 import { raycastTerrain } from './terrain-raycast.mjs';
 import {
-  AUTO_STEP_HEIGHT,AUTO_HOP_UPWARD_SPEED,describeFallImpact
+  AUTO_STEP_HEIGHT,AUTO_HOP_HEIGHT,AUTO_HOP_UPWARD_SPEED,describeFallImpact
 } from './character-traversal-policy.mjs';
 
 export const ACTOR_PHYSICS_SCHEMA = 'voxel-v2.actor-physics.v1';
 export const ACTOR_HALF_WIDTH = 0.28;
 export const ACTOR_HEIGHT = 1.6;
-export const ACTOR_STEP_HEIGHT = 1.05;
+export const ACTOR_STEP_HEIGHT = AUTO_HOP_HEIGHT;
 export const ACTOR_MOVE_SPEED = 4.4;
 export const ACTOR_GRAVITY = 22;
 export const ACTOR_MAX_FALL_SPEED = 22;
@@ -179,8 +179,8 @@ function moveHorizontal(world,position,axis,distance,canStep) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
   }
-  // A 1m cliff is not a tiny walking curb. Let the controller launch
-  // a bounded, collision-swept automatic hop instead of teleporting.
+  // Only a short, physically plausible ledge may trigger a passive hop.
+  // Never treat a full metre cliff as an ordinary player traversal.
   if(landing.position-position.y>AUTO_STEP_HEIGHT+0.001) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false,hopCandidate:true};

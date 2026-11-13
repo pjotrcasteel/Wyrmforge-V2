@@ -21,7 +21,10 @@ function fixture(name) {
   const world=new VoxelWorld({chunkEdge:32});
   floor(world);
   if(name==='wall') for(let y=1;y<=4;y++) for(let z=-2;z<=2;z++) world.set(0,y,z,3);
-  if(name==='step') for(let z=-2;z<=2;z++) world.set(0,1,z,3);
+  if(name==='step') for(let z=-2;z<=2;z++) {
+    world.set(0,1,z,3);
+    world.setMicroSurfaceTile(0,1,z,Array(100).fill(5));
+  }
   if(name==='cliff') for(let x=0;x<=12;x++) for(let z=-5;z<=5;z++) world.set(x,0,z,0);
   return world;
 }

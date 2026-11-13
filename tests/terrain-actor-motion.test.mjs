@@ -60,10 +60,13 @@ test('non-player upward impulse still collides with rock ceiling and stops', () 
   }
 });
 
-test('automatic walking step handles small ledge but not a tall wall', () => {
+test('automatic passive hop handles a 50cm ledge but not a 1m wall', () => {
   for(const edge of [16,32]){
     const world=groundWorld(edge);
-    for(let x=2;x<=5;x++)world.set(x,1,0,3);
+    for(let x=2;x<=5;x++) {
+      world.set(x,1,0,3);
+      world.setMicroSurfaceTile(x,1,0,Array(100).fill(5));
+    }
     let actor=spawnTerrainActor(world,{x:.5,z:.5,searchTopY:10});
     let stepped=false;
     for(let i=0;i<55;i++){
@@ -72,7 +75,7 @@ test('automatic walking step handles small ledge but not a tall wall', () => {
     }
     assert.equal(stepped,true);
     assert.ok(actor.x>2.5);
-    assert.ok(actor.y>1.9);
+    assert.ok(actor.y>1.48);
 
     const high=groundWorld(edge);
     for(let y=1;y<=7;y++)high.set(2,y,0,3);

@@ -19,6 +19,7 @@ import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import { analyzeCharacterReachability } from './src/character-reachability.mjs';
 import { projectVoxel } from './src/camera-presets.mjs';
+import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
@@ -28,6 +29,9 @@ const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
 const traversalLayout=document.querySelector('#traversal-layout');
 const reachabilityReport=document.querySelector('#reachability-report');
+const dummyActor=document.querySelector('#dummy-actor');
+const dummyProgress=document.querySelector('#dummy-route-progress');
+const dummyStatus=document.querySelector('#dummy-actor-status');
 const combatGuideContext=combatGuide.getContext('2d');
 const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
@@ -108,6 +112,7 @@ function paintEncounterGuide(view) {
   ctx.clearRect(0,0,combatGuide.width,combatGuide.height);
   if(!combatLayout.checked || !generatedSite || !active?.world) {
     paintTraversalOverlay(ctx,view);
+    paintDummyActor(ctx,view);
     return;
   }
   const guide=projectEncounterGuides(generatedSite,active.world,view);
@@ -191,12 +196,14 @@ function paintEncounterGuide(view) {
     ctx.fill();
   }
   paintTraversalOverlay(ctx,view);
+  paintDummyActor(ctx,view);
 }
 
 // Navigation is a separate derived consumer of the current Voxel V2 Terrain
 // Port. The generator has NO actor collision or health implementation.
 function currentReachability() {
-  if(!traversalLayout.checked || !generatedSite || !active?.port)return null;
+  if((!traversalLayout.checked && !dummyActor.checked) ||
+      !generatedSite || !active?.port)return null;
   const revision=active.world.revision;
   const epoch=active.port.epoch;
   if(reachabilityCache?.revision===revision &&
@@ -277,6 +284,69 @@ function paintTraversalOverlay(ctx,view) {
     ctx.strokeStyle=target.reachable?'#f0fff9':'#ff506a';
     ctx.lineWidth=2;
     ctx.stroke();
+  }
+}
+
+// A clearly visible dummy is intentionally NOT game rendering. It uses
+// the actual V2 1.6m collider, projected at the same unmodified camera scale
+// as the terrain. The navigation report determines which solid floor can
+// support its feet, and the slider selects the route index.
+function paintDummyActor(ctx,view) {
+  if(!dummyActor.checked || !generatedSite || !active?.port) return;
+  try {
+    const report=currentReachability();
+    if(!report)return;
+    const dummy=projectRouteDummy(report,Number(dummyProgress.value),view);
+    if(!dummy) {
+      dummyStatus.textContent='No supported actor location at the entry.';
+      return;
+    }
+    const dpr=combatGuide.width/Math.max(1,combatGuide.clientWidth);
+    ctx.save();
+    ctx.imageSmoothingEnabled=false;
+    // Collision volume edges use true projected positions, not a
+    // screenshot-scale sprite that can hide an impassable one-metre cliff.
+    ctx.strokeStyle='rgba(255,240,157,0.95)';
+    ctx.lineWidth=Math.max(1,dpr);
+    ctx.setLineDash([3*dpr,3*dpr]);
+    for(const [a,b] of dummy.boxEdges) {
+      ctx.beginPath();
+      ctx.moveTo(a.x,a.y);
+      ctx.lineTo(b.x,b.y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    const pixel=n=>Math.round(n);
+    // Minimal blocky proxy, not the final Character/Sprite engine.
+    const body=dummy.torso;
+    ctx.fillStyle='#2d3f78';
+    ctx.fillRect(pixel(body.x),pixel(body.y),
+      Math.max(1,pixel(body.width)),Math.max(1,pixel(body.height*0.7)));
+    ctx.fillStyle='#4f78aa';
+    ctx.fillRect(pixel(body.x),pixel(body.y+body.height*0.7),
+      Math.max(1,pixel(body.width*0.35)),Math.max(1,pixel(body.height*0.3)));
+    ctx.fillRect(pixel(body.x+body.width*0.65),
+      pixel(body.y+body.height*0.7),
+      Math.max(1,pixel(body.width*0.35)),Math.max(1,pixel(body.height*0.3)));
+    const h=dummy.head;
+    ctx.fillStyle='#e8c89f';
+    ctx.fillRect(pixel(h.x-h.radius),pixel(h.y-h.radius),
+      Math.max(1,pixel(h.radius*2)),Math.max(1,pixel(h.radius*2)));
+    ctx.fillStyle='#f4dc77';
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    ctx.font=Math.max(10,Math.round(11*dpr))+'px ui-monospace,monospace';
+    ctx.fillText('1.6 m',pixel(dummy.top.x),pixel(dummy.top.y-6*dpr));
+    ctx.restore();
+    const next=dummy.nextHeightDifference;
+    dummyStatus.textContent='Dummy: 1.6m tall × 0.56m wide · '+
+      (dummy.routeIndex+1)+'/'+dummy.routeLength+' route cells · '+
+      (next===null?'At destination':
+        'Next terrain change '+(next>0?'+':'')+next.toFixed(2)+'m ('+
+        dummy.nextMovement+')')+
+      ' · Max passive hop '+dummy.recommendedHopLimit.toFixed(2)+'m';
+  } catch(error) {
+    dummyStatus.textContent='Dummy scale check failed: '+error.message;
   }
 }
 
@@ -362,6 +432,7 @@ function resetSite() {
     renderer.setMeshes([]);
     generatedSite=null;
     reachabilityCache=null;
+    dummyStatus.textContent='Preparing a 1.6m actor-scale route…';
     reachabilityReport.textContent='Generating terrain before actor reachability can be traced.';
     if(siteKind.value==='fixture') {
       loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
@@ -614,17 +685,29 @@ siteSeed.addEventListener('change',()=>{
   resetSite();
 });
 combatLayout.addEventListener('change',()=>{
-  if(!combatLayout.checked && !traversalLayout.checked && combatGuideContext) {
+  if(!combatLayout.checked && !traversalLayout.checked &&
+      !dummyActor.checked && combatGuideContext) {
     combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
   }
 });
 traversalLayout.addEventListener('change',()=>{
   reachabilityReport.hidden=!traversalLayout.checked;
   if(traversalLayout.checked) currentReachability();
-  else if(!combatLayout.checked) {
+  else if(!combatLayout.checked && !dummyActor.checked) {
     combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
   }
 });
+dummyActor.addEventListener('change',()=>{
+  dummyProgress.disabled=!dummyActor.checked;
+  if(dummyActor.checked) currentReachability();
+  else if(!combatLayout.checked && !traversalLayout.checked) {
+    combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
+  }
+});
+dummyProgress.addEventListener('input',()=>{
+  lastStatusAt=-Infinity;
+});
+
 viewCamera.addEventListener('change',()=>{
   resetPreviewView();
   controls.open=false;

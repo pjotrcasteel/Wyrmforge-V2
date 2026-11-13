@@ -78,9 +78,12 @@ test('two-voxel wall blocks the player without high-speed tunneling', () => {
   assert.equal(current.grounded,true);
 });
 
-test('one-cell ledge is climbable; taller cliff is not', () => {
+test('a 50cm physical ledge is climbable; full 1m and taller cliffs are not', () => {
   const world=flat();
-  for(let x=2;x<=4;x++)world.set(x,1,0,3);
+  for(let x=2;x<=4;x++) {
+    world.set(x,1,0,3);
+    world.setMicroSurfaceTile(x,1,0,Array(100).fill(5));
+  }
   let current=actor(),stepped=false;
   for(let i=0;i<48;i++) {
     current=simulateTerrainActor(world,current,{moveX:1,dt:1/60});
@@ -88,9 +91,14 @@ test('one-cell ledge is climbable; taller cliff is not', () => {
   }
   assert.equal(stepped,true);
   assert.ok(current.x>2.3,'actor must climb the one-voxel edge');
-  assert.ok(current.y>1.9,'feet must rest on raised surface');
+  assert.ok(current.y>1.48,'feet must rest on the microvoxel landing');
   assert.equal(current.grounded,true);
 
+  const fullMetre=flat();
+  for(let x=2;x<=4;x++)fullMetre.set(x,1,0,3);
+  current=run(fullMetre,actor(),65,{moveX:1,dt:1/60});
+  assert.ok(current.x<2-ACTOR_HALF_WIDTH,
+    'a 1m ledge must NOT count as comfortable passive traversal');
   const cliff=flat();
   for(let y=1;y<=8;y++)for(let x=2;x<6;x++)cliff.set(x,y,0,3);
   current=run(cliff,actor(),70,{moveX:1,dt:1/60});
