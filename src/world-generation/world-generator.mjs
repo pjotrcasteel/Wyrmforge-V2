@@ -10,6 +10,9 @@ import { gradeEscapeRoutes } from './escape-route-geometry.mjs';
 import { specifyEscapeRoutes } from './escape-route-specification.mjs';
 import { composeCombatFlow } from './combat-flow-geometry.mjs';
 import { specifyCombatFlow } from './combat-flow-specification.mjs';
+import { composeRoadSurfaces } from './road-surface-geometry.mjs';
+import { specifyRoadSurfaces } from './road-surface-specification.mjs';
+import { classifySurfaceStrata } from './terrain-strata.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -125,12 +128,20 @@ function prepareGeometry(plan,seed) {
     maneuverPockets:plan.maneuverPockets,flowLinks:plan.flowLinks
   });
   gradeEscapeRoutes({radius,heights,escapeRoutes:plan.escapeRoutes});
-  return {heights,surfaces};
+  // Final authored road pass wins over arena flattening AND re-grade detours.
+  // Its real one-voxel bed and continuous materials survive the entire site.
+  const roadWork=composeRoadSurfaces({
+    radius,heights,surfaces,routes:plan.routes,combatSpaces:plan.combatSpaces
+  });
+  const geology=classifySurfaceStrata({
+    radius,heights,surfaces,terrain:plan.terrain
+  });
+  return {heights,surfaces,roadWork,geology};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
 // mutation. Full 3D strata (not only a heightmap) cross signed chunk origins.
-function generateRuns(radius,heights,surfaces) {
+function generateRuns(radius,heights,surfaces,soilDepth) {
   const runs=[];
   const size=radius*2;
   let maxY=FLOOR;
@@ -141,7 +152,10 @@ function generateRuns(radius,heights,surfaces) {
     const top=heights[idx];
     if(y>top) return 0;
     if(y===top) return surfaces[idx];
-    if(y>=top-2) return 2;
+    // Rock outcrops are a contiguous stone mass, never a thin grey cap
+    // above two unsupported brown dirt bands on vertical mountain walls.
+    if(surfaces[idx]===3) return 3;
+    if(y>=top-soilDepth) return 2;
     return 3;
   };
   for(let y=FLOOR;y<=maxY;y++)for(let z=-radius;z<radius;z++) {
@@ -200,7 +214,7 @@ export class WorldGeneratorV2 {
     const builder=new SitePlanBuilder(recipe);
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
-    const {heights,surfaces}=prepareGeometry(plan,seed);
+    const {heights,surfaces,roadWork,geology}=prepareGeometry(plan,seed);
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
       routes:plan.routes,landmarks:plan.landmarks,
@@ -225,13 +239,19 @@ export class WorldGeneratorV2 {
       maneuverPockets:plan.maneuverPockets,
       flowLinks:plan.flowLinks
     });
-    const {runs,totalCells}=generateRuns(recipe.radius,heights,surfaces);
+    const roads=specifyRoadSurfaces({
+      radius:recipe.radius,heights,surfaces,
+      routes:plan.routes,combatSpaces:plan.combatSpaces,roadWork
+    });
+    const {runs,totalCells}=generateRuns(
+      recipe.radius,heights,surfaces,plan.terrain.soilDepth
+    );
     const definition=this.#terrainAdapter({
       siteId:recipe.siteId,seed:recipe.seed,
       chunkEdge:recipe.chunkEdge,runs
     });
     const layout=Object.freeze({
-      routes:plan.routes,clearings:plan.clearings,
+      routes:plan.routes,roads,geology,clearings:plan.clearings,
       landmarks:plan.landmarks,features:plan.features,
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,

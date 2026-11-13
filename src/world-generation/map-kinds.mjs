@@ -42,13 +42,30 @@ const routeNodes = Object.freeze([
   Object.freeze({x:0,z:-18})
 ]);
 
-function addNarrativePaths(builder, kind) {
-  builder.addRoute('entry-to-exit', routeNodes, 2);
+// Each Strategy owns the appearance and desired *sub-voxel* road depth.
+// Integer Voxel V2 terrain can currently carve only one entire voxel;
+// the 0.1-0.3 intent is preserved for a future fractional surface renderer.
+const ROAD_PROFILES=Object.freeze({
+  'wet-forest':Object.freeze({
+    kind:'worn-forest-track',nominalCutFraction:0.12,material:2,cutVoxels:1
+  }),
+  'forest-highland':Object.freeze({
+    kind:'foothill-track',nominalCutFraction:0.2,material:2,cutVoxels:1
+  }),
+  'mountain-pass':Object.freeze({
+    kind:'rock-cut-pass',nominalCutFraction:0.3,material:3,cutVoxels:1
+  })
+});
+
+function addNarrativePaths(builder, kind, biome) {
+  const road=ROAD_PROFILES[biome];
+  if(!road) throw new RangeError('Missing biome road profile: '+biome);
+  builder.addRoute('entry-to-exit', routeNodes, 2,road);
   // This spur is authored around the encounter clearing, never a disconnected
   // scatter of props. The gameplay/world-map decides what the landmark means.
   builder.addRoute('landmark-spur', [
     {x:1,z:2},{x:4,z:0},{x:8,z:-3}
-  ], 1);
+  ], 1,road);
   builder.addClearing({id:'encounter-glade', x:1,z:2,radius:5});
   builder.addClearing({id:'landmark-approach',x:8,z:-3,radius:3});
   builder.addLandmark({id:'site-landmark',kind,
@@ -157,7 +174,7 @@ function forest(builder, context) {
     },
     exposedStone: 0.94
   });
-  addNarrativePaths(builder,'forest-ruin');
+  addNarrativePaths(builder,'forest-ruin','wet-forest');
   addEscapeLayout(builder,'wet-forest');
   addManeuverFlow(builder,'wet-forest');
   builder.addFeature({id:'wetland',kind:'water-basin',x:-12,z:7,radius:5});
@@ -176,7 +193,7 @@ function transition(builder, context) {
     },
     exposedStone: 0.68
   });
-  addNarrativePaths(builder,'mountain-watch');
+  addNarrativePaths(builder,'mountain-watch','forest-highland');
   addEscapeLayout(builder,'forest-highland');
   addManeuverFlow(builder,'forest-highland');
   builder.addFeature({id:'lower-forest',kind:'woodland',
@@ -195,9 +212,13 @@ function mountains(builder, context) {
       return 3 + northward*7 + 0.65*valley + cliff +
         2.0*siteNoise(seed,x,z,11,4);
     },
-    exposedStone:0.24
+    // Mountain cliffs should expose continuous bedrock instead of repeating
+    // brown soil sandwiches between grey stone ledges.
+    exposedStone:0.24,
+    soilDepth:1,
+    rockFaceThreshold:2
   });
-  addNarrativePaths(builder,'mountain-shrine');
+  addNarrativePaths(builder,'mountain-shrine','mountain-pass');
   addEscapeLayout(builder,'mountain-pass');
   addManeuverFlow(builder,'mountain-pass');
   builder.addFeature({id:'western-escarpment',kind:'cliff',
