@@ -51,7 +51,7 @@ export function benchmarkWorldGeneration({seeds=WORLDGEN_STRESS_SEEDS}={}) {
         }
         const {world}=loader.terrain;
         maximalChunks=Math.max(maximalChunks,world.chunkCount);
-        hashes.add(generated.hash);
+        if(pitch===16) hashes.add(generated.hash);
         maximalRuns=Math.max(maximalRuns,generated.definition.runs.length);
         maximalCells=Math.max(maximalCells,generated.totalCells);
         samples.push({
