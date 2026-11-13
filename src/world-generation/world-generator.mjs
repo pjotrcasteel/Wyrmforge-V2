@@ -136,7 +136,7 @@ function prepareGeometry(plan,seed) {
     radius,heights,surfaces,routes:plan.routes,combatSpaces:plan.combatSpaces
   });
   const roadGrades=gradeNavigableRoads({
-    radius,heights,routes:plan.routes
+    radius,heights,routes:plan.routes,escapeRoutes:plan.escapeRoutes
   });
   const geology=classifySurfaceStrata({
     radius,heights,surfaces,terrain:plan.terrain
