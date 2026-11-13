@@ -32,6 +32,7 @@ export function composeRoadSurfaces({
     });
   }
   let paintedCells=0,recessedCells=0,combatRoadCells=0;
+  const original=heights.slice();
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     // Road priority follows the authored route order: the continuous entry-
     // to-exit spine wins over narrower landmark spurs at intersections.
@@ -58,8 +59,19 @@ export function composeRoadSurfaces({
     // Carve a narrow inset and leave a full-height terrain shoulder.
     // No shader-only dark stripe: this changes the real voxel top Y.
     const centerWidth=Math.min(1.2,route.width*0.6);
-    if(distance<=centerWidth && heights[i]>=profile.cutVoxels) {
-      heights[i]-=profile.cutVoxels;
+    const current=original[i];
+    const canRecess=distance<=centerWidth &&
+      current>=profile.cutVoxels &&
+      // A one-voxel depression must never turn a previously walkable
+      // approach or pocket corridor into a two-voxel impassable ledge.
+      [[-1,0],[1,0],[0,-1],[0,1]].every(([dx,dz])=>{
+        const nx=x+dx,nz=z+dz;
+        if(nx<-radius || nx>=radius || nz<-radius || nz>=radius) return true;
+        const neighbor=original[index(radius,nx,nz)];
+        return Math.abs((current-profile.cutVoxels)-neighbor)<=1;
+      });
+    if(canRecess) {
+      heights[i]=current-profile.cutVoxels;
       recessedCells++;
     }
   }
