@@ -136,7 +136,7 @@ body.focus-mode #site-summary{max-width:46%}
 <a href="./external-terrain-lab.html">WorldGen lab</a>
 </header>
 <main id="preview-stage">
-  <canvas id="site-view" aria-label="Real generated 3D terrain; drag to pan, pinch to zoom"></canvas>
+  <canvas id="site-view" aria-label="Wyrmforge 2.5D Hunt with real generated Voxel V2 terrain"></canvas>
   <canvas id="combat-guide" aria-hidden="true"></canvas>
   <div id="view-toolbar">
     <span id="site-summary">Wet Forest · World Generation V2 loading</span>
@@ -157,7 +157,8 @@ body.focus-mode #site-summary{max-width:46%}
   </div>
   <button id="play-respawn" type="button">Respawn</button>
   <button id="play-report" type="button">Save report</button>
-  <button id="play-camera-toggle" type="button" aria-label="Switch camera view">WorldGen 3D</button>
+  <button id="play-camera-toggle" type="button"
+    aria-label="Compare 2.5D Hunt and 3D inspection camera">2.5D Hunt</button>
   <details id="controls" aria-label="World generation settings">
     <summary>Map settings &amp; actions</summary>
     <div id="control-body">
@@ -219,8 +220,8 @@ body.focus-mode #site-summary{max-width:46%}
       <div class="control-field">
         <label for="view-camera">View</label>
         <select id="view-camera" aria-label="Terrain viewing angle">
-          <option value="inspection" selected>WorldGen 3D camera (verified)</option>
-          <option value="hunt">Legacy top-down candidate (not approved)</option>
+          <option value="inspection">Voxel 3D inspection (diagnostic)</option>
+          <option value="hunt" selected>Wyrmforge 2.5D Hunt (game)</option>
         </select>
       </div>
       <div class="control-field">
