@@ -9,6 +9,7 @@ import {
   selectRoadCell,roadMicroCut,microCellCenter
 } from '../src/world-generation/road-footprint.mjs';
 import { rasterizeEscapeRoute } from '../src/world-generation/escape-route-geometry.mjs';
+import { composeRoadBoundaryAprons } from '../src/world-generation/road-boundary-apron.mjs';
 
 const same=(a,b)=>Math.abs(a-b)<1e-6;
 const cols=height=>Array(100).fill(height);
@@ -117,6 +118,14 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         }
       }
       const inCirculation=(x,z)=>circulation.has(x+','+z);
+      const boundaryGrass=new Set();
+      for(const apron of composeRoadBoundaryAprons({radius:20,routes})) {
+        for(const pair of apron.grassShoulders)for(const point of pair.nodes) {
+          if(!selectRoadCell(point.x,point.z,routes)) {
+            boundaryGrass.add(point.x+','+point.z);
+          }
+        }
+      }
       const gradeMap=new Map(generated.layout.roadGrades.centers
         .map(point=>[point.x+','+point.z,point.topTenths]));
       assert.ok(generated.layout.roadGrades.cells>30);
@@ -125,8 +134,9 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
       for(const tile of surfaceTiles) {
         const selected=selectRoadCell(tile.x,tile.z,routes);
         if(!selected) {
-          assert.ok(inCirculation(tile.x,tile.z)||kind==='mountain-pass',
-            'a grass micro-landing must belong to an authored movement corridor');
+          assert.ok(inCirculation(tile.x,tile.z) ||
+            boundaryGrass.has(tile.x+','+tile.z) || kind==='mountain-pass',
+            'a grass micro-landing must belong to a corridor or boundary apron');
           const graded=gradeMap.get(tile.x+','+tile.z);
           if(graded!==undefined) {
             assert.ok(tile.levels.every(level=>level===graded-tile.y*10),
