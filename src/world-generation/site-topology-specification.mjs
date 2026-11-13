@@ -14,7 +14,7 @@ function checkPoint(point,radius) {
 }
 
 export function specifySiteTopology({radius,heights,routes,landmarks,clearings}) {
-  if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
+  if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !(heights instanceof Int16Array) ||
       heights.length!==(radius*2)**2 ||
       !Array.isArray(routes) || !Array.isArray(landmarks) ||
