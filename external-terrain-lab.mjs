@@ -820,7 +820,7 @@ function frame(now) {
       // Default to the already-tested diagonal inspection basis so the actual
       // underside, stone walls and vertical height are legible on mobile.
       // This is presentation-only: switching views never remeshes terrain.
-      const camera=playMode?'hunt':viewCamera.value;
+      const camera=viewCamera.value; // Play Hunt defaults to north-up in its own page
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
       const inspected=generatedSite??expeditionSite;
       const fit=inspected
