@@ -7,11 +7,23 @@ import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
 
 const index=(r,x,z)=>(z+r)*r*2+x+r;
 
-export function gradeNavigableRoads({radius,heights,routes=[]}) {
+export function gradeNavigableRoads({
+  radius,heights,routes=[],escapeRoutes=[]
+}) {
   if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
       !(heights instanceof Int16Array) ||
-      heights.length!==(radius*2)**2 || !Array.isArray(routes)) {
+      heights.length!==(radius*2)**2 ||
+      !Array.isArray(routes) || !Array.isArray(escapeRoutes)) {
     throw new TypeError('Road grades require bounded authoritative terrain heights');
+  }
+  // Previously accepted escape loops must keep their own separately
+  // authored grades. A road may intersect them but must not rewrite
+  // their centerline voxels (which would invalidate enemy escape paths).
+  const protectedEscapeCells=new Set();
+  for(const route of escapeRoutes) {
+    for(const p of rasterizeEscapeRoute(route.nodes)) {
+      protectedEscapeCells.add(p.x+','+p.z);
+    }
   }
   const gradedTopTenths=new Int16Array(heights.length);
   const before=heights.slice();
@@ -35,7 +47,8 @@ export function gradeNavigableRoads({radius,heights,routes=[]}) {
       const nominalCut=Math.round(route.roadProfile.nominalCutFraction*10);
       for(let j=0;j<path.length;j++) {
         const point=path[j],i=index(radius,point.x,point.z);
-        if(gradedTopTenths[i]) continue;
+        if(gradedTopTenths[i] ||
+            protectedEscapeCells.has(point.x+','+point.z))continue;
         const t=j/Math.max(1,path.length-1);
         const desired=Math.round(10*(fromTop+(toTop-fromTop)*t))-nominalCut;
         // A 10cm surface is represented by a solid parent cube and a
