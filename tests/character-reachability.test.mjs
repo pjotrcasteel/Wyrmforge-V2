@@ -139,6 +139,14 @@ test('generated world reachability is traced from real loaded voxels, not WorldG
         terrain:loader.terrain.port,bounds:generated.layout.footprint,
         start:route.nodes[0],targets:targetPoints
       });
+      console.log('ACTOR-REACHABILITY-AUDIT '+JSON.stringify({
+        kind,worldRevision:report.worldRevision,
+        standable:report.standableCells,reachable:report.reachableCells,
+        safe:report.safelyReachableCells,risk:report.damageRiskCells,
+        targets:report.targets.map(target=>({
+          id:target.id,reachable:target.reachable,damage:target.damage
+        }))
+      }));
       assert.equal(report.totalCells,1600);
       assert.ok(report.standableCells>200);
       assert.ok(report.reachableCells>100,
