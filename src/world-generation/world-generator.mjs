@@ -13,6 +13,7 @@ import { specifyCombatFlow } from './combat-flow-specification.mjs';
 import { composeRoadSurfaces } from './road-surface-geometry.mjs';
 import { specifyRoadSurfaces } from './road-surface-specification.mjs';
 import { classifySurfaceStrata } from './terrain-strata.mjs';
+import { composeMicroSurfaceTiles } from './micro-surface-grammar.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -246,12 +247,21 @@ export class WorldGeneratorV2 {
     const {runs,totalCells}=generateRuns(
       recipe.radius,heights,surfaces,plan.terrain.soilDepth
     );
+    const microSurface=composeMicroSurfaceTiles({
+      radius:recipe.radius,seed,
+      heights,surfaces,routes:plan.routes,
+      rockFaceThreshold:plan.terrain.rockFaceThreshold
+    });
     const definition=this.#terrainAdapter({
       siteId:recipe.siteId,seed:recipe.seed,
-      chunkEdge:recipe.chunkEdge,runs
+      chunkEdge:recipe.chunkEdge,runs,
+      surfaceTiles:microSurface.tiles
     });
     const layout=Object.freeze({
-      routes:plan.routes,roads,geology,clearings:plan.clearings,
+      routes:plan.routes,roads,geology,microSurface:Object.freeze({
+        schema:microSurface.schema,tileCount:microSurface.tileCount,
+        roadTiles:microSurface.roadTiles,rockTiles:microSurface.rockTiles
+      }),clearings:plan.clearings,
       landmarks:plan.landmarks,features:plan.features,
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
