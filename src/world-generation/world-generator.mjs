@@ -5,6 +5,7 @@ import { validateWorldSiteRecipe, WORLD_GENERATOR_VERSION } from './site-recipe.
 import { createDefaultMapKindRegistry, siteNoise } from './map-kinds.mjs';
 import { SitePlanBuilder } from './site-plan-builder.mjs';
 import { specifySiteTopology } from './site-topology-specification.mjs';
+import { specifyEncounterSpaces } from './encounter-space-specification.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -36,6 +37,21 @@ function prepareGeometry(plan,seed) {
   const clearings=plan.clearings.map(c=>({
     ...c,target:base(c.x,c.z)
   }));
+  const combatSpaces=plan.combatSpaces.map(space=>({
+    ...space,target:base(space.x,space.z)
+  }));
+  const approachSegments=plan.approaches.map(approach=>{
+    const center=combatSpaces.find(space=>space.id===approach.combatSpaceId);
+    const dx=center.x-approach.x,dz=center.z-approach.z;
+    const distance=Math.hypot(dx,dz);
+    const destination=center.target;
+    // Keep every ingress route climbable in one-voxel steps even when the
+    // surrounding authored mountains are very steep.
+    const source=clamp(base(approach.x,approach.z),
+      destination-distance*0.58,destination+distance*0.58);
+    return {...approach,dx,dz,center,source,destination,
+      distanceSquared:dx*dx+dz*dz};
+  });
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=gridIndex(radius,x,z);
     const natural=base(x,z);
@@ -60,11 +76,34 @@ function prepareGeometry(plan,seed) {
         shaped=shaped*(1-smooth(influence))+clearing.target*smooth(influence);
       }
     }
+    for(const segment of approachSegments) {
+      const dx=x-segment.x,dz=z-segment.z;
+      const t=clamp((dx*segment.dx+dz*segment.dz)/segment.distanceSquared,0,1);
+      const distance=Math.hypot(dx-t*segment.dx,dz-t*segment.dz);
+      const influence=clamp((segment.width+2-distance)/2,0,1);
+      if(influence>0) {
+        const grade=segment.source+(segment.destination-segment.source)*t;
+        shaped=shaped*(1-smooth(influence))+grade*smooth(influence);
+      }
+    }
+    // The player needs room to circle, kite and dodge. Only the interior
+    // combat floor is levelled; surrounding cliffs, wetland and mountains
+    // still give each kind a handcrafted geographical silhouette.
+    for(const space of combatSpaces) {
+      const distance=Math.hypot(x-space.x,z-space.z);
+      const influence=clamp((space.radius+2-distance)/3,0,1);
+      if(influence>0) {
+        shaped=shaped*(1-smooth(influence))+space.target*smooth(influence);
+      }
+    }
     const height=clamp(Math.round(shaped),0,MAX_TOP);
     heights[i]=height;
     const stony=siteNoise(seed,x,z,10,20)>plan.terrain.exposedStone ||
       (Math.abs(natural-shaped)>4 && plan.terrain.exposedStone<0.5);
-    surfaces[i]=onTrail ? 2 : stony ? 3 : 1;
+    const inCombat=plan.combatSpaces.some(space=>
+      Math.hypot(x-space.x,z-space.z)<=space.radius);
+    // Never paint the whole arena brown as though it were a narrow footpath.
+    surfaces[i]=inCombat ? (stony ? 3 : 1) : onTrail ? 2 : stony ? 3 : 1;
   }
   return {heights,surfaces};
 }
@@ -144,7 +183,14 @@ export class WorldGeneratorV2 {
     const {heights,surfaces}=prepareGeometry(plan,seed);
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
-      routes:plan.routes,landmarks:plan.landmarks,clearings:plan.clearings
+      routes:plan.routes,landmarks:plan.landmarks,
+      clearings:[...plan.clearings,...plan.combatSpaces,...plan.approaches]
+    });
+    const encounter=specifyEncounterSpaces({
+      radius:recipe.radius,heights,
+      combatSpaces:plan.combatSpaces,
+      approaches:plan.approaches,
+      discoveryCandidates:plan.discoveryCandidates
     });
     const {runs,totalCells}=generateRuns(recipe.radius,heights,surfaces);
     const definition=this.#terrainAdapter({
@@ -154,6 +200,15 @@ export class WorldGeneratorV2 {
     const layout=Object.freeze({
       routes:plan.routes,clearings:plan.clearings,
       landmarks:plan.landmarks,features:plan.features,
+      combatSpaces:plan.combatSpaces,
+      approaches:plan.approaches,
+      discoveryCandidates:Object.freeze(plan.discoveryCandidates.map(candidate=>{
+        const surfaceY=heights[gridIndex(recipe.radius,candidate.x,candidate.z)];
+        return Object.freeze({
+          ...candidate,surfaceY,buriedY:surfaceY-candidate.coverDepth
+        });
+      })),
+      encounter,
       footprint:Object.freeze({
         minX:-recipe.radius,maxX:recipe.radius-1,
         minZ:-recipe.radius,maxZ:recipe.radius-1,
