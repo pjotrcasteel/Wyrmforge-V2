@@ -40,7 +40,10 @@ button:disabled{opacity:.5;cursor:default}
 #control-body{overflow:auto;overscroll-behavior:contain;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
 #control-body label{font-size:12px;color:#c8dce3;align-self:end}
 #control-body label[for="site-kind"],#control-body #site-kind,
-#control-body #status,#control-body .control-note{grid-column:1 / -1}
+#control-body #status,#control-body .control-note,
+#control-body #reachability-report{grid-column:1 / -1}
+#reachability-report{font:11px/1.45 ui-monospace,monospace;color:#bde9d5;
+  border:1px solid #4d6d66;border-radius:7px;padding:9px;white-space:pre-wrap}
 #control-body select,#control-body input,#control-body button{min-width:0;width:100%}
 #control-body .control-field{min-width:0;display:flex;flex-direction:column;gap:5px}
 #control-body .control-note{color:#bdced3;font-size:11px;line-height:1.4;margin:0}
@@ -86,6 +89,11 @@ body.focus-mode #site-summary{max-width:46%}
       <div class="control-field">
         <label><input id="combat-layout" type="checkbox" style="width:auto" /> Show arena, maneuver spaces and escape routes</label>
       </div>
+      <label for="traversal-layout">Actual character traversal</label>
+      <div class="control-field">
+        <label><input id="traversal-layout" type="checkbox" style="width:auto" /> Show reachable terrain and fall hazards</label>
+      </div>
+      <div id="reachability-report" role="status" hidden>Generate a map to trace reachability.</div>
       <label for="site-kind">Site kind</label>
       <select id="site-kind" aria-label="World Generation V2 map kind">
         <option value="fixture">Fixed arch (voxel diagnostic)</option>
