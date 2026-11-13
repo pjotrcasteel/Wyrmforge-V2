@@ -15,8 +15,8 @@ test('existing external 3D lab previews World Generation V2 without implementing
   assert.match(host,/generatedSite=generateWorldSite\(recipe\)/);
   assert.match(host,/new V2ExternalTerrainLoader\(generatedSite\.definition,/);
   assert.match(host,/new V2ExternalTerrainLoader\(createExternalSiteFixture\(/);
-  assert.match(host,/siteKind\.addEventListener\('change',resetSite\)/);
-  assert.match(host,/siteSeed\.addEventListener\('change',resetSite\)/);
+  assert.match(host,/siteKind\.addEventListener\('change',\(\)=>\{/);
+  assert.match(host,/siteSeed\.addEventListener\('change',\(\)=>\{/);
   assert.match(host,/active\.port\.apply\(/);
   assert.match(host,/generatedSite\.layout\.clearings\[0\]/);
   assert.match(host,/generateWorldSite\(recipe\)/);
