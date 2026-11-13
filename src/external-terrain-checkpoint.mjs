@@ -94,7 +94,11 @@ export class V2ExternalTerrainReplaySession {
       schema:validated.schema,siteId:validated.siteId,
       generatorVersion:validated.generatorVersion,
       seed:validated.seed,chunkEdge:validated.chunkEdge,
-      runs:validated.runs.map(run=>({...run}))
+      runs:validated.runs.map(run=>({...run})),
+      ...(validated.surfaceTiles
+        ? {surfaceTiles:validated.surfaceTiles.map(tile=>({
+          x:tile.x,y:tile.y,z:tile.z,levels:[...tile.levels]
+        }))} : {})
     };
     if(replayDataDigest(source)!==checkpoint.checksums.source ||
         replayDataDigest(checkpoint.journal)!==checkpoint.checksums.journal) {
