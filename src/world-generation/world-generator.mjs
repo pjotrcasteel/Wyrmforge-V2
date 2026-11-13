@@ -209,7 +209,6 @@ export class WorldGeneratorV2 {
       radius:recipe.radius,heights,
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
-      escapeRoutes:plan.escapeRoutes,escapeAudit,
       discoveryCandidates:plan.discoveryCandidates
     });
     const {runs,totalCells}=generateRuns(recipe.radius,heights,surfaces);
@@ -222,6 +221,7 @@ export class WorldGeneratorV2 {
       landmarks:plan.landmarks,features:plan.features,
       combatSpaces:plan.combatSpaces,
       approaches:plan.approaches,
+      escapeRoutes:plan.escapeRoutes,escapeAudit,
       discoveryCandidates:Object.freeze(plan.discoveryCandidates.map(candidate=>{
         const surfaceY=heights[gridIndex(recipe.radius,candidate.x,candidate.z)];
         return Object.freeze({
