@@ -21,6 +21,7 @@ function noise(seed,x,z) {
 
 export function composeMicroSurfaceTiles({
   radius,seed,heights,surfaces,routes,rockFaceThreshold=null,
+  gradedTopTenths=null,
   flowLinks=[],escapeRoutes=[],approaches=[],combatSpaces=[]
 }) {
   if(!Number.isSafeInteger(radius) || radius<2 || radius>24 ||
@@ -29,6 +30,9 @@ export function composeMicroSurfaceTiles({
       !(surfaces instanceof Uint8Array) ||
       heights.length!==(radius*2)**2 ||
       surfaces.length!==heights.length || !Array.isArray(routes) ||
+      (gradedTopTenths!==null &&
+        (!(gradedTopTenths instanceof Int16Array) ||
+          gradedTopTenths.length!==heights.length)) ||
       ![flowLinks,escapeRoutes,approaches,combatSpaces].every(Array.isArray)) {
     throw new TypeError('Expected bounded completed WorldGen heightfield');
   }
@@ -53,6 +57,7 @@ export function composeMicroSurfaceTiles({
   const roads=[],connectors=[],cliffs=[];
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=index(radius,x,z),top=heights[i];
+    const authoredTop=gradedTopTenths?.[i]??0;
     const selected=selectRoadCell(x,z,tracks);
     const profile=selected?.route??null;
     // A whole 1m rise across the trail would be thigh-to-waist height on
@@ -79,13 +84,20 @@ export function composeMicroSurfaceTiles({
         }
       }
     }
-    if(!profile && !rockFace && !heightTransition) continue;
+    if(!profile && !rockFace && !heightTransition && !authoredTop) continue;
     const levels=[];
     let changed=false;
     for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++) {
       const px=microCellCenter(x,ix),pz=microCellCenter(z,iz);
       let cut=0;
-      if(profile) {
+      if(authoredTop) {
+        // The primary road's 10cm longitudinal grade is the authoritative
+        // physical top, including its 10-30cm worn-road inset.
+        cut=10-(authoredTop-top*10);
+        if(cut<0 || cut>9) {
+          throw new Error('Microvoxel road grade disagrees with parent solid');
+        }
+      } else if(profile) {
         // The same selected 1m road cell owns its material AND its physical
         // ten-centimeter occupancy. Never carve beyond a painted boundary.
         cut=Math.max(roadMicroCut(px,pz,selected),
