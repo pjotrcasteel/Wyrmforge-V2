@@ -10,6 +10,7 @@ import {
 } from '../src/world-generation/index.mjs';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
+import { generateHuntExpeditionRegion } from '../src/world-generation/hunt-expedition-region.mjs';
 
 function expedition(seed=7,overrides={}) {
   return composeHuntExpeditionPlan(createHuntExpeditionRecipe({
@@ -190,7 +191,7 @@ test('WorldMap recipe rejects invalid scope, illegal kind and fake story hints',
   });
   const plan=expedition(7);
   assert.throws(()=>generateWorldExpeditionRegion(plan,'no-such-region'),RangeError);
-  assert.throws(()=>generateWorldExpeditionRegion(plan,'region-entry',{
+  assert.throws(()=>generateHuntExpeditionRegion(plan,'region-entry',{
     terrainAdapter:null
   }),TypeError);
 });
