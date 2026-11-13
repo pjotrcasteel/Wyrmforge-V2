@@ -117,6 +117,10 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         }
       }
       const inCirculation=(x,z)=>circulation.has(x+','+z);
+      const gradeMap=new Map(generated.layout.roadGrades.centers
+        .map(point=>[point.x+','+point.z,point.topTenths]));
+      assert.ok(generated.layout.roadGrades.cells>30);
+      assert.ok(generated.layout.roadGrades.maximumGradeTenths<=5);
       let authoredRoadTiles=0;
       for(const tile of surfaceTiles) {
         const selected=selectRoadCell(tile.x,tile.z,routes);
@@ -142,10 +146,14 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
           return lower && !lowerTop &&
             inCirculation(tile.x,tile.z) && inCirculation(nx,nz);
         });
+        const graded=gradeMap.get(tile.x+','+tile.z);
         for(let z=0;z<10;z++)for(let x=0;x<10;x++) {
           const cut=roadMicroCut(microCellCenter(tile.x,x),microCellCenter(tile.z,z),selected);
-          assert.equal(tile.levels[z*10+x],10-Math.max(cut,transition?5:0),
-            'road cells must match authored material and physical half-metre landing');
+          const expected=graded!==undefined
+            ? graded-tile.y*10
+            : 10-Math.max(cut,transition?5:0);
+          assert.equal(tile.levels[z*10+x],expected,
+            'road solid occupancy must match physical 10cm longitudinal grade');
         }
       }
       assert.ok(authoredRoadTiles>=20);
