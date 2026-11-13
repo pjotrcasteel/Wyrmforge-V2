@@ -154,6 +154,19 @@ test('generated world reachability is traced from real loaded voxels, not WorldG
         'the real actor must reach more than the start corner');
       assert.equal(report.worldRevision,loader.terrain.world.revision);
       assert.equal(report.targets.length,targetPoints.length);
+      if(report.targets.some(target=>!target.reachable)) {
+        const waypoints=route.nodes;
+        const heights=waypoints.map(node=>{
+          const cell=report.cells.find(c=>c.x===node.x && c.z===node.z);
+          return {x:node.x,z:node.z,y:cell?.y,state:cell?.state};
+        });
+        const blocked=report.cells.filter(c=>c.state==='unreachable')
+          .filter(c=>c.z< -10)
+          .map(c=>[c.x,c.z,c.y]);
+        console.log('ACTOR-ROUTE-BLOCKERS '+JSON.stringify({
+          kind,seed,heights,northBlocked:blocked.slice(0,100)
+        }));
+      }
       assert.ok(report.targets.every(target=>target.reachable),
         kind+' seed '+seed+' stranded a required destination: '+
         report.targets.filter(target=>!target.reachable)
