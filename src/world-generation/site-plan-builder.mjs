@@ -36,14 +36,22 @@ export class SitePlanBuilder {
     }
     return freezePoint(point);
   }
-  setTerrain({elevation,exposedStone}) {
+  setTerrain({
+    elevation,exposedStone,soilDepth=2,rockFaceThreshold=null
+  }) {
     if(this.#built || this.#terrain) throw new Error('Terrain intent already specified');
     if(typeof elevation!=='function' ||
         !Number.isFinite(exposedStone) ||
-        exposedStone<0 || exposedStone>1) {
-      throw new TypeError('Terrain intent needs elevation and a stone exposure threshold');
+        exposedStone<0 || exposedStone>1 ||
+        !integer(soilDepth) || soilDepth<1 || soilDepth>3 ||
+        (rockFaceThreshold!==null &&
+          (!integer(rockFaceThreshold) || rockFaceThreshold<2 ||
+            rockFaceThreshold>6))) {
+      throw new TypeError('Terrain intent needs bounded slope and geological strata');
     }
-    this.#terrain=Object.freeze({elevation,exposedStone});
+    this.#terrain=Object.freeze({
+      elevation,exposedStone,soilDepth,rockFaceThreshold
+    });
     return this;
   }
   addRoute(id,nodes,width=2,roadProfile=null) {
