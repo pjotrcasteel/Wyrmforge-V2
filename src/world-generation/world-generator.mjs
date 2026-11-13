@@ -50,6 +50,7 @@ function prepareGeometry(plan,seed) {
       if(distanceSquared===0) throw new RangeError('Duplicate route segment nodes');
       routeSegments.push({
         a,dx,dz,distanceSquared,width:route.width,
+        painted:Boolean(route.roadProfile),
         from:base(a.x,a.z),to:base(b.x,b.z)
       });
     }
@@ -88,7 +89,7 @@ function prepareGeometry(plan,seed) {
       const dx=x-segment.a.x,dz=z-segment.a.z;
       const t=clamp((dx*segment.dx+dz*segment.dz)/segment.distanceSquared,0,1);
       const d=Math.hypot(dx-t*segment.dx,dz-t*segment.dz);
-      if(d<=segment.width) onTrail=true;
+      if(segment.painted && d<=segment.width) onTrail=true;
       const influence=clamp((segment.width+3-d)/3,0,1);
       if(influence<=0 || influence<strongest) continue;
       strongest=influence;
