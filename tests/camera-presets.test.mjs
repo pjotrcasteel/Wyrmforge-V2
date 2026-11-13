@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMERA_PRESETS, getCameraPreset, projectVoxel } from '../src/camera-presets.mjs';
+import { CAMERA_PRESETS, PLAY_HUNT_CAMERA, getCameraPreset, projectVoxel } from '../src/camera-presets.mjs';
 import { createScene } from '../src/voxel-world.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 
@@ -88,4 +88,29 @@ test('Hunt preserves north-up controls and projects 1-voxel cliffs more clearly'
   }
   assert.equal(world.revision,oldRevision);
   assert.deepEqual(buildExposedFaceMeshes(world),oldMeshes);
+});
+
+
+test('the Wyrmforge 2.5D Hunt camera is north-up with genuine voxel height',()=>{
+  assert.equal(PLAY_HUNT_CAMERA,'hunt');
+  const camera=getCameraPreset(PLAY_HUNT_CAMERA);
+  assert.match(camera.label,/2\.5D/);
+  const options={...view,camera:PLAY_HUNT_CAMERA};
+  const level=projectVoxel(0,4,0,options);
+  const east=projectVoxel(1,4,0,options);
+  const south=projectVoxel(0,4,1,options);
+  const oneMetreHigher=projectVoxel(0,5,0,options);
+  const tenCmHigher=projectVoxel(0,4.1,0,options);
+  assert.ok(east.x>level.x && Math.abs(east.y-level.y)<1e-9,
+    'horizontal joystick movement stays horizontal on the screen');
+  assert.ok(south.y>level.y && Math.abs(south.x-level.x)<1e-9,
+    'vertical joystick movement stays north/south on the screen');
+  assert.ok(level.y>oneMetreHigher.y,
+    'real raised cliffs remain visible in 2.5D');
+  assert.ok(level.y>tenCmHigher.y &&
+    level.y-tenCmHigher.y<level.y-oneMetreHigher.y,
+  'the actual 10cm terrain elevation must project continuously');
+  assert.ok(Math.abs(camera.down[1])>0.1 &&
+    Math.abs(camera.down[2])>0.5,
+    '2.5D uses both physical elevation and world-plane depth, not a 2D flat map');
 });
