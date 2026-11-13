@@ -132,7 +132,7 @@ test('unplanned and invalid escape routes are rejected before a world is adapted
   }),/east and west/);
   assert.throws(()=>specifyEscapeRoutes({
     radius,heights,escapeRoutes:[a,{...b,nodes:[...b.nodes.slice(0,-1),{x:2,z:-15}]}]
-  }),/same entry/);
+  }),/share entry and rejoin anchors/);
   assert.throws(()=>rasterizeEscapeRoute([{x:1,z:1},{x:1,z:1}]),/zero-length/);
 });
 
