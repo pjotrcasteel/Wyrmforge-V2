@@ -8,6 +8,7 @@ import { generateWorldSite } from '../src/world-generation/index.mjs';
 import {
   selectRoadCell,roadMicroCut,microCellCenter
 } from '../src/world-generation/road-footprint.mjs';
+import { rasterizeEscapeRoute } from '../src/world-generation/escape-route-geometry.mjs';
 
 const same=(a,b)=>Math.abs(a-b)<1e-6;
 const cols=height=>Array(100).fill(height);
@@ -99,14 +100,31 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         regionId:'road-material-seam',siteId:'material-'+kind,
         encounterId:'seam-check',kind,seed,chunkEdge:16
       }));
-      const {routes}=generated.layout;
+      const {routes,flowLinks,escapeRoutes,approaches,combatSpaces}=generated.layout;
       const {runs,surfaceTiles}=generated.definition;
+      const circulation=new Set();
+      for(const nodes of [
+        ...routes.map(route=>route.nodes),
+        ...flowLinks.map(link=>link.nodes),
+        ...escapeRoutes.map(route=>route.nodes),
+        ...approaches.map(approach=>[
+          {x:approach.x,z:approach.z},
+          {x:combatSpaces[0].x,z:combatSpaces[0].z}
+        ])
+      ]) {
+        for(const point of rasterizeEscapeRoute(nodes)) {
+          circulation.add(point.x+','+point.z);
+        }
+      }
+      const inCirculation=(x,z)=>circulation.has(x+','+z);
       let authoredRoadTiles=0;
       for(const tile of surfaceTiles) {
         const selected=selectRoadCell(tile.x,tile.z,routes);
         if(!selected) {
-          assert.equal(kind,'mountain-pass',
-            'soft terrain must never have detached micro cuts beneath grass');
+          assert.ok(inCirculation(tile.x,tile.z)||kind==='mountain-pass',
+            'a grass micro-landing must belong to an authored movement corridor');
+          if(kind!=='mountain-pass')assert.ok(tile.levels.every(level=>level===5),
+            'a connector cell must be a physical 50cm landing');
           continue;
         }
         authoredRoadTiles++;
@@ -121,7 +139,8 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
             run.z===nz && run.y===tile.y-1 && run.material!==0);
           const lowerTop=runs.some(run=>run.x<=nx && run.x+run.length>nx &&
             run.z===nz && run.y===tile.y && run.material!==0);
-          return lower && !lowerTop && selectRoadCell(nx,nz,routes);
+          return lower && !lowerTop &&
+            inCirculation(tile.x,tile.z) && inCirculation(nx,nz);
         });
         for(let z=0;z<10;z++)for(let x=0;x<10;x++) {
           const cut=roadMicroCut(microCellCenter(tile.x,x),microCellCenter(tile.z,z),selected);
