@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **H08-01 — playable Wet Forest movement slice**.
+**Current focus:** **H08-01 — player review and device acceptance of Play Hunt**.
 **Latest integrated technical baseline:** PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), commit `27b1c02`. This is a multi-region *generator* baseline, **not a playable Hunt**.
 
 ## How to use this in every chat / PR
@@ -63,7 +63,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 - **Player experience:** one tap opens a **Play Hunt** page, spawns a visible Wizard-sized proxy on physically generated Wet Forest ground; use a touch joystick or WASD/arrow keys to walk without active jump; fixed north-up Hunt camera follows the character. Inspect slopes, scale, collision and routes. Respawn/reset is straightforward.
 - **Technical boundary:** reuse real Voxel V2 terrain, actor physics, WebGL mesher and existing worker/upload queues. The proxy is explicitly temporary; no V1 code, second physics store or offscreen-only mock.
 - **Gate:** repeatable seed, supported spawn, no walking through or floating inside terrain, touch gesture release + app-switch handling, visible current region and real frame p50/p95/p99/hitch stats, unit tests and first hands-on iPhone review. No claim of full Hunt exploration before H08-02.
-- **Evidence:** not merged. This is the **next PR and demo**.
+- **Evidence:** [PR #143](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/143), merge \`a1960ce\`, 536 automated V2 tests green and Pages deployment successful. [Play the one-region Wet Forest preview](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?v=a1960ce). Browser-local frame timing is displayed; physical iPhone/Android frame reports and hands-on feel are **still unknown**. Requires acceptance or defect report before status \`ACCEPTED\`.
 
 ### H08-02 — Walk seamlessly between regional boundaries
 - **Status:** `READY` after H08-01.
