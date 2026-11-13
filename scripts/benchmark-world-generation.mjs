@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
 import { MAP_KIND_IDS } from '../src/world-generation/map-kinds.mjs';
-import { WorldGeneratorV2 } from '../src/world-generation/world-generator.mjs';
+import { createDefaultWorldGeneratorV2 } from '../src/world-generation/index.mjs';
 import {
   V2ExternalTerrainLoader, MAX_INITIAL_TERRAIN_RUNS,
   MAX_INITIAL_TERRAIN_CELLS, MAX_INITIAL_TERRAIN_STEP_CELLS
@@ -19,7 +19,7 @@ export function benchmarkWorldGeneration({seeds=WORLDGEN_STRESS_SEEDS}={}) {
         seed>=0 && seed<=0xffffffff)) {
     throw new RangeError('Expected bounded, nonnegative World Generation V2 seeds');
   }
-  const generator=new WorldGeneratorV2();
+  const generator=createDefaultWorldGeneratorV2();
   const samples=[];
   const uniqueByKind=new Map();
   let maximalRuns=0, maximalCells=0, maximalChunks=0;
