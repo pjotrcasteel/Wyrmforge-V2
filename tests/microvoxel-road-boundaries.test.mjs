@@ -115,10 +115,18 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
         assert.ok(top,'micro step must belong to a real physical top voxel');
         assert.equal(top.material,selected.route.roadProfile.material,
           'painted road material and 10cm occupancy must share one cell selector');
+        const transition=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>{
+          const nx=tile.x+dx,nz=tile.z+dz;
+          const lower=runs.some(run=>run.x<=nx && run.x+run.length>nx &&
+            run.z===nz && run.y===tile.y-1 && run.material!==0);
+          const lowerTop=runs.some(run=>run.x<=nx && run.x+run.length>nx &&
+            run.z===nz && run.y===tile.y && run.material!==0);
+          return lower && !lowerTop && selectRoadCell(nx,nz,routes);
+        });
         for(let z=0;z<10;z++)for(let x=0;x<10;x++) {
           const cut=roadMicroCut(microCellCenter(tile.x,x),microCellCenter(tile.z,z),selected);
-          assert.equal(tile.levels[z*10+x],10-cut,
-            'every subcell height follows its selected painted road profile');
+          assert.equal(tile.levels[z*10+x],10-Math.max(cut,transition?5:0),
+            'road cells must match authored material and physical half-metre landing');
         }
       }
       assert.ok(authoredRoadTiles>=20);
