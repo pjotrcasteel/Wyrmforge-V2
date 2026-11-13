@@ -11,6 +11,17 @@ export function distanceToRoadSegment(x,z,a,b) {
   return Math.hypot(x-a.x-t*dx,z-a.z-t*dz);
 }
 
+// Use integer tenth coordinates before conversion. Adjacent systems must
+// never produce different cuts at rounding thresholds because one computed
+// (index+0.5)*0.1 while another computed (index+0.5)/10.
+export function microCellCenter(voxel,index) {
+  if(!Number.isSafeInteger(voxel) || !Number.isSafeInteger(index) ||
+      index<0 || index>9) {
+    throw new RangeError('Microcell center requires voxel and 0..9 index');
+  }
+  return (voxel*10+index+0.5)/10;
+}
+
 export function selectRoadCell(x,z,routes) {
   for(const route of routes) {
     if(!route.roadProfile) continue;
