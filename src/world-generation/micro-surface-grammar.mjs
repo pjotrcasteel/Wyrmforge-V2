@@ -35,6 +35,18 @@ export function composeMicroSurfaceTiles({
     const i=index(radius,x,z),top=heights[i];
     const selected=selectRoadCell(x,z,tracks);
     const profile=selected?.route??null;
+    // A whole 1m rise across the trail would be thigh-to-waist height on
+    // a 1.6m actor. Refine the HIGHER road tile into a genuine 50cm
+    // landing whenever an adjacent authored road tile is one block lower.
+    // The adjacent high tile remains solid; two 50cm steps replace the
+    // previous single one-metre climb, with no bent triangles.
+    const heightTransition=profile &&
+      [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>{
+        const nx=x+dx,nz=z+dz;
+        return nx>=-radius && nx<radius && nz>=-radius && nz<radius &&
+          selectRoadCell(nx,nz,tracks) &&
+          top-heights[index(radius,nx,nz)]===1;
+      });
     if(profile && surfaces[i]!==profile.roadProfile.material) {
       throw new Error('Road surface material disagrees with selected microvoxels');
     }
@@ -57,7 +69,8 @@ export function composeMicroSurfaceTiles({
       if(profile) {
         // The same selected 1m road cell owns its material AND its physical
         // ten-centimeter occupancy. Never carve beyond a painted boundary.
-        cut=roadMicroCut(px,pz,selected);
+        cut=Math.max(roadMicroCut(px,pz,selected),
+          heightTransition ? 5 : 0);
       } else if(rockFace) {
         // Staggered cliff lips with coarse clusters of tiny steps.
         // No smoothly tilted top quads and no gratuitous 1000-cell
