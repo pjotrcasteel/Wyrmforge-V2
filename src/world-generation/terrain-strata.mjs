@@ -14,16 +14,17 @@ export function classifySurfaceStrata({
     throw new TypeError('Invalid bounded geological terrain');
   }
   const threshold=terrain.rockFaceThreshold;
-  let stoneOutcrops=0,grassCaps=0;
+  let stoneOutcrops=0,convertedCliffCaps=0,grassCaps=0;
   if(threshold!==null) {
     if(!Number.isSafeInteger(threshold) || threshold<2 || threshold>6) {
       throw new RangeError('Rock face slope threshold must be bounded');
     }
     for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
       const index=(z+radius)*radius*2+x+radius;
-      // A deliberate dirt road (2) remains dirt in non-rocky biomes,
-      // while a mountain road is authored as bedrock (3) and stays solid.
-      if(surfaces[index]!==1) continue;
+      // Count actual exposed stone faces, whether noise already made them
+      // stone or cliff classification did. Dirt trails (material 2) are not
+      // silently reclassified as rock.
+      if(surfaces[index]!==1 && surfaces[index]!==3) continue;
       const elevation=heights[index];
       let exposed=false;
       for(const [dx,dz] of [[0,1],[0,-1],[1,0],[-1,0]]) {
@@ -36,7 +37,10 @@ export function classifySurfaceStrata({
         }
       }
       if(exposed) {
-        surfaces[index]=3;
+        if(surfaces[index]===1) {
+          surfaces[index]=3;
+          convertedCliffCaps++;
+        }
         stoneOutcrops++;
       }
     }
@@ -45,7 +49,7 @@ export function classifySurfaceStrata({
   return Object.freeze({
     soilDepth:terrain.soilDepth,
     rockFaceThreshold:threshold,
-    stoneOutcrops,grassCaps,
+    stoneOutcrops,convertedCliffCaps,grassCaps,
     continuousBedrockBelowStone:true
   });
 }
