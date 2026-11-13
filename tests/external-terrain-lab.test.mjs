@@ -66,7 +66,7 @@ test('external proof builds complete scenes on worker while allowing small-devic
   assert.match(entry,/new Worker\(new URL\('\.\/src\/terrain-mesh\.worker\.mjs'/);
   assert.match(entry,/pendingMesh=\{terrain,kind,epoch\}/);
   assert.match(entry,/if\(!meshBridge\.status\.busy\)/);
-  assert.match(entry,/renderer\.setMeshes\(meshes\)/);
+  assert.match(entry,/renderer\.setMeshes\(presentSiteMeshes\(terrain\.world,meshes\)\)/);
   assert.match(entry,/if\(pendingMesh\) \{/);
   assert.match(entry,/if\(kind==='restore'\) \{/);
   assert.match(entry,/meshBridge\?\.cancel\(\)/);
