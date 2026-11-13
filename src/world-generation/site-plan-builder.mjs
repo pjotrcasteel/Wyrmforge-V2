@@ -46,14 +46,29 @@ export class SitePlanBuilder {
     this.#terrain=Object.freeze({elevation,exposedStone});
     return this;
   }
-  addRoute(id,nodes,width=2) {
+  addRoute(id,nodes,width=2,roadProfile=null) {
     this.#checkOpen(id);
     if(!Array.isArray(nodes) || nodes.length<2 || nodes.length>10 ||
         !integer(width) || width<1 || width>3) {
       throw new RangeError('Routes need bounded nodes and width');
     }
+    // User-authored road intent remains independent of Voxel V2 resolution.
+    // 0.1-0.3 voxel is a future surface-detail target: integer solids can
+    // currently encode only a full-voxel recessed bed, never fractional Y.
+    let profile=null;
+    if(roadProfile!==null) {
+      const {kind,nominalCutFraction,material,cutVoxels}=roadProfile;
+      if(typeof kind!=='string' || !IDENTIFIER.test(kind) ||
+          !Number.isFinite(nominalCutFraction) ||
+          nominalCutFraction<0.1 || nominalCutFraction>0.3 ||
+          ![2,3].includes(material) || cutVoxels!==1) {
+        throw new RangeError('Road profile requires valid material and a 0.1-0.3 cut intent');
+      }
+      profile=Object.freeze({kind,nominalCutFraction,material,cutVoxels});
+    }
     this.#routes.push(Object.freeze({
-      id,width,nodes:Object.freeze(nodes.map(node=>this.#point(node)))
+      id,width,nodes:Object.freeze(nodes.map(node=>this.#point(node))),
+      roadProfile:profile
     }));
     return this;
   }
