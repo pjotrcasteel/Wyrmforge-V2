@@ -99,3 +99,31 @@ Outstanding: physically authored vegetation/rocks/buildings (World Objects V2),
 Wyrm corruption material art, generated rivers/water simulation, actual
 game-side World Map/Hunt integration, advanced crossings and multi-layer route
 topology, and sustained mobile stress testing. Don't claim those as delivered.
+
+## Mobile-first site inspection — 2026-11-13
+
+The World Generation preview page now gives the generated world its own
+full-height viewport. The old always-visible control tray consumed most of
+the iPhone screen and could crop the top of tall mountain sites.
+
+- **Map settings & actions** is a collapsed-by-default overlay, so choosing
+  the site kind, seed, camera, chunk pitch, carve, or save does not permanently
+  reduce the rendered map area. A short live readiness/error indicator stays
+  visible even when settings are closed; detailed engine diagnostics remain
+  inside the expanded panel.
+- A **Focus** mode hides the header and expands the same WebGL canvas to the
+  browser's available viewport. Fit, +/− zoom and drag/pinch gestures work
+  without invoking fullscreen APIs that are inconsistent on mobile Safari.
+- The viewer fits the actual 3D `layout.footprint`, including minimum and
+  maximum elevation, by projecting all eight volume corners through the
+  existing camera basis. It centers that projected volume and reserves
+  margins, preventing the tall rocky site from being cropped at the top.
+- The Fit control resets temporary pan/zoom; changing site kind or camera
+  also recenters the view. All navigation is presentation-only. It never
+  edits the site recipe, invokes the generator, loads voxels, remeshes terrain,
+  or changes the replaceable-engine contract.
+
+Automated tests cover every built-in generated kind at phone and landscape
+sizes, both camera presets, world-corner clipping, zoom bounds and the
+collapsed/focus UI contracts. This is a **viewer usability change**, not
+new terrain generation or a new camera engine.

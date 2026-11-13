@@ -40,9 +40,10 @@ test('external site opens with diagonal 3D inspection, while keeping the optiona
   assert.match(html,/<option value="inspection" selected>3D inspection/);
   assert.match(html,/<option value="hunt">Hunt camera/);
   assert.match(host,/const camera=viewCamera\.value/);
-  assert.match(host,/renderer\.render\(\{[\s\S]*?scale,panX:0,panY:0,camera/);
+  assert.match(host,/renderer\.render\(\{[\s\S]*?scale,panX,panY,camera/);
   assert.doesNotMatch(host,/camera:'hunt'/,
     'external proof must not force the nearly top-down Hunt camera');
+  assert.match(host,/viewCamera\.addEventListener\('change',\(\)=>\{/);
   assert.doesNotMatch(host,/viewCamera\.addEventListener\('change',resetSite\)/,
     'a camera-only change must not destroy and reload the voxel world');
 });
