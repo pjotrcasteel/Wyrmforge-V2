@@ -3,6 +3,9 @@
 // queried. This conservative swept AABB is a measured capsule alternative,
 // not yet a production player controller or a full rigid-body physics engine.
 import { raycastTerrain } from './terrain-raycast.mjs';
+import {
+  AUTO_STEP_HEIGHT,AUTO_HOP_UPWARD_SPEED,describeFallImpact
+} from './character-traversal-policy.mjs';
 
 export const ACTOR_PHYSICS_SCHEMA = 'voxel-v2.actor-physics.v1';
 export const ACTOR_HALF_WIDTH = 0.28;
@@ -176,6 +179,12 @@ function moveHorizontal(world,position,axis,distance,canStep) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
   }
+  // A 1m cliff is not a tiny walking curb. Let the controller launch
+  // a bounded, collision-swept automatic hop instead of teleporting.
+  if(landing.position-position.y>AUTO_STEP_HEIGHT+0.001) {
+    return {position:{...position,[axis]:initial.position},
+      blocked:true,stepped:false,hopCandidate:true};
+  }
   return {position:{...reached,y:landing.position},
     blocked:false,stepped:true};
 }
@@ -288,16 +297,30 @@ export function simulateTerrainActor(world,actor,{
   const xMotion=moveHorizontal(world,actor,'x',dx,canStep);
   const zMotion=moveHorizontal(world,xMotion.position,'z',dz,canStep);
   let position=zMotion.position;
-  // Other V2 physics systems may supply a bounded upward impulse later.
-  // It is swept against ceilings, but no game/player input initiates it.
+  const autoHopStarted=Boolean(canStep && (xMotion.hopCandidate || zMotion.hopCandidate) &&
+    (actor.hopCooldown??0)<=0);
+  const hopCooldown=autoHopStarted?0.32:Math.max(0,(actor.hopCooldown??0)-dt);
+  // The player has NO jump command. A real obstacle found by the swept
+  // collider starts a ballistic automatic hop, never a 1m position snap.
+  const requestedVy=autoHopStarted ? AUTO_HOP_UPWARD_SPEED : actor.vy;
   const vy=Math.max(-ACTOR_MAX_FALL_SPEED,
-    Math.min(ACTOR_MAX_UPWARD_SPEED,actor.vy-ACTOR_GRAVITY*dt));
+    Math.min(ACTOR_MAX_UPWARD_SPEED,requestedVy-ACTOR_GRAVITY*dt));
   // Sweep both ascending AND descending travel. The first hit on an upward
   // sweep is a ceiling; it must stop ascent, not count as grounded.
   const vertical=sweepActorAxis(world,position,'y',vy*dt);
   position={...position,y:vertical.position};
   const ceilingContact=vertical.collided && vy>0;
   const grounded=vertical.collided && vy<0;
+  // Track apex after both external impulses and automatic hops. Detect a
+  // fall from a destroyed floor just as readily as one from walking off a
+  // cliff. Emit the impact once on landing; Gameplay owns reducing HP.
+  const startY=initialSupport && requestedVy<=0
+    ? actor.y : (Number.isFinite(actor.fallStartY)?actor.fallStartY:actor.y);
+  const apex=vy>0 ? Math.max(startY,position.y) : startY;
+  const fallDistance=grounded ? Math.max(0,apex-position.y) : 0;
+  const fallImpact=grounded && fallDistance>=0.5
+    ? describeFallImpact({distance:fallDistance,speed:Math.abs(vy)})
+    : null;
   return {
     schema:ACTOR_PHYSICS_SCHEMA,...position,
     vy:vertical.collided ? 0 : vy,
@@ -305,6 +328,9 @@ export function simulateTerrainActor(world,actor,{
     wallContact:xMotion.blocked || zMotion.blocked,
     ceilingContact,
     stepUp:xMotion.stepped || zMotion.stepped,
+    autoHopStarted,hopCooldown,
+    fallStartY:grounded?position.y:apex,
+    fallImpact,fallDamage:fallImpact?.damage??0,
     worldRevision:world.revision,
     error:null
   };

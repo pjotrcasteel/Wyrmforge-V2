@@ -13,7 +13,7 @@ function advance(world,actor,steps,input) {
     contacts+=Number(actor.wallContact);
     airborne+=Number(!actor.grounded);
     overlaps+=Number(actorOverlapsTerrain(world,actor));
-    stepUps+=Number(actor.stepUp);
+    stepUps+=Number(Boolean(actor.stepUp || actor.autoHopStarted));
   }
   return {actor,contacts,airborne,overlaps,stepUps};
 }

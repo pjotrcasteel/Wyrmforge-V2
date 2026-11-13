@@ -507,3 +507,56 @@ after destroying a refined road voxel.
 No shader masking, vertex bending, material recoloring or arbitrary
 second geometry authority was added. These are fixes to actual physical
 voxels and the existing World Generation output boundary.
+
+## Character traversal acceptance (independent Navigation / Physics consumer)
+
+Mobile visual checks confirmed the real 10 cm roads look more natural, but
+highlighted a *gameplay* constraint: many hills still contain full 1 m ledges.
+Wyrmforge has **no active jump button**, and a fall should be dangerous.
+
+This change does **not** make World Generation implement player physics or
+health. Instead, a replaceable **Character Traversal Policy** declares:
+
+- Automatically walk up small ledges (up to **0.35 m**).
+- Perform a **passive, collision-swept ballistic hop** when moving toward an
+  otherwise clear ledge up to **1.05 m**. A 1 m hop must animate across
+  successive physics ticks, not teleport the actor to its new elevation.
+- A wall taller than the permitted hop or a low ceiling is *not* passable.
+- A fall of **2 m or less** is harmless. Above that, gameplay receives
+  a single **fall-impact event** with suggested damage
+  `ceil(20 × (fall metres − 2))`, capped at 100. No HP is modified
+  inside Voxel V2 or World Generation.
+- Drops beyond **6 m** are excluded from *normal* navigable edges, even
+  though actual physics remains free to let an actor fall off a cliff.
+
+**Navigation** is now a derived, independent consumer of the public
+`V2TerrainPort`. `analyzeCharacterReachability` samples the **actual
+loaded voxel world** (including microvoxel heights and the character's
+0.56 m wide, 1.6 m tall collision volume), tests standing support,
+horizontal clearance, directed uphill/downhill transitions and fall
+severity, then constructs a bounded shortest **lowest-damage** route
+graph. The result has versioned per-cell statuses and a route-to-target
+query. No WorldGen heightmap is used as navigation truth.
+
+The World Generation **viewer** has an opt-in *Show reachable terrain and
+fall hazards* diagnostic. Green denotes safely reachable standing cells,
+amber denotes routes requiring harmful drops, and red marks standable but
+unreachable areas. A white trace connects the entrance to the exit when
+possible. Status text lists actual reachable cells and inaccessible
+landmarks/arena spaces. The graph is cached by terrain authority epoch,
+revision and site hash and recomputed after a destructive edit or restore.
+
+**Boundaries:** World Generation still only composes geography; Voxel V2
+owns solidity and fixed-step actor collision; Traversal Policy owns hop
+and fall thresholds; Navigation consumes the public read port and never
+writes world data; Gameplay/Health alone deducts HP when it receives a
+fall-impact event. Enemy AI / future full horde pathfinding may consume
+navigation knowledge, but are not implemented or silently coupled here.
+
+**Tests:** fixed-step automatic hops vs instant teleports, 10 cm steps,
+head clearance, high walls, safe and injurious falls, one-shot impact
+events, real collider-sized pathfinding, vertical overhangs, microvoxel
+landings, one-way dangerous drops, changed-world recalculation, and
+three real generated/loaded map kinds. This is character-level terrain
+reachability, **not yet dynamic crowd-navigation or a final game combat
+controller**.

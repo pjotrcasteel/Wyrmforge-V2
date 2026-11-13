@@ -84,7 +84,7 @@ test('one-cell ledge is climbable; taller cliff is not', () => {
   let current=actor(),stepped=false;
   for(let i=0;i<48;i++) {
     current=simulateTerrainActor(world,current,{moveX:1,dt:1/60});
-    stepped ||= current.stepUp;
+    stepped ||= current.stepUp || current.autoHopStarted;
   }
   assert.equal(stepped,true);
   assert.ok(current.x>2.3,'actor must climb the one-voxel edge');

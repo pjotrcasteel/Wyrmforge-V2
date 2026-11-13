@@ -17,6 +17,8 @@ import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
+import { analyzeCharacterReachability } from './src/character-reachability.mjs';
+import { projectVoxel } from './src/camera-presets.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
@@ -24,6 +26,8 @@ import {
 const canvas=document.querySelector('#site-view');
 const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
+const traversalLayout=document.querySelector('#traversal-layout');
+const reachabilityReport=document.querySelector('#reachability-report');
 const combatGuideContext=combatGuide.getContext('2d');
 const status=document.querySelector('#status');
 const pitch=document.querySelector('#chunk-edge');
@@ -60,6 +64,7 @@ let pendingMesh=null;
 let pendingEdit=null;
 let meshSource='worker';
 let generatedSite=null;
+let reachabilityCache=null;
 
 // Viewer-only navigation. Positions are CSS pixels so DPR changes do not
 // change the user's pan; neither controls nor camera touch the voxel world.
@@ -101,7 +106,10 @@ function paintEncounterGuide(view) {
   if(!combatGuideContext) return;
   const ctx=combatGuideContext;
   ctx.clearRect(0,0,combatGuide.width,combatGuide.height);
-  if(!combatLayout.checked || !generatedSite || !active?.world) return;
+  if(!combatLayout.checked || !generatedSite || !active?.world) {
+    paintTraversalOverlay(ctx,view);
+    return;
+  }
   const guide=projectEncounterGuides(generatedSite,active.world,view);
   const pixelRatio=combatGuide.width/Math.max(1,combatGuide.clientWidth);
   for(const space of guide.combat) {
@@ -181,6 +189,94 @@ function paintEncounterGuide(view) {
     ctx.arc(approach.point.x,approach.point.y,5*pixelRatio,0,Math.PI*2);
     ctx.fillStyle='#ffca6f';
     ctx.fill();
+  }
+  paintTraversalOverlay(ctx,view);
+}
+
+// Navigation is a separate derived consumer of the current Voxel V2 Terrain
+// Port. The generator has NO actor collision or health implementation.
+function currentReachability() {
+  if(!traversalLayout.checked || !generatedSite || !active?.port)return null;
+  const revision=active.world.revision;
+  const epoch=active.port.epoch;
+  if(reachabilityCache?.revision===revision &&
+      reachabilityCache?.epoch===epoch &&
+      reachabilityCache?.hash===generatedSite.hash) {
+    return reachabilityCache.report;
+  }
+  const entrance=generatedSite.layout.routes.find(route=>
+    route.id==='entry-to-exit');
+  if(!entrance) return null;
+  const targets=[
+    {id:'exit',...entrance.nodes.at(-1)},
+    ...generatedSite.layout.combatSpaces,
+    ...generatedSite.layout.maneuverPockets,
+    ...generatedSite.layout.landmarks,
+    ...generatedSite.layout.approaches
+  ];
+  const report=analyzeCharacterReachability({
+    terrain:active.port,
+    bounds:generatedSite.layout.footprint,
+    start:entrance.nodes[0],targets
+  });
+  reachabilityCache={revision,epoch,hash:generatedSite.hash,report};
+  const reached=report.targets.filter(target=>target.reachable).length;
+  const missing=report.targets.filter(target=>!target.reachable)
+    .map(target=>target.id);
+  reachabilityReport.textContent=
+    'Actual actor-sized reachable: '+report.reachableCells+' / '+
+    report.standableCells+' standable cells\n'+
+    'No-damage access: '+report.safelyReachableCells+
+    ' · damaging routes: '+report.damageRiskCells+'\n'+
+    'Key destinations: '+reached+' / '+report.targets.length+
+    (missing.length?'\nBlocked: '+missing.join(', '):'\nAll key destinations reachable')+
+    '\nGreen: safe · Amber: damaging drop · Red: inaccessible';
+  return report;
+}
+
+function paintTraversalOverlay(ctx,view) {
+  if(!traversalLayout.checked || !generatedSite || !active?.port)return;
+  let report;
+  try {
+    report=currentReachability();
+  } catch(error) {
+    reachabilityReport.textContent='Reachability audit failed: '+error.message;
+    return;
+  }
+  if(!report)return;
+  const radius=Math.max(1.1,Math.min(3,view.scale*0.22));
+  for(const cell of report.cells) {
+    if(cell.state==='blocked')continue;
+    const point=projectVoxel(cell.x+0.5,cell.y+0.04,cell.z+0.5,view);
+    ctx.fillStyle=cell.state==='safe'
+      ? 'rgba(72,218,152,0.65)'
+      : cell.state==='damaging'
+        ? 'rgba(255,188,87,0.85)' : 'rgba(255,86,104,0.72)';
+    ctx.fillRect(point.x-radius,point.y-radius,radius*2,radius*2);
+  }
+  const exit=report.targets.find(target=>target.id==='exit');
+  const route=exit && report.routeTo(exit.x,exit.z);
+  if(route && route.length>1) {
+    ctx.beginPath();
+    route.forEach((node,index)=>{
+      const point=projectVoxel(node.x+0.5,node.y+0.12,node.z+0.5,view);
+      if(index===0)ctx.moveTo(point.x,point.y);
+      else ctx.lineTo(point.x,point.y);
+    });
+    ctx.lineWidth=Math.max(2,view.scale*0.4);
+    ctx.strokeStyle='rgba(247,251,255,0.97)';
+    ctx.stroke();
+  }
+  for(const target of report.targets) {
+    const cell=report.cells.find(item=>
+      item.x===target.x && item.z===target.z);
+    if(cell?.y===null || cell?.y===undefined)continue;
+    const p=projectVoxel(target.x+0.5,cell.y+0.2,target.z+0.5,view);
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,radius*2.5,0,Math.PI*2);
+    ctx.strokeStyle=target.reachable?'#f0fff9':'#ff506a';
+    ctx.lineWidth=2;
+    ctx.stroke();
   }
 }
 
@@ -265,6 +361,8 @@ function resetSite() {
     active=null;
     renderer.setMeshes([]);
     generatedSite=null;
+    reachabilityCache=null;
+    reachabilityReport.textContent='Generating terrain before actor reachability can be traced.';
     if(siteKind.value==='fixture') {
       loader=new V2ExternalTerrainLoader(createExternalSiteFixture({
         chunkEdge:Number(pitch.value),seed:7
@@ -516,7 +614,14 @@ siteSeed.addEventListener('change',()=>{
   resetSite();
 });
 combatLayout.addEventListener('change',()=>{
-  if(!combatLayout.checked && combatGuideContext) {
+  if(!combatLayout.checked && !traversalLayout.checked && combatGuideContext) {
+    combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
+  }
+});
+traversalLayout.addEventListener('change',()=>{
+  reachabilityReport.hidden=!traversalLayout.checked;
+  if(traversalLayout.checked) currentReachability();
+  else if(!combatLayout.checked) {
     combatGuideContext.clearRect(0,0,combatGuide.width,combatGuide.height);
   }
 });
