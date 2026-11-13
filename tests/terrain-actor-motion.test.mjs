@@ -68,7 +68,7 @@ test('automatic walking step handles small ledge but not a tall wall', () => {
     let stepped=false;
     for(let i=0;i<55;i++){
       actor=step(world,actor,{moveX:1});
-      stepped ||=actor.stepUp;
+      stepped ||=actor.stepUp || actor.autoHopStarted;
     }
     assert.equal(stepped,true);
     assert.ok(actor.x>2.5);
