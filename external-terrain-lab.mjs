@@ -15,6 +15,7 @@ import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe } from './src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from './src/world-generation/index.mjs';
+import { presentGeneratedSurfaceMeshes } from './src/terrain-surface-detail.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
@@ -377,12 +378,20 @@ function restoreState() {
   }
 }
 
+function presentSiteMeshes(world,meshes) {
+  // Independent surface presentation consumes the public generated-site
+  // contract. All voxel edit authority and worker meshing remain unchanged.
+  return generatedSite
+    ? presentGeneratedSurfaceMeshes({site:generatedSite,world,meshes})
+    : meshes;
+}
+
 function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
   if(!pendingMesh || pendingMesh.terrain!==terrain ||
       pendingMesh.epoch!==epoch) return;
   // Only a complete revision-consistent mesh from this world can replace
   // the active GPU scene. No old voxel world is unloaded before this point.
-  renderer.setMeshes(meshes);
+  renderer.setMeshes(presentSiteMeshes(terrain.world,meshes));
   if(kind==='restore') {
     loader?.unload();
     restoredSession?.unload();
@@ -596,7 +605,8 @@ try {
         try {
           // The original dirty IDs also remove emptied GPU chunks when
           // the worker sends no replacement mesh for a deleted chunk.
-          if(!renderer.queueReplacementMeshes(new Set(dirtyIds),meshes,
+          if(!renderer.queueReplacementMeshes(new Set(dirtyIds),
+              presentSiteMeshes(world,meshes),
               {sceneEpoch:pendingEdit.rendererSceneEpoch})) {
             throw new Error('Renderer scene changed while external mesh was building');
           }
