@@ -7,6 +7,7 @@
 <style>
 :root{color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;width:100%;height:100%;background:#101820;color:#e7edf1;font:14px system-ui}
 body{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 header{min-height:46px;padding:7px 12px;background:#1d2b35;display:flex;align-items:center;gap:12px}
@@ -119,6 +120,16 @@ body.focus-mode #site-summary{max-width:46%}
         <option value="mini-boss-arena">Miniboss — broken stone ring arena</option>
         <option value="wyrm-lair">Wyrm lair — caldera boss arena</option>
       </select>
+      <div class="control-field" style="grid-column:1/-1">
+        <label><input id="expedition-mode" type="checkbox" />
+          Inspect multi-region Hunt expedition (foundation)</label>
+      </div>
+      <div class="control-field" style="grid-column:1/-1" id="expedition-region-field" hidden>
+        <label for="expedition-region">Expedition region to inspect</label>
+        <select id="expedition-region" aria-label="Choose a generated Hunt expedition region"></select>
+        <p class="control-note">Regions are separately generated in world coordinates.
+          Continuous playable streaming, story interactions and hordes are not implemented yet.</p>
+      </div>
       <div class="control-field">
         <label for="site-seed">Terrain seed</label>
         <input id="site-seed" type="number" min="0" max="4294967295" step="1"

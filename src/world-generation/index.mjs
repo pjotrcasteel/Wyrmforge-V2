@@ -13,3 +13,17 @@ export function createDefaultWorldGeneratorV2({registry}={}) {
 export function generateWorldSite(recipe,{registry}={}) {
   return createDefaultWorldGeneratorV2({registry}).generate(recipe);
 }
+
+ 
+// Expedition foundation: request one bounded, world-positioned region at a
+// time. A streaming/activation manager and real Hunt integration are later.
+export {
+  createHuntExpeditionRecipe,composeHuntExpeditionPlan
+} from './hunt-expedition-plan.mjs';
+import { generateHuntExpeditionRegion } from './hunt-expedition-region.mjs';
+
+export function generateWorldExpeditionRegion(plan,regionId) {
+  return generateHuntExpeditionRegion(plan,regionId,{
+    terrainAdapter:toVoxelTerrainDefinition
+  });
+}

@@ -8,14 +8,15 @@ import {
 import { WORLD_GENERATOR_VERSION } from './site-recipe.mjs';
 
 export function toVoxelTerrainDefinition({
-  siteId,seed,chunkEdge,runs,surfaceTiles=[]
+  siteId,seed,chunkEdge,runs,surfaceTiles=[],
+  generatorVersion=WORLD_GENERATOR_VERSION
 }) {
   return validateExternalTerrainDefinition({
     schema:surfaceTiles.length
       ? TERRAIN_INITIALIZATION_MICRO_SCHEMA
       : TERRAIN_INITIALIZATION_SCHEMA,
     siteId,seed,chunkEdge,
-    generatorVersion:WORLD_GENERATOR_VERSION,
+    generatorVersion,
     runs,
     ...(surfaceTiles.length ? {surfaceTiles} : {})
   });

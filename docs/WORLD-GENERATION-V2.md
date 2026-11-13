@@ -752,3 +752,72 @@ keeps its original 8192 run / 1048576 voxel / 384 generated microtile
 budgets, with generation stress and actual loaded-world tests enforcing
 them. Browser device measurements and visual acceptance are separate
 gates; this does **not** complete V2.8 playable Hunt integration.
+
+
+## Hunt expedition regions — V2.8 foundation slice 1 (2026-11-13)
+
+**Response to [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md):**
+One Hunt can no longer be modeled as one 40m combat fixture. This slice
+adds an independent **World Map Hunt recipe and multi-region expedition
+plan**, plus a small, testable **on-demand physical region generator**.
+These are NOT the finished streaming runtime, final map dimensions,
+narrative implementation, enemy AI, or a playable Hunt.
+
+### Concrete prototype geography
+
+- `createHuntExpeditionRecipe`: bounded World Map inputs: journey/hunt
+  identity, chapter, chosen biome, corruption, world revision, seed,
+  chunk pitch, scope and optional **opaque story beat identifiers**.
+  The generator never fabricates story text or awards discoveries.
+- `composeHuntExpeditionPlan`: standard plan has 11 connected
+  32m regions spanning a **96m × 160m geographical envelope**.
+  Extended scope adds three spaces/alternate paths, with a
+  **128m × 160m envelope** (mirrored between seeds). Includes central
+  through-route, linked side loops, horde-compatible clearings,
+  investigation/discovery location opportunities, retreat/flank space
+  and extraction. This is a **spatial adventure skeleton**, not
+  automatically populated gameplay.
+- `generateWorldExpeditionRegion(plan,id)`: composes ONE 32m tile in
+  fixed world-space X/Z coordinates and emits canonical real layered
+  3D Voxel V2 initialization runs. Seeded broad geography and interior
+  relief vary with the selected biome; local edits fade near neighboring
+  borders to avoid rectangular steps. 7m-wide portals and authored
+  center-to-port routes share a physically level top. A site region
+  can load via the existing bounded `V2ExternalTerrainLoader`,
+  one region at a time, without raising its run/cell/step budgets.
+- Existing `WorldGeneratorV2` single-site recipes, biome identities,
+  10cm traversal work, actor policy and independent Voxel V2 remain
+  available and unchanged. The public terrain adapter now takes an
+  **optional version field**, defaulting to the existing version for
+  old results.
+- In the existing mobile World Generation viewer, check
+  **"Inspect multi-region Hunt expedition (foundation)"** and choose
+  an expedition region. This visualizes one physically loaded region
+  in its real world coordinates; the summary displays the expedition
+  envelope and selected region. The preview does not fake a stitched
+  playable world or auto-load all regions.
+
+### Acceptance and remaining gates
+
+Tests verify deterministic plan identity, multi-route graph reachability,
+World Map-provided story placement opportunities, region-order-independent
+voxel generation, actual loaded Voxel V2 material/height on both sides of
+neighboring world-coordinate borders, protected 7m portals, non-port
+seam height continuity, per-region loader budgets, seed variation and
+legacy single-site compatibility. The test suite covers all seeded
+region IDs and distinct journey scopes.
+
+**NOT IMPLEMENTED:** true adjacent-region streaming into one authoritative
+active voxel world; incremental visible chunk scheduling and cross-region
+raycast/actor navigation; populated physical trees/ruins; enemy hordes;
+investigation interaction and persistence; cross-Hunt story state;
+a full-size, camera-tested Hunt. This code only establishes the correct
+generator and public loader boundaries for that work. The 32m
+region edge is an implementation tile size, NOT a final Hunt size
+or a promise of runtime mobile FPS.
+
+**Next milestone slice:** a bounded region activation/window API with
+shared global voxel authority and deterministic seam replay, then
+on-device exploration and encounter/World Object integrations. Treat
+the lab as a review surface and continue to require actual Hunt
+integration before claiming V2.8 complete.
