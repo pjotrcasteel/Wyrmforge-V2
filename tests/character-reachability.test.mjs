@@ -115,8 +115,9 @@ test('one-way damaging drops are reachable but penalized, while impossible rises
 
 test('generated world reachability is traced from real loaded voxels, not WorldGen metadata',()=>{
   for(const kind of ['wet-forest','forest-highland','mountain-pass']) {
+    for(const seed of [7,19,101,267]) {
     const generated=generateWorldSite(createWorldSiteRecipe({
-      kind,seed:7,chunkEdge:32,
+      kind,seed,chunkEdge:32,
       regionId:'reachability-acceptance',
       siteId:'traversal-'+kind,
       encounterId:'traversal'
@@ -140,7 +141,7 @@ test('generated world reachability is traced from real loaded voxels, not WorldG
         start:route.nodes[0],targets:targetPoints
       });
       console.log('ACTOR-REACHABILITY-AUDIT '+JSON.stringify({
-        kind,worldRevision:report.worldRevision,
+        kind,seed,worldRevision:report.worldRevision,
         standable:report.standableCells,reachable:report.reachableCells,
         safe:report.safelyReachableCells,risk:report.damageRiskCells,
         targets:report.targets.map(target=>({
@@ -153,14 +154,23 @@ test('generated world reachability is traced from real loaded voxels, not WorldG
         'the real actor must reach more than the start corner');
       assert.equal(report.worldRevision,loader.terrain.world.revision);
       assert.equal(report.targets.length,targetPoints.length);
-      const rerun=analyzeCharacterReachability({
+      assert.ok(report.targets.every(target=>target.reachable),
+        kind+' seed '+seed+' stranded a required destination: '+
+        report.targets.filter(target=>!target.reachable)
+          .map(target=>target.id).join(', '));
+      assert.ok(report.targets.every(target=>target.damage===0),
+        kind+' seed '+seed+' requires damaging drops to reach an authored destination');
+      const rerun=seed===7 ? analyzeCharacterReachability({
         terrain:loader.terrain.port,bounds:generated.layout.footprint,
         start:route.nodes[0],targets:targetPoints
-      });
-      assert.deepEqual(report.targets,rerun.targets);
-      assert.equal(report.reachableCells,rerun.reachableCells);
-      assert.equal(report.damageRiskCells,rerun.damageRiskCells);
+      }) : null;
+      if(rerun) {
+        assert.deepEqual(report.targets,rerun.targets);
+        assert.equal(report.reachableCells,rerun.reachableCells);
+        assert.equal(report.damageRiskCells,rerun.damageRiskCells);
+      }
     } finally {loader.unload();}
+    }
   }
 });
 
