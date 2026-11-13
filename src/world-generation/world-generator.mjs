@@ -15,6 +15,7 @@ import { specifyRoadSurfaces } from './road-surface-specification.mjs';
 import { classifySurfaceStrata } from './terrain-strata.mjs';
 import { composeMicroSurfaceTiles } from './micro-surface-grammar.mjs';
 import { gradeNavigableRoads } from './navigable-road-grades.mjs';
+import { sampleWorldInfluence, WORLD_INFLUENCE_SCHEMA } from './world-influence-grammar.mjs';
 
 export const WORLD_GENERATION_RESULT_SCHEMA='wyrmforge.generated-site.v2';
 const FLOOR=-3;
@@ -29,7 +30,15 @@ function prepareGeometry(plan,seed) {
   const size=radius*2;
   const heights=new Int16Array(size*size);
   const surfaces=new Uint8Array(size*size);
-  const base=(x,z)=>clamp(plan.terrain.elevation(x,z),0,MAX_TOP);
+  // Only natural geography receives Wyrm influence. All route, combat and
+  // escape constraints are applied afterwards, using the same voxel heights.
+  const influenceAt=(x,z)=>sampleWorldInfluence({
+    radius,seed,corruption:plan.recipe.corruption,x,z
+  });
+  const base=(x,z)=>clamp(
+    plan.terrain.elevation(x,z)+influenceAt(x,z).elevationShift,0,MAX_TOP
+  );
+  let alteredNaturalCells=0,weatheredStoneCells=0,peakStrength=0;
   const routeSegments=[];
   for(const route of plan.routes) {
     for(let i=1;i<route.nodes.length;i++) {
@@ -66,6 +75,9 @@ function prepareGeometry(plan,seed) {
   });
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=gridIndex(radius,x,z);
+    const influence=influenceAt(x,z);
+    if(influence.elevationShift!==0)alteredNaturalCells++;
+    peakStrength=Math.max(peakStrength,influence.strength);
     const natural=base(x,z);
     let shaped=natural;
     let onTrail=false;
@@ -120,7 +132,10 @@ function prepareGeometry(plan,seed) {
     const inCombat=plan.combatSpaces.some(space=>
       Math.hypot(x-space.x,z-space.z)<=space.radius);
     // Never paint the whole arena brown as though it were a narrow footpath.
-    surfaces[i]=inCombat ? (stony ? 3 : 1) : onTrail ? 2 : stony ? 3 : 1;
+    const influenceStone=!onTrail && !inCombat && influence.weatheredStone;
+    if(influenceStone && !stony)weatheredStoneCells++;
+    surfaces[i]=inCombat ? (stony ? 3 : 1) : onTrail ? 2 :
+      stony || influenceStone ? 3 : 1;
   }
   // Secondary maneuvering spaces are authored terrain, not additional spawn
   // arenas. Grade their wide connections before escape-loop finalization so
@@ -143,7 +158,17 @@ function prepareGeometry(plan,seed) {
   const geology=classifySurfaceStrata({
     radius,heights,surfaces,terrain:plan.terrain
   });
-  return {heights,surfaces,roadWork,geology,roadGrades};
+  const worldInfluence=Object.freeze({
+    schema:WORLD_INFLUENCE_SCHEMA,
+    corruption:plan.recipe.corruption,
+    direction:'toward-north-exit',
+    alteredNaturalCells,weatheredStoneCells,
+    peakStrength:Number(peakStrength.toFixed(6)),
+    // This is geography/stone exposure only. Fire, lava, props and weather
+    // remain separate engines with their own contracts.
+    hasFireSimulation:false
+  });
+  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
@@ -221,7 +246,8 @@ export class WorldGeneratorV2 {
     const builder=new SitePlanBuilder(recipe);
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
-    const {heights,surfaces,roadWork,geology,roadGrades}=prepareGeometry(plan,seed);
+    const {heights,surfaces,roadWork,geology,roadGrades,worldInfluence}=
+      prepareGeometry(plan,seed);
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
       routes:plan.routes,landmarks:plan.landmarks,
@@ -267,7 +293,7 @@ export class WorldGeneratorV2 {
       surfaceTiles:microSurface.tiles
     });
     const layout=Object.freeze({
-      routes:plan.routes,roads,geology,
+      routes:plan.routes,roads,geology,worldInfluence,
       roadGrades:Object.freeze({
         schema:roadGrades.schema,cells:roadGrades.cells,
         maximumGradeTenths:roadGrades.maximumGradeTenths,
