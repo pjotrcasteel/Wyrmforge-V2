@@ -67,7 +67,7 @@ test('headroom rejects sites that a 2D heightmap would incorrectly mark walkable
   world.set(3,2,2,3);
   const report=audit(world);
   const cell=report.cells.find(x=>x.x===3 && x.z===2);
-  assert.equal(cell.state,'blocked');
+  assert.equal(cell.state,'unreachable');
   assert.equal(report.routeTo(3,2),null);
   assert.equal(report.targets[0].reachable,true,
     'an alternate route around the overhang remains possible');
