@@ -1,8 +1,11 @@
 // World Generation V2: Strategy pattern. These are replaceable design recipes,
 // not VoxelWorld implementations, material shaders, prop engines, or game data.
 // Each strategy composes a site plan using only the public builder vocabulary.
+import { createFireArenaStrategies } from './fire-arena-strategies.mjs';
+
 export const MAP_KIND_IDS = Object.freeze([
-  'wet-forest', 'forest-highland', 'mountain-pass'
+  'wet-forest', 'forest-highland', 'mountain-pass',
+  'scorched-approach', 'mini-boss-arena', 'wyrm-lair'
 ]);
 
 function mix(seed, x, z, salt) {
@@ -238,7 +241,8 @@ function mountains(builder, context) {
 const BUILTIN_STRATEGIES=Object.freeze([
   Object.freeze({kind:'wet-forest',compose:forest}),
   Object.freeze({kind:'forest-highland',compose:transition}),
-  Object.freeze({kind:'mountain-pass',compose:mountains})
+  Object.freeze({kind:'mountain-pass',compose:mountains}),
+  ...createFireArenaStrategies(siteNoise)
 ]);
 
 // Registry pattern with injected strategy implementations. A later map kind
