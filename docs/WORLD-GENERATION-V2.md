@@ -600,3 +600,28 @@ CI verifies auto-hop thresholds and actual microvoxel landings, as
 well as all three authored site kinds across multiple seeds. The
 generated site remains a World Generation product, while the Actor
 and Navigation engines own their own independently swappable rules.
+
+## Entry/exit road apron at the finite map boundary — V2.6.1
+
+A real iPhone Wet Forest seed-7 screenshot exposed a blocky, raised road lip
+near the **first/last road cells at the outer site boundary**. The Strategy's
+entry/exit endpoints were intentionally just inside the 40×40 map, while
+road-painting continued to its edge. The new shared 10cm movement grading
+stopped at the waypoint, leaving painted border cells at independent 1m
+whole-voxel elevations.
+
+The pure, replaceable `road-boundary-apron.mjs` rule now detects an
+authored road endpoint facing a nearby map edge. It generates short, bounded
+entry/exit spine extensions only through **already-painted road cells**,
+and connects their immediate painted shoulders to the existing joint
+corridor-grade graph. The same 50cm maximum movement grade, real 10cm
+microvoxel occupancy, materials, raycasting and actor collider apply right
+to the edge. Grass and cliffs outside the road remain authored landforms,
+not flattened decorative ramps. The public Voxel V2 schema is unchanged;
+the deterministic WorldGen output version is `worldgen-v2.6.1`.
+
+The viewer's real seed-7 recipe and the other two biomes across four seeds
+are tested for exact physical entry/exit heights, shoulder alignment,
+material-to-geometry consistency and ongoing arena/escape connectivity.
+No per-vertex bending, camera scaling, special-case hardcoded seed, or
+new second source of collision truth was introduced.
