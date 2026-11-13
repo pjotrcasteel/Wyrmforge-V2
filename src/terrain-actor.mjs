@@ -105,6 +105,36 @@ export function sweepActorAxis(world,position,axis,distance) {
     throw new RangeError('Actor sweep axis or distance is out of bounds');
   }
   if (distance===0) return { position:position[axis],collided:false };
+  // Physical 10cm topography changes *within* a 1m voxel. Checking only
+  // integer plane crossings lets a walking actor enter a raised microtile
+  // without detecting contact, then fail next tick with actor-overlap.
+  // Keep integer sweeps for non-refined worlds and use bounded, authoritative
+  // AABB probes for refined horizontal movement. Never consult render meshes.
+  if(axis!=='y' && world.microSurfaceCount>0 &&
+      typeof world.intersectsPhysicalBox==='function') {
+    const total=Math.abs(distance),sign=Math.sign(distance);
+    const stride=0.05; // half a microvoxel; no gap between sampled contacts
+    const steps=Math.ceil(total/stride);
+    let safe=0;
+    for(let i=1;i<=steps;i++) {
+      const travelled=Math.min(total,i*stride);
+      const candidate={...position,
+        [axis]:position[axis]+sign*travelled};
+      if(actorOverlapsTerrain(world,candidate)) {
+        // Binary-refine the first contact without moving into the obstacle.
+        let low=safe,high=travelled;
+        for(let iteration=0;iteration<12;iteration++) {
+          const mid=(low+high)*0.5;
+          const probe={...position,[axis]:position[axis]+sign*mid};
+          if(actorOverlapsTerrain(world,probe))high=mid;
+          else low=mid;
+        }
+        return {position:position[axis]+sign*low,collided:true};
+      }
+      safe=travelled;
+    }
+    return {position:position[axis]+distance,collided:false};
+  }
   const bounds=box(position);
   if(axis==='y' && distance<0 && world.microSurfaceCount>0 &&
       typeof world.groundContactHeight==='function') {
