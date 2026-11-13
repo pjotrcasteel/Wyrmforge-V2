@@ -37,6 +37,7 @@ const playJoystick=document.querySelector('#play-joystick');
 const playStick=document.querySelector('#play-stick');
 const playHud=document.querySelector('#play-hud');
 const playRespawn=document.querySelector('#play-respawn');
+const playReport=document.querySelector('#play-report');
 const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
 const traversalLayout=document.querySelector('#traversal-layout');
@@ -1053,6 +1054,48 @@ if(playMode) {
       if(playPointer.id===event.pointerId)resetPlayInput();
     });
   }
+  playReport.addEventListener('click',()=>{
+    // Data is captured in the actual phone browser: no fabricated device
+    // benchmarks, invented GPU timings or server-side profiler access.
+    const report={
+      schema:'wyrmforge.hunt-play-report.v1',
+      build:{version:VERSION,commit:COMMIT},
+      capturedAtUtc:new Date().toISOString(),
+      site:{
+        seed:expeditionPlan?.recipe.seed??null,
+        regionId:expeditionSite?.regionId??null,
+        generatorVersion:expeditionSite?.definition.generatorVersion??null
+      },
+      device:{
+        userAgent:navigator.userAgent,
+        devicePixelRatio:window.devicePixelRatio,
+        viewportCss:{width:canvas.clientWidth,height:canvas.clientHeight},
+        framebuffer:{width:canvas.width,height:canvas.height}
+      },
+      performance:{
+        frameIntervals:playFrameStats.snapshot,
+        frameWorkCpu:playCpuStats.snapshot,
+        note:'Observed RAF intervals and main thread CPU work; not GPU timing'
+      },
+      terrain:{
+        initializedCells:loader?.progress.totalCells??null,
+        chunks:active?.world.chunkCount??null,
+        voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
+        gpuQueue:renderer?.uploadQueueStatistics??null
+      }
+    };
+    const blob=new Blob([JSON.stringify(report,null,2)],{
+      type:'application/json'
+    });
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download='wyrmforge-play-hunt-'+COMMIT.slice(0,7)+'.json';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  });
   playRespawn.addEventListener('click',resetPlayActor);
   window.addEventListener('blur',()=>{
     resetPlayInput();
