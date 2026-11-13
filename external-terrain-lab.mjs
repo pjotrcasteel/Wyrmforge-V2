@@ -270,7 +270,7 @@ function paintTraversalOverlay(ctx,view) {
   for(const target of report.targets) {
     const cell=report.cells.find(item=>
       item.x===target.x && item.z===target.z);
-    if(!cell?.y)continue;
+    if(cell?.y===null || cell?.y===undefined)continue;
     const p=projectVoxel(target.x+0.5,cell.y+0.2,target.z+0.5,view);
     ctx.beginPath();
     ctx.arc(p.x,p.y,radius*2.5,0,Math.PI*2);
