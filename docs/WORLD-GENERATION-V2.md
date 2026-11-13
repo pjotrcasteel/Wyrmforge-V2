@@ -232,3 +232,56 @@ height steps, explicit route independence and invalid disconnected plans.
 The existing WorldGen 24-site CI stress baseline still applies. Larger
 runtime arenas, mobile horde-load simulation and final camera/gameplay
 acceptance remain separate future work.
+
+## WorldGen v2.2 — handcrafted horde circulation, not just escape lines
+
+The next World Generation milestone builds **secondary maneuver spaces** that
+support continuous horde-survival combat rather than a single central floor.
+The generator still owns *geography*, not enemies, enemy pathfinding, object
+placement, chests, rewards, lighting or camera behavior.
+
+The three built-in **Strategy** implementations now choose different tactical
+identities and physical locations:
+
+- **Wet Forest:** a broad mossy glade to the northwest and a narrower
+  fern-lined lowland gully to the southeast.
+- **Forest → Highland:** a lower, wider foothill terrace and a constricted
+  rocky ridge turn.
+- **Mountain Pass:** an uneven western stone terrace and an eastern cliff
+  overlook. These connect to the central fighting floor without creating a
+  single mandatory chokepoint.
+
+Each strategy declares pockets and wide terrain links with the existing
+**SitePlanBuilder**. The **combat-flow-geometry** compositor turns that design
+into actual graded terrain, with broad lane shoulders and distinct small
+plateaus, before the escape-loop finalization step. It does *not* write
+VoxelWorld state; the existing adapter still emits the public terrain
+initialization definition.
+
+The new **combat-flow Specification** audits the produced heightfield, rather
+than trusting drawn links. It enforces separately located maneuver pockets,
+90%+ walkable inner floors, a minimum of three adjacent side cells with
+one-voxel-or-less height difference at each route step, and continuous
+cardinal traversal from the central arena into each pocket. Custom Strategy
+plugins can omit this optional combat grammar entirely.
+
+Site layout now includes `maneuverPockets`, `flowLinks` and `combatFlow`
+under the existing `wyrmforge.generated-site.v2` schema. Deterministic
+generator semantics advance to **worldgen-v2.2.0**. The immutable recipe,
+voxel adapter schema, material IDs, renderer, and runtime horde/loot engines
+are unchanged.
+
+The existing optional combat overlay additionally draws blue maneuver rings
+and pale connector guides. These are diagnostics only and never reveal hidden
+discovery candidates.
+
+CI validates real voxel-loaded movement width and step heights across
+map kinds/chunk sizes, seed-to-seed deterministic variation, established
+four-flank ingress and west/east escape routes, injectable custom Strategies
+without combat flow, and the existing 24-site generation/loading stress
+baseline. These checks do not certify mobile gameplay load or final art.
+
+**Next boundary:** when implementing actual hordes and player movement,
+Encounter/AI and navigation must consume the **current** destructible world,
+not assume initial geography is unchanged. No enemy spawn schedule or steering
+logic belongs in World Generation.
