@@ -94,15 +94,9 @@ vec3 grassAlbedo(vec3 world) {
 }
 
 void main() {
-  // Exposed lower stone skirts visually recede into the woodland canvas.
-  // Keep upward surfaces and upper cliff rims opaque for terrain readability.
-  bool woodlandStoneWall = uWoodlandBackdrop && abs(vMaterial - 3.0) < 0.5 && abs(vNormal.y) < 0.5;
-  if (woodlandStoneWall) {
-    float coverage = smoothstep(1.5, 4.5, vWorld.y);
-    vec3 cell = floor(vWorld * 12.0 + 0.001);
-    float threshold = fract(dot(cell, vec3(0.75488, 0.56984, 0.43829)));
-    if (coverage <= threshold) discard;
-  }
+  // The scenic woodland extends up to the playable shelf in the Hunt view.
+  // Hide its exposed stone skirt on both sides, including the underside.
+  if (uWoodlandBackdrop && vNormal.y < 0.5 && abs(vMaterial - 3.0) < 0.5) discard;
   // The early mobile Play Hunt has no authored texture atlas, lighting,
   // normal or ORM assets. Do not shade every phone pixel with the entire
   // optional material pipeline when exploring this terrain prototype.
@@ -116,7 +110,6 @@ void main() {
     float light=vNormal.y>0.5?1.0:
       vNormal.y< -0.5?0.52:vNormal.x>0.5?0.84:
       vNormal.z>0.5?0.78:0.70;
-    if (woodlandStoneWall) base = mix(base, vec3(0.25, 0.32, 0.23), 0.8);
     outColor=vec4(clamp(base*sqrt(light),0.0,1.0),1.0);
     return;
   }
@@ -236,9 +229,6 @@ void main() {
     float elevationTone=clamp(1.0+(vWorld.y-4.0)*0.16,0.58,1.42);
     lighting*=elevationTone;
     if (vNormal.y<0.5 && vNormal.y>-0.5) lighting*=0.82;
-  }
-  if (woodlandStoneWall) {
-    linearAlbedo = mix(linearAlbedo, srgbToLinearColor(vec3(0.29, 0.36, 0.26)), 0.85);
   }
   outColor = vec4(linearToSrgbColor(linearAlbedo * lighting), 1.0);
 }
