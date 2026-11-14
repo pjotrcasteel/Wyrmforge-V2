@@ -1,3 +1,4 @@
+import { HuntTreePreview } from './src/hunt-tree-preview.mjs';
 // V2.6 end-to-end diagnostic host. It is a separate page, not World Generation V2.
 // Input -> bounded V2 initializer -> authoritative world/port -> existing
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
@@ -104,6 +105,8 @@ let playActor=null;
 let playConnected=null;
 let playStream=null;
 let playView=null;
+const playTreeAtlas=playMode?new Image():null;
+if(playTreeAtlas)playTreeAtlas.src='./art/wet-forest/live-trees.png';
 let playFireball=null;
 let playImpact=null;
 let playFireballCount=0;
@@ -190,7 +193,9 @@ function paintEncounterGuide(view) {
   if(!combatLayout.checked || !generatedSite || !active?.world) {
     paintTraversalOverlay(ctx,view);
     paintDummyActor(ctx,view);
-    paintPlayActor(ctx,view);
+    if(playMode&&playActor&&playStream?.trees){
+      playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view));
+    }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
     return;
   }
@@ -890,6 +895,7 @@ function resetSite() {
         const footprint={minX:Math.min(...all.map(b=>b.minX)),maxX:Math.max(...all.map(b=>b.maxX)),
           minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
+          trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
           {epoch:terrainEpochs.next(),microSurfaceCapacity:2048});
@@ -1111,7 +1117,13 @@ function frame(now) {
       if(renderer.render({width:canvas.width,height:canvas.height,
           scale,panX,panY,camera,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
-        if(playMode)playView=view;
+        if(playMode){
+          playView=view;
+          const residency=playStream?.residency;
+          if(residency&&!streamingBusy()&&!renderer.pendingUploads){
+            playStream.trees.update(residency.metrics.residentRegions,active.port);
+          }
+        }
         paintEncounterGuide({...view});
       }
     }

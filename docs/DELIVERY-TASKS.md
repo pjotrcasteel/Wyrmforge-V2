@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **H08-02B — streaming actual authored WorldGen sites into the same Play Hunt**.
+**Current focus:** **H08-05 — World Objects V2 in Play Hunt**.
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 ## GitHub issue tracking
@@ -169,9 +169,9 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 - **Player acceptance (2026-11-14):** build `0962573` showed visible physical craters on iPhone and user said “Nice, continue.” Screenshot shows p95 17ms; no new exported impact performance report. Carry the prior walking baseline forward; do not infer sustained destruction performance.
 - **Done for now:** Player can spawn, steer, collide and respawn **within one Wet Forest region** on iPhone with a follow camera; core tests are green and local/real-device frame evidence shows no blocking control or performance regression. Stop here; do not require streaming, trees, enemies, objectives, lighting or final Wizard art.
 
-### H08-02 — Walk seamlessly between regional boundaries **← ACTIVE**
+### H08-02 — Walk seamlessly between regional boundaries
 - **GitHub Issue:** [#156](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/156)
-- **Status:** `IN PROGRESS` — H08-02A first connection; full streaming gate remains open.
+- **Status:** `DONE FOR NOW` — iPhone walkthrough accepted on build `7daaa67`. The visible right edge is deferred to trees and fog.
 - **Player experience:** walk through multiple Wet Forest regions without a level-selection menu, teleportation into cliffs or a full-world reload. Streaming boundaries are invisible technical boundaries inside one Hunt, not World Map nodes or objective gates. The World Map remains the journey-level destination selector.
 - **Technical boundary:** bounded region activation/prefetch and unload around player, one authoritative Voxel V2 occupancy/edit authority, 7m physical seams, stable world coordinates and local edit persistence. **Each streamed region must reuse the actual WorldGeneratorV2 site/geometry/micro-surface pipeline**; the existing prototype `generateWorldExpeditionRegion()` has its own simplified heightfield and is restricted to the diagnostic lab until replaced or adapted through the actual WorldGen contracts. Never substitute that fixture into Play Hunt. Do not instantiate eleven concurrent independent VoxelWorld authorities.
 - **Gate:** physical actor crosses ports both ways; previously edited ground survives unload/revisit; no duplicate/seam colliders; bounded chunks, peak memory and camera/render updates. Record loading and stall metrics.
@@ -188,7 +188,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 #### H08-02B — Bounded seamless streaming of authored Hunt sites
 - **GitHub Issue:** [#163](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/163)
-- **Status:** `IN PROGRESS` — first prefetch increment, followed by eviction/reload and the full graph.
+- **Status:** `DONE FOR NOW` — iPhone walkthrough accepted on build `7daaa67`. The visible right edge is deferred to trees and fog.
 - **Delivers:** extend authored site composition to the expedition graph; prefetch/activate/unload bounded regions in one authoritative Voxel V2 world. Continuous movement and Fireball edit persistence across revisit.
 - **Dependencies:** H08-02A; child of H08-02, not dependent on parent completion.
 - **Gate:** bidirectional crossings across multiple regions, no visible loading boundaries or stale collision, stable bounded memory and frame pacing on real phones, replay retained edits.
@@ -210,7 +210,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-03 — Natural regions and readable traversal
 - **GitHub Issue:** [#158](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/158)
-- **Status:** `IMPLEMENTED` — implementation in [PR #194](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/194), awaiting phone walkthrough.
+- **Status:** `DONE FOR NOW` — iPhone walkthrough accepted on build `7daaa67`. The visible right edge is deferred to trees and fog.
 - **Implementation:** Wet Forest region roles select relief, wetland positions, exposed stone and landmark descriptors. Play Hunt composes irregular physical land within each streaming region and tapers the connecting shoulders. The existing port cross-sections, terminal approaches and underlying voxel grades are preserved.
 - **Automated evidence:** seeds 7, 8 and 19 cover region roles, opportunities and connector approaches, including the extended expedition. The physical actor tests cross every standard seam in both directions and traverse the branching expedition on all three seeds with bounded streaming and the original Fireball edit retained after eviction.
 - **Player experience:** walk a varied forest with wide trails, glades, natural elevation transitions, choices and non-arbitrary boundaries; not generic 32m squares.
@@ -231,7 +231,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### W08-99 — World Generation V2 completion and handoff to World Objects V2
 - **GitHub Issue:** [#164](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/164)
-- **Status:** `PLANNED` — terminal task of the current World Generation engine scope.
+- **Status:** `DONE FOR NOW` — iPhone walkthrough accepted on build `7daaa67`. The visible right edge is deferred to trees and fog.
 - **Dependencies:** H08-00, H08-02A, H08-02B, H08-02, H08-03, H08-04. Validate remaining WorldGen-owned topology and placement contracts for later investigation sites, objective gates, encounters and boss terrain; create explicit scoped tasks before the handoff if genuine gaps emerge. Gameplay implementations are not a dependency.
 - **Delivers:** explicit engine completion review on the actual Play Hunt, with deterministic authored geography, natural routes, bounded streaming, persistent edits, object placement contracts and real mobile performance. Record evidence and deferred nonblocking improvements.
 - **Done for now:** all scoped World Generation tasks are closed with evidence, no critical defects remain, player approves the playable experience, and WorldGen interfaces are documented for the next engine. Mark World Generation V2 DONE FOR NOW, freeze its scope, and activate H08-05 (World Objects V2). Future enhancements get distinct tasks; do not start the next engine before the handoff.
@@ -239,7 +239,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-05 — Physical trees, large rocks and fallen logs in Play Hunt
 - **GitHub Issue:** [#160](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/160)
-- **Status:** `PLANNED`
+- **Status:** `IN PROGRESS` — exact V1 live-tree sprite preview; physical objects and fog are still pending.
 - **Player experience:** walk around giant rocks and between tree trunks, use cover and see scale. Trees and rocks can be destroyed with later spells; initial static collision must be real.
 - **Technical boundary:** replaceable World Objects V2 instance API, Voxel V2 terrain grounding + object collider authority, proper renderer integration; simple temporary meshes/sprites until art approved.
 - **Gate:** hundreds of instances with bounded draw/collision budgets, no invisible walls or trunk/rock ghosts, persistent IDs across region unload/revisit; physical mobile frame metrics.

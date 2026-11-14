@@ -56,6 +56,8 @@ export function createVersionedLab(root, sha) {
     ' · initializing…</span>';
   writeFileSync(huntPath,huntHtml.replace(buildLabel,actualLabel));
   cpSync(sourcePath,join(dest,'src'),{recursive:true});
+  const artPath=join(directory,'art');
+  if(existsSync(artPath))cpSync(artPath,join(dest,'art'),{recursive:true});
   if (!existsSync(join(dest,'src','build-info.mjs'))) {
     throw new Error('Versioned Pages artifact is incomplete');
   }
