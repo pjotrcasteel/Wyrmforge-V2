@@ -838,7 +838,8 @@ function resetSite() {
         playStream={phase:'waiting',continuation:generateConnectedHuntContinuation(generatedSite,playConnected),
           writer:null,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(playConnected.definition,
-          {epoch:terrainEpochs.next()});
+          {epoch:terrainEpochs.next(),microSurfaceCapacity:Math.max(1024,
+            playConnected.definition.surfaceTiles.length+playStream.continuation.definition.surfaceTiles.length)});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
           {epoch:terrainEpochs.next()});
