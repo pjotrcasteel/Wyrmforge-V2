@@ -164,7 +164,17 @@ function auditBroadRelief(definition,seam) {
       previous=h;
     }
   }
-  return {outerMicroTiles,outerRisers,outerFineRisers,elevationCount:elevations.size};
+  let roadRisers=0,previousRoad=null;
+  for(let z=seam.minZ;z<=seam.maxZ;z++){
+    const tile=tiles.get('0,'+z);
+    const h=top.get('0,'+z)*10+(tile?tile.levels[0]:10);
+    if(previousRoad!==null && h!==previousRoad){
+      roadRisers++;
+      assert.ok(Math.abs(h-previousRoad)<=4,'road landings remain traversable');
+    }
+    previousRoad=h;
+  }
+  return {outerMicroTiles,outerRisers,outerFineRisers,roadRisers,elevationCount:elevations.size};
 }
 
 test('both joins have broad physical landforms without dense fractional shoulder contours',t=>{
@@ -179,6 +189,7 @@ test('both joins have broad physical landforms without dense fractional shoulder
       assert.equal(metric.outerFineRisers,0);
       assert.ok(metric.elevationCount>=2,'do not flatten all natural relief');
       assert.ok(metric.outerRisers<=100,'avoid repeated elevation bands');
+      if(seed===7)assert.ok(metric.roadRisers<=5,'the reported seam needs fewer repeated road risers');
     }
   }
 });
