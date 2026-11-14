@@ -16,7 +16,8 @@ import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe, siteRadiusForKind } from './src/world-generation/site-recipe.mjs';
 import {
   generateWorldSite,generateWorldExpeditionRegion,
-  createHuntExpeditionRecipe,composeHuntExpeditionPlan
+  createHuntExpeditionRecipe,composeHuntExpeditionPlan,
+  generateConnectedHuntStart,connectedHuntLocation
 } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
@@ -97,6 +98,7 @@ let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
+let playConnected=null;
 let playView=null;
 let playFireball=null;
 let playImpact=null;
@@ -127,6 +129,8 @@ function resetPreviewView() {
 function updateSiteSummary() {
   if(playMode) {
     siteSummary.textContent='Wet Forest · '+(
+      playConnected ? (playConnected.footprint.maxZ-playConnected.footprint.minZ+1)+
+        'm connected · '+playConnected.sites.length+' sites' :
       generatedSite ? generatedSite.generatorVersion+' · '+generatedSite.hash :
         'World Generation V2 loading'
     )+' · seed '+siteSeed.value;
@@ -565,7 +569,7 @@ function resetPlayActor() {
   // Use the EXACT authored entry and physical footprint returned by the
   // same WorldGeneratorV2 that powers the WorldGen lab. The Voxel V2 actor
   // never spawns inside a synthetic expedition-region flat-height fixture.
-  const footprint=generatedSite.layout.footprint;
+  const footprint=playConnected?.footprint??generatedSite.layout.footprint;
   const entry=generatedSite.layout.topology.entry;
   const region={
     bounds:footprint,origin:{x:0,z:0}
@@ -591,7 +595,7 @@ function updatePlayFrame(now) {
       let steps=0;
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
         playActor=stepHuntExplorer(active.world,playActor,
-          generatedSite.layout.footprint,input);
+          playConnected?.footprint??generatedSite.layout.footprint,input);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -614,7 +618,8 @@ function updatePlayFrame(now) {
     playHudDetails.textContent='WIZARD · '+(playActor?'walkable':'loading')+
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
       '\nVoxel source: '+(generatedSite?.hash??'—')+
-      '\n10cm terrain tiles: '+(generatedSite?.layout.microSurface.tileCount??0)+
+      '\nSection: '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z):'entry')+
+      '\n10cm terrain tiles: '+(playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
       '\nFrame p95: '+ms(metrics.p95Ms)+
@@ -689,7 +694,7 @@ function updateStatus(now=performance.now()) {
         expeditionSite ? 'Expedition '+expeditionSite.regionId :
         'Fixed voxel fixture')+
       ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'+
-      (playMode?' · Tap terrain: Fireball':'')
+      (playMode?' · '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z)+' · ':'')+'Tap: Fireball':'')
     : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
       '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
 }
@@ -716,6 +721,7 @@ function resetSite() {
     active=null;
     renderer.setMeshes([]);
     generatedSite=null;
+    playConnected=null;
     playActor=null;
     playView=null;
     playFireball=null;
@@ -790,8 +796,14 @@ function resetSite() {
       )) {
         throw new Error('Play Hunt requires authored WorldGen V2 and Voxel V2 microterrain');
       }
-      loader=new V2ExternalTerrainLoader(generatedSite.definition,
-        {epoch:terrainEpochs.next()});
+      if(playMode) {
+        playConnected=generateConnectedHuntStart(generatedSite);
+        loader=new V2ExternalTerrainLoader(playConnected.definition,
+          {epoch:terrainEpochs.next()});
+      } else {
+        loader=new V2ExternalTerrainLoader(generatedSite.definition,
+          {epoch:terrainEpochs.next()});
+      }
     }
     breachButton.textContent=generatedSite || expeditionSite
       ? 'Carve generated terrain' : 'Break stone span';
@@ -1222,7 +1234,10 @@ if(playMode) {
         fullWorldGenMaterialShading:true,
         heightContrast:viewCamera.value===PLAY_HUNT_CAMERA,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
-        microSurfaceTiles:generatedSite?.layout.microSurface.tileCount??null
+        microSurfaceTiles:playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
+        connectedWorld:playConnected?{hash:playConnected.hash,planHash:playConnected.planHash,
+          sites:playConnected.sites,footprint:playConnected.footprint,seam:playConnected.seam,
+          streaming:playConnected.streaming,currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
       },
       device:{
         userAgent:navigator.userAgent,
