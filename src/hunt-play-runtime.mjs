@@ -2,13 +2,13 @@
 // Uses the already-owned Voxel V2 actor physics; NO second collider, hidden
 // jump, scene-geometry raycast, invented enemy AI or object engine.
 import {
-  spawnTerrainActor,simulateTerrainActor,
-  ACTOR_MOVE_SPEED
+  spawnTerrainActor,simulateTerrainActor
 } from './terrain-actor.mjs';
 import { terrainRayFromScreen } from './terrain-raycast.mjs';
 
 export const HUNT_EXPLORATION_SCHEMA='wyrmforge.hunt-exploration.v1';
-export const HUNT_WALK_SPEED=ACTOR_MOVE_SPEED;
+// Gameplay tuning is separate from the default Voxel V2 actor policy.
+export const HUNT_WALK_SPEED=5.2;
 export const HUNT_FIXED_STEP=1/60;
 const MARGIN=0.65;
 const PORT_WIDTH=2.7;
@@ -49,7 +49,7 @@ export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0}={},
     throw new TypeError('A bounded current Hunt region is required');
   }
   // Input and actor collision remain in the actual V2 physics policy.
-  const moved=simulateTerrainActor(world,actor,{moveX,moveZ,dt});
+  const moved=simulateTerrainActor(world,actor,{moveX,moveZ,dt,moveSpeed:HUNT_WALK_SPEED});
   if(moved.error)return Object.freeze({...moved});
   return Object.freeze(clipToRegion(moved,bounds));
 }
