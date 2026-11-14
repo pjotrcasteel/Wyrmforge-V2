@@ -869,7 +869,7 @@ function resetSite() {
           minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
-        loader=new V2ExternalTerrainLoader(playConnected.definition,
+        loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
           {epoch:terrainEpochs.next(),microSurfaceCapacity:2048});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
