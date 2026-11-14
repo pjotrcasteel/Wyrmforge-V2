@@ -221,7 +221,8 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-04 — Deterministic tree and boulder placement contract
 - **GitHub Issue:** [#159](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/159)
-- **Status:** `READY` for design; integration after H08-02.
+- **Status:** `IMPLEMENTED` — on-demand WorldGen placement contract. Play Hunt object integration is tracked separately.
+- **Evidence:** `wet-forest-placement.test.mjs` checks stable regeneration, distinct seeds, clustered trees/boulders, non-overlapping footprints, protected spaces and actual Voxel V2 surface grounding across seeds 7, 8 and 19.
 - **Player experience:** recognizable forest groves, clear natural pathways, rock clusters and readable open horde spaces.
 - **Technical boundary:** WorldGen owns stable object descriptors (ID, kind, material, scale, footprint, seed), slope/moisture/clustering rules and exclusions. **World Objects V2** owns actual instances, collider/destruction and visuals. No random standalone decorations that block passage.
 - **Gate:** identical seed/revision = same placements; changed seed varies organically; no object overlaps, blocked entry, horde floor or required exit. Profiling baseline before adding instances.

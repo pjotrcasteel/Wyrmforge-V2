@@ -821,3 +821,25 @@ shared global voxel authority and deterministic seam replay, then
 on-device exploration and encounter/World Object integrations. Treat
 the lab as a review surface and continue to require actual Hunt
 integration before claiming V2.8 complete.
+
+
+## H08-04 — Authored Wet Forest placement
+
+`generateAuthoredHuntTerrainGraph(entry, plan).placement(regionId)` regenerates
+a `wyrmforge.wet-forest-placement.v1` bundle for one region in world metres.
+Each immutable descriptor carries an ID, cluster ID, kind, material, scale,
+seed, centre position and circular footprint. IDs and coordinates reproduce
+for the same authored region, seed and world revision regardless of request
+order. The Y coordinate is the generated surface before any terrain edits.
+
+WorldGen searches for bounded clusters of at least two trees or boulders,
+up to 24 descriptors per region. It reserves the road, ports, flank and
+escape corridors, encounter and maneuver spaces, landmark and discovery
+approaches, and wetland. Landform and surface grade constrain each footprint.
+Areas with little safe space may have no placements. Connectors have no
+placement bundles.
+
+The placement call is on demand. Normal Play Hunt loading, streaming and
+meshing do not call it. A future World Objects consumer owns grounding
+against the current Terrain Port after edits and owns all object instances,
+physics, rendering and destruction.
