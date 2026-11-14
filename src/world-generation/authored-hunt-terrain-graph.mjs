@@ -5,6 +5,7 @@ import {composeAuthoredHuntLayout} from './authored-hunt-layout.mjs';
 import {composeNorthSouthHuntConnector} from './connected-hunt-start.mjs';
 import {composeLateralHuntConnector} from './lateral-hunt-connector.mjs';
 import {clipHuntLandform} from './hunt-landform-footprint.mjs';
+import {composeWetForestPlacement} from './wet-forest-placement.mjs';
 
 export class AuthoredHuntTerrainGraph {
   #entry;
@@ -33,6 +34,10 @@ export class AuthoredHuntTerrainGraph {
     return this.#generateSite(this.#createRecipe({...this.#entry.recipe,
       regionId:region.id,siteId:'preview-'+region.id,huntRole:region.role,
       lateralPorts:region.ports.map(p=>p.direction).filter(d=>d==='east'||d==='west')}));
+  }
+  placement(id){
+    const region=this.#region(id);
+    return composeWetForestPlacement(this.#source(id),region);
   }
   region(id){
     const region=this.#region(id),site=this.#source(id);
