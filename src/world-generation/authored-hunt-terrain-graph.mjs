@@ -30,7 +30,8 @@ export class AuthoredHuntTerrainGraph {
     const region=this.#region(id);
     if(region.id===this.#layout.entryRegionId)return this.#entry;
     return this.#generateSite(this.#createRecipe({...this.#entry.recipe,
-      regionId:region.id,siteId:'preview-'+region.id}));
+      regionId:region.id,siteId:'preview-'+region.id,
+      lateralPorts:region.ports.map(p=>p.direction).filter(d=>d==='east'||d==='west')}));
   }
   region(id){
     const region=this.#region(id),site=this.#source(id);
@@ -55,6 +56,20 @@ export class AuthoredHuntTerrainGraph {
         southSite:from.offsetZ>to.offsetZ?a:b,northSite:from.offsetZ>to.offsetZ?b:a,
         terrainAdapter:this.#adapter});
     return Object.freeze({...seam,kind:'link',fromId:link.fromId,toId:link.toId});
+  }
+  initialTerrain(ids){
+    if(!Array.isArray(ids)||ids.length!==3||new Set(ids).size!==3)
+      throw new Error('Expected the two initial regions and their link');
+    const regions=ids.filter(id=>this.#layout.regions.some(r=>r.id===id));
+    const link=this.#layout.links.find(l=>ids.includes(l.id));
+    if(regions.length!==2||!regions.includes(this.#layout.entryRegionId)||
+        !link||![link.fromId,link.toId].every(id=>regions.includes(id)))
+      throw new Error('Invalid initial graph neighborhood');
+    const bands=ids.map(id=>this.materialize(id));
+    return this.#adapter({siteId:'authored-graph-start',seed:this.#entry.recipe.seed,
+      chunkEdge:this.#entry.recipe.chunkEdge,generatorVersion:this.#entry.generatorVersion,
+      runs:bands.flatMap(b=>b.definition.runs),
+      surfaceTiles:bands.flatMap(b=>b.definition.surfaceTiles??[])});
   }
   materialize(id){
     if(this.#layout.regions.some(r=>r.id===id))return this.region(id);
