@@ -1,5 +1,35 @@
 import { projectVoxel } from './camera-presets.mjs';
+import { containsHuntLandform } from './world-generation/hunt-landform-footprint.mjs';
 import { LIVE_TREES } from './wet-forest-tree-sprites.mjs';
+
+const EDGE_SPRITES=LIVE_TREES.filter(sprite=>sprite.h>=150);
+
+export function placeScenicEdgeTrees(region,layout,terrain){
+  const inside=(x,z)=>layout.regions.some(band=>containsHuntLandform(band,x,z))||
+    layout.links.some(band=>containsHuntLandform(band,x,z));
+  const {minX,maxX,minZ,maxZ}=region.bounds;
+  const trees=[];
+  for(let z=minZ-2;z<=maxZ+2;z++){
+    for(let x=minX-2;x<=maxX+2;x++){
+      if(((x+2*z)%3)!==0||inside(x,z))continue;
+      const edge=[[0,-2],[-2,0],[2,0],[0,2],[0,-1],[-1,0],[1,0],[0,1]]
+        .find(([dx,dz])=>containsHuntLandform(region,x+dx,z+dz));
+      if(!edge)continue;
+      // Only the nearest region owns this exterior root. Use the complete
+      // graph to keep future streaming ports and neighboring routes clear.
+      const owner=layout.regions.find(band=>[[0,-2],[-2,0],[2,0],[0,2],
+        [0,-1],[-1,0],[1,0],[0,1]].some(([dx,dz])=>containsHuntLandform(band,x+dx,z+dz)));
+      if(owner!==region)continue;
+      const hit=terrain.raycast({origin:[x+edge[0]+.5,32,z+edge[1]+.5],
+        direction:[0,-1,0],maxDistance:42});
+      if(!hit)continue;
+      const hash=(Math.imul(x,73856093)^Math.imul(z,19349663))>>>0;
+      trees.push({x:x+.5,y:hit.point.y-.3,z:z+.5,scale:1+(hash%3)*.1,
+        sprite:EDGE_SPRITES[hash%EDGE_SPRITES.length],scenic:true});
+    }
+  }
+  return trees;
+}
 
 // H08-05 first visual slice. Placement IDs survive eviction and regenerated
 // instances choose the same original art. Cache only published regions.
@@ -17,7 +47,8 @@ export class HuntTreePreview {
     }
     const next=regionIds.find(id=>!this.#regions.has(id));
     if(next===undefined||!this.#image.complete||!this.#image.naturalWidth)return;
-    const trees=[];
+    const region=this.#graph.layout.regions.find(band=>band.id===next);
+    const trees=placeScenicEdgeTrees(region,this.#graph.layout,terrain);
     for(const item of this.#graph.placement(next).placements){
       if(item.kind!=='tree')continue;
       const {x,z}=item.position;
@@ -31,6 +62,7 @@ export class HuntTreePreview {
   paint(ctx,view,actor,paintActor){
     const layers=[];
     for(const trees of this.#regions.values())for(const tree of trees){
+      if(tree.scenic&&view.camera!=='hunt')continue;
       const foot=projectVoxel(tree.x,tree.y,tree.z,view);
       const {sprite}=tree;
       const scale=view.scale*tree.scale/32;
