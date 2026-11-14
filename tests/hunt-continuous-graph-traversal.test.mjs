@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateConnectedHuntStart,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
+import {containsHuntLandform} from '../src/world-generation/hunt-landform-footprint.mjs';
 import {HuntGraphResidency} from '../src/hunt-graph-residency.mjs';
 import {actorOverlapsTerrain} from '../src/terrain-actor.mjs';
 import {analyzeCharacterReachability} from '../src/character-reachability.mjs';
@@ -82,7 +83,12 @@ for(const seed of [7,8,19])test('H08-02B: uninterrupted branching loop and retai
         minZ:r.bounds.minZ+1,maxZ:r.bounds.maxZ-1,minY:-3,maxY:30};
       const start={x:Math.floor(actor.x),z:Math.floor(actor.z)};
       const target={x:Math.floor(x),z:Math.floor(z)};
-      const audit=analyzeCharacterReachability({terrain:port,bounds:inner,start,targets:[target],
+      const terrain={
+        raycast:ray=>port.raycast(ray),sweepActor:(...args)=>port.sweepActor(...args),
+        actorOverlaps:actor=>[-.65,.65].some(dx=>[-.65,.65].some(dz=>
+          !containsHuntLandform(r,actor.x+dx,actor.z+dz)))||port.actorOverlaps(actor)
+      };
+      const audit=analyzeCharacterReachability({terrain,bounds:inner,start,targets:[target],
         profile:{...DEFAULT_TRAVERSAL_PROFILE,maxNavigableDrop:.55}});
       const path=audit.routeTo(target.x,target.z);
       assert.ok(path,'No physical reversible interior path in '+r.id+' from '+JSON.stringify(start)+' to '+JSON.stringify(target));

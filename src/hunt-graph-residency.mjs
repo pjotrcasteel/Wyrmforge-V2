@@ -9,6 +9,7 @@ const distance=(b,x,z)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX-1),
   Math.max(b.minZ-z,0,z-b.maxZ-1));
 const contains=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const MARGIN=.65;
+const PREFETCH_LOOKAHEAD_METRES=8;
 
 export class HuntGraphResidency {
   #graph;
@@ -71,7 +72,7 @@ export class HuntGraphResidency {
   // Protect the actor's current band and any band supporting its clearance.
   // Pick the two closest neighboring ports; a small residency bias avoids
   // churn at an equal-distance junction. Never mutate while crossing a link.
-  next(actor,{respawn=false}={}){
+  next(actor,{respawn=false,movement}={}){
     const metrics=this.metrics;
     if(metrics.transition)return null;
     const {x,z}=actor,at=this.location(x,z);
@@ -93,10 +94,15 @@ export class HuntGraphResidency {
     }
     if(this.#links.has(at))return null;
     const adjacent=[...this.#links.values()].filter(l=>l.fromId===at||l.toId===at);
+    const moveX=movement?.moveX??0,moveZ=movement?.moveZ??0;
+    const magnitude=Math.max(1,Math.hypot(moveX,moveZ));
+    const aheadX=x+moveX/magnitude*PREFETCH_LOOKAHEAD_METRES;
+    const aheadZ=z+moveZ/magnitude*PREFETCH_LOOKAHEAD_METRES;
     const candidates=adjacent.map(link=>{
       const neighbor=link.fromId===at?link.toId:link.fromId;
       const d=distance(link.bounds,x,z);
-      return {link,neighbor,d,score:d-(metrics.residentLinks.includes(link.id)?4:0)};
+      const approach=Math.min(d,distance(link.bounds,aheadX,aheadZ));
+      return {link,neighbor,score:approach-(metrics.residentLinks.includes(link.id)?4:0)};
     }).sort((a,b)=>a.score-b.score||a.link.id.localeCompare(b.link.id)).slice(0,2);
     const wantsRegions=new Set([at,...candidates.map(c=>c.neighbor)]);
     const wantsLinks=new Set(candidates.map(c=>c.link.id));

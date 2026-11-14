@@ -1,6 +1,6 @@
 // Bounding rectangles allocate streaming bands. These row spans describe the
 // physical land inside them, in the same integer cells as the Voxel V2 runs.
-const PORT_HALF_WIDTH=9;
+const PORT_HALF_WIDTH=13;
 const horizontal=direction=>direction==='east'||direction==='west';
 
 function footprint(bounds,includes) {
@@ -54,7 +54,7 @@ export function connectorLandform(link,seed) {
     const step=sideways?x-bounds.minX:z-bounds.minZ;
     const across=sideways?z-fromPort.at.z:x-fromPort.at.x;
     const taper=step===0||step===7?0:Math.sin(Math.PI*step/7);
-    return Math.abs(across-taper*Math.sin(phase))<=PORT_HALF_WIDTH-2*taper;
+    return Math.abs(across-taper*Math.sin(phase))<=PORT_HALF_WIDTH-taper;
   });
 }
 

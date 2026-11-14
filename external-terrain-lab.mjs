@@ -528,7 +528,9 @@ function updatePlayStreaming(now) {
   const residency=stream.residency;
   if(!residency.metrics.transition) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
-    const job=residency.next(playActor,{respawn:stream.respawnPending});
+    const job=residency.next(playActor,{
+      respawn:stream.respawnPending,movement:playMovementInput()
+    });
     if(!job)return;
     if(job.action==='respawn') {
       stream.respawnPending=false;
