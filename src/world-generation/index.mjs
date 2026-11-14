@@ -30,18 +30,29 @@ export function generateWorldExpeditionRegion(plan,regionId) {
 
 import { createWorldSiteRecipe } from './site-recipe.mjs';
 import { createHuntExpeditionRecipe,composeHuntExpeditionPlan } from './hunt-expedition-plan.mjs';
-import { composeConnectedHuntStart } from './connected-hunt-start.mjs';
+import { composeConnectedHuntStart,composeConnectedHuntContinuation } from './connected-hunt-start.mjs';
 
-export function generateConnectedHuntStart(entrySite) {
+function planForEntry(entrySite) {
   const recipe=entrySite.recipe;
-  const plan=composeHuntExpeditionPlan(createHuntExpeditionRecipe({
+  return composeHuntExpeditionPlan(createHuntExpeditionRecipe({
     journeyId:'fire-tier-one',huntId:'preview-expedition',chapter:0,
     kind:recipe.kind,seed:recipe.seed,worldRevision:recipe.worldRevision,
     chunkEdge:recipe.chunkEdge,corruption:recipe.corruption
   }));
-  return composeConnectedHuntStart(plan,entrySite,{
+}
+
+export function generateConnectedHuntStart(entrySite) {
+  return composeConnectedHuntStart(planForEntry(entrySite),entrySite,{
     generateSite:generateWorldSite,createRecipe:createWorldSiteRecipe,
     terrainAdapter:toVoxelTerrainDefinition
   });
 }
 export { connectedHuntLocation } from './connected-hunt-start.mjs';
+
+export function generateConnectedHuntContinuation(entrySite,start) {
+  return composeConnectedHuntContinuation(planForEntry(entrySite),entrySite,start,{
+    generateSite:generateWorldSite,createRecipe:createWorldSiteRecipe,
+    terrainAdapter:toVoxelTerrainDefinition
+  });
+}
+export { activateConnectedHuntContinuation } from './connected-hunt-start.mjs';
