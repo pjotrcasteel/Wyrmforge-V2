@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **H08-01 — player review and device acceptance of Play Hunt**.
-**Latest merged Play Hunt candidate:** PR [#143](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/143), commit `a1960ce`, one region (not yet player-accepted). The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
+**Current focus:** **H08-02B — streaming actual authored WorldGen sites into the same Play Hunt**.
+**Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 ## GitHub issue tracking
 
@@ -180,7 +180,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 #### H08-02A — First bounded connection between authored Hunt sites
 - **GitHub Issue:** [#157](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/157)
-- **Status:** `NEEDS PLAYER REVIEW` after code validation.
+- **Status:** `DONE FOR NOW` — user approved the connected Hunt and seamless direction on 2026-11-14; no new full phone report, so sustained mobile performance remains an open parent-level gate.
 - **Delivers:** 40 × 88m continuous Wet Forest: original 40m WorldGen entry, independently authored 40m woodland-trail site (next northbound expedition role), 8m graded transition derived from the two actual boundary profiles. A single existing Voxel V2 loader, port and ledger own every voxel. No teleport, geometry replacement or second world. All original microtiles remain intact.
 - **Boundary:** two sites resident at once, intentionally not full streaming; this bounded slice uses authored site extents rather than the older 32m diagnostic region spacing. H08-02B must extend the same composition contract to bounded streamed activation/unload, persistent edits and the complete expedition graph.
 - **Gate:** actual actor walks across the seam both ways, earlier Fireball edits remain, source definitions remain unchanged, run/microtile/chunk budgets and mobile frame report are reviewed.
@@ -188,11 +188,14 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 #### H08-02B — Bounded seamless streaming of authored Hunt sites
 - **GitHub Issue:** [#163](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/163)
-- **Status:** `READY` — next implementation after H08-02A review.
+- **Status:** `IN PROGRESS` — first prefetch increment, followed by eviction/reload and the full graph.
 - **Delivers:** extend authored site composition to the expedition graph; prefetch/activate/unload bounded regions in one authoritative Voxel V2 world. Continuous movement and Fireball edit persistence across revisit.
 - **Dependencies:** H08-02A; child of H08-02, not dependent on parent completion.
 - **Gate:** bidirectional crossings across multiple regions, no visible loading boundaries or stale collision, stable bounded memory and frame pacing on real phones, replay retained edits.
 - **Done for now:** planned Hunt geography is traversable with bounded residency and persistent edits; no extra biomes or gameplay systems needed.
+
+- **H08-02B first increment:** keep the accepted two-site 88m start. As the Wizard enters the second region, append the next actual authored site and graded connector using bounded 512-cell steps in the existing Voxel V2 world. Publish the 136m footprint only after local mesh worker and GPU uploads finish. Preserve the original world/port/journal and all earlier craters. Maximum three resident sites in this increment; **no eviction or reload yet**. Report actual activation time, phase and resident count. The parent issue remains open until unloading/reloading and the full planned graph are verified.
+- **Next increment:** bounded eviction and regeneration with persistent edits and cross-region traversal. Do not close H08-02B until these requirements pass.
 
 ### F07-03 — Player recovery after destructive terrain (later)
 - **GitHub Issue:** [#169](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/169)

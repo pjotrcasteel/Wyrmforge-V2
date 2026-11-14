@@ -130,5 +130,53 @@ export function composeConnectedHuntStart(plan,south,{generateSite,createRecipe,
 
 export function connectedHuntLocation(connection,z) {
   return connection.sites.find(site=>z>=site.minZ && z<site.maxZ+1)?.id ??
-    (z>=connection.seam.minZ && z<connection.seam.maxZ+1?'connection':'outside');
+    ((connection.seams??[connection.seam]).some(seam=>z>=seam.minZ && z<seam.maxZ+1)?'connection':'outside');
+}
+
+// First streaming increment: the next authored northbound site and its
+// connector are a separate immutable definition, disjoint from the live start.
+// No world allocation or simplified heightfield in the generator.
+export function composeConnectedHuntContinuation(plan,entrySite,start,{generateSite,createRecipe,terrainAdapter}) {
+  if(start.planHash!==plan.hash || start.sites.length!==2 ||
+      start.sites[0].hash!==entrySite.hash)throw new Error('Invalid authored Hunt prefix');
+  const tail=start.sites[1];
+  const region=plan.regions.find(r=>r.id===tail.id);
+  const next=plan.regions.find(r=>r.id===region?.ports.find(p=>p.direction==='north')?.peerRegionId);
+  if(!next || !next.ports.some(p=>p.direction==='south' && p.peerRegionId===tail.id))
+    throw new Error('Expected reciprocal northbound region');
+  const makeSite=id=>generateSite(createRecipe({...entrySite.recipe,
+    regionId:id,siteId:'preview-'+id}));
+  const south=makeSite(tail.id),north=makeSite(next.id);
+  if(south.hash!==tail.hash)throw new Error('Existing authored site identity changed');
+  const localOffset=south.layout.footprint.minZ-CONNECTOR_DEPTH-north.layout.footprint.maxZ-1;
+  const connector=joinBoundaries(south,north,localOffset);
+  const offsetZ=tail.offsetZ+localOffset;
+  const translate=(items,offset)=>items.map(item=>({...item,z:item.z+offset}));
+  const definition=terrainAdapter({
+    siteId:'connected-wet-forest-prefetch',seed:entrySite.recipe.seed,
+    chunkEdge:entrySite.recipe.chunkEdge,generatorVersion:entrySite.generatorVersion,
+    runs:[...translate(north.definition.runs,offsetZ),...translate(connector.runs,tail.offsetZ)],
+    surfaceTiles:[...translate(north.definition.surfaceTiles,offsetZ),
+      ...translate(connector.surfaceTiles,tail.offsetZ)]
+  });
+  const seam=Object.freeze({...connector.seam,
+    minZ:connector.seam.minZ+tail.offsetZ,maxZ:connector.seam.maxZ+tail.offsetZ});
+  const site=Object.freeze({id:next.id,role:next.role,hash:north.hash,offsetZ,
+    minZ:north.layout.footprint.minZ+offsetZ,maxZ:north.layout.footprint.maxZ+offsetZ});
+  if(seam.maxZ!==start.footprint.minZ-1 || site.maxZ!==seam.minZ-1)
+    throw new Error('Authored prefetch is not contiguous');
+  const footprint=Object.freeze({...start.footprint,minZ:site.minZ,
+    minY:Math.min(start.footprint.minY,north.layout.footprint.minY),
+    maxY:Math.max(start.footprint.maxY,north.layout.footprint.maxY,connector.maxY)});
+  return Object.freeze({definition,site,seam,footprint,
+    triggerZ:tail.maxZ+1-5,hash:start.hash+'-'+north.hash});
+}
+
+export function activateConnectedHuntContinuation(start,continuation) {
+  return Object.freeze({...start,
+    sites:Object.freeze([...start.sites,continuation.site]),
+    seams:Object.freeze([start.seam,continuation.seam]),
+    footprint:continuation.footprint,hash:continuation.hash,
+    streaming:true,eviction:false,residentLimit:3
+  });
 }
