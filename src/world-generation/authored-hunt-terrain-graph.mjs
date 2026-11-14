@@ -30,7 +30,7 @@ export class AuthoredHuntTerrainGraph {
     const region=this.#region(id);
     if(region.id===this.#layout.entryRegionId)return this.#entry;
     return this.#generateSite(this.#createRecipe({...this.#entry.recipe,
-      regionId:region.id,siteId:'preview-'+region.id,
+      regionId:region.id,siteId:'preview-'+region.id,huntRole:region.role,
       lateralPorts:region.ports.map(p=>p.direction).filter(d=>d==='east'||d==='west')}));
   }
   region(id){
