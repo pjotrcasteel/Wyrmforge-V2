@@ -4,7 +4,8 @@
 import { VoxelWorld, CHUNK_EDGE_CANDIDATES, MAX_SCENE_SEED } from './voxel-world.mjs';
 import { TerrainEditLedger } from './terrain-edit-ledger.mjs';
 import { V2TerrainPort } from './terrain-integration-port.mjs';
-import { validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
+import { validateMicroSurfaceTiles,MAX_MICRO_SURFACE_TILES } from './microvoxel-surface.mjs';
+import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 
 export const TERRAIN_INITIALIZATION_SCHEMA = 'voxel-v2.terrain-initialization.v1';
 export const TERRAIN_INITIALIZATION_MICRO_SCHEMA='voxel-v2.terrain-initialization.v2';
@@ -212,5 +213,65 @@ export class V2ExternalTerrainLoader {
     this.#world.clear();
     this.#ledger=null;
     this.#port=null;
+  }
+}
+
+
+// Add a validated, disjoint northward band to the SAME initialized Voxel V2
+// authority. The host owns activation: keep actor bounds at the old published
+// footprint until this writer, the worker and GPU upload queue have finished.
+// The existing ledger and port survive; streaming is not a destructive edit.
+export class V2ExternalTerrainAppend {
+  #world;
+  #definition;
+  #run=0;
+  #offset=0;
+  #tile=0;
+  #dirty=new Set();
+  #written=0;
+  constructor(world,definition,{previousMinZ}={}) {
+    this.#definition=validateExternalTerrainDefinition(definition);
+    if(!world || world.chunkEdge!==this.#definition.chunkEdge ||
+        !Number.isSafeInteger(previousMinZ) || this.#definition.runs.some(r=>r.z>=previousMinZ) ||
+        this.#definition.surfaceTiles?.some(t=>t.z>=previousMinZ)) {
+      throw new RangeError('Streamed band must be north of the published footprint');
+    }
+    if(world.microSurfaceCount+(this.#definition.surfaceTiles?.length??0)>MAX_MICRO_SURFACE_TILES)
+      throw new RangeError('Streamed band exceeds resident microtile capacity');
+    // The caller supplies an unopened band; no pre-existing world may own
+    // chunks wholly beyond that band boundary. Shared edge chunks are allowed.
+    this.#world=world;
+  }
+  get progress() {
+    return Object.freeze({loadedCells:this.#written,totalCells:this.#definition.totalCells,
+      done:this.#run===this.#definition.runs.length &&
+        this.#tile===(this.#definition.surfaceTiles?.length??0)});
+  }
+  get dirtyChunks() {
+    if(!this.progress.done)throw new Error('Streamed terrain band is incomplete');
+    return new Set(this.#dirty);
+  }
+  step(maxCells=512) {
+    if(!Number.isSafeInteger(maxCells) || maxCells<1 || maxCells>MAX_INITIAL_TERRAIN_STEP_CELLS)
+      throw new RangeError('Invalid streaming cell budget');
+    let remaining=maxCells;
+    while(remaining>0 && this.#run<this.#definition.runs.length) {
+      const run=this.#definition.runs[this.#run];
+      const x=run.x+this.#offset;
+      if(this.#world.get(x,run.y,run.z)!==0)
+        throw new Error('Streamed terrain would overwrite authoritative occupancy');
+      this.#world.set(x,run.y,run.z,run.material);
+      markDirtyForEditedVoxel(this.#dirty,this.#world.chunkEdge,x,run.y,run.z);
+      this.#written++;remaining--;this.#offset++;
+      if(this.#offset===run.length){this.#run++;this.#offset=0;}
+    }
+    const tiles=this.#definition.surfaceTiles??[];
+    while(remaining>0 && this.#run===this.#definition.runs.length && this.#tile<tiles.length) {
+      const tile=tiles[this.#tile++];
+      this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
+      markDirtyForEditedVoxel(this.#dirty,this.#world.chunkEdge,tile.x,tile.y,tile.z);
+      remaining--;
+    }
+    return this.progress;
   }
 }
