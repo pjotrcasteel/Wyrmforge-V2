@@ -46,6 +46,30 @@ one circular combat floor, a painted road, or a level editor fixture.
    types; their fighting floors support plenty of movement, changing
    terrain and more than one retreat/kiting route.
 
+## Approved refinement — seamless Hunts and objective-controlled gates (2026-11-14)
+
+Keep the World Map as the strategic, branching journey between complete
+Hunts. Inside a Hunt, regions connect seamlessly; their streaming boundaries
+are invisible implementation details, not scene-selection points.
+
+Some passages may be blocked by physical gates or magical barriers until
+the player completes an investigation, discovers a key, defeats a guardian,
+survives a horde or fulfills another explicit objective. Optional branches
+and freely traversable areas remain important. Ordinary destructible
+obstacles are distinct from progression locks: destruction must not
+silently bypass a mandatory prerequisite or accidentally make it impossible
+to complete.
+
+WorldGen provides viable passage locations and approaches. Gameplay owns
+objective prerequisites and persistent unlock state; Voxel V2 and World
+Objects provide physical occupancy/collision. A completed Hunt can also
+unlock a destination on the World Map. The exact objective content and
+gate presentation remain future gameplay work, not streaming work.
+
+Delivery sequence: H08-02 seamless streaming, H08-03 natural geography,
+H08-06A objective gates, H08-07 combat-controlled variants, H08-09 World
+Map destination unlocks and extraction. See [Delivery Tasks](../DELIVERY-TASKS.md).
+
 ## Why the current V2 implementation is not yet Hunt-sized
 
 The 40×40 m ordinary site, 56×56 m miniboss and 64×64 m Wyrm cavern
