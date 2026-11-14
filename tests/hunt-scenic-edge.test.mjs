@@ -28,7 +28,7 @@ test('entry scenery leaves a clear trail mouth and blends into deeper trees',()=
     {raycast:()=>({point:{y:5}})});
   assert.ok(trees.some(tree=>tree.z>20));
   assert.ok(trees.every(tree=>tree.z<19||Math.abs(tree.x)>=6));
-  assert.ok(new Set(trees.map(tree=>tree.opacity)).size>1);
+  assert.ok(trees.every(tree=>tree.opacity===undefined));
   for(const [i,tree] of trees.entries())for(const peer of trees.slice(i+1)){
     assert.ok(Math.hypot(tree.x-peer.x,tree.z-peer.z)>=2.8);
   }

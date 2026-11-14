@@ -42,7 +42,7 @@ export function placeScenicEdgeTrees(region,layout,terrain){
     if(!hit)continue;
     const setback=Math.abs(edge[0])+Math.abs(edge[1]);
     trees.push({x:x+.5,y:hit.point.y-.35-setback*.18,z:z+.5,
-      scale:.84+((hash>>>8)%6)*.08,opacity:1-setback*.12,
+      scale:.84+((hash>>>8)%6)*.08,
       sprite:EDGE_SPRITES[(hash>>>16)%EDGE_SPRITES.length],scenic:true});
   }
   return trees;
@@ -86,7 +86,7 @@ export class HuntTreePreview {
       const x=Math.round(foot.x-sprite.ax*scale),y=Math.round(foot.y-sprite.ay*scale);
       const w=Math.round(sprite.w*scale),h=Math.round(sprite.h*scale);
       if(x+w<=0||x>=view.width||y+h<=0||y>=view.height)continue;
-      layers.push({depth:foot.depth,x,y,w,h,sprite,opacity:tree.opacity??1});
+      layers.push({depth:foot.depth,x,y,w,h,sprite});
     }
     const foot=projectVoxel(actor.x,actor.y,actor.z,view);
     layers.push({depth:foot.depth});
@@ -95,7 +95,6 @@ export class HuntTreePreview {
     ctx.imageSmoothingEnabled=false;
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
-      ctx.globalAlpha=layer.opacity??1;
       if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
       else paintActor();
     }
