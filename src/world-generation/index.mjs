@@ -30,7 +30,7 @@ export function generateWorldExpeditionRegion(plan,regionId) {
 
 import { createWorldSiteRecipe } from './site-recipe.mjs';
 import { createHuntExpeditionRecipe,composeHuntExpeditionPlan } from './hunt-expedition-plan.mjs';
-import { composeConnectedHuntStart,composeConnectedHuntContinuation } from './connected-hunt-start.mjs';
+import { composeConnectedHuntStart,composeConnectedHuntContinuation,activateConnectedHuntContinuation } from './connected-hunt-start.mjs';
 
 function planForEntry(entrySite) {
   const recipe=entrySite.recipe;
