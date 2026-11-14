@@ -26,7 +26,7 @@ export class HuntWoodlandObjects {
         // Use the existing reserved footprint so neither prop moves into a route.
         const radius=item.footprint.radius;
         const halfLength=radius*.66;
-        const supported=(item.seed>>>24)%3===0&&[-halfLength,halfLength].every(offset=>{
+        const supported=(item.variant==='log'||(!item.variant&&(item.seed>>>24)%3===0))&&[-halfLength,halfLength].every(offset=>{
           const end=terrain.raycast({origin:[x+offset,32,z],direction:[0,-1,0],maxDistance:42});
           return end&&Math.abs(end.point.y-base.y)<=.25;
         });

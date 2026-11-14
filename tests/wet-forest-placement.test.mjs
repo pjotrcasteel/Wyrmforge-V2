@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
+import {HuntWoodlandObjects} from '../src/hunt-woodland-objects.mjs';
 
 const entryRecipe={kind:'wet-forest',regionId:'starter-region',siteId:'preview-wet-forest',
   encounterId:'preview-001',chunkEdge:32};
@@ -82,5 +83,23 @@ test('clustered tree and boulder descriptors fit real land, preserve routes and 
     }
     assert.ok(graph.placement(graph.layout.entryRegionId).placements.filter(p=>p.kind==='tree').length>=7);
     assert.deepEqual(kinds,new Set(['tree','boulder']));
+  }
+});
+
+test('the arrival trail has a grounded boulder and log within the phone intro view',()=>{
+  for(const seed of [7,8,19]){
+    const graph=graphFor(seed),id=graph.layout.entryRegionId;
+    const loader=new V2ExternalTerrainLoader(graph.region(id).definition);
+    try{
+      while(!loader.progress.done)loader.loadStep(4096);
+      const objects=new HuntWoodlandObjects(graph);
+      objects.update([id],loader.terrain.port);
+      const props=[...objects.regions][0].filter(prop=>prop.id.includes(':trailside:'));
+      assert.deepEqual(props.map(prop=>prop.kind),['boulder','log']);
+      for(const prop of props){
+        assert.ok(Math.abs(prop.x-.5)*16<201);
+        assert.ok(Math.abs(prop.z-16)*16*.77<120);
+      }
+    }finally{loader.unload();}
   }
 });
