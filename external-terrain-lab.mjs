@@ -1001,7 +1001,7 @@ function frame(now) {
           scale,panX,panY,camera,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode)playView=view;
-        paintEncounterGuide(view);
+        paintEncounterGuide({...view});
       }
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
