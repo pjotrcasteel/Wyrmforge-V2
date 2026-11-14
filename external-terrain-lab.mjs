@@ -268,6 +268,7 @@ function paintEncounterGuide(view) {
   paintTraversalOverlay(ctx,view);
   paintDummyActor(ctx,view);
   paintPlayActor(ctx,view);
+  paintPlayFireball(ctx,view);
 }
 
 // Navigation is a separate derived consumer of the current Voxel V2 Terrain
@@ -687,7 +688,8 @@ function updateStatus(now=performance.now()) {
     ? (generatedSite ? generatedSite.recipe.kind :
         expeditionSite ? 'Expedition '+expeditionSite.regionId :
         'Fixed voxel fixture')+
-      ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'
+      ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'+
+      (playMode?' · Tap terrain: Fireball':'')
     : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
       '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
 }
@@ -995,7 +997,8 @@ function frame(now) {
         : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
       const view={width:canvas.width,height:canvas.height,
         scale,panX,panY,camera};
-      if(renderer.render({...view,huntHeightContrast:playMode &&
+      if(renderer.render({width:canvas.width,height:canvas.height,
+          scale,panX,panY,camera,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode)playView=view;
         paintEncounterGuide(view);
