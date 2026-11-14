@@ -197,3 +197,18 @@ test('physical 10cm height differences inside a single 1m tile cannot trap the a
   }
   assert.ok(collisions>0,'raised microterrain must participate in actual collision');
 });
+
+
+test('Hunt speed tuning retains default actor policy and swept wall collision',()=>{
+  const world=flat();
+  const start=actor();
+  const standard=run(world,start,60,{moveX:1,dt:1/60});
+  const faster=run(world,start,60,{moveX:1,dt:1/60,moveSpeed:5.2});
+  assert.ok(Math.abs(standard.x-start.x-4.4)<1e-6);
+  assert.ok(Math.abs(faster.x-start.x-5.2)<1e-6);
+  for(let y=1;y<=3;y++)world.set(2,y,0,3);
+  const blocked=run(world,start,80,{moveX:1,dt:1/60,moveSpeed:5.2});
+  assert.ok(blocked.x<2-ACTOR_HALF_WIDTH);
+  assert.equal(actorOverlapsTerrain(world,blocked),false);
+  assert.throws(()=>simulateTerrainActor(world,start,{moveX:1,moveSpeed:20}),RangeError);
+});
