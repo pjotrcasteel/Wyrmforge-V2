@@ -15,8 +15,8 @@ export class V2TerrainResidencySet {
   #loads=0;
 
   constructor(world,{residentLimit=3,maxBands=14}={}) {
-    if(!Number.isSafeInteger(residentLimit)||residentLimit<1||residentLimit>3||
-        !Number.isSafeInteger(maxBands)||maxBands<residentLimit||maxBands>14)
+    if(!Number.isSafeInteger(residentLimit)||residentLimit<1||residentLimit>5||
+        !Number.isSafeInteger(maxBands)||maxBands<residentLimit||maxBands>40)
       throw new RangeError('Invalid bounded residency limits');
     this.#world=world;this.#limit=residentLimit;this.#maxBands=maxBands;
   }
