@@ -50,6 +50,13 @@ test('every planned region and connection has a separate deterministic native te
     for(const link of graph.layout.links){
       const band=graph.materialize(link.id);
       auditDefinition({...band,landform:link.landform});
+      const sideways=['east','west'].includes(link.fromPort.direction);
+      const start=sideways?link.bounds.minX:link.bounds.minZ;
+      for(let step=0;step<8;step++)for(let offset=-11;offset<=11;offset++){
+        const x=sideways?start+step:link.fromPort.at.x+offset;
+        const z=sideways?link.fromPort.at.z+offset:start+step;
+        assert.ok(containsHuntLandform(link,x,z),link.id+' woodland shoulders');
+      }
       for(const port of [link.fromPort,link.toPort]){
         const region=graph.layout.regions.find(region=>region.ports.includes(port));
         const dx=port.direction==='west'?-1:port.direction==='east'?1:0;
