@@ -86,9 +86,9 @@ test('Wizard crosses the graded connection in both directions in one physical wo
 test('Play Hunt activates the connected authored terrain in one loader and retains the original diagnostic lab',()=>{
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
   assert.ok(host.includes('playConnected=generateConnectedHuntStart(generatedSite)'));
-  assert.ok(host.includes('new V2ExternalTerrainLoader(playConnected.definition'));
+  assert.ok(host.includes('new V2ExternalTerrainLoader(graph.initialTerrain(initialIds)'));
   assert.ok(host.includes('new V2ExternalTerrainLoader(generatedSite.definition'));
-  assert.ok(host.includes('stepHuntExplorer(active.world,playActor,bounds,input)'));
+  assert.ok(host.includes('stepHuntExplorer(active.world,playActor,bounds,allowed)'));
   assert.ok(host.includes('connectedWorld:playConnected?'));
   assert.ok(host.includes('const inspectExpedition=!playMode && expeditionMode.checked'));
 });

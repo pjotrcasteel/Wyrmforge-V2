@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
-import {generateWorldSite,generateConnectedHuntStart,generateConnectedHuntMainRoute,
+import {generateWorldSite,
   generateAuthoredHuntTerrainGraph,createHuntExpeditionRecipe,composeHuntExpeditionPlan} from '../src/world-generation/index.mjs';
 import {toVoxelTerrainDefinition} from '../src/world-generation/voxel-terrain-adapter.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
@@ -50,21 +50,18 @@ test('every planned region and connection has a separate deterministic native te
   }
 });
 
-test('graph main-route geometry exactly matches the deployed authored main route',()=>{
+test('graph region geometry matches its native port-aware source, preserving the entry',()=>{
   const {entry,graph}=setup(7);
-  const {route,bands}=generateConnectedHuntMainRoute(entry,generateConnectedHuntStart(entry));
-  for(let i=0;i<bands.length;i++){
-    const site=graph.region(bands[i].id);
-    const z=site.bounds.maxZ;
-    assert.deepEqual(bands[i].definition.runs.filter(r=>r.z<=z),site.definition.runs);
-    assert.deepEqual((bands[i].definition.surfaceTiles??[]).filter(t=>t.z<=z),site.definition.surfaceTiles??[]);
-    if(i===0)continue;
-    const previous=route.sites[i-1].id;
-    const link=graph.layout.links.find(l=>[l.fromId,l.toId].includes(previous)&&
-      [l.fromId,l.toId].includes(site.id));
-    const seam=graph.link(link.id);
-    assert.deepEqual(bands[i].definition.runs.filter(r=>r.z>z),seam.definition.runs);
-    assert.deepEqual((bands[i].definition.surfaceTiles??[]).filter(t=>t.z>z),seam.definition.surfaceTiles??[]);
+  for(const region of graph.layout.regions){
+    const source=region.id===graph.layout.entryRegionId?entry:
+      generateWorldSite(createWorldSiteRecipe({...entry.recipe,
+        regionId:region.id,siteId:'preview-'+region.id,
+        lateralPorts:region.ports.map(p=>p.direction).filter(d=>d==='east'||d==='west')}));
+    const band=graph.region(region.id);
+    const translate=items=>items.map(item=>({...item,x:item.x+region.offsetX,z:item.z+region.offsetZ}));
+    assert.equal(band.sourceHash,source.hash);
+    assert.deepEqual(band.definition.runs,translate(source.definition.runs));
+    assert.deepEqual(band.definition.surfaceTiles??[],translate(source.definition.surfaceTiles??[]));
   }
 });
 

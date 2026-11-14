@@ -3,7 +3,7 @@
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { V2ExternalTerrainLoader } from './src/external-terrain-loader.mjs';
-import { HuntMainRouteResidency } from './src/hunt-main-route-residency.mjs';
+import { HuntGraphResidency } from './src/hunt-graph-residency.mjs';
 import {
   createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
 } from './src/external-terrain-checkpoint.mjs';
@@ -19,7 +19,7 @@ import {
   generateWorldSite,generateWorldExpeditionRegion,
   createHuntExpeditionRecipe,composeHuntExpeditionPlan,
   generateConnectedHuntStart,connectedHuntLocation,
-  generateConnectedHuntMainRoute
+  generateAuthoredHuntTerrainGraph
 } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
@@ -132,8 +132,8 @@ function resetPreviewView() {
 function updateSiteSummary() {
   if(playMode) {
     siteSummary.textContent='Wet Forest · '+(
-      playConnected ? (playConnected.footprint.maxZ-playConnected.footprint.minZ+1)+
-        'm main route · '+(playStream?.residency?.metrics.residentIds.length??2)+' resident sites' :
+      playConnected ? (playStream?.graph.layout.regions.length??2)+
+        ' planned sites · '+(playStream?.residency?.metrics.residentRegions.length??2)+' resident sites' :
       generatedSite ? generatedSite.generatorVersion+' · '+generatedSite.hash :
         'World Generation V2 loading'
     )+' · seed '+siteSeed.value;
@@ -520,13 +520,13 @@ function updatePlayStreaming(now) {
       errorMessage || !renderer?.ready || pendingMesh || restoring)return;
   const stream=playStream;
   if(!stream.residency) {
-    stream.residency=new HuntMainRouteResidency(active.world,stream.bands);
+    stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds);
     stream.phase='ready';
   }
   const residency=stream.residency;
   if(!residency.metrics.transition) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
-    const job=residency.next(playActor.z,{respawn:stream.respawnPending});
+    const job=residency.next(playActor,{respawn:stream.respawnPending});
     if(!job)return;
     if(job.action==='respawn') {
       stream.respawnPending=false;
@@ -647,13 +647,13 @@ function updatePlayFrame(now) {
       const input=playStream?.respawnPending?{moveX:0,moveZ:0}:playMovementInput();
       let steps=0;
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
-        // A contiguous published interval is the only traversable footprint.
-        // Never move across unloaded or partially uploaded terrain.
-        const bounds=playStream?.residency?.bounds(playActor.z,playConnected.footprint)
-          ??playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
-        if(playActor.z<=bounds.minZ+.8)input.moveZ=Math.max(0,input.moveZ);
-        if(playActor.z>=bounds.maxZ+.2)input.moveZ=Math.min(0,input.moveZ);
-        playActor=stepHuntExplorer(active.world,playActor,bounds,input);
+        // The graph is not a rectangle. A clearance-checked union of
+        // published regions and seams constrains horizontal movement.
+        const residency=playStream?.residency;
+        const bounds=residency?playStream.footprint:
+          playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
+        const allowed=residency?residency.constrainInput(playActor,input):input;
+        playActor=stepHuntExplorer(active.world,playActor,bounds,allowed);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -676,7 +676,7 @@ function updatePlayFrame(now) {
     playHudDetails.textContent='WIZARD · '+(playActor?'walkable':'loading')+
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
       '\nVoxel source: '+(generatedSite?.hash??'—')+
-      '\nSection: '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z):'entry')+
+      '\nSection: '+(playConnected && playActor ? (playStream?.residency?.location(playActor.x,playActor.z)??connectedHuntLocation(playConnected,playActor.z)):'entry')+
       '\nStreaming: '+(playStream?.phase??'—')+
       '\nResidency: '+(playStream?.residency?.metrics.evictions??0)+' evictions / '+(playStream?.residency?.metrics.loads??0)+' loads'+
       '\n10cm terrain tiles: '+(active?.world.microSurfaceCount??0)+
@@ -754,7 +754,7 @@ function updateStatus(now=performance.now()) {
         expeditionSite ? 'Expedition '+expeditionSite.regionId :
         'Fixed voxel fixture')+
       ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'+
-      (playMode?' · '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z)+' · ':'')+'Tap: Fireball':'')
+      (playMode?' · '+(playConnected && playActor ? (playStream?.residency?.location(playActor.x,playActor.z)??connectedHuntLocation(playConnected,playActor.z))+' · ':'')+'Tap: Fireball':'')
     : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
       '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
 }
@@ -860,11 +860,16 @@ function resetSite() {
       if(playMode) {
         playConnected=generateConnectedHuntStart(generatedSite);
         const initialFootprint=playConnected.footprint;
-        const mainRoute=generateConnectedHuntMainRoute(generatedSite,playConnected);
-        playConnected=mainRoute.route;
-        playStream={phase:'waiting',bands:mainRoute.bands,initialFootprint,
+        const graph=generateAuthoredHuntTerrainGraph(generatedSite);
+        const initialIds=playConnected.sites.map(site=>site.id);
+        const firstLink=graph.layout.links.find(link=>initialIds.includes(link.fromId)&&initialIds.includes(link.toId));
+        initialIds.push(firstLink.id);
+        const all=graph.layout.regions.map(region=>region.bounds);
+        const footprint={minX:Math.min(...all.map(b=>b.minX)),maxX:Math.max(...all.map(b=>b.maxX)),
+          minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
+        playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
-        loader=new V2ExternalTerrainLoader(playConnected.definition,
+        loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
           {epoch:terrainEpochs.next(),microSurfaceCapacity:2048});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
@@ -1303,11 +1308,12 @@ if(playMode) {
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
         microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
         connectedWorld:playConnected?{hash:playConnected.hash,planHash:playConnected.planHash,
-          sites:playConnected.sites,footprint:playConnected.footprint,seam:playConnected.seam,
-          streaming:playConnected.streaming,eviction:(playStream?.residency?.metrics.evictions??0)>0,
-          residentSites:playStream?.residency?.metrics.residentIds.length??2,
+          sites:playStream?.graph.layout.regions??playConnected.sites,footprint:playStream?.footprint??playConnected.footprint,
+          links:playStream?.graph.layout.links??[],seam:playConnected.seam,
+          streaming:Boolean(playStream?.residency),eviction:(playStream?.residency?.metrics.evictions??0)>0,
+          residentSites:playStream?.residency?.metrics.residentRegions.length??2,
           residency:{...playStream?.residency?.metrics,elapsedMs:playStream?.elapsedMs??null},
-          prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
+          prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?(playStream?.residency?.location(playActor.x,playActor.z)??connectedHuntLocation(playConnected,playActor.z)):null}:null
       },
       device:{
         userAgent:navigator.userAgent,

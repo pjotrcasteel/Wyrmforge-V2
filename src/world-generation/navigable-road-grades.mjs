@@ -12,7 +12,7 @@ const GRADE_LIMIT_TENTHS=5; // 0.5m max physical rise between route cells
 
 export function gradeNavigableRoads({
   radius,heights,routes=[],escapeRoutes=[],flowLinks=[],
-  approaches=[],combatSpaces=[]
+  approaches=[],combatSpaces=[],lateralPorts=[]
 }) {
   if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
       !(heights instanceof Int16Array) ||
@@ -35,6 +35,21 @@ export function gradeNavigableRoads({
     authored.push(apron.spine,...apron.shoulders,...apron.grassShoulders);
   }
   const hub=combatSpaces[0];
+  // Side-port aprons belong to the authored physical grade graph. Join
+  // the existing flank at its endpoint and retain natural surface materials.
+  // Three lanes and cross-links provide clearance without a new painted road.
+  for(const side of lateralPorts) {
+    const flank=approaches.find(a=>a.id===side+'-flank');
+    if(!flank)throw new Error('Lateral port requires an authored combat flank');
+    const edge=side==='west'?-radius:radius-1;
+    for(const z of [-1,0,1]) {
+      const nodes=[{x:edge,z},{x:flank.x,z}];
+      if(z!==flank.z)nodes.push({x:flank.x,z:flank.z});
+      authored.push({nodes});
+    }
+    for(let x=Math.min(edge,flank.x);x<=Math.max(edge,flank.x);x++)
+      authored.push({nodes:[{x,z:-1},{x,z:1}]});
+  }
   if(hub)for(const approach of approaches) {
     authored.push({nodes:[
       {x:approach.x,z:approach.z},{x:hub.x,z:hub.z}

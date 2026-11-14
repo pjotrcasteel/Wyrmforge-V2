@@ -39,13 +39,18 @@ export function validateWorldSiteRecipe(recipe) {
       recipe.corruption<0 || recipe.corruption>1) {
     throw new RangeError('Corruption progress must be within [0,1]');
   }
+  const ports=recipe.lateralPorts;
+  if(ports!==undefined && (recipe.kind!=='wet-forest'||!Array.isArray(ports)||
+      ports.length>2||new Set(ports).size!==ports.length||!ports.every(p=>['east','west'].includes(p))))
+    throw new RangeError('Invalid authored lateral ports');
   return Object.freeze({
     schema:WORLD_SITE_RECIPE_SCHEMA,
     regionId:recipe.regionId,siteId:recipe.siteId,
     encounterId:recipe.encounterId,kind:recipe.kind,
     seed:recipe.seed,worldRevision:recipe.worldRevision,
     chunkEdge:recipe.chunkEdge,radius:recipe.radius,
-    corruption:recipe.corruption
+    corruption:recipe.corruption,
+    ...(ports?.length?{lateralPorts:Object.freeze([...ports].sort())}:{})
   });
 }
 
@@ -53,10 +58,10 @@ export function createWorldSiteRecipe({
   regionId='starter-forest',siteId='site-forest-01',
   encounterId='hunt-001',kind='wet-forest',
   seed=7,worldRevision=0,chunkEdge=16,
-  radius=siteRadiusForKind(kind),corruption=0
+  radius=siteRadiusForKind(kind),corruption=0,lateralPorts
 }={}) {
   return validateWorldSiteRecipe({
     schema:WORLD_SITE_RECIPE_SCHEMA,regionId,siteId,encounterId,kind,
-    seed,worldRevision,chunkEdge,radius,corruption
+    seed,worldRevision,chunkEdge,radius,corruption,lateralPorts
   });
 }
