@@ -1,4 +1,4 @@
-import { HuntTreePreview } from './src/hunt-tree-preview.mjs';
+import { HuntTreePreview,createForestBackdrop } from './src/hunt-tree-preview.mjs';
 // V2.6 end-to-end diagnostic host. It is a separate page, not World Generation V2.
 // Input -> bounded V2 initializer -> authoritative world/port -> existing
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
@@ -106,6 +106,9 @@ let playConnected=null;
 let playStream=null;
 let playView=null;
 const playTreeAtlas=playMode?new Image():null;
+const forestCanvas=document.querySelector('#forest-backdrop');
+const forestContext=forestCanvas?.getContext('2d');
+const paintForest=forestContext?createForestBackdrop(playTreeAtlas):null;
 if(playTreeAtlas)playTreeAtlas.src='./art/wet-forest/live-trees.png';
 let playFireball=null;
 let playImpact=null;
@@ -181,6 +184,7 @@ function resizeCanvas() {
   if(canvas.width!==width || canvas.height!==height) {
     canvas.width=width;
     canvas.height=height;
+    if(forestCanvas){forestCanvas.width=width;forestCanvas.height=height;}
     combatGuide.width=width;
     combatGuide.height=height;
   }
@@ -1119,6 +1123,7 @@ function frame(now) {
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode){
           playView=view;
+          if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
             playStream.trees.update(residency.metrics.residentRegions,active.port);
@@ -1420,7 +1425,7 @@ try {
   renderer=new WebGLVoxelView(canvas,{
     // Use the actual WorldGen V2 material pipeline for BOTH camera
     // projections. The 2.5D game camera does not require 2D fake terrain.
-    fastHuntMode:false,
+    transparentBackground:Boolean(forestContext),fastHuntMode:false,
     onAvailabilityChange(ready,error) {
       // A restored GL context cannot clear an unrelated worker or replay failure.
       rendererErrorMessage=ready ? null : (error?.message ?? 'WebGL context lost');

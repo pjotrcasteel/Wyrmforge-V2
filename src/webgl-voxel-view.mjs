@@ -304,17 +304,19 @@ export class WebGLVoxelView {
   #losses = 0;
   #onAvailabilityChange;
   #fastHuntMode;
+  #transparentBackground;
 
   constructor(canvas, {
-    onAvailabilityChange = () => {},fastHuntMode=false
+    onAvailabilityChange = () => {},fastHuntMode=false,transparentBackground=false
   } = {}) {
     if(typeof fastHuntMode!=='boolean') {
       throw new TypeError('fastHuntMode must be a boolean');
     }
     this.#fastHuntMode=fastHuntMode;
+    this.#transparentBackground=transparentBackground;
     this.#onAvailabilityChange = onAvailabilityChange;
     const gl = canvas.getContext('webgl2', {
-      alpha: false, antialias: false, depth: true, stencil: false, preserveDrawingBuffer: false
+      alpha: transparentBackground, antialias: false, depth: true, stencil: false, preserveDrawingBuffer: false
     });
     if (!gl) throw new Error('WebGL2 is unavailable on this device');
     this.#gl = gl;
@@ -800,7 +802,8 @@ export class WebGLVoxelView {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
-    gl.clearColor(16 / 255, 24 / 255, 32 / 255, 1);
+    if(this.#transparentBackground)gl.clearColor(0,0,0,0);
+    else gl.clearColor(16 / 255, 24 / 255, 32 / 255, 1);
     gl.clearDepth(1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.#program);

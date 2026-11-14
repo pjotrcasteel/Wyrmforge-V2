@@ -52,3 +52,43 @@ export class HuntTreePreview {
     ctx.restore();
   }
 }
+
+
+// A world-anchored scenic canopy behind the WebGL terrain. The repeating
+// patch is drawn once and has no terrain, object or collision representation.
+export function createForestBackdrop(image){
+  const tile=document.createElement('canvas');
+  tile.width=384;
+  tile.height=384;
+  const brush=tile.getContext('2d');
+  let pattern;
+  return (ctx,view)=>{
+    if(!pattern&&image.complete&&image.naturalWidth){
+      brush.fillStyle='#304732';
+      brush.fillRect(0,0,384,384);
+      brush.imageSmoothingEnabled=false;
+      for(let row=0;row<8;row++)for(let col=0;col<8;col++){
+        const sprite=LIVE_TREES[(row*11+col*7)%LIVE_TREES.length];
+        const x=col*48+(row*13+col*3)%28;
+        const y=row*48+(col*19+row*5)%29;
+        const w=Math.round(sprite.w*.62),h=Math.round(sprite.h*.62);
+        for(const dx of [-384,0,384])for(const dy of [-384,0,384]){
+          brush.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,x+dx-w/2,y+dy-h,w,h);
+        }
+      }
+      brush.fillStyle='rgba(25,48,34,.42)';
+      brush.fillRect(0,0,384,384);
+      pattern=ctx.createPattern(tile,'repeat');
+    }
+    ctx.save();
+    const origin=projectVoxel(0,0,0,view);
+    ctx.translate(Math.round(origin.x),Math.round(origin.y));
+    const scale=view.scale/16;
+    ctx.scale(scale,scale);
+    ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle=pattern??'#304732';
+    ctx.fillRect(-origin.x/scale-2,-origin.y/scale-2,
+      view.width/scale+4,view.height/scale+4);
+    ctx.restore();
+  };
+}

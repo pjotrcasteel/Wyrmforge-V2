@@ -833,7 +833,7 @@ for the same authored region, seed and world revision regardless of request
 order. The Y coordinate is the generated surface before any terrain edits.
 
 WorldGen searches for bounded clusters of at least two trees or boulders,
-up to 24 descriptors per region. It reserves the road, ports, flank and
+up to 36 descriptors per region. It reserves the road, ports, flank and
 escape corridors, encounter and maneuver spaces, landmark and discovery
 approaches, and wetland. Landform and surface grade constrain each footprint.
 Areas with little safe space may have no placements. Connectors have no

@@ -1,7 +1,7 @@
 import {containsHuntLandform} from './hunt-landform-footprint.mjs';
 
 export const WET_FOREST_PLACEMENT_SCHEMA='wyrmforge.wet-forest-placement.v1';
-const MAX_PLACEMENTS=24;
+const MAX_PLACEMENTS=36;
 const MAX_GRADE_TENTHS=5;
 const clearance=1;
 const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
@@ -68,7 +68,7 @@ export function composeWetForestPlacement(site,region){
     if(distance(point,basin)<basin.radius+radius+(kind==='tree'?0:1))return null;
     if(protectedAreas.some(area=>distance(point,area)<area.radius+radius+clearance))return null;
     if(segments.some(segment=>distanceToSegment(point,segment)<segment.width+radius+clearance))return null;
-    const edge=radius+.5;
+    const edge=radius+(kind==='tree'?.2:.5);
     const center=surface(Math.floor(point.x),Math.floor(point.z));
     if(!center||center.material===2||(kind==='tree'&&center.material!==1))return null;
     let low=Infinity,high=-Infinity;
@@ -81,23 +81,23 @@ export function composeWetForestPlacement(site,region){
         high=Math.max(high,column.high);
       }
     }
-    return high-low<=MAX_GRADE_TENTHS?center.center/10:null;
+    return high-low<=(kind==='tree'?10:MAX_GRADE_TENTHS)?center.center/10:null;
   };
 
   const placements=[];
   // Each accepted cluster gets a deterministic local search around its anchor.
   // Sparse or steep areas can reject an entire cluster without forcing fillers.
-  for(let cluster=0;cluster<36&&placements.length<=MAX_PLACEMENTS-2;cluster++){
+  for(let cluster=0;cluster<72&&placements.length<=MAX_PLACEMENTS-2;cluster++){
     const kind=cluster%3===0?'boulder':'tree';
     const center={
       x:bounds.minX+Math.floor(next()*(bounds.maxX-bounds.minX+1)),
       z:bounds.minZ+Math.floor(next()*(bounds.maxZ-bounds.minZ+1))
     };
     const members=[];
-    for(let attempt=0;attempt<18&&members.length<4;attempt++){
+    for(let attempt=0;attempt<24&&members.length<4;attempt++){
       const point={x:center.x+Math.floor(next()*9)-3.5,z:center.z+Math.floor(next()*9)-3.5};
       const scale=.8+Math.floor(next()*5)/10;
-      const radius=(kind==='tree'?.65:.85)*scale;
+      const radius=(kind==='tree'?.46:.85)*scale;
       if([...placements,...members].some(p=>distance(p.position,point)<p.footprint.radius+radius+clearance))continue;
       const y=eligible(point,radius,kind);
       if(y===null)continue;
