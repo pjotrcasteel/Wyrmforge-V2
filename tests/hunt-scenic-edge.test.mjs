@@ -19,3 +19,17 @@ test('scenic roots stay outside terrain while crowns can project over its edge',
     return root>edge&&root-tree.sprite.ay*tree.scale*view.scale/32<edge;
   }));
 });
+
+test('entry scenery leaves a clear trail mouth and blends into deeper trees',()=>{
+  const bounds={minX:-20,maxX:19,minZ:-20,maxZ:19};
+  const region={bounds,offsetX:0,role:'arrival',
+    landform:Array.from({length:40},()=>[{start:-20,end:20}])};
+  const trees=placeScenicEdgeTrees(region,{regions:[region],links:[]},
+    {raycast:()=>({point:{y:5}})});
+  assert.ok(trees.some(tree=>tree.z>20));
+  assert.ok(trees.every(tree=>tree.z<19||Math.abs(tree.x)>=6));
+  assert.ok(new Set(trees.map(tree=>tree.opacity)).size>1);
+  for(const [i,tree] of trees.entries())for(const peer of trees.slice(i+1)){
+    assert.ok(Math.hypot(tree.x-peer.x,tree.z-peer.z)>=2.8);
+  }
+});

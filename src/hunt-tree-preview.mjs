@@ -4,29 +4,46 @@ import { LIVE_TREES } from './wet-forest-tree-sprites.mjs';
 
 const EDGE_SPRITES=LIVE_TREES.filter(sprite=>sprite.h>=150);
 
+const EDGE_OFFSETS=Array.from({length:4},(_,i)=>i+1)
+  .flatMap(d=>[[0,-d],[-d,0],[d,0],[0,d]]);
+const edgeHash=(x,z)=>(Math.imul(x,73856093)^Math.imul(z,19349663))>>>0;
+
+function nearTrailMouth(region,x,z){
+  if(region.role==='arrival'&&z>=region.bounds.maxZ-4&&Math.abs(x-region.offsetX)<6)return true;
+  if(region.role==='extraction'&&z<=region.bounds.minZ+4&&Math.abs(x-region.offsetX)<6)return true;
+  return (region.ports??[]).some(({at,direction})=>{
+    const sideways=direction==='east'||direction==='west';
+    return Math.abs(sideways?x-at.x:z-at.z)<5&&Math.abs(sideways?z-at.z:x-at.x)<6;
+  });
+}
+
 export function placeScenicEdgeTrees(region,layout,terrain){
   const inside=(x,z)=>layout.regions.some(band=>containsHuntLandform(band,x,z))||
     layout.links.some(band=>containsHuntLandform(band,x,z));
   const {minX,maxX,minZ,maxZ}=region.bounds;
-  const trees=[];
-  for(let z=minZ-2;z<=maxZ+2;z++){
-    for(let x=minX-2;x<=maxX+2;x++){
-      if(((x+2*z)%3)!==0||inside(x,z))continue;
-      const edge=[[0,-2],[-2,0],[2,0],[0,2],[0,-1],[-1,0],[1,0],[0,1]]
-        .find(([dx,dz])=>containsHuntLandform(region,x+dx,z+dz));
+  const candidates=[];
+  for(let z=minZ-4;z<=maxZ+4;z++){
+    for(let x=minX-4;x<=maxX+4;x++){
+      const hash=edgeHash(x,z);
+      if(hash%4!==0||inside(x,z)||nearTrailMouth(region,x+.5,z+.5))continue;
+      const edge=EDGE_OFFSETS.find(([dx,dz])=>containsHuntLandform(region,x+dx,z+dz));
       if(!edge)continue;
-      // Only the nearest region owns this exterior root. Use the complete
-      // graph to keep future streaming ports and neighboring routes clear.
-      const owner=layout.regions.find(band=>[[0,-2],[-2,0],[2,0],[0,2],
-        [0,-1],[-1,0],[1,0],[0,1]].some(([dx,dz])=>containsHuntLandform(band,x+dx,z+dz)));
+      const owner=layout.regions.find(band=>EDGE_OFFSETS.some(([dx,dz])=>
+        containsHuntLandform(band,x+dx,z+dz)));
       if(owner!==region)continue;
-      const hit=terrain.raycast({origin:[x+edge[0]+.5,32,z+edge[1]+.5],
-        direction:[0,-1,0],maxDistance:42});
-      if(!hit)continue;
-      const hash=(Math.imul(x,73856093)^Math.imul(z,19349663))>>>0;
-      trees.push({x:x+.5,y:hit.point.y-.3,z:z+.5,scale:1+(hash%3)*.1,
-        sprite:EDGE_SPRITES[hash%EDGE_SPRITES.length],scenic:true});
+      candidates.push({x,z,hash,edge});
     }
+  }
+  const trees=[];
+  for(const {x,z,hash,edge} of candidates.sort((a,b)=>a.hash-b.hash)){
+    if(trees.some(tree=>Math.hypot(tree.x-x-.5,tree.z-z-.5)<2.8))continue;
+    const hit=terrain.raycast({origin:[x+edge[0]+.5,32,z+edge[1]+.5],
+      direction:[0,-1,0],maxDistance:42});
+    if(!hit)continue;
+    const setback=Math.abs(edge[0])+Math.abs(edge[1]);
+    trees.push({x:x+.5,y:hit.point.y-.35-setback*.18,z:z+.5,
+      scale:.84+((hash>>>8)%6)*.08,opacity:1-setback*.12,
+      sprite:EDGE_SPRITES[(hash>>>16)%EDGE_SPRITES.length],scenic:true});
   }
   return trees;
 }
@@ -69,7 +86,7 @@ export class HuntTreePreview {
       const x=Math.round(foot.x-sprite.ax*scale),y=Math.round(foot.y-sprite.ay*scale);
       const w=Math.round(sprite.w*scale),h=Math.round(sprite.h*scale);
       if(x+w<=0||x>=view.width||y+h<=0||y>=view.height)continue;
-      layers.push({depth:foot.depth,x,y,w,h,sprite});
+      layers.push({depth:foot.depth,x,y,w,h,sprite,opacity:tree.opacity??1});
     }
     const foot=projectVoxel(actor.x,actor.y,actor.z,view);
     layers.push({depth:foot.depth});
@@ -78,6 +95,7 @@ export class HuntTreePreview {
     ctx.imageSmoothingEnabled=false;
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
+      ctx.globalAlpha=layer.opacity??1;
       if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
       else paintActor();
     }
