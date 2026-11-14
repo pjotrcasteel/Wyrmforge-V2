@@ -5,6 +5,9 @@ import {
 } from './microvoxel-surface.mjs';
 // World coordinates are signed integers; chunk dimensions are a V2 choice.
 // 16 and 32 are explicit V2 experiment configurations, not inherited V1 constants.
+// Explicit upper bound for the three-site prefetch experiment. The default
+// stays at 1024; this does not expand any individual WorldGen definition.
+export const MAX_RESIDENT_MICRO_SURFACE_TILES=2048;
 export const CHUNK_EDGE = 16;
 export const CHUNK_EDGE_CANDIDATES = Object.freeze([16, 32]);
 const floorDiv = (n, edge) => Math.floor(n / edge);
@@ -19,11 +22,17 @@ export class VoxelWorld {
   #occupied = new Map();
   #chunkEdge;
   #microSurfaces=new Map();
+  #microSurfaceCapacity;
 
-  constructor({ chunkEdge = CHUNK_EDGE } = {}) {
+  constructor({ chunkEdge = CHUNK_EDGE,microSurfaceCapacity=MAX_MICRO_SURFACE_TILES } = {}) {
     if (!CHUNK_EDGE_CANDIDATES.includes(chunkEdge)) {
       throw new RangeError('chunkEdge must be 16 or 32');
     }
+    if(!Number.isSafeInteger(microSurfaceCapacity) || microSurfaceCapacity<1 ||
+        microSurfaceCapacity>MAX_RESIDENT_MICRO_SURFACE_TILES) {
+      throw new RangeError('Invalid bounded resident micro surface capacity');
+    }
+    this.#microSurfaceCapacity=microSurfaceCapacity;
     this.#chunkEdge = chunkEdge;
   }
 
@@ -37,6 +46,7 @@ export class VoxelWorld {
       this.#microSurfaces.size*MICRO_VOXEL_COUNT;
   }
   get microSurfaceCount() {return this.#microSurfaces.size;}
+  get microSurfaceCapacity() {return this.#microSurfaceCapacity;}
 
   chunkRevision(cx, cy, cz) {
     this.#validate(cx, cy, cz);
@@ -76,7 +86,7 @@ export class VoxelWorld {
     const id=key(x,y,z);
     const previous=this.#microSurfaces.get(id);
     if(previous?.every((value,i)=>value===tile.levels[i])) return false;
-    if(!previous && this.#microSurfaces.size>=MAX_MICRO_SURFACE_TILES) {
+    if(!previous && this.#microSurfaces.size>=this.#microSurfaceCapacity) {
       throw new RangeError('Micro surface tile budget exceeded');
     }
     this.#microSurfaces.set(id,Uint8Array.from(tile.levels));
