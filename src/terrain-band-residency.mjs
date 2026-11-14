@@ -7,9 +7,23 @@ import {markDirtyForEditedVoxel} from './chunk-dirty.mjs';
 
 const key=(x,y,z)=>x+','+y+','+z;
 
+// Cheap deterministic integrity guard over canonical runs and microlevels;
+// not a cryptographic signature or a second terrain representation.
+function definitionSignature(definition){
+  let h=2166136261;
+  const add=n=>{h=Math.imul(h^(n|0),16777619)>>>0;};
+  for(const char of definition.siteId+'|'+definition.generatorVersion)add(char.charCodeAt(0));
+  add(definition.seed);add(definition.chunkEdge);
+  for(const r of definition.runs){add(r.x);add(r.y);add(r.z);add(r.length);add(r.material);}
+  for(const t of definition.surfaceTiles??[]){add(t.x);add(t.y);add(t.z);for(const level of t.levels)add(level);}
+  return h;
+}
+
 export class V2TerrainBandResidency {
   #world;
   #definition;
+  #regenerate;
+  #signature;
   #removed=new Set();
   #surfaceOverrides=new Map();
   #phase='resident';
@@ -19,14 +33,22 @@ export class V2TerrainBandResidency {
   #dirty=new Set();
   #operations=0;
 
-  constructor(world,definition,{resident=true}={}) {
+  constructor(world,definition,{resident=true,regenerate=null}={}) {
     if(typeof resident!=='boolean')throw new TypeError('Expected initial band residency');
     this.#definition=validateExternalTerrainDefinition(definition);
     if(!world || world.chunkEdge!==this.#definition.chunkEdge) {
       throw new TypeError('Expected the existing authoritative V2 world');
     }
+    if(regenerate!==null&&typeof regenerate!=='function')throw new TypeError('Expected terrain definition factory');
     this.#world=world;
+    this.#regenerate=regenerate;
+    this.#signature=definitionSignature(this.#definition);
     this.#phase=resident?'resident':'evicted';
+  }
+
+  get retainedDefinition() {
+    return this.#definition?{runs:this.#definition.runs.length,
+      microTiles:this.#definition.surfaceTiles?.length??0}:null;
   }
 
   get progress() {
@@ -49,10 +71,13 @@ export class V2TerrainBandResidency {
 
   beginReload() {
     if(this.#phase!=='evicted')throw new Error('Band is not evicted');
-    const tiles=this.#definition.surfaceTiles??[];
+    const definition=this.#definition??validateExternalTerrainDefinition(this.#regenerate());
+    if(definitionSignature(definition)!==this.#signature)throw new Error('Regenerated terrain definition changed');
+    const tiles=definition.surfaceTiles??[];
     // Conservative admission before the first world mutation.
     if(this.#world.microSurfaceCount+tiles.length>this.#world.microSurfaceCapacity)
       throw new RangeError('Reload exceeds resident micro surface budget');
+    this.#definition=definition;
     this.#begin('reloading');
   }
 
@@ -124,6 +149,7 @@ export class V2TerrainBandResidency {
     }
     if(this.#run===runs.length&&this.#tile===tiles.length) {
       this.#phase=this.#phase==='evicting'?'evicted':'resident';
+      if(this.#phase==='evicted'&&this.#regenerate)this.#definition=null;
       if(this.#phase==='resident') {
         this.#removed.clear();this.#surfaceOverrides.clear();
       }

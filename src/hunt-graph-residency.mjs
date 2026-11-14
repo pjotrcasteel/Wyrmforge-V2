@@ -28,7 +28,8 @@ export class HuntGraphResidency {
   }
   #register(id,resident=false) {
     if(!this.#registered.has(id)) {
-      this.#set.register(id,this.#graph.materialize(id).definition,{resident});
+      const regenerate=()=>this.#graph.materialize(id).definition;
+      this.#set.register(id,regenerate(),{resident,regenerate});
       this.#registered.add(id);
     }
   }
@@ -38,6 +39,7 @@ export class HuntGraphResidency {
     const residentLinks=base.residentIds.filter(id=>this.#links.has(id));
     return {...base,residentRegions,residentLinks,peakRegions:this.#peakRegions};
   }
+  get storageMetrics(){return this.#set.storageMetrics;}
   get dirtyChunks(){return this.#set.dirtyChunks;}
   step(budget){return this.#set.step(budget);}
   publish(){

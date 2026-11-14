@@ -4,6 +4,7 @@
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { V2ExternalTerrainLoader } from './src/external-terrain-loader.mjs';
 import { HuntGraphResidency } from './src/hunt-graph-residency.mjs';
+import { HuntStreamingEvidence } from './src/hunt-streaming-evidence.mjs';
 import {
   createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
 } from './src/external-terrain-checkpoint.mjs';
@@ -28,7 +29,7 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
-  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,
+  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,
   targetHuntFireball,isHuntCastTap
 } from './src/hunt-play-runtime.mjs';
 import {
@@ -110,8 +111,9 @@ let playRemovedVoxels=0;
 const playFollowCamera=new HuntFollowCamera();
 let playStepAccumulator=0;
 let playFrameAt=null;
-const playFrameStats=new HuntPlayPerformance();
-const playCpuStats=new HuntPlayPerformance();
+let playFrameStats=new HuntPlayPerformance();
+let playCpuStats=new HuntPlayPerformance();
+let playEvidence=new HuntStreamingEvidence();
 const playKeys=new Set();
 const playPointer={id:null,x:0,z:0};
 let lastHudAt=-Infinity;
@@ -533,12 +535,18 @@ function updatePlayStreaming(now) {
       resetPlayActor();
       return;
     }
+    const beginAt=performance.now();
     residency.begin(job);
+    playEvidence.begin(job,now,performance.now()-beginAt);
     stream.phase='residency-writing';
     stream.startedAt=now;
   }
   if(residency.metrics.transition.phase==='writing') {
-    if(residency.step(512).phase!=='awaiting-mesh')return;
+    const before=residency.metrics.transition.operations;
+    const writeAt=performance.now();
+    const progress=residency.step(512);
+    playEvidence.write(progress.operations-before,performance.now()-writeAt);
+    if(progress.phase!=='awaiting-mesh')return;
     const dirty=residency.dirtyChunks;
     if(dirty.size) {
       const epoch=meshBridge.replace(active.world,dirty);
@@ -550,6 +558,7 @@ function updatePlayStreaming(now) {
   }
   if(stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads) {
     residency.publish();
+    playEvidence.publish(now);
     stream.elapsedMs=now-stream.startedAt;
     stream.phase='ready';
     updateSiteSummary();
@@ -640,7 +649,10 @@ function updatePlayFrame(now) {
   if(!playMode)return;
   if(playFrameAt!==null && !document.hidden) {
     const delta=now-playFrameAt;
-    if(delta>0 && delta<=1000)playFrameStats.recordFrame(delta);
+    if(delta>0 && delta<=1000){
+      playFrameStats.recordFrame(delta);
+      playEvidence.frame(delta);
+    }
     if(playActor && generatedSite && active?.world &&
         !pendingMesh && !restoring) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
@@ -653,7 +665,9 @@ function updatePlayFrame(now) {
         const bounds=residency?playStream.footprint:
           playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
         const allowed=residency?residency.constrainInput(playActor,input):input;
+        const before=playActor;
         playActor=stepHuntExplorer(active.world,playActor,bounds,allowed);
+        playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -679,6 +693,8 @@ function updatePlayFrame(now) {
       '\nSection: '+(playConnected && playActor ? (playStream?.residency?.location(playActor.x,playActor.z)??connectedHuntLocation(playConnected,playActor.z)):'entry')+
       '\nStreaming: '+(playStream?.phase??'—')+
       '\nResidency: '+(playStream?.residency?.metrics.evictions??0)+' evictions / '+(playStream?.residency?.metrics.loads??0)+' loads'+
+      '\nVisited sections: '+playEvidence.snapshot.visitedSections.length+
+      ' · '+playEvidence.snapshot.distanceMetres+'m'+
       '\n10cm terrain tiles: '+(active?.world.microSurfaceCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
@@ -789,6 +805,10 @@ function resetSite() {
     playImpact=null;
     playFireballCount=0;
     playRemovedVoxels=0;
+    playFrameAt=null;
+    playFrameStats=new HuntPlayPerformance();
+    playCpuStats=new HuntPlayPerformance();
+    playEvidence=new HuntStreamingEvidence();
     playFollowCamera.reset();
     resetPlayInput();
     expeditionSite=null;
@@ -1032,7 +1052,12 @@ function frame(now) {
   try {
     updatePlayFrame(now);
     if(playMode)advancePlayFireball(now);
-    if(playMode)updatePlayStreaming(now);
+    if(playMode){
+      updatePlayStreaming(now);
+      if(active?.world)playEvidence.observe({world:active.world,
+        section:playActor?playStream?.residency?.location(playActor.x,playActor.z):null,
+        storage:playStream?.residency?.storageMetrics});
+    }
     if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
@@ -1324,6 +1349,7 @@ if(playMode) {
       performance:{
         frameIntervals:playFrameStats.snapshot,
         frameWorkCpu:playCpuStats.snapshot,
+        streamingEvidence:playEvidence.snapshot,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
@@ -1331,7 +1357,8 @@ if(playMode) {
         initializedCells:loader?.progress.totalCells??null,
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
-        gpuQueue:renderer?.uploadQueueStatistics??null
+        gpuQueue:renderer?.uploadQueueStatistics??null,
+        retainedTerrain:playStream?.residency?.storageMetrics??null
       }
     };
     const blob=new Blob([JSON.stringify(report,null,2)],{
