@@ -81,6 +81,42 @@ export function findHuntRegionCrossing(plan,regionId,actor) {
   return null;
 }
 
+// Presentation only: the camera must not copy the actor's ballistic Y
+// every frame. Small terrain steps and hops are physical actor motion, not
+// whole-world motion. Keep horizontal tracking responsive, hold the last
+// grounded elevation through airborne motion, and ease genuine grade changes.
+export class HuntFollowCamera {
+  #position=null;
+  #groundY=0;
+  #lastAt=null;
+  reset(actor=null) {
+    this.#position=actor?{x:actor.x,y:actor.y,z:actor.z}:null;
+    this.#groundY=actor?.y??0;
+    this.#lastAt=null;
+  }
+  update(actor,now) {
+    if(![actor?.x,actor?.y,actor?.z,now].every(Number.isFinite)) {
+      throw new TypeError('A finite actor position and frame timestamp are required');
+    }
+    if(!this.#position) this.reset(actor);
+    const dt=this.#lastAt===null?0:
+      Math.min(0.05,Math.max(0,(now-this.#lastAt)/1000));
+    this.#lastAt=now;
+    if(actor.grounded) {
+      const delta=actor.y-this.#groundY;
+      // A 35cm dead zone absorbs 10cm surface changes and contact noise.
+      if(Math.abs(delta)>0.35) this.#groundY=actor.y-Math.sign(delta)*0.35;
+    }
+    const horizontal=1-Math.exp(-dt/0.055);
+    this.#position.x+=(actor.x-this.#position.x)*horizontal;
+    this.#position.z+=(actor.z-this.#position.z)*horizontal;
+    const vertical=(this.#groundY-this.#position.y)*(1-Math.exp(-dt/0.28));
+    const maxTravel=2*dt;
+    this.#position.y+=Math.max(-maxTravel,Math.min(maxTravel,vertical));
+    return {...this.#position};
+  }
+}
+
 export class HuntPlayPerformance {
   #samples=[];
   #hitches=0;
