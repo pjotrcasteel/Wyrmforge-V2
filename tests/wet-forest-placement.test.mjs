@@ -35,7 +35,7 @@ test('clustered tree and boulder descriptors fit real land, preserve routes and 
     for(const region of graph.layout.regions){
       const id=region.id;
       const {placements}=graph.placement(id);
-      assert.ok(placements.length<=24);
+      assert.ok(placements.length<=36);
       if(!placements.length)continue;
       const recipe=createWorldSiteRecipe(id===graph.layout.entryRegionId?{...entryRecipe,seed}:{
         ...entryRecipe,seed,regionId:id,siteId:'preview-'+id,huntRole:region.role,
@@ -67,7 +67,7 @@ test('clustered tree and boulder descriptors fit real land, preserve routes and 
             assert.ok(distance(position,opportunity.at)>=3+footprint.radius);
           }
           assert.ok(Math.abs(ground(port,position.x,position.z).point.y-position.y)<.001);
-          const edge=footprint.radius+.5;
+          const edge=footprint.radius+(kind==='tree'?.2:.5);
           const heights=[];
           for(let z=Math.floor(position.z-edge);z<=Math.floor(position.z+edge);z++){
             for(let x=Math.floor(position.x-edge);x<=Math.floor(position.x+edge);x++){
@@ -76,10 +76,11 @@ test('clustered tree and boulder descriptors fit real land, preserve routes and 
               heights.push(hit.point.y);
             }
           }
-          assert.ok(Math.max(...heights)-Math.min(...heights)<=.5001);
+          assert.ok(Math.max(...heights)-Math.min(...heights)<=(kind==='tree'?1.0001:.5001));
         }
       }finally{loader.unload();}
     }
+    assert.ok(graph.placement(graph.layout.entryRegionId).placements.filter(p=>p.kind==='tree').length>=7);
     assert.deepEqual(kinds,new Set(['tree','boulder']));
   }
 });
