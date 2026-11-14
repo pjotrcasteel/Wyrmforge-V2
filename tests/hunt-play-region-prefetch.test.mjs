@@ -19,8 +19,9 @@ test('H08-02B: bounded authored third site streams into the same edited physical
   assert.equal(next.footprint.maxZ-next.footprint.minZ+1,136);
   assert.equal(next.site.id,'region-horde-crossing');
   assert.ok(next.definition.runs.every(run=>run.z<start.footprint.minZ));
-  assert.ok(start.definition.surfaceTiles.length+next.definition.surfaceTiles.length<=1024);
-  const loader=new V2ExternalTerrainLoader(start.definition);
+  const capacity=start.definition.surfaceTiles.length+next.definition.surfaceTiles.length;
+  assert.ok(capacity>1024 && capacity<=2048);
+  const loader=new V2ExternalTerrainLoader(start.definition,{microSurfaceCapacity:capacity});
   try {
     while(!loader.progress.done)loader.loadStep(4096);
     const {world,port}=loader.terrain;
@@ -64,7 +65,8 @@ test('H08-02B: bounded authored third site streams into the same edited physical
     walk(1,initialZ);
     assert.equal(connectedHuntLocation(expanded,actor.z),start.sites[1].id);
     assert.equal(world.get(hit.cell.x,hit.cell.y,hit.cell.z),0);
-    assert.ok(world.microSurfaceCount<=1024);
+    assert.ok(world.microSurfaceCount<=capacity);
+    assert.equal(world.microSurfaceCapacity,capacity);
   }finally{loader.unload();}
 });
 
