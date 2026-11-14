@@ -1,0 +1,18 @@
+export const LIVE_TREES=Object.freeze([
+  Object.freeze({"name":"tree.pine_l.live.0","ax":61,"ay":254,"h":255,"w":128,"x":0,"y":0}),
+  Object.freeze({"name":"tree.pine_l.live.1","ax":61,"ay":254,"h":255,"w":128,"x":128,"y":0}),
+  Object.freeze({"name":"tree.pine_s.live.0","ax":47,"ay":207,"h":208,"w":96,"x":256,"y":0}),
+  Object.freeze({"name":"tree.pine_s.live.1","ax":47,"ay":207,"h":208,"w":96,"x":352,"y":0}),
+  Object.freeze({"name":"tree.oak_l.live.0","ax":47,"ay":159,"h":160,"w":106,"x":448,"y":0}),
+  Object.freeze({"name":"tree.oak_l.live.1","ax":47,"ay":159,"h":160,"w":106,"x":554,"y":0}),
+  Object.freeze({"name":"tree.conifer_l.live.0","ax":45,"ay":156,"h":157,"w":92,"x":660,"y":0}),
+  Object.freeze({"name":"tree.conifer_l.live.1","ax":45,"ay":156,"h":157,"w":92,"x":0,"y":255}),
+  Object.freeze({"name":"tree.conifer_l.live.2","ax":45,"ay":156,"h":157,"w":92,"x":92,"y":255}),
+  Object.freeze({"name":"tree.conifer_l.live.3","ax":45,"ay":156,"h":157,"w":92,"x":184,"y":255}),
+  Object.freeze({"name":"tree.oak_s.live.0","ax":35,"ay":125,"h":126,"w":73,"x":276,"y":255}),
+  Object.freeze({"name":"tree.oak_s.live.1","ax":35,"ay":125,"h":126,"w":73,"x":349,"y":255}),
+  Object.freeze({"name":"tree.conifer_s.live.0","ax":28,"ay":102,"h":103,"w":54,"x":422,"y":255}),
+  Object.freeze({"name":"tree.conifer_s.live.1","ax":28,"ay":102,"h":103,"w":54,"x":476,"y":255}),
+  Object.freeze({"name":"tree.conifer_s.live.2","ax":28,"ay":102,"h":103,"w":54,"x":530,"y":255}),
+  Object.freeze({"name":"tree.conifer_s.live.3","ax":28,"ay":102,"h":103,"w":54,"x":584,"y":255}),
+]);
