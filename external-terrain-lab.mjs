@@ -1101,16 +1101,16 @@ function frame(now) {
         : Math.max(9,Math.min(20,
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
       const followTarget=playMode && playActor
-        ? playFollowCamera.update(playActor,now):null;
+        ? playFollowCamera.update(playActor,now,{level:camera===PLAY_HUNT_CAMERA}):null;
       const followed=followTarget
         ? projectVoxel(followTarget.x,followTarget.y+0.85,followTarget.z,{
           width:canvas.width,height:canvas.height,scale,camera})
         : null;
       const panX=followed
-        ? canvas.width/2-followed.x
+        ? Math.round(canvas.width/2-followed.x)
         : (fit?.panX ?? 0)*viewZoom+viewPanX*pixelRatio;
       const panY=followed
-        ? canvas.height*.51-followed.y
+        ? Math.round(canvas.height*.51-followed.y)
         : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
       const view={width:canvas.width,height:canvas.height,
         scale,panX,panY,camera};
