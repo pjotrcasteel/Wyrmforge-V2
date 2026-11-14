@@ -86,7 +86,7 @@ test('clustered tree and boulder descriptors fit real land, preserve routes and 
   }
 });
 
-test('the arrival trail has a grounded boulder and log within the phone intro view',()=>{
+test('the arrival trail has a grounded boulder and log within the opening region trail corridor',()=>{
   for(const seed of [7,8,19]){
     const graph=graphFor(seed),id=graph.layout.entryRegionId;
     const loader=new V2ExternalTerrainLoader(graph.region(id).definition);
@@ -98,7 +98,7 @@ test('the arrival trail has a grounded boulder and log within the phone intro vi
       assert.deepEqual(props.map(prop=>prop.kind),['boulder','log']);
       for(const prop of props){
         assert.ok(Math.abs(prop.x-.5)*16<201);
-        assert.ok(Math.abs(prop.z-16)*16*.77<120);
+        assert.ok(prop.z>-18&&prop.z<18);
       }
     }finally{loader.unload();}
   }

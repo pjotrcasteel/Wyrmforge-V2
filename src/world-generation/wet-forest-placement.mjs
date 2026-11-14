@@ -85,34 +85,6 @@ export function composeWetForestPlacement(site,region){
   };
 
   const placements=[];
-  if(region.role==='arrival'){
-    const candidates=[];
-    const radius=.75;
-    const entry=translate(layout.topology.entry);
-    for(let z=bounds.minZ;z<=bounds.maxZ;z++){
-      for(let x=bounds.minX;x<=bounds.maxX;x++){
-        const point={x:x+.5,z:z+.5};
-        const y=eligible(point,radius,'boulder');
-        if(y===null)continue;
-        candidates.push({x:point.x,y,z:point.z});
-      }
-    }
-    candidates.sort((a,b)=>distance(a,entry)-distance(b,entry));
-    for(const rock of candidates){
-      const log=candidates.find(point=>distance(point,rock)>=radius*2+clearance&&
-        distance(point,rock)<=8);
-      if(!log)continue;
-      for(const [variant,position] of [['boulder',rock],['log',log]]){
-        placements.push(Object.freeze({
-          id:region.id+':'+seed.toString(16)+':trailside:'+variant,
-          clusterId:region.id+':trailside',kind:'boulder',variant,material:'stone',
-          position:Object.freeze(position),scale:1,seed,
-          footprint:Object.freeze({shape:'circle',radius})
-        }));
-      }
-      break;
-    }
-  }
   // Each accepted cluster gets a deterministic local search around its anchor.
   // Sparse or steep areas can reject an entire cluster without forcing fillers.
   for(let cluster=0;cluster<72&&placements.length<=MAX_PLACEMENTS-2;cluster++){
@@ -137,6 +109,34 @@ export function composeWetForestPlacement(site,region){
       }));
     }
     if(members.length>=2)placements.push(...members.slice(0,MAX_PLACEMENTS-placements.length));
+  }
+  if(region.role==='arrival'&&placements.length<=MAX_PLACEMENTS-2){
+    const candidates=[];
+    const radius=.55;
+    const entry=translate(layout.topology.entry);
+    for(let z=bounds.minZ;z<=bounds.maxZ;z++){
+      for(let x=bounds.minX;x<=bounds.maxX;x++){
+        const point={x:x+.5,z:z+.5};
+        const y=eligible(point,radius,'boulder');
+        if(y===null||placements.some(p=>distance(p.position,point)<p.footprint.radius+radius+clearance))continue;
+        candidates.push({x:point.x,y,z:point.z});
+      }
+    }
+    candidates.sort((a,b)=>distance(a,entry)-distance(b,entry));
+    for(const rock of candidates){
+      const log=candidates.find(point=>distance(point,rock)>=radius*2+clearance&&
+        distance(point,rock)<=8);
+      if(!log)continue;
+      for(const [variant,position] of [['boulder',rock],['log',log]]){
+        placements.push(Object.freeze({
+          id:region.id+':'+seed.toString(16)+':trailside:'+variant,
+          clusterId:region.id+':trailside',kind:'boulder',variant,material:'stone',
+          position:Object.freeze(position),scale:1,seed,
+          footprint:Object.freeze({shape:'circle',radius})
+        }));
+      }
+      break;
+    }
   }
   return Object.freeze({schema:WET_FOREST_PLACEMENT_SCHEMA,regionId:region.id,
     seed,worldRevision:recipe.worldRevision,placements:Object.freeze(placements)});
