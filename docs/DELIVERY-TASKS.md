@@ -161,7 +161,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-02 — Walk seamlessly between regional boundaries **← ACTIVE**
 - **Status:** `IN PROGRESS` — H08-02A first connection; full streaming gate remains open.
-- **Player experience:** walk through multiple Wet Forest regions without a level-selection menu, teleportation into cliffs or a full-world reload.
+- **Player experience:** walk through multiple Wet Forest regions without a level-selection menu, teleportation into cliffs or a full-world reload. Streaming boundaries are invisible technical boundaries inside one Hunt, not World Map nodes or objective gates. The World Map remains the journey-level destination selector.
 - **Technical boundary:** bounded region activation/prefetch and unload around player, one authoritative Voxel V2 occupancy/edit authority, 7m physical seams, stable world coordinates and local edit persistence. **Each streamed region must reuse the actual WorldGeneratorV2 site/geometry/micro-surface pipeline**; the existing prototype `generateWorldExpeditionRegion()` has its own simplified heightfield and is restricted to the diagnostic lab until replaced or adapted through the actual WorldGen contracts. Never substitute that fixture into Play Hunt. Do not instantiate eleven concurrent independent VoxelWorld authorities.
 - **Gate:** physical actor crosses ports both ways; previously edited ground survives unload/revisit; no duplicate/seam colliders; bounded chunks, peak memory and camera/render updates. Record loading and stall metrics.
 - **Evidence:** H08-00 generator seams only; streaming runtime not yet built.
@@ -210,12 +210,19 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 - **Technical boundary:** spatial placement from WorldGen; objects/interaction and clue meaning owned by Gameplay/Narrative. No hardcoded fake objective rewards in terrain.
 - **Gate:** player can reach and interact with planned locations, detours do not force narrow combat tunnels, deterministic save/resume; mobile readability.
 - **Dependencies:** H08-03, H08-05.
-- **Done for now:** At least one traversable optional discovery and one investigation location work in Play Hunt, with interaction and save/restore, without blocking the main route. Stop; the full mystery/story progression belongs to H08-09.
+- **Done for now:** At least one traversable optional discovery and one investigation location work in Play Hunt, with interaction and save/restore, without blocking the main route unless an explicit objective gate is intended. Stop; the full mystery/story progression belongs to H08-09.
+
+#### H08-06A — Objective-controlled passages
+- **Status:** `PLANNED` — direction approved by the player on 2026-11-14; do not implement ahead of streaming.
+- **Delivers:** selected physical gates or magical barriers between areas of the same seamless Hunt, unlocked by investigation, key discovery or completion of a required local objective. Other routes and optional discoveries remain freely explorable.
+- **Boundary:** Gameplay/Narrative owns prerequisite state and unlocks; WorldGen supplies reachable gate/approach positions and passage topology; Voxel V2/World Objects supply physical collision. Distinguish destructible obstacles from progression locks; carving surrounding terrain must not silently bypass a required objective, nor trap the player.
+- **Gate:** locked passage cannot be bypassed through destruction; objective completion opens the passage without a scene reload; state persists after unload/revisit; optional routes remain meaningful and reachable. Combat-controlled variants follow H08-07.
+- **Done for now:** one actual objective-controlled gate works end to end in Play Hunt, including safe traversal after opening and save/revisit. No general quest engine or complete campaign required.
 
 ### H08-07 — Enemy waves and Horde Hunt pacing
 - **Status:** `PLANNED`
 - **Player experience:** Hollowed and the tier's other enemies arrive in increasing numbers; movement, cover and terrain matter rather than a static target range.
-- **Technical boundary:** independent Encounter/AI spawning and movement consumers; WorldGen defines usable spawn spaces, never AI decisions.
+- **Technical boundary:** independent Encounter/AI spawning and movement consumers; WorldGen defines usable spawn spaces, never AI decisions. Encounter completion can satisfy the H08-06A gate prerequisite (e.g. defeating a guardian or surviving a horde); the encounter system does not own terrain or progression state.
 - **Gate:** representative ambush/horde workloads on the actual page, no AI standing in blocked rock or 10cm terrain discrepancies; per-device p95/p99, memory/queues and responsiveness checked.
 - **Dependencies:** H08-02, H08-05.
 - **Done for now:** An actual short horde sequence spawns and moves in Play Hunt, navigating physical space without ghosting, and representative phone frame/hitch data is collected. Stop adding enemy varieties until a task requires them.
@@ -230,9 +237,9 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-09 — Extraction, upgrades and cross-Hunt journey continuity
 - **Status:** `PLANNED`
-- **Player experience:** complete a Hunt, leave via its real extraction, keep rewards/upgrades and choose the next World Map Hunt; clues and biomes connect coherently toward the Wyrm.
+- **Player experience:** complete a Hunt, leave via its real extraction, keep rewards/upgrades and choose the next World Map Hunt; clues and biomes connect coherently toward the Wyrm. Keep the World Map as the strategic branching journey, with locked destinations unlocked by completed Hunt objectives or prerequisite outcomes. Each map node denotes an entire adventure, not a technical streaming region.
 - **Technical boundary:** World Map / Gameplay own story graph, progression and persistent state; WorldGen owns geographical constraints.
-- **Gate:** reproducible 3+ Hunt journey with valid transitions, preserved save/state and nonrandom narrative evidence.
+- **Gate:** reproducible 3+ Hunt journey with valid transitions, preserved save/state and nonrandom narrative evidence; demonstrate at least one initially locked destination becoming selectable through its stated prerequisite.
 - **Dependencies:** H08-06, H08-08.
 - **Done for now:** Finish one Hunt, extract, retain its result and load the next seeded World Map Hunt with a coherent clue/biome transition; a 3-Hunt test path preserves progression. Stop at working integration, not an entire authored campaign.
 
