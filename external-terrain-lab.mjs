@@ -2,7 +2,7 @@
 // Input -> bounded V2 initializer -> authoritative world/port -> existing
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
 import { VERSION, COMMIT } from './src/build-info.mjs';
-import { V2ExternalTerrainLoader } from './src/external-terrain-loader.mjs';
+import { V2ExternalTerrainLoader,V2ExternalTerrainAppend } from './src/external-terrain-loader.mjs';
 import {
   createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
 } from './src/external-terrain-checkpoint.mjs';
@@ -17,7 +17,8 @@ import { createWorldSiteRecipe, siteRadiusForKind } from './src/world-generation
 import {
   generateWorldSite,generateWorldExpeditionRegion,
   createHuntExpeditionRecipe,composeHuntExpeditionPlan,
-  generateConnectedHuntStart,connectedHuntLocation
+  generateConnectedHuntStart,connectedHuntLocation,
+  generateConnectedHuntContinuation,activateConnectedHuntContinuation
 } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
@@ -99,6 +100,7 @@ let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
 let playConnected=null;
+let playStream=null;
 let playView=null;
 let playFireball=null;
 let playImpact=null;
@@ -508,9 +510,42 @@ function paintPlayFireball(ctx,view) {
   }
 }
 
+function streamingBusy() {
+  return ['loading','meshing'].includes(playStream?.phase);
+}
+
+function updatePlayStreaming(now) {
+  if(!playMode || !playStream || !active || !playActor || document.hidden ||
+      errorMessage || !renderer?.ready || pendingMesh || restoring)return;
+  if(playStream.phase==='waiting') {
+    if(playActor.z>playStream.continuation.triggerZ || playFireball || pendingEdit || renderer.pendingUploads)return;
+    playStream.writer=new V2ExternalTerrainAppend(active.world,playStream.continuation.definition,
+      {previousMinZ:playConnected.footprint.minZ});
+    playStream.startedAt=now;
+    playStream.phase='loading';
+  }
+  if(playStream.phase==='loading') {
+    if(!playStream.writer.step(512).done)return;
+    const dirty=playStream.writer.dirtyChunks;
+    const epoch=meshBridge.replace(active.world,dirty);
+    if(!meshBridge.status.busy)throw new Error('Streamed terrain mesh worker did not start');
+    pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
+    playStream.phase='meshing';
+    return;
+  }
+  if(playStream.phase==='meshing' && !pendingEdit && !renderer.pendingUploads) {
+    // Publish traversable bounds only when the complete new geometry is visible.
+    playConnected=activateConnectedHuntContinuation(playConnected,playStream.continuation);
+    playStream.phase='ready';
+    playStream.elapsedMs=now-playStream.startedAt;
+    playStream.writer=null;
+    updateSiteSummary();
+  }
+}
+
 function castPlayFireball(clientX,clientY) {
   if(!playMode || !playActor || !active || !playView || playFireball ||
-      pendingMesh || pendingEdit || restoring || errorMessage ||
+      pendingMesh || pendingEdit || restoring || errorMessage || streamingBusy() ||
       !renderer?.ready || renderer.pendingUploads)return;
   const rect=canvas.getBoundingClientRect();
   if(rect.width<=0 || rect.height<=0)return;
@@ -619,7 +654,8 @@ function updatePlayFrame(now) {
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
       '\nVoxel source: '+(generatedSite?.hash??'—')+
       '\nSection: '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z):'entry')+
-      '\n10cm terrain tiles: '+(playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??0)+
+      '\nStreaming: '+(playStream?.phase??'—')+
+      '\n10cm terrain tiles: '+(active?.world.microSurfaceCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
       '\nFrame p95: '+ms(metrics.p95Ms)+
@@ -722,6 +758,7 @@ function resetSite() {
     renderer.setMeshes([]);
     generatedSite=null;
     playConnected=null;
+    playStream=null;
     playActor=null;
     playView=null;
     playFireball=null;
@@ -798,6 +835,8 @@ function resetSite() {
       }
       if(playMode) {
         playConnected=generateConnectedHuntStart(generatedSite);
+        playStream={phase:'waiting',continuation:generateConnectedHuntContinuation(generatedSite,playConnected),
+          writer:null,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(playConnected.definition,
           {epoch:terrainEpochs.next()});
       } else {
@@ -961,6 +1000,7 @@ function frame(now) {
   try {
     updatePlayFrame(now);
     if(playMode)advancePlayFireball(now);
+    if(playMode)updatePlayStreaming(now);
     if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
@@ -1016,7 +1056,7 @@ function frame(now) {
         paintEncounterGuide({...view});
       }
     }
-    const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
+    const blocked=!active || !renderer?.ready || renderer.pendingUploads || streamingBusy() ||
       Boolean(errorMessage) || Boolean(rendererErrorMessage) || Boolean(restoring) ||
       Boolean(pendingMesh) || Boolean(pendingEdit);
     breachButton.disabled=blocked;
@@ -1234,10 +1274,11 @@ if(playMode) {
         fullWorldGenMaterialShading:true,
         heightContrast:viewCamera.value===PLAY_HUNT_CAMERA,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
-        microSurfaceTiles:playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
+        microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
         connectedWorld:playConnected?{hash:playConnected.hash,planHash:playConnected.planHash,
           sites:playConnected.sites,footprint:playConnected.footprint,seam:playConnected.seam,
-          streaming:playConnected.streaming,currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
+          streaming:playConnected.streaming,eviction:false,residentSites:playConnected.sites.length,
+          prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
       },
       device:{
         userAgent:navigator.userAgent,
