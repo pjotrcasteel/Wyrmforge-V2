@@ -81,3 +81,10 @@ export function generateConnectedHuntMainRoute(entrySite,start) {
   // A single immutable definition per band, never a giant voxel allocation.
   return {route,bands};
 }
+
+import {composeLateralHuntConnector} from './lateral-hunt-connector.mjs';
+export function generateLateralHuntConnector(layout,linkId,westSite,eastSite) {
+  return composeLateralHuntConnector(layout,linkId,{
+    westSite,eastSite,terrainAdapter:toVoxelTerrainDefinition
+  });
+}
