@@ -41,7 +41,7 @@ function clipToRegion(actor,bounds) {
     z:Math.max(bounds.minZ+MARGIN,Math.min(bounds.maxZ+1-MARGIN,actor.z))
   };
 }
-export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0}={},
+export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0,objects=null}={},
   dt=HUNT_FIXED_STEP) {
   if(!bounds || !['minX','maxX','minZ','maxZ'].every(key=>
     Number.isSafeInteger(bounds[key])) || bounds.minX>=bounds.maxX ||
@@ -49,7 +49,7 @@ export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0}={},
     throw new TypeError('A bounded current Hunt region is required');
   }
   // Input and actor collision remain in the actual V2 physics policy.
-  const moved=simulateTerrainActor(world,actor,{moveX,moveZ,dt,moveSpeed:HUNT_WALK_SPEED});
+  const moved=simulateTerrainActor(world,actor,{moveX,moveZ,dt,moveSpeed:HUNT_WALK_SPEED,limitHorizontal:objects?.limitTravel.bind(objects)});
   if(moved.error)return Object.freeze({...moved});
   return Object.freeze(clipToRegion(moved,bounds));
 }

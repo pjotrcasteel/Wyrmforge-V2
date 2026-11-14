@@ -88,7 +88,7 @@ test('Play Hunt activates the connected authored terrain in one loader and retai
   assert.ok(host.includes('playConnected=generateConnectedHuntStart(generatedSite)'));
   assert.ok(host.includes('new V2ExternalTerrainLoader(graph.initialTerrain(initialIds)'));
   assert.ok(host.includes('new V2ExternalTerrainLoader(generatedSite.definition'));
-  assert.ok(host.includes('stepHuntExplorer(active.world,playActor,bounds,allowed)'));
+  assert.ok(host.includes('objects:playStream?.trees.objects'));
   assert.ok(host.includes('connectedWorld:playConnected?'));
   assert.ok(host.includes('const inspectExpedition=!playMode && expeditionMode.checked'));
 });

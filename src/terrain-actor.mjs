@@ -304,7 +304,7 @@ export function recoverTerrainActor(world,position,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED
+  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED,limitHorizontal=null
 }={}) {
   validateWorld(world);
   validatePosition(actor);
@@ -325,8 +325,14 @@ export function simulateTerrainActor(world,actor,{
   const initialSupport=groundProbe(world,actor);
   // Short ledge steps are automatic walking. No player jump mechanic.
   const canStep=initialSupport && actor.vy<=0;
-  const xMotion=moveHorizontal(world,actor,'x',dx,canStep);
-  const zMotion=moveHorizontal(world,xMotion.position,'z',dz,canStep);
+  const advance=(position,axis,distance)=>{
+    const travel=limitHorizontal?.(position,axis,distance)??distance;
+    const motion=moveHorizontal(world,position,axis,travel,canStep);
+    if(travel!==distance)motion.blocked=true;
+    return motion;
+  };
+  const xMotion=advance(actor,'x',dx);
+  const zMotion=advance(xMotion.position,'z',dz);
   let position=zMotion.position;
   const autoHopStarted=Boolean(canStep && (xMotion.hopCandidate || zMotion.hopCandidate) &&
     (actor.hopCooldown??0)<=0);
