@@ -59,69 +59,56 @@ function joinBoundaries(south,north,offsetZ) {
   const runs=[],surfaceTiles=[],columns=new Map();
   let maximumRouteGradeTenths=0,maxY=floor;
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
-  // Height at a continuous ground position. Use the actual authored edge
-  // samples; integer x is the center of a coarse voxel, not a world edge.
-  const edgeHeight=(profile,x)=>{
-    const lo=clamp(Math.floor(x),a.minX,a.maxX);
-    const hi=clamp(lo+1,a.minX,a.maxX);
-    const fraction=clamp(x-lo,0,1);
-    return profile.get(lo).topTenths*(1-fraction)+profile.get(hi).topTenths*fraction;
-  };
-  const heightAt=(x,z)=>{
-    const t=clamp((z-start+1)/(CONNECTOR_DEPTH+1),0,1);
-    const interior=Math.sin(Math.PI*t);
-    const shoulder=clamp((Math.abs(x)-3)/3,0,1);
-    const phase=Math.sin(x*.41+south.recipe.seed*.19)*.24+
-      Math.sin(x*.93+south.recipe.seed*.07)*.09;
-    const blend=clamp(t+phase*interior*shoulder,0,1);
-    const n=edgeHeight(northEdge,x),s=edgeHeight(southEdge,x);
-    // Coherent small variation, not random noise or altered renderer vertices.
-    const wave=Math.sin(x*.73+south.recipe.seed*.19)*1.6+
-      Math.sin(x*.31+z*.91)*.75;
-    return n+(s-n)*blend+wave*interior*shoulder;
-  };
+  // The previous connector interpolated every tenth-metre of the entire
+  // 40m-wide strip. In the north-up Hunt camera, this turned even gentle
+  // slopes into dense dark contour lines. Use broad, rounded landforms
+  // outside the actual traversable road; micrograde only the passage and
+  // its two-cell shoulder. Voxel storage and collision remain authoritative.
+  const phase=(south.recipe.seed%97)*.19;
   for(let x=a.minX;x<=a.maxX;x++){
     const s=southEdge.get(x),n=northEdge.get(x);
     let previous=n.topTenths;
     for(let z=start;z<a.minZ;z++){
       const t=(z-start+1)/(CONNECTOR_DEPTH+1);
       const interior=Math.sin(Math.PI*t);
-      const topTenths=Math.round(heightAt(x,z));
-      // Sample actual 10cm occupancy in coherent 20cm patches. Quantize
-      // the grade *after* sampling, rather than making all 100 microcells
-      // a single flat 1m terrace. Keep the central route's proven support
-      // profile and limit new shoulder refinement to 3 tenths either side
-      // of the existing column, so one sparse parent still represents it.
-      const tops=[];
-      for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++) {
-        const px=x+(Math.floor(ix/2)*2+1)/10-.5;
-        const pz=z+(Math.floor(iz/2)*2+1)/10-.5;
-        const shoulder=clamp((Math.abs(x)-3)/2,0,1);
-        const sampled=heightAt(px,pz);
-        // The protected central path retains the validated coarse grade.
-        tops.push(Math.round(clamp(topTenths+(sampled-topTenths)*shoulder,
-          topTenths-3,topTenths+3)));
+      const delta=s.topTenths-n.topTenths;
+      // Group shallow road risers into a few coherent landings. Limit
+      // each real step to 40cm; preserve both authored endpoints exactly.
+      const steps=Math.max(1,Math.ceil(Math.abs(delta)/4));
+      const grade=n.topTenths+Math.round(delta*Math.round(t*steps)/steps);
+      // One broad curved transition, with monotonic height along each
+      // column; no repeating rows of small waves or sub-cell noise.
+      const curve=.28*Math.sin(x*.16+phase)+.08*Math.cos(x*.29-phase);
+      const u=clamp(t+curve*interior,0,1);
+      const eased=u*u*(3-2*u);
+      const broadTop=10*Math.round((n.y+1)*(1-eased)+(s.y+1)*eased);
+      const shoulder=clamp((Math.abs(x)-3)/3,0,1);
+      const topTenths=shoulder===1?broadTop:
+        shoulder===0?Math.round(grade):
+          5*Math.round((grade*(1-shoulder)+broadTop*shoulder)/5);
+      const y=Math.ceil(topTenths/10)-1;
+      const level=topTenths-y*10;
+      // Follow both authored caps, with a modest asymmetric bend. Do not
+      // widen a narrow trail into a rectangular arena at the seam.
+      const bend=interior*Math.sin(phase)*.65;
+      let left=Math.min(0,Math.round(northRoad.left+
+        (southRoad.left-northRoad.left)*t+bend));
+      let right=Math.max(0,Math.round(northRoad.right+
+        (southRoad.right-northRoad.right)*t+bend));
+      if(left===0 && right===0) {
+        if(bend<0)left=-1;else right=1;
       }
-      const y=Math.ceil(Math.max(...tops)/10)-1;
-      // Voxel V2 sparse surface contract refines only the top parent;
-      // do not claim a partial second parent or create unsupported floors.
-      const levels=tops.map(top=>clamp(top-y*10,1,10));
-      const bend=interior*Math.sin(south.recipe.seed*.47)*.45;
-      // Both authored road endpoints are centered at x=0. Their rounded
-      // boundary caps can be only one cell wide. Never subtract a taper
-      // from that width: the previous fractional interval became empty.
-      // Widen the interior gradually and always preserve the center lane.
-      const left=Math.min(0,Math.floor(northRoad.left+
-        (southRoad.left-northRoad.left)*t+bend-interior*1.3));
-      const right=Math.max(0,Math.ceil(northRoad.right+
-        (southRoad.right-northRoad.right)*t+bend+interior*1.3));
+      // The central lane stays connected, with room to walk alongside it.
+      if(interior>.65) {
+        left=Math.min(-1,left);right=Math.max(1,right);
+      }
       const edgeMaterial=t<.5?n.material:s.material;
       const central=Math.abs(x)<=Math.max(Math.abs(left),Math.abs(right))+1;
       const material=x>=left && x<=right?2:
         (central && edgeMaterial===2?1:edgeMaterial);
       columns.set(x+','+z,{y,material});
       maxY=Math.max(maxY,y);
-      if(levels.some(level=>level!==10))surfaceTiles.push({x,y,z,levels});
+      if(level!==10)surfaceTiles.push({x,y,z,levels:Array(100).fill(level)});
       if(Math.abs(x)<=3)maximumRouteGradeTenths=Math.max(
         maximumRouteGradeTenths,Math.abs(topTenths-previous));
       previous=topTenths;
@@ -149,7 +136,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   return {runs,surfaceTiles,seam:Object.freeze({
     direction:'north',minZ:start,maxZ:a.minZ-1,routeWidthMetres:7,
-    profile:'micrograded-road-v4',
+    profile:'broad-relief-road-v5',
     maximumRouteGradeTenths,depthMetres:CONNECTOR_DEPTH
   }),maxY};
 }
@@ -188,7 +175,7 @@ export function composeConnectedHuntStart(plan,south,{generateSite,createRecipe,
     ]),
     streaming:false,
     // The generated-site hashes remain intact; only the composition is new.
-    hash:'connected-v4-'+south.hash+'-'+north.hash
+    hash:'connected-v5-'+south.hash+'-'+north.hash
   });
 }
 

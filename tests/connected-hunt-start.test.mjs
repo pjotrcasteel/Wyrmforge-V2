@@ -114,7 +114,7 @@ test('both authored region seams retain a continuous dirt road at every row',()=
     const materialAt=(x,z)=>topMaterialAt(
       z<start.footprint.minZ?next.definition:start.definition,x,z);
     for(const seam of [start.seam,next.seam]) {
-      assert.equal(seam.profile,'micrograded-road-v4');
+      assert.equal(seam.profile,'broad-relief-road-v5');
       assert.ok(seam.maximumRouteGradeTenths<=5);
       for(let z=seam.minZ;z<=seam.maxZ;z++) {
         assert.equal(materialAt(0,z),2,'Missing dirt road at seed '+seed+', z='+z);
@@ -128,10 +128,10 @@ test('both authored region seams retain a continuous dirt road at every row',()=
 });
 
 
-// Evaluate the authoritative surface at 10cm resolution, not a screenshot
-// or the metadata. Longitudinal steps must no longer be confined to the
-// synchronized metre rows which produced the horizontal stripe artifact.
-function shoulderRiserDistribution(definition,seam) {
+// Audit stored surface height (not shader appearance). Broad terrain
+// beyond the two-cell graded shoulder must not be made of repeated
+// fractional terraces. Seed 7 previously had thousands of small risers.
+function auditBroadRelief(definition,seam) {
   const tiles=new Map(definition.surfaceTiles.map(t=>[t.x+','+t.z,t]));
   const top=new Map();
   for(const run of definition.runs) {
@@ -141,36 +141,55 @@ function shoulderRiserDistribution(definition,seam) {
       if(!top.has(key)||top.get(key)<run.y)top.set(key,run.y);
     }
   }
-  const height=(mx,mz)=>{
-    const x=Math.floor(mx/10),z=Math.floor(mz/10);
-    const tile=tiles.get(x+','+z);
-    const y=top.get(x+','+z);
-    return y*10+(tile?tile.levels[(mz-z*10)*10+mx-x*10]:10);
-  };
-  let interior=0,coarse=0,mixedTiles=0;
-  for(const t of tiles.values())if(t.z>=seam.minZ && t.z<=seam.maxZ &&
-      Math.abs(t.x)>=5 && new Set(t.levels).size>1)mixedTiles++;
-  for(let mz=seam.minZ*10+1;mz<(seam.maxZ+1)*10;mz++) {
-    for(let mx=-200;mx<200;mx++){
-      if(Math.abs(Math.floor(mx/10))<5)continue;
-      const delta=Math.abs(height(mx,mz)-height(mx,mz-1));
-      if(delta<1 || delta>5)continue; // natural cliffs are not the defect
-      if(mz%10===0)coarse++;else interior++;
+  let outerMicroTiles=0,outerRisers=0,outerFineRisers=0;
+  const elevations=new Set();
+  for(let x=-20;x<20;x++){
+    if(Math.abs(x)<6)continue;
+    let previous=null,previousSign=0;
+    for(let z=seam.minZ;z<=seam.maxZ;z++) {
+      const y=top.get(x+','+z);
+      assert.ok(Number.isInteger(y));
+      const tile=tiles.get(x+','+z);
+      if(tile)outerMicroTiles++;
+      const h=y*10+(tile?tile.levels[0]:10);
+      elevations.add(h);
+      if(previous!==null && h!==previous) {
+        outerRisers++;
+        const delta=h-previous,sign=Math.sign(delta);
+        if(Math.abs(delta)<10)outerFineRisers++;
+        assert.ok(previousSign===0||previousSign===sign,
+          'outer relief should not oscillate along the connector');
+        previousSign=sign;
+      }
+      previous=h;
     }
   }
-  return {interior,coarse,mixedTiles,interiorFraction:interior/(interior+coarse)};
+  let roadRisers=0,previousRoad=null;
+  for(let z=seam.minZ;z<=seam.maxZ;z++){
+    const tile=tiles.get('0,'+z);
+    const h=top.get('0,'+z)*10+(tile?tile.levels[0]:10);
+    if(previousRoad!==null && h!==previousRoad){
+      roadRisers++;
+      assert.ok(Math.abs(h-previousRoad)<=4,'road landings remain traversable');
+    }
+    previousRoad=h;
+  }
+  return {outerMicroTiles,outerRisers,outerFineRisers,roadRisers,elevationCount:elevations.size};
 }
 
-test('both seam shoulders distribute physical risers inside 1m tiles, not only on synchronized metre boundaries',t=>{
+test('both joins have broad physical landforms without dense fractional shoulder contours',t=>{
   for(const seed of [7,19,101,267]){
     const authored=entry(seed);
     const start=generateConnectedHuntStart(authored);
     const next=generateConnectedHuntContinuation(authored,start);
     for(const [definition,seam] of [[start.definition,start.seam],[next.definition,next.seam]]){
-      const metric=shoulderRiserDistribution(definition,seam);
+      const metric=auditBroadRelief(definition,seam);
       t.diagnostic(JSON.stringify({seed,z:seam.minZ,...metric}));
-      assert.ok(metric.mixedTiles>=20,'shoulders require real varied microcell occupancy');
-      assert.ok(metric.interiorFraction>=.25,'small risers must not be concentrated at whole-metre rows');
+      assert.equal(metric.outerMicroTiles,0);
+      assert.equal(metric.outerFineRisers,0);
+      assert.ok(metric.elevationCount>=2,'do not flatten all natural relief');
+      assert.ok(metric.outerRisers<=100,'avoid repeated elevation bands');
+      if(seed===7)assert.ok(metric.roadRisers<=5,'the reported seam needs fewer repeated road risers');
     }
   }
 });
