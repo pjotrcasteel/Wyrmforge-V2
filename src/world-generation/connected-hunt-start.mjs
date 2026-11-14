@@ -71,7 +71,11 @@ function joinBoundaries(south,north,offsetZ) {
     for(let z=start;z<a.minZ;z++){
       const t=(z-start+1)/(CONNECTOR_DEPTH+1);
       const interior=Math.sin(Math.PI*t);
-      const grade=n.topTenths+(s.topTenths-n.topTenths)*t;
+      const delta=s.topTenths-n.topTenths;
+      // Group shallow road risers into a few coherent landings. Limit
+      // each real step to 40cm; preserve both authored endpoints exactly.
+      const steps=Math.max(1,Math.ceil(Math.abs(delta)/4));
+      const grade=n.topTenths+Math.round(delta*Math.round(t*steps)/steps);
       // One broad curved transition, with monotonic height along each
       // column; no repeating rows of small waves or sub-cell noise.
       const curve=.28*Math.sin(x*.16+phase)+.08*Math.cos(x*.29-phase);
