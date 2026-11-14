@@ -56,6 +56,12 @@ export class HuntTreePreview {
 
 // A world-anchored scenic canopy behind the WebGL terrain. The repeating
 // patch is drawn once and has no terrain, object or collision representation.
+// Wet Forest's scenic shelf sits near the playable grass elevation. Keep
+// this datum fixed so walking and Fireball edits never shift the scenery.
+export function forestBackdropOrigin(view){
+  return projectVoxel(0,5,0,view);
+}
+
 export function createForestBackdrop(image){
   const tile=document.createElement('canvas');
   tile.width=384;
@@ -81,7 +87,7 @@ export function createForestBackdrop(image){
       pattern=ctx.createPattern(tile,'repeat');
     }
     ctx.save();
-    const origin=projectVoxel(0,0,0,view);
+    const origin=forestBackdropOrigin(view);
     ctx.translate(Math.round(origin.x),Math.round(origin.y));
     const scale=view.scale/16;
     ctx.scale(scale,scale);

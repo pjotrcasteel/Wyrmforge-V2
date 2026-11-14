@@ -4,6 +4,7 @@ import {
   projectVoxel,WebGLVoxelView,
   WEBGL_V2_VERTEX_SHADER_SOURCE,WEBGL_V2_FRAGMENT_SHADER_SOURCE
 } from '../src/webgl-voxel-view.mjs';
+import { forestBackdropOrigin } from '../src/hunt-tree-preview.mjs';
 import { VoxelWorld } from '../src/voxel-world.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 
@@ -75,4 +76,15 @@ test('WebGL2 shader exports include the complete fast Hunt and legacy paths',()=
   // GLSL ES reserves "patch" for tessellation. It is not a JavaScript
   // syntax error, so the real shader compiler runs separately in CI.
   assert.doesNotMatch(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/\bpatch\b/);
+});
+
+test('Wet Forest backdrop projects at a fixed raised world elevation',()=>{
+  const view={...camera,camera:'hunt',scale:16};
+  const ground=projectVoxel(0,0,0,view);
+  const forest=forestBackdropOrigin(view);
+  assert.equal(forest.x,ground.x);
+  assert.ok(Math.abs(ground.y-forest.y-51.2)<1e-9);
+  const panned=forestBackdropOrigin({...view,panX:60,panY:-36});
+  assert.equal(panned.x-forest.x,45);
+  assert.equal(panned.y-forest.y,-28);
 });
