@@ -7,7 +7,7 @@ import {
 } from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import {
-  HUNT_FIXED_STEP,HuntPlayPerformance,spawnHuntExplorer,
+  HUNT_FIXED_STEP,HuntPlayPerformance,HuntFollowCamera,spawnHuntExplorer,
   stepHuntExplorer,findHuntRegionCrossing
 } from '../src/hunt-play-runtime.mjs';
 import { actorOverlapsTerrain } from '../src/terrain-actor.mjs';
@@ -151,4 +151,49 @@ test('H08-01 mobile visual/performance fix changes only the playable route',()=>
   assert.match(host,/wyrmforge\.hunt-play-report\.v1/);
   assert.match(host,/source:'request-animation-frame-local'|frameIntervals:playFrameStats\.snapshot/);
   assert.match(host,/gpuQueue:renderer\?\.uploadQueueStatistics/);
+});
+
+
+test('H08-01 camera ignores micro-step bob and automatic airborne hops',()=>{
+  const follow=new HuntFollowCamera();
+  const actor=Object.freeze({x:0,y:4,z:0,grounded:true});
+  follow.reset(actor);
+  follow.update(actor,0);
+  for(let i=1;i<=120;i++) {
+    const a={x:i/30,y:4+(i%2)*.1,z:0,grounded:true};
+    const target=follow.update(a,i*1000/60);
+    assert.equal(target.y,4,'10cm ground variations must not shake the world');
+  }
+  for(let i=121;i<=160;i++){
+    const a={x:4,y:4+Math.sin((i-120)*Math.PI/40)*.9,z:0,grounded:false};
+    assert.equal(follow.update(a,i*1000/60).y,4,
+      'ballistic actor hops must not lift the camera');
+  }
+  assert.equal(actor.y,4);
+});
+
+test('H08-01 real elevation changes ease smoothly and respawn snaps cleanly',()=>{
+  const follow=new HuntFollowCamera();
+  follow.update({x:0,y:4,z:0,grounded:true},0);
+  let previous=4;
+  for(let i=1;i<=180;i++){
+    const target=follow.update({x:3,y:6,z:2,grounded:true},i*1000/60);
+    assert.ok(target.y>=previous && target.y-previous<=2/60+1e-8);
+    previous=target.y;
+  }
+  assert.ok(previous>5.60 && previous<=5.65);
+  const resumed=follow.update({x:3,y:6,z:2,grounded:true},60000);
+  assert.ok(resumed.y-previous<=.1+1e-8,'returning from a background tab cannot snap the view');
+  follow.reset({x:-4,y:2,z:8,grounded:true});
+  assert.deepEqual(follow.update({x:-4,y:2,z:8,grounded:true},61000),
+    {x:-4,y:2,z:8});
+});
+
+test('Play Hunt renders a separate smoothed follow target, not the raw actor height',()=>{
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  assert.ok(host.includes('playFollowCamera.update(playActor,now)'));
+  assert.ok(host.includes('projectVoxel(followTarget.x,followTarget.y+0.85,followTarget.z'));
+  assert.ok(!host.includes('projectVoxel(playActor.x,playActor.y+0.85,playActor.z'));
+  assert.ok(host.includes('playFollowCamera.reset(playActor)'));
+  assert.ok(host.includes('projectActorDiagnostic(playActor,view)'));
 });
