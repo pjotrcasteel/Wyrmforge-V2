@@ -68,15 +68,27 @@ function joinBoundaries(south,north,offsetZ) {
       // protected route. Low-amplitude coherent variation, zero at the
       // source edges; route heights and their traversal audit stay intact.
       const shoulder=Math.min(1,Math.max(0,(Math.abs(x)-3)/3));
+      // Offset the grade phase per lateral column rather than quantizing
+      // an entire 40m-wide row at the same interpolation point. Both
+      // endpoints and the protected route still use their original grade.
+      const phase=Math.sin(x*.41+south.recipe.seed*.19)*.24+
+        Math.sin(x*.93+south.recipe.seed*.07)*.09;
+      const blend=Math.min(1,Math.max(0,t+phase*interior*shoulder));
       const wave=Math.sin(x*.73+south.recipe.seed*.19)*1.6+
         Math.sin(x*.31+z*.91)*.75;
-      const topTenths=Math.round(n.topTenths+(s.topTenths-n.topTenths)*t+
+      const topTenths=Math.round(n.topTenths+(s.topTenths-n.topTenths)*blend+
         wave*interior*shoulder);
       const y=Math.ceil(topTenths/10)-1;
       const level=topTenths-y*10;
-      const bend=interior*Math.sin(south.recipe.seed*.47)*1.2;
-      const left=northRoad.left+(southRoad.left-northRoad.left)*t+bend+interior*.6;
-      const right=northRoad.right+(southRoad.right-northRoad.right)*t+bend-interior*.6;
+      const bend=interior*Math.sin(south.recipe.seed*.47)*.45;
+      // Both authored road endpoints are centered at x=0. Their rounded
+      // boundary caps can be only one cell wide. Never subtract a taper
+      // from that width: the previous fractional interval became empty.
+      // Widen the interior gradually and always preserve the center lane.
+      const left=Math.min(0,Math.floor(northRoad.left+
+        (southRoad.left-northRoad.left)*t+bend-interior*1.3));
+      const right=Math.max(0,Math.ceil(northRoad.right+
+        (southRoad.right-northRoad.right)*t+bend+interior*1.3));
       const edgeMaterial=t<.5?n.material:s.material;
       const central=Math.abs(x)<=Math.max(Math.abs(left),Math.abs(right))+1;
       const material=x>=left && x<=right?2:
@@ -111,7 +123,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   return {runs,surfaceTiles,seam:Object.freeze({
     direction:'north',minZ:start,maxZ:a.minZ-1,routeWidthMetres:7,
-    profile:'staggered-edge-v2',
+    profile:'continuous-road-v3',
     maximumRouteGradeTenths,depthMetres:CONNECTOR_DEPTH
   }),maxY};
 }
@@ -150,7 +162,7 @@ export function composeConnectedHuntStart(plan,south,{generateSite,createRecipe,
     ]),
     streaming:false,
     // The generated-site hashes remain intact; only the composition is new.
-    hash:'connected-v2-'+south.hash+'-'+north.hash
+    hash:'connected-v3-'+south.hash+'-'+north.hash
   });
 }
 

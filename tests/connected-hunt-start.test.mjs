@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
-import { generateWorldSite,generateConnectedHuntStart,connectedHuntLocation } from '../src/world-generation/index.mjs';
+import { generateWorldSite,generateConnectedHuntStart,generateConnectedHuntContinuation,connectedHuntLocation } from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import { spawnTerrainActor,actorOverlapsTerrain } from '../src/terrain-actor.mjs';
 import { stepHuntExplorer,HUNT_FIXED_STEP } from '../src/hunt-play-runtime.mjs';
@@ -91,4 +91,38 @@ test('Play Hunt activates the connected authored terrain in one loader and retai
   assert.ok(host.includes('playConnected?.footprint??generatedSite.layout.footprint,input'));
   assert.ok(host.includes('connectedWorld:playConnected?'));
   assert.ok(host.includes('const inspectExpedition=!playMode && expeditionMode.checked'));
+});
+
+
+// Audit the actual stored top material, not the route descriptor: a
+// walkable grass gap still passes physics tests but disconnects the road.
+function topMaterialAt(definition,x,z) {
+  let y=-Infinity,material=0;
+  for(const run of definition.runs) {
+    if(run.z===z && x>=run.x && x<run.x+run.length && run.y>y) {
+      y=run.y;material=run.material;
+    }
+  }
+  return material;
+}
+
+test('both authored region seams retain a continuous dirt road at every row',()=>{
+  for(const seed of [7,19,101,267]) {
+    const authored=entry(seed);
+    const start=generateConnectedHuntStart(authored);
+    const next=generateConnectedHuntContinuation(authored,start);
+    const materialAt=(x,z)=>topMaterialAt(
+      z<start.footprint.minZ?next.definition:start.definition,x,z);
+    for(const seam of [start.seam,next.seam]) {
+      assert.equal(seam.profile,'continuous-road-v3');
+      assert.ok(seam.maximumRouteGradeTenths<=5);
+      for(let z=seam.minZ;z<=seam.maxZ;z++) {
+        assert.equal(materialAt(0,z),2,'Missing dirt road at seed '+seed+', z='+z);
+        assert.ok([-1,1].some(x=>materialAt(x,z)===2),
+          'Road must not shrink to an isolated one-cell strip');
+      }
+      assert.equal(materialAt(0,seam.minZ-1),2,'Northern authored road endpoint');
+      assert.equal(materialAt(0,seam.maxZ+1),2,'Southern authored road endpoint');
+    }
+  }
 });
