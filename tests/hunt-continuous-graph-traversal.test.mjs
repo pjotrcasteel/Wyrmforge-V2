@@ -12,10 +12,10 @@ import {spawnHuntExplorer,stepHuntExplorer,HUNT_FIXED_STEP,HUNT_WALK_SPEED} from
 // The diagnostic navigation audit supplies waypoints only. Actual movement
 // still goes through normal fixed-step controls, collision and graph residency.
 // GPU publication is represented by an explicit acknowledgement after writes.
-test('H08-02B: one wizard walks the complete branching loop and returns to the edited entry', t=>{
+for(const seed of [7,8,19])test('H08-02B: uninterrupted branching loop and retained entry crater, seed '+seed, t=>{
   const entry=generateWorldSite(createWorldSiteRecipe({
     regionId:'starter-region',siteId:'preview-wet-forest',encounterId:'preview-001',
-    kind:'wet-forest',seed:7,chunkEdge:32}));
+    kind:'wet-forest',seed,chunkEdge:32}));
   const graph=generateAuthoredHuntTerrainGraph(entry);
   const start=generateConnectedHuntStart(entry);
   const initial=start.sites.map(s=>s.id);
@@ -63,6 +63,7 @@ test('H08-02B: one wizard walks the complete branching loop and returns to the e
       }
       assert.ok(stream.metrics.residentRegions.length<=3);
       assert.ok(stream.metrics.residentLinks.length<=2);
+      assert.ok(stream.storageMetrics.definitions<=5,'evicted authored definitions were not released');
       assert.ok(stream.metrics.residentIds.includes(stream.location(actor.x,actor.z)));
     };
     const walk=(x,z,label)=>{
@@ -108,6 +109,8 @@ test('H08-02B: one wizard walks the complete branching loop and returns to the e
     assert.deepEqual(port.exportJournal(),journal);
     assert.equal(loader.terrain.world,world);
     assert.ok(metres>400);
+    assert.ok(stream.metrics.registered>stream.storageMetrics.definitions);
+    assert.ok(stream.storageMetrics.definitions<=5);
     assert.ok(stream.metrics.evictions>0&&streamWrites>0);
     t.diagnostic(JSON.stringify({ticks,metres,streamWrites,...stream.metrics}));
   }finally{loader.unload();}
