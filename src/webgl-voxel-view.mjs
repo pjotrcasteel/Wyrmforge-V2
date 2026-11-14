@@ -57,6 +57,7 @@ uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform bool uFastHuntMode;
 uniform bool uHuntHeightContrast;
+uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
 
@@ -93,6 +94,14 @@ vec3 grassAlbedo(vec3 world) {
 }
 
 void main() {
+  // Exposed lower stone skirts visually recede into the woodland canvas.
+  // Keep upward surfaces and upper cliff rims opaque for terrain readability.
+  if (uWoodlandBackdrop && abs(vMaterial - 3.0) < 0.5 && abs(vNormal.y) < 0.5) {
+    float coverage = smoothstep(0.0, 3.0, vWorld.y);
+    vec3 cell = floor(vWorld * 12.0 + 0.001);
+    float threshold = fract(dot(cell, vec3(0.75488, 0.56984, 0.43829)));
+    if (coverage <= threshold) discard;
+  }
   // The early mobile Play Hunt has no authored texture atlas, lighting,
   // normal or ORM assets. Do not shade every phone pixel with the entire
   // optional material pipeline when exploring this terrain prototype.
@@ -617,6 +626,7 @@ export class WebGLVoxelView {
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
       fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
       huntHeightContrast: gl.getUniformLocation(this.#program, 'uHuntHeightContrast'),
+      woodlandBackdrop: gl.getUniformLocation(this.#program, 'uWoodlandBackdrop'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
       terrainNormal: gl.getUniformLocation(this.#program, 'uTerrainNormal'),
@@ -813,6 +823,7 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
     gl.uniform1i(this.#uniforms.fastHuntMode,this.#fastHuntMode?1:0);
     gl.uniform1i(this.#uniforms.huntHeightContrast,huntHeightContrast?1:0);
+    gl.uniform1i(this.#uniforms.woodlandBackdrop,this.#transparentBackground&&camera==='hunt'?1:0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];
     const layers = keys.map(key => {
