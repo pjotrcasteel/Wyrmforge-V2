@@ -84,11 +84,11 @@ test('H08-02B: bounded authored third site streams into the same edited physical
   }finally{loader.unload();}
 });
 
-test('Play Hunt publishes the extended bounds only after worker and GPU readiness',()=>{
+test('Play Hunt publishes rolling bounds only after worker and GPU readiness',()=>{
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
-  assert.ok(host.includes('new V2ExternalTerrainAppend(active.world,'));
-  assert.ok(host.includes('playStream.writer.step(512)'));
-  assert.ok(host.includes("playStream.phase==='meshing' && !pendingEdit && !renderer.pendingUploads"));
-  assert.ok(host.includes('activateConnectedHuntContinuation(playConnected,playStream.continuation)'));
-  assert.ok(host.includes('playConnected?.footprint??generatedSite.layout.footprint,input'));
+  assert.ok(host.includes('new HuntMainRouteResidency(active.world,stream.bands)'));
+  assert.ok(host.includes('residency.step(512)'));
+  assert.ok(host.includes("stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads"));
+  assert.ok(host.includes('residency.publish()'));
+  assert.ok(host.includes('residency?.bounds(playActor.z,playConnected.footprint)'));
 });
