@@ -3,6 +3,7 @@
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
 import { VERSION, COMMIT } from './src/build-info.mjs';
 import { V2ExternalTerrainLoader,V2ExternalTerrainAppend } from './src/external-terrain-loader.mjs';
+import { V2TerrainBandResidency } from './src/terrain-band-residency.mjs';
 import {
   createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
 } from './src/external-terrain-checkpoint.mjs';
@@ -511,7 +512,7 @@ function paintPlayFireball(ctx,view) {
 }
 
 function streamingBusy() {
-  return ['loading','meshing'].includes(playStream?.phase);
+  return ['loading','meshing','residency-writing','residency-meshing'].includes(playStream?.phase);
 }
 
 function updatePlayStreaming(now) {
@@ -539,7 +540,52 @@ function updatePlayStreaming(now) {
     playStream.phase='ready';
     playStream.elapsedMs=now-playStream.startedAt;
     playStream.writer=null;
+    playStream.residency=new V2TerrainBandResidency(active.world,generatedSite.definition);
     updateSiteSummary();
+  }
+  updateEntryResidency(now);
+}
+
+// First live residency slice: evict only the original entry, leaving the
+// two authored northern sites and both physical joins untouched. Hysteresis
+// keeps the work away from the actor and avoids repeated edge thrashing.
+function updateEntryResidency(now) {
+  const stream=playStream,band=stream.residency;
+  if(!band)return;
+  if(stream.phase==='ready') {
+    if(playFireball || pendingEdit || renderer.pendingUploads)return;
+    const distance=generatedSite.layout.footprint.minZ-playActor.z;
+    if(band.progress.phase==='resident' && distance>=65 && !stream.respawnPending) {
+      band.beginEviction();
+      stream.entryVisible=false;
+      stream.residencyAction='evict';
+    } else if(band.progress.phase==='evicted' && (distance<=50 || stream.respawnPending)) {
+      band.beginReload();
+      stream.residencyAction='reload';
+    } else return;
+    stream.residencyStartedAt=now;
+    stream.phase='residency-writing';
+  }
+  if(stream.phase==='residency-writing') {
+    if(!band.step(512).done)return;
+    const dirty=band.dirtyChunks;
+    const epoch=meshBridge.replace(active.world,dirty);
+    if(!meshBridge.status.busy)throw new Error('Residency mesh worker did not start');
+    pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
+    stream.phase='residency-meshing';
+    return;
+  }
+  if(stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads) {
+    stream.residencyElapsedMs=now-stream.residencyStartedAt;
+    stream.phase='ready';
+    if(stream.residencyAction==='reload') {
+      stream.entryVisible=true;
+      stream.reloads++;
+      if(stream.respawnPending) {
+        stream.respawnPending=false;
+        resetPlayActor();
+      }
+    } else stream.evictions++;
   }
 }
 
@@ -601,6 +647,11 @@ function resetPlayInput() {
 }
 function resetPlayActor() {
   if(!playMode || !generatedSite || !active?.world)return;
+  if(playStream?.entryVisible===false) {
+    playStream.respawnPending=true;
+    resetPlayInput();
+    return;
+  }
   // Use the EXACT authored entry and physical footprint returned by the
   // same WorldGeneratorV2 that powers the WorldGen lab. The Voxel V2 actor
   // never spawns inside a synthetic expedition-region flat-height fixture.
@@ -627,6 +678,12 @@ function updatePlayFrame(now) {
         !pendingMesh && !restoring) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
       const input=playMovementInput();
+      // The original footprint remains stable for the journey. Do not step
+      // onto an evicted entry before its collision and GPU meshes are ready.
+      if(playStream?.entryVisible===false &&
+          playActor.z>=generatedSite.layout.footprint.minZ-4) {
+        input.moveZ=Math.min(0,input.moveZ);
+      }
       let steps=0;
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
         playActor=stepHuntExplorer(active.world,playActor,
@@ -655,6 +712,7 @@ function updatePlayFrame(now) {
       '\nVoxel source: '+(generatedSite?.hash??'—')+
       '\nSection: '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z):'entry')+
       '\nStreaming: '+(playStream?.phase??'—')+
+      '\nResidency: '+(playStream?.evictions??0)+' evictions / '+(playStream?.reloads??0)+' reloads'+
       '\n10cm terrain tiles: '+(active?.world.microSurfaceCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
@@ -836,7 +894,8 @@ function resetSite() {
       if(playMode) {
         playConnected=generateConnectedHuntStart(generatedSite);
         playStream={phase:'waiting',continuation:generateConnectedHuntContinuation(generatedSite,playConnected),
-          writer:null,startedAt:null,elapsedMs:null};
+          writer:null,startedAt:null,elapsedMs:null,residency:null,entryVisible:true,
+          evictions:0,reloads:0,respawnPending:false,residencyElapsedMs:null};
         loader=new V2ExternalTerrainLoader(playConnected.definition,
           {epoch:terrainEpochs.next(),microSurfaceCapacity:Math.max(1024,
             playConnected.definition.surfaceTiles.length+playStream.continuation.definition.surfaceTiles.length)});
@@ -1278,7 +1337,11 @@ if(playMode) {
         microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
         connectedWorld:playConnected?{hash:playConnected.hash,planHash:playConnected.planHash,
           sites:playConnected.sites,footprint:playConnected.footprint,seam:playConnected.seam,
-          streaming:playConnected.streaming,eviction:false,residentSites:playConnected.sites.length,
+          streaming:playConnected.streaming,eviction:playStream?.evictions>0,
+          residentSites:playConnected.sites.length-(playStream?.entryVisible===false?1:0),
+          residency:{entryVisible:playStream?.entryVisible??true,evictions:playStream?.evictions??0,
+            reloads:playStream?.reloads??0,elapsedMs:playStream?.residencyElapsedMs??null,
+            removedCells:playStream?.residency?.progress.removedCells??0},
           prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
       },
       device:{
