@@ -89,13 +89,15 @@ export function findHuntRegionCrossing(plan,regionId,actor) {
 export class HuntFollowCamera {
   #position=null;
   #groundY=0;
+  #levelY=0;
   #lastAt=null;
   reset(actor=null) {
     this.#position=actor?{x:actor.x,y:actor.y,z:actor.z}:null;
     this.#groundY=actor?.y??0;
+    this.#levelY=this.#groundY;
     this.#lastAt=null;
   }
-  update(actor,now) {
+  update(actor,now,{level=false}={}) {
     if(![actor?.x,actor?.y,actor?.z,now].every(Number.isFinite)) {
       throw new TypeError('A finite actor position and frame timestamp are required');
     }
@@ -114,7 +116,7 @@ export class HuntFollowCamera {
     const vertical=(this.#groundY-this.#position.y)*(1-Math.exp(-dt/0.28));
     const maxTravel=2*dt;
     this.#position.y+=Math.max(-maxTravel,Math.min(maxTravel,vertical));
-    return {...this.#position};
+    return {...this.#position,y:level?this.#levelY:this.#position.y};
   }
 }
 

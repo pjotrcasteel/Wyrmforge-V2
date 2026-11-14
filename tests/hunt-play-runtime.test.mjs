@@ -191,9 +191,22 @@ test('H08-01 real elevation changes ease smoothly and respawn snaps cleanly',()=
 
 test('Play Hunt renders a separate smoothed follow target, not the raw actor height',()=>{
   const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
-  assert.ok(host.includes('playFollowCamera.update(playActor,now)'));
+  assert.ok(host.includes('playFollowCamera.update(playActor,now,{level:camera===PLAY_HUNT_CAMERA})'));
   assert.ok(host.includes('projectVoxel(followTarget.x,followTarget.y+0.85,followTarget.z'));
   assert.ok(!host.includes('projectVoxel(playActor.x,playActor.y+0.85,playActor.z'));
   assert.ok(host.includes('playFollowCamera.reset(playActor)'));
   assert.ok(host.includes('projectActorDiagnostic(playActor,view)'));
+});
+
+test('north-up Hunt locks camera elevation while tracking horizontal movement',()=>{
+  const follow=new HuntFollowCamera();
+  follow.reset({x:0,y:4,z:0});
+  for(let i=0;i<100;i++){
+    const target=follow.update({x:i/10,y:4+(i%3)*.6,z:-i/10,grounded:true},
+      i*1000/60,{level:true});
+    assert.equal(target.y,4);
+    if(i>0)assert.ok(target.x>0&&target.z<0);
+  }
+  follow.reset({x:0,y:7,z:0});
+  assert.equal(follow.update({x:0,y:7,z:0},2000,{level:true}).y,7);
 });
