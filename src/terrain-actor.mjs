@@ -304,12 +304,13 @@ export function recoverTerrainActor(world,position,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,dt=1/60
+  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED
 }={}) {
   validateWorld(world);
   validatePosition(actor);
   if (!Number.isFinite(dt) || dt<=0 || dt>1/20 ||
       !Number.isFinite(actor.vy) ||
+      !Number.isFinite(moveSpeed) || moveSpeed<=0 || moveSpeed>6 ||
       ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1)) {
     throw new RangeError('Actor inputs or fixed-step delta outside supported bounds');
   }
@@ -319,8 +320,8 @@ export function simulateTerrainActor(world,actor,{
   }
   const length=Math.hypot(moveX,moveZ);
   const divisor=Math.max(1,length);
-  const dx=moveX/divisor*ACTOR_MOVE_SPEED*dt;
-  const dz=moveZ/divisor*ACTOR_MOVE_SPEED*dt;
+  const dx=moveX/divisor*moveSpeed*dt;
+  const dz=moveZ/divisor*moveSpeed*dt;
   const initialSupport=groundProbe(world,actor);
   // Short ledge steps are automatic walking. No player jump mechanic.
   const canStep=initialSupport && actor.vy<=0;
