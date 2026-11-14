@@ -246,6 +246,28 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 - **Dependencies:** H08-04, H08-02., W08-99 (World Generation handoff).
 - **Done for now:** The player walks naturally among real visible collidable tree trunks, rocks and logs on phone; object identity persists and representative instance counts satisfy frame/collision budgets. Stop; full destruction/final art belong to H08-08/R10-01.
 
+#### Owner follow-up — continuous woodland crowns (2026-11-14)
+
+IMG_6703 on build `b6f110c` still showed clipped backdrop trees and a bare
+central arrival edge. The previous tiled tree image and separate rim trees
+are replaced by a ground-only backdrop and one world-anchored scenic tree
+field. Whole sprites share depth ordering with the other trees and actor.
+Their original alpha is retained; no sprite fading or terrain-edge clipping.
+
+Scenic roots remain outside **all** planned region and connector footprints,
+including nonresident regions. Only the current camera window is cached,
+expanded for crown width/height so roots off-screen do not discard visible
+trees. This changes presentation only, with no voxel, path, collision or
+Fireball targeting changes. The closed arrival edge no longer has an
+artificial empty strip; actual connector corridors remain clear.
+
+Validation: automated regressions cover seeds 7/8/19, every region/link,
+full-sprite drawing, off-screen crowns, pan/zoom/revisit stability and bounded
+view counts. CPU Canvas renders of the actual scenic code over an approximated
+seed-7 terrain surface were inspected at entry, east, west and north. These are
+not WebGL or iPhone performance evidence. Actual device visual acceptance and
+H08-05 physical-object completion remain open.
+
 ### H08-06 — Exploratory ruins, secrets and investigations
 - **GitHub Issue:** [#161](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/161)
 - **Status:** `PLANNED`
