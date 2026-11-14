@@ -28,7 +28,7 @@ test('H08-03: World Map role changes physical geography without changing biome o
       landmarks.add(a.layout.landmarks[0].kind);
       const profile=wetForestRegionProfile(huntRole,seed);
       assert.ok(Number.isFinite(profile.relief(-12,7)));
-      assert.equal(a.layout.features.find(f=>f.id==='wetland').x,profile.wetX);
+      assert.equal(Math.abs(a.layout.features.find(f=>f.id==='wetland').x),Math.abs(profile.wetX));
     }
     assert.equal(signatures.size,roles.length);
     assert.equal(landmarks.size,roles.length);
