@@ -2,8 +2,8 @@
 // Input -> bounded V2 initializer -> authoritative world/port -> existing
 // exposed-face mesher -> existing WebGL2 renderer and queued edit uploads.
 import { VERSION, COMMIT } from './src/build-info.mjs';
-import { V2ExternalTerrainLoader,V2ExternalTerrainAppend } from './src/external-terrain-loader.mjs';
-import { V2TerrainBandResidency } from './src/terrain-band-residency.mjs';
+import { V2ExternalTerrainLoader } from './src/external-terrain-loader.mjs';
+import { HuntMainRouteResidency } from './src/hunt-main-route-residency.mjs';
 import {
   createExternalTerrainCheckpoint, V2ExternalTerrainReplaySession
 } from './src/external-terrain-checkpoint.mjs';
@@ -19,7 +19,7 @@ import {
   generateWorldSite,generateWorldExpeditionRegion,
   createHuntExpeditionRecipe,composeHuntExpeditionPlan,
   generateConnectedHuntStart,connectedHuntLocation,
-  generateConnectedHuntContinuation,activateConnectedHuntContinuation
+  generateConnectedHuntMainRoute
 } from './src/world-generation/index.mjs';
 import { buildPixelMicroSurfaceMeshes } from './src/microvoxel-mesher.mjs';
 import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overlay.mjs';
@@ -133,7 +133,7 @@ function updateSiteSummary() {
   if(playMode) {
     siteSummary.textContent='Wet Forest · '+(
       playConnected ? (playConnected.footprint.maxZ-playConnected.footprint.minZ+1)+
-        'm connected · '+playConnected.sites.length+' sites' :
+        'm main route · '+(playStream?.residency?.metrics.residentIds.length??2)+' resident sites' :
       generatedSite ? generatedSite.generatorVersion+' · '+generatedSite.hash :
         'World Generation V2 loading'
     )+' · seed '+siteSeed.value;
@@ -512,80 +512,47 @@ function paintPlayFireball(ctx,view) {
 }
 
 function streamingBusy() {
-  return ['loading','meshing','residency-writing','residency-meshing'].includes(playStream?.phase);
+  return Boolean(playStream?.residency?.metrics.transition);
 }
 
 function updatePlayStreaming(now) {
   if(!playMode || !playStream || !active || !playActor || document.hidden ||
       errorMessage || !renderer?.ready || pendingMesh || restoring)return;
-  if(playStream.phase==='waiting') {
-    if(playActor.z>playStream.continuation.triggerZ || playFireball || pendingEdit || renderer.pendingUploads)return;
-    playStream.writer=new V2ExternalTerrainAppend(active.world,playStream.continuation.definition,
-      {previousMinZ:playConnected.footprint.minZ});
-    playStream.startedAt=now;
-    playStream.phase='loading';
+  const stream=playStream;
+  if(!stream.residency) {
+    stream.residency=new HuntMainRouteResidency(active.world,stream.bands);
+    stream.phase='ready';
   }
-  if(playStream.phase==='loading') {
-    if(!playStream.writer.step(512).done)return;
-    const dirty=playStream.writer.dirtyChunks;
-    const epoch=meshBridge.replace(active.world,dirty);
-    if(!meshBridge.status.busy)throw new Error('Streamed terrain mesh worker did not start');
-    pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
-    playStream.phase='meshing';
-    return;
-  }
-  if(playStream.phase==='meshing' && !pendingEdit && !renderer.pendingUploads) {
-    // Publish traversable bounds only when the complete new geometry is visible.
-    playConnected=activateConnectedHuntContinuation(playConnected,playStream.continuation);
-    playStream.phase='ready';
-    playStream.elapsedMs=now-playStream.startedAt;
-    playStream.writer=null;
-    playStream.residency=new V2TerrainBandResidency(active.world,generatedSite.definition);
-    updateSiteSummary();
-  }
-  updateEntryResidency(now);
-}
-
-// First live residency slice: evict only the original entry, leaving the
-// two authored northern sites and both physical joins untouched. Hysteresis
-// keeps the work away from the actor and avoids repeated edge thrashing.
-function updateEntryResidency(now) {
-  const stream=playStream,band=stream.residency;
-  if(!band)return;
-  if(stream.phase==='ready') {
+  const residency=stream.residency;
+  if(!residency.metrics.transition) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
-    const distance=generatedSite.layout.footprint.minZ-playActor.z;
-    if(band.progress.phase==='resident' && distance>=65 && !stream.respawnPending) {
-      band.beginEviction();
-      stream.entryVisible=false;
-      stream.residencyAction='evict';
-    } else if(band.progress.phase==='evicted' && (distance<=50 || stream.respawnPending)) {
-      band.beginReload();
-      stream.residencyAction='reload';
-    } else return;
-    stream.residencyStartedAt=now;
+    const job=residency.next(playActor.z,{respawn:stream.respawnPending});
+    if(!job)return;
+    if(job.action==='respawn') {
+      stream.respawnPending=false;
+      resetPlayActor();
+      return;
+    }
+    residency.begin(job);
     stream.phase='residency-writing';
+    stream.startedAt=now;
   }
-  if(stream.phase==='residency-writing') {
-    if(!band.step(512).done)return;
-    const dirty=band.dirtyChunks;
-    const epoch=meshBridge.replace(active.world,dirty);
-    if(!meshBridge.status.busy)throw new Error('Residency mesh worker did not start');
-    pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
+  if(residency.metrics.transition.phase==='writing') {
+    if(residency.step(512).phase!=='awaiting-mesh')return;
+    const dirty=residency.dirtyChunks;
+    if(dirty.size) {
+      const epoch=meshBridge.replace(active.world,dirty);
+      if(!meshBridge.status.busy)throw new Error('Residency mesh worker did not start');
+      pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
+    }
     stream.phase='residency-meshing';
     return;
   }
   if(stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads) {
-    stream.residencyElapsedMs=now-stream.residencyStartedAt;
+    residency.publish();
+    stream.elapsedMs=now-stream.startedAt;
     stream.phase='ready';
-    if(stream.residencyAction==='reload') {
-      stream.entryVisible=true;
-      stream.reloads++;
-      if(stream.respawnPending) {
-        stream.respawnPending=false;
-        resetPlayActor();
-      }
-    } else stream.evictions++;
+    updateSiteSummary();
   }
 }
 
@@ -647,7 +614,7 @@ function resetPlayInput() {
 }
 function resetPlayActor() {
   if(!playMode || !generatedSite || !active?.world)return;
-  if(playStream?.entryVisible===false) {
+  if(playStream?.residency && (streamingBusy() || !playStream.residency.metrics.residentIds.includes(playConnected.sites[0].id))) {
     playStream.respawnPending=true;
     resetPlayInput();
     return;
@@ -677,17 +644,16 @@ function updatePlayFrame(now) {
     if(playActor && generatedSite && active?.world &&
         !pendingMesh && !restoring) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
-      const input=playMovementInput();
-      // The original footprint remains stable for the journey. Do not step
-      // onto an evicted entry before its collision and GPU meshes are ready.
-      if(playStream?.entryVisible===false &&
-          playActor.z>=generatedSite.layout.footprint.minZ-4) {
-        input.moveZ=Math.min(0,input.moveZ);
-      }
+      const input=playStream?.respawnPending?{moveX:0,moveZ:0}:playMovementInput();
       let steps=0;
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
-        playActor=stepHuntExplorer(active.world,playActor,
-          playConnected?.footprint??generatedSite.layout.footprint,input);
+        // A contiguous published interval is the only traversable footprint.
+        // Never move across unloaded or partially uploaded terrain.
+        const bounds=playStream?.residency?.bounds(playActor.z,playConnected.footprint)
+          ??playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
+        if(playActor.z<=bounds.minZ+.8)input.moveZ=Math.max(0,input.moveZ);
+        if(playActor.z>=bounds.maxZ+.2)input.moveZ=Math.min(0,input.moveZ);
+        playActor=stepHuntExplorer(active.world,playActor,bounds,input);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -712,7 +678,7 @@ function updatePlayFrame(now) {
       '\nVoxel source: '+(generatedSite?.hash??'—')+
       '\nSection: '+(playConnected && playActor ? connectedHuntLocation(playConnected,playActor.z):'entry')+
       '\nStreaming: '+(playStream?.phase??'—')+
-      '\nResidency: '+(playStream?.evictions??0)+' evictions / '+(playStream?.reloads??0)+' reloads'+
+      '\nResidency: '+(playStream?.residency?.metrics.evictions??0)+' evictions / '+(playStream?.residency?.metrics.loads??0)+' loads'+
       '\n10cm terrain tiles: '+(active?.world.microSurfaceCount??0)+
       '\nPosition: '+p+
       '\nFrame p50: '+ms(metrics.p50Ms)+
@@ -893,12 +859,13 @@ function resetSite() {
       }
       if(playMode) {
         playConnected=generateConnectedHuntStart(generatedSite);
-        playStream={phase:'waiting',continuation:generateConnectedHuntContinuation(generatedSite,playConnected),
-          writer:null,startedAt:null,elapsedMs:null,residency:null,entryVisible:true,
-          evictions:0,reloads:0,respawnPending:false,residencyElapsedMs:null};
+        const initialFootprint=playConnected.footprint;
+        const mainRoute=generateConnectedHuntMainRoute(generatedSite,playConnected);
+        playConnected=mainRoute.route;
+        playStream={phase:'waiting',bands:mainRoute.bands,initialFootprint,
+          residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(playConnected.definition,
-          {epoch:terrainEpochs.next(),microSurfaceCapacity:Math.max(1024,
-            playConnected.definition.surfaceTiles.length+playStream.continuation.definition.surfaceTiles.length)});
+          {epoch:terrainEpochs.next(),microSurfaceCapacity:2048});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
           {epoch:terrainEpochs.next()});
@@ -917,7 +884,7 @@ function resetSite() {
 }
 
 function impactSpan(targetOverride=null) {
-  if(!active || restoring || pendingMesh || pendingEdit || errorMessage ||
+  if(streamingBusy() || !active || restoring || pendingMesh || pendingEdit || errorMessage ||
       !renderer.ready || renderer.pendingUploads) return;
   if(typeof Worker!=='function' && active.world.chunkCount>8) {
     errorMessage='Web Worker is required to edit larger external terrain';
@@ -975,7 +942,7 @@ function impactSpan(targetOverride=null) {
 }
 
 function saveState() {
-  if(!active || restoring || pendingEdit || renderer.pendingUploads) return;
+  if(playMode || !active || restoring || pendingEdit || renderer.pendingUploads) return;
   try {
     const checkpoint=restoredSession
       ? restoredSession.saveCheckpoint()
@@ -992,7 +959,7 @@ function saveState() {
 }
 
 function restoreState() {
-  if(!active || !savedCheckpoint || restoring || pendingEdit || renderer.pendingUploads) return;
+  if(playMode || !active || !savedCheckpoint || restoring || pendingEdit || renderer.pendingUploads) return;
   try {
     // Keep the active world visible until the new source + journal is verified.
     restoring=new V2ExternalTerrainReplaySession(savedCheckpoint,
@@ -1120,8 +1087,8 @@ function frame(now) {
       Boolean(errorMessage) || Boolean(rendererErrorMessage) || Boolean(restoring) ||
       Boolean(pendingMesh) || Boolean(pendingEdit);
     breachButton.disabled=blocked;
-    saveButton.disabled=blocked;
-    restoreButton.disabled=blocked || !savedCheckpoint;
+    saveButton.disabled=playMode || blocked;
+    restoreButton.disabled=playMode || blocked || !savedCheckpoint;
     updateStatus(now);
   } catch(error) {
     meshBridge?.cancel();
@@ -1337,11 +1304,9 @@ if(playMode) {
         microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
         connectedWorld:playConnected?{hash:playConnected.hash,planHash:playConnected.planHash,
           sites:playConnected.sites,footprint:playConnected.footprint,seam:playConnected.seam,
-          streaming:playConnected.streaming,eviction:playStream?.evictions>0,
-          residentSites:playConnected.sites.length-(playStream?.entryVisible===false?1:0),
-          residency:{entryVisible:playStream?.entryVisible??true,evictions:playStream?.evictions??0,
-            reloads:playStream?.reloads??0,elapsedMs:playStream?.residencyElapsedMs??null,
-            removedCells:playStream?.residency?.progress.removedCells??0},
+          streaming:playConnected.streaming,eviction:(playStream?.residency?.metrics.evictions??0)>0,
+          residentSites:playStream?.residency?.metrics.residentIds.length??2,
+          residency:{...playStream?.residency?.metrics,elapsedMs:playStream?.elapsedMs??null},
           prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?connectedHuntLocation(playConnected,playActor.z):null}:null
       },
       device:{

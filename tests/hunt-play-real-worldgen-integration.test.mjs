@@ -84,7 +84,7 @@ test('H08-01 Play Hunt cannot fall back to the simplified expedition generator',
   assert.match(host,/generatedSite\.definition\.schema!=='voxel-v2\.terrain-initialization\.v2'/);
   assert.match(host,/generatedSite\.layout\.microSurface\.tileCount<1/);
   assert.match(host,/playActor=spawnHuntExplorer\(active\.world,region/);
-  assert.match(host,/generatedSite\.layout\.footprint,input\)/);
+  assert.match(host,/generatedSite\.layout\.footprint;/);
   assert.match(host,/generatedSite\.layout\.topology\.entry/);
   assert.match(host,/Voxel source: /);
   assert.match(host,/microSurfaceTiles:active\?\.world\.microSurfaceCount/);

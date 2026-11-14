@@ -30,7 +30,7 @@ export function generateWorldExpeditionRegion(plan,regionId) {
 
 import { createWorldSiteRecipe } from './site-recipe.mjs';
 import { createHuntExpeditionRecipe,composeHuntExpeditionPlan } from './hunt-expedition-plan.mjs';
-import { composeConnectedHuntStart,composeConnectedHuntContinuation } from './connected-hunt-start.mjs';
+import { composeConnectedHuntStart,composeConnectedHuntContinuation,activateConnectedHuntContinuation } from './connected-hunt-start.mjs';
 
 function planForEntry(entrySite) {
   const recipe=entrySite.recipe;
@@ -58,3 +58,26 @@ export function generateConnectedHuntContinuation(entrySite,start) {
 export { activateConnectedHuntContinuation } from './connected-hunt-start.mjs';
 
 export { composeAuthoredHuntLayout } from './authored-hunt-layout.mjs';
+
+// Temporary main-route streaming slice. The complete authored branching
+// layout remains the geography contract, not this northbound projection.
+export function generateConnectedHuntMainRoute(entrySite,start) {
+  let route=start;
+  const entry=route.sites[0],second=route.sites[1];
+  const split=entrySite.layout.footprint.minZ;
+  const definition=toVoxelTerrainDefinition({...start.definition,siteId:'second-route-band',
+    runs:start.definition.runs.filter(r=>r.z<split),
+    surfaceTiles:start.definition.surfaceTiles.filter(t=>t.z<split)});
+  const bands=[
+    {id:entry.id,minZ:entry.minZ,maxZ:entry.maxZ,definition:entrySite.definition},
+    {id:second.id,minZ:second.minZ,maxZ:split-1,definition}
+  ];
+  for(let next=generateConnectedHuntContinuation(entrySite,route);next;
+      next=generateConnectedHuntContinuation(entrySite,route)) {
+    bands.push({id:next.site.id,minZ:next.site.minZ,maxZ:next.seam.maxZ,
+      definition:next.definition});
+    route=activateConnectedHuntContinuation(route,next);
+  }
+  // A single immutable definition per band, never a giant voxel allocation.
+  return {route,bands};
+}
