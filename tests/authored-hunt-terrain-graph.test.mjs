@@ -55,7 +55,7 @@ test('graph region geometry matches its native port-aware source, preserving the
   for(const region of graph.layout.regions){
     const source=region.id===graph.layout.entryRegionId?entry:
       generateWorldSite(createWorldSiteRecipe({...entry.recipe,
-        regionId:region.id,siteId:'preview-'+region.id,
+        regionId:region.id,siteId:'preview-'+region.id,huntRole:region.role,
         lateralPorts:region.ports.map(p=>p.direction).filter(d=>d==='east'||d==='west')}));
     const band=graph.region(region.id);
     const translate=items=>items.map(item=>({...item,x:item.x+region.offsetX,z:item.z+region.offsetZ}));
