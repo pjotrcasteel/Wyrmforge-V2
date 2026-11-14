@@ -25,7 +25,7 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
-  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HUNT_FIXED_STEP
+  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP
 } from './src/hunt-play-runtime.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
@@ -96,6 +96,7 @@ let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
+const playFollowCamera=new HuntFollowCamera();
 let playStepAccumulator=0;
 let playFrameAt=null;
 const playFrameStats=new HuntPlayPerformance();
@@ -497,6 +498,7 @@ function resetPlayActor() {
   playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:{x:entry.x,z:entry.z}
   });
+  playFollowCamera.reset(playActor);
   playStepAccumulator=0;
   resetPlayInput();
 }
@@ -529,7 +531,8 @@ function updatePlayFrame(now) {
       playActor.x.toFixed(1),playActor.y.toFixed(1),
       playActor.z.toFixed(1)].join(', '):'—';
     playHudSummary.textContent=
-      (playActor?.error?'Collision issue':playActor?'WorldGen 3D':'Loading')+
+      (playActor?.error?'Collision issue':playActor?
+        (viewCamera.value===PLAY_HUNT_CAMERA?'2.5D Hunt':'3D inspection'):'Loading')+
       ' · p95 '+ms(metrics.p95Ms)+' · details';
     playHudDetails.textContent='WIZARD · '+(playActor?'walkable':'loading')+
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
@@ -635,6 +638,7 @@ function resetSite() {
     renderer.setMeshes([]);
     generatedSite=null;
     playActor=null;
+    playFollowCamera.reset();
     resetPlayInput();
     expeditionSite=null;
     expeditionPlan=null;
@@ -876,10 +880,8 @@ function frame(now) {
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
     resizeCanvas();
     if(renderer?.ready) {
-      // The hunt preset looks almost top-down on a small, low-profile fixture.
-      // Default to the already-tested diagonal inspection basis so the actual
-      // underside, stone walls and vertical height are legible on mobile.
-      // This is presentation-only: switching views never remeshes terrain.
+      // Follow the stabilized presentation target, not the actor's
+      // ballistic height. Both projections retain the same voxel geometry.
       const camera=viewCamera.value; // 2.5D north-up Hunt; 3D inspector opt-in only
       const pixelRatio=canvas.width/Math.max(1,canvas.clientWidth);
       const inspected=generatedSite??expeditionSite;
@@ -894,8 +896,10 @@ function frame(now) {
         : fit ? fit.scale*viewZoom
         : Math.max(9,Math.min(20,
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
-      const followed=playMode && playActor
-        ? projectVoxel(playActor.x,playActor.y+0.85,playActor.z,{
+      const followTarget=playMode && playActor
+        ? playFollowCamera.update(playActor,now):null;
+      const followed=followTarget
+        ? projectVoxel(followTarget.x,followTarget.y+0.85,followTarget.z,{
           width:canvas.width,height:canvas.height,scale,camera})
         : null;
       const panX=followed
