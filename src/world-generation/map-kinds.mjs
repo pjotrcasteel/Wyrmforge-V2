@@ -2,6 +2,7 @@
 // not VoxelWorld implementations, material shaders, prop engines, or game data.
 // Each strategy composes a site plan using only the public builder vocabulary.
 import { createFireArenaStrategies } from './fire-arena-strategies.mjs';
+import { wetForestRegionProfile } from './wet-forest-region-profile.mjs';
 
 export const MAP_KIND_IDS = Object.freeze([
   'wet-forest', 'forest-highland', 'mountain-pass',
@@ -60,7 +61,7 @@ const ROAD_PROFILES=Object.freeze({
   })
 });
 
-function addNarrativePaths(builder, kind, biome) {
+function addNarrativePaths(builder, kind, biome,combatRadius=7) {
   const road=ROAD_PROFILES[biome];
   if(!road) throw new RangeError('Missing biome road profile: '+biome);
   builder.addRoute('entry-to-exit', routeNodes, 2,road);
@@ -77,7 +78,7 @@ function addNarrativePaths(builder, kind, biome) {
   // Every handcrafted site must also work as a horde-survival arena:
   // a broad central fighting floor and multiple genuine flank approaches.
   // The runtime's enemy system decides if/when/how enemies appear.
-  builder.addCombatSpace({id:'central-arena',x:1,z:2,radius:7});
+  builder.addCombatSpace({id:'central-arena',x:1,z:2,radius:combatRadius});
   for(const approach of [
     {id:'north-flank',x:1,z:-13,width:3},
     {id:'east-flank',x:14,z:2,width:3},
@@ -168,19 +169,21 @@ function addManeuverFlow(builder,kind) {
 
 function forest(builder, context) {
   const seed = context.seed;
+  const role=context.recipe?.huntRole;
+  const profile=role?wetForestRegionProfile(role,seed):null;
   builder.setTerrain({
     elevation(x,z) {
       const broad = 2.2 * siteNoise(seed,x,z,15,1);
       const detail = 1.2 * siteNoise(seed,x,z,7,2);
       const wetHollow = 1.5 * Math.exp(-((x+12)**2+(z-7)**2)/70);
-      return 2 + broad + detail - wetHollow;
+      return 2 + broad + detail + (profile?profile.relief(x,z):-wetHollow);
     },
-    exposedStone: 0.94
+    exposedStone: profile?.rock??0.94
   });
-  addNarrativePaths(builder,'forest-ruin','wet-forest');
+  addNarrativePaths(builder,profile?.landmark??'forest-ruin','wet-forest',role==='horde'?8:7);
   addEscapeLayout(builder,'wet-forest');
   addManeuverFlow(builder,'wet-forest');
-  builder.addFeature({id:'wetland',kind:'water-basin',x:-12,z:7,radius:5});
+  builder.addFeature({id:'wetland',kind:'water-basin',x:profile?.wetX??-12,z:profile?.wetZ??7,radius:5});
   builder.addFeature({id:'northern-grove',kind:'woodland',
     x:-10,z:-9,radius:7});
 }

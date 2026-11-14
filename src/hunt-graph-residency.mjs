@@ -3,6 +3,7 @@
 // At most 3 full regions and 2 seam strips are published or being written.
 import {V2TerrainResidencySet} from './terrain-residency-set.mjs';
 import {HUNT_WALK_SPEED,HUNT_FIXED_STEP} from './hunt-play-runtime.mjs';
+import {containsHuntLandform} from './world-generation/hunt-landform-footprint.mjs';
 
 const distance=(b,x,z)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX-1),
   Math.max(b.minZ-z,0,z-b.maxZ-1));
@@ -54,7 +55,7 @@ export class HuntGraphResidency {
     // All corners of the actor clearance must be supported by the union,
     // including a join between two bands. No rectangular diagonal shortcut.
     return [-MARGIN,MARGIN].every(dx=>[-MARGIN,MARGIN].every(dz=>
-      ids.some(id=>contains(this.#all.get(id).bounds,x+dx,z+dz))));
+      ids.some(id=>containsHuntLandform(this.#all.get(id),x+dx,z+dz))));
   }
   constrainInput(actor,input,dt=HUNT_FIXED_STEP){
     const ids=this.#set.residentIds;

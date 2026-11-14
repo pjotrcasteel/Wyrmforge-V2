@@ -11,6 +11,7 @@ export function siteRadiusForKind(kind) {
   if(kind==='wyrm-lair')return WORLD_WYRM_LAIR_RADIUS;
   return WORLD_SITE_RADIUS;
 }
+const HUNT_ROLES=new Set(['arrival','exploration','horde','investigation','discovery','flank','extraction']);
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/;
 
 export function validateWorldSiteRecipe(recipe) {
@@ -39,6 +40,9 @@ export function validateWorldSiteRecipe(recipe) {
       recipe.corruption<0 || recipe.corruption>1) {
     throw new RangeError('Corruption progress must be within [0,1]');
   }
+  const role=recipe.huntRole;
+  if(role!==undefined&&(recipe.kind!=='wet-forest'||!HUNT_ROLES.has(role)))
+    throw new RangeError('Invalid authored Hunt region role');
   const ports=recipe.lateralPorts;
   if(ports!==undefined && (recipe.kind!=='wet-forest'||!Array.isArray(ports)||
       ports.length>2||new Set(ports).size!==ports.length||!ports.every(p=>['east','west'].includes(p))))
@@ -50,6 +54,7 @@ export function validateWorldSiteRecipe(recipe) {
     seed:recipe.seed,worldRevision:recipe.worldRevision,
     chunkEdge:recipe.chunkEdge,radius:recipe.radius,
     corruption:recipe.corruption,
+    ...(role?{huntRole:role}:{}),
     ...(ports?.length?{lateralPorts:Object.freeze([...ports].sort())}:{})
   });
 }
@@ -58,10 +63,10 @@ export function createWorldSiteRecipe({
   regionId='starter-forest',siteId='site-forest-01',
   encounterId='hunt-001',kind='wet-forest',
   seed=7,worldRevision=0,chunkEdge=16,
-  radius=siteRadiusForKind(kind),corruption=0,lateralPorts
+  radius=siteRadiusForKind(kind),corruption=0,lateralPorts,huntRole
 }={}) {
   return validateWorldSiteRecipe({
     schema:WORLD_SITE_RECIPE_SCHEMA,regionId,siteId,encounterId,kind,
-    seed,worldRevision,chunkEdge,radius,corruption,lateralPorts
+    seed,worldRevision,chunkEdge,radius,corruption,lateralPorts,huntRole
   });
 }
