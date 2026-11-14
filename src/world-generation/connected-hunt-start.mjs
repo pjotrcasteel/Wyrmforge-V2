@@ -184,13 +184,22 @@ export function connectedHuntLocation(connection,z) {
     ((connection.seams??[connection.seam]).some(seam=>z>=seam.minZ && z<seam.maxZ+1)?'connection':'outside');
 }
 
-// First streaming increment: the next authored northbound site and its
-// connector are a separate immutable definition, disjoint from the live start.
-// No world allocation or simplified heightfield in the generator.
+// Generate one next authored northbound site and its disjoint connector.
+// The prefix is geography metadata, not a residency list. Each continuation
+// is independently materializable; no world allocation or new heightfield.
 export function composeConnectedHuntContinuation(plan,entrySite,start,{generateSite,createRecipe,terrainAdapter}) {
-  if(start.planHash!==plan.hash || start.sites.length!==2 ||
-      start.sites[0].hash!==entrySite.hash)throw new Error('Invalid authored Hunt prefix');
-  const tail=start.sites[1];
+  if(start.planHash!==plan.hash || start.sites.length<2 ||
+      start.sites.length>plan.regions.length ||
+      start.sites[0].hash!==entrySite.hash ||
+      start.sites[0].id!==plan.entryRegionId)throw new Error('Invalid authored Hunt prefix');
+  for(let i=1;i<start.sites.length;i++) {
+    const previous=start.sites[i-1],current=start.sites[i];
+    const region=plan.regions.find(r=>r.id===previous.id);
+    if(!region?.ports.some(p=>p.direction==='north'&&p.peerRegionId===current.id))
+      throw new Error('Invalid northbound Hunt prefix');
+  }
+  const tail=start.sites.at(-1);
+  if(tail.id===plan.exitRegionId)return null;
   const region=plan.regions.find(r=>r.id===tail.id);
   const next=plan.regions.find(r=>r.id===region?.ports.find(p=>p.direction==='north')?.peerRegionId);
   if(!next || !next.ports.some(p=>p.direction==='south' && p.peerRegionId===tail.id))
@@ -224,9 +233,12 @@ export function composeConnectedHuntContinuation(plan,entrySite,start,{generateS
 }
 
 export function activateConnectedHuntContinuation(start,continuation) {
+  if(!continuation || continuation.seam.maxZ!==start.footprint.minZ-1 ||
+      start.sites.some(site=>site.id===continuation.site.id))
+    throw new Error('Invalid Hunt continuation activation');
   return Object.freeze({...start,
     sites:Object.freeze([...start.sites,continuation.site]),
-    seams:Object.freeze([start.seam,continuation.seam]),
+    seams:Object.freeze([...(start.seams??[start.seam]),continuation.seam]),
     footprint:continuation.footprint,hash:continuation.hash,
     streaming:true,eviction:false,residentLimit:3
   });
