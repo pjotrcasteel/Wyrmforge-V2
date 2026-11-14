@@ -6,6 +6,8 @@ import { generateWorldSite,generateConnectedHuntStart,generateConnectedHuntConti
   activateConnectedHuntContinuation,connectedHuntLocation } from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader,V2ExternalTerrainAppend } from '../src/external-terrain-loader.mjs';
 import { spawnTerrainActor,actorOverlapsTerrain } from '../src/terrain-actor.mjs';
+import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
+import { buildPixelMicroSurfaceMeshes } from '../src/microvoxel-mesher.mjs';
 import { stepHuntExplorer,HUNT_FIXED_STEP } from '../src/hunt-play-runtime.mjs';
 
 test('H08-02B: bounded authored third site streams into the same edited physical world',()=>{
@@ -25,6 +27,10 @@ test('H08-02B: bounded authored third site streams into the same edited physical
   try {
     while(!loader.progress.done)loader.loadStep(4096);
     const {world,port}=loader.terrain;
+    // Exercise the actual presentation mesh budget for initial publication.
+    const initialMeshes=buildPixelMicroSurfaceMeshes(world,buildExposedFaceMeshes(world));
+    assert.ok(initialMeshes.length>0);
+    assert.ok(initialMeshes.reduce((n,m)=>n+m.faceCount,0)<100000);
     const hit=port.raycast({origin:[5.5,30,-16.5],direction:[0,-1,0],maxDistance:64});
     assert.ok(hit);
     const edit=port.apply({id:'prefetch-retained-crater',type:'carve-crater',
@@ -41,6 +47,12 @@ test('H08-02B: bounded authored third site streams into the same edited physical
       assert.ok(++frames<200);
     }
     assert.ok(append.dirtyChunks.size>0 && append.dirtyChunks.size<=128);
+    // Streaming uses local coarse worker meshes and the sparse micro mesh
+    // adapter. Verify the new shoulder detail stays in that same budget.
+    const dirtyMeshes=buildPixelMicroSurfaceMeshes(world,
+      buildExposedFaceMeshes(world,{chunkIds:append.dirtyChunks}));
+    assert.ok(dirtyMeshes.length>0);
+    assert.ok(dirtyMeshes.reduce((n,m)=>n+m.faceCount,0)<100000);
     assert.equal(loader.terrain.world,world);
     assert.equal(loader.terrain.port,port);
     assert.deepEqual(port.exportJournal(),journal);

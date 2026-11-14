@@ -114,7 +114,7 @@ test('both authored region seams retain a continuous dirt road at every row',()=
     const materialAt=(x,z)=>topMaterialAt(
       z<start.footprint.minZ?next.definition:start.definition,x,z);
     for(const seam of [start.seam,next.seam]) {
-      assert.equal(seam.profile,'continuous-road-v3');
+      assert.equal(seam.profile,'micrograded-road-v4');
       assert.ok(seam.maximumRouteGradeTenths<=5);
       for(let z=seam.minZ;z<=seam.maxZ;z++) {
         assert.equal(materialAt(0,z),2,'Missing dirt road at seed '+seed+', z='+z);
@@ -123,6 +123,54 @@ test('both authored region seams retain a continuous dirt road at every row',()=
       }
       assert.equal(materialAt(0,seam.minZ-1),2,'Northern authored road endpoint');
       assert.equal(materialAt(0,seam.maxZ+1),2,'Southern authored road endpoint');
+    }
+  }
+});
+
+
+// Evaluate the authoritative surface at 10cm resolution, not a screenshot
+// or the metadata. Longitudinal steps must no longer be confined to the
+// synchronized metre rows which produced the horizontal stripe artifact.
+function shoulderRiserDistribution(definition,seam) {
+  const tiles=new Map(definition.surfaceTiles.map(t=>[t.x+','+t.z,t]));
+  const top=new Map();
+  for(const run of definition.runs) {
+    if(run.z<seam.minZ || run.z>seam.maxZ)continue;
+    for(let x=run.x;x<run.x+run.length;x++) {
+      const key=x+','+run.z;
+      if(!top.has(key)||top.get(key)<run.y)top.set(key,run.y);
+    }
+  }
+  const height=(mx,mz)=>{
+    const x=Math.floor(mx/10),z=Math.floor(mz/10);
+    const tile=tiles.get(x+','+z);
+    const y=top.get(x+','+z);
+    return y*10+(tile?tile.levels[(mz-z*10)*10+mx-x*10]:10);
+  };
+  let interior=0,coarse=0,mixedTiles=0;
+  for(const t of tiles.values())if(t.z>=seam.minZ && t.z<=seam.maxZ &&
+      Math.abs(t.x)>=5 && new Set(t.levels).size>1)mixedTiles++;
+  for(let mz=seam.minZ*10+1;mz<(seam.maxZ+1)*10;mz++) {
+    for(let mx=-200;mx<200;mx++){
+      if(Math.abs(Math.floor(mx/10))<5)continue;
+      const delta=Math.abs(height(mx,mz)-height(mx,mz-1));
+      if(delta<1 || delta>5)continue; // natural cliffs are not the defect
+      if(mz%10===0)coarse++;else interior++;
+    }
+  }
+  return {interior,coarse,mixedTiles,interiorFraction:interior/(interior+coarse)};
+}
+
+test('both seam shoulders distribute physical risers inside 1m tiles, not only on synchronized metre boundaries',t=>{
+  for(const seed of [7,19,101,267]){
+    const authored=entry(seed);
+    const start=generateConnectedHuntStart(authored);
+    const next=generateConnectedHuntContinuation(authored,start);
+    for(const [definition,seam] of [[start.definition,start.seam],[next.definition,next.seam]]){
+      const metric=shoulderRiserDistribution(definition,seam);
+      t.diagnostic(JSON.stringify({seed,z:seam.minZ,...metric}));
+      assert.ok(metric.mixedTiles>=20,'shoulders require real varied microcell occupancy');
+      assert.ok(metric.interiorFraction>=.25,'small risers must not be concentrated at whole-metre rows');
     }
   }
 });
