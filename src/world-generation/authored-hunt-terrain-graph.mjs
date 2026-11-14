@@ -4,6 +4,7 @@
 import {composeAuthoredHuntLayout} from './authored-hunt-layout.mjs';
 import {composeNorthSouthHuntConnector} from './connected-hunt-start.mjs';
 import {composeLateralHuntConnector} from './lateral-hunt-connector.mjs';
+import {clipHuntLandform} from './hunt-landform-footprint.mjs';
 
 export class AuthoredHuntTerrainGraph {
   #entry;
@@ -38,7 +39,8 @@ export class AuthoredHuntTerrainGraph {
     const translate=items=>items.map(item=>({...item,x:item.x+region.offsetX,z:item.z+region.offsetZ}));
     const definition=this.#adapter({siteId:region.id,seed:site.recipe.seed,
       chunkEdge:site.recipe.chunkEdge,generatorVersion:site.generatorVersion,
-      runs:translate(site.definition.runs),surfaceTiles:translate(site.definition.surfaceTiles)});
+      ...clipHuntLandform(region,{runs:translate(site.definition.runs),
+        surfaceTiles:translate(site.definition.surfaceTiles??[])})});
     return Object.freeze({id,kind:'region',role:region.role,bounds:region.bounds,
       sourceHash:site.hash,definition});
   }
@@ -48,13 +50,14 @@ export class AuthoredHuntTerrainGraph {
     const from=this.#region(link.fromId),to=this.#region(link.toId);
     const a=this.#source(from.id),b=this.#source(to.id);
     const lateral=['east','west'].includes(link.fromPort.direction);
+    const terrainAdapter=input=>this.#adapter({...input,...clipHuntLandform(link,input)});
     const seam=lateral?
       composeLateralHuntConnector(this.#layout,id,{
         westSite:from.offsetX<to.offsetX?a:b,eastSite:from.offsetX<to.offsetX?b:a,
-        terrainAdapter:this.#adapter}):
+        terrainAdapter}):
       composeNorthSouthHuntConnector(this.#layout,id,{
         southSite:from.offsetZ>to.offsetZ?a:b,northSite:from.offsetZ>to.offsetZ?b:a,
-        terrainAdapter:this.#adapter});
+        terrainAdapter});
     return Object.freeze({...seam,kind:'link',fromId:link.fromId,toId:link.toId});
   }
   initialTerrain(ids){

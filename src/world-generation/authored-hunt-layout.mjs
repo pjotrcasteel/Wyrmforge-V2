@@ -2,6 +2,8 @@
 // Preserve every logical region/link/role from the World Map expedition plan.
 // Translate the existing 40m authored Wet Forest footprint into world space,
 // leaving an 8m strip for each physical connector. No extra voxel authority.
+import {regionLandform,connectorLandform} from './hunt-landform-footprint.mjs';
+
 const gap=8;
 
 export function composeAuthoredHuntLayout(plan,entrySite) {
@@ -28,9 +30,10 @@ export function composeAuthoredHuntLayout(plan,entrySite) {
     const opportunities=region.opportunities.map(item=>Object.freeze({...item,
       at:Object.freeze({x:item.at.x-region.origin.x+offsetX,
         z:item.at.z-region.origin.z+offsetZ})}));
-    return Object.freeze({id:region.id,role:region.role,biome:region.biome,
+    const band={id:region.id,role:region.role,biome:region.biome,
       offsetX,offsetZ,bounds:Object.freeze(bounds),ports:Object.freeze(ports),
-      opportunities:Object.freeze(opportunities)});
+      opportunities:Object.freeze(opportunities)};
+    return Object.freeze({...band,landform:regionLandform(band,plan.recipe.seed)});
   });
   const byId=new Map(regions.map(r=>[r.id,r]));
   const links=plan.links.map(link=>{
@@ -48,7 +51,8 @@ export function composeAuthoredHuntLayout(plan,entrySite) {
     };
     if((horizontal?rectangle.maxX-rectangle.minX:rectangle.maxZ-rectangle.minZ)!==gap-1)
       throw new Error('Noncontiguous authored Hunt connector');
-    return Object.freeze({...link,fromPort,toPort,bounds:Object.freeze(rectangle)});
+    const band={...link,fromPort,toPort,bounds:Object.freeze(rectangle)};
+    return Object.freeze({...band,landform:connectorLandform(band,plan.recipe.seed)});
   });
   return Object.freeze({schema:'wyrmforge.authored-hunt-layout.v1',planHash:plan.hash,
     entryRegionId:plan.entryRegionId,exitRegionId:plan.exitRegionId,

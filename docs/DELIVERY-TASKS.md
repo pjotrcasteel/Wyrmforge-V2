@@ -210,7 +210,9 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-03 — Natural regions and readable traversal
 - **GitHub Issue:** [#158](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/158)
-- **Status:** `PLANNED`
+- **Status:** `IMPLEMENTED` — implementation in [PR #194](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/194), awaiting phone walkthrough.
+- **Implementation:** Wet Forest region roles select relief, wetland positions, exposed stone and landmark descriptors. Play Hunt composes irregular physical land within each streaming region and tapers the connecting shoulders. The existing port cross-sections, terminal approaches and underlying voxel grades are preserved.
+- **Automated evidence:** seeds 7, 8 and 19 cover region roles, opportunities and connector approaches, including the extended expedition. The physical actor tests cross every standard seam in both directions and traverse the branching expedition on all three seeds with bounded streaming and the original Fireball edit retained after eviction.
 - **Player experience:** walk a varied forest with wide trails, glades, natural elevation transitions, choices and non-arbitrary boundaries; not generic 32m squares.
 - **Technical boundary:** WorldGen V2 terrain/route grammar. Voxel V2 remains the source of collision/destruction.
 - **Gate:** representative fixed seeds, reachable optional detours and exits, camera readability and no impassable one-metre ledges on primary paths. Check generation, chunk seams and movement performance.

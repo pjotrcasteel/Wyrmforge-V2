@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,
   generateAuthoredHuntTerrainGraph,createHuntExpeditionRecipe,composeHuntExpeditionPlan} from '../src/world-generation/index.mjs';
+import {containsHuntLandform} from '../src/world-generation/hunt-landform-footprint.mjs';
 import {toVoxelTerrainDefinition} from '../src/world-generation/voxel-terrain-adapter.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
+import {analyzeCharacterReachability} from '../src/character-reachability.mjs';
+import {DEFAULT_TRAVERSAL_PROFILE} from '../src/character-traversal-policy.mjs';
 import {spawnTerrainActor,actorOverlapsTerrain} from '../src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_FIXED_STEP} from '../src/hunt-play-runtime.mjs';
 
@@ -19,9 +22,16 @@ function setup(seed,scope='standard'){
 
 function auditDefinition(band){
   const b=band.bounds;
+  const columns=new Set();
   for(const r of band.definition.runs){
     assert.ok(r.x>=b.minX&&r.x+r.length-1<=b.maxX,band.id);
     assert.ok(r.z>=b.minZ&&r.z<=b.maxZ,band.id);
+    for(let x=r.x;x<r.x+r.length;x++)columns.add(x+','+r.z);
+  }
+  const count=(b.maxX-b.minX+1)*(b.maxZ-b.minZ+1);
+  assert.ok(columns.size<count*.95,band.id+' retains a square footprint');
+  for(let z=b.minZ;z<=b.maxZ;z++)for(let x=b.minX;x<=b.maxX;x++) {
+    assert.equal(columns.has(x+','+z),containsHuntLandform(band,x,z),band.id);
   }
   for(const t of band.definition.surfaceTiles??[]){
     assert.ok(t.x>=b.minX&&t.x<=b.maxX&&t.z>=b.minZ&&t.z<=b.maxZ,band.id);
@@ -33,13 +43,23 @@ test('every planned region and connection has a separate deterministic native te
     const {graph,plan}=setup(seed,scope);
     for(const region of graph.layout.regions){
       const band=graph.materialize(region.id);
-      auditDefinition(band);
+      auditDefinition({...band,landform:region.landform});
       assert.equal(band.role,region.role);
       assert.deepEqual(band,graph.region(region.id));
     }
     for(const link of graph.layout.links){
       const band=graph.materialize(link.id);
-      auditDefinition(band);
+      auditDefinition({...band,landform:link.landform});
+      for(const port of [link.fromPort,link.toPort]){
+        const region=graph.layout.regions.find(region=>region.ports.includes(port));
+        const dx=port.direction==='west'?-1:port.direction==='east'?1:0;
+        const dz=port.direction==='north'?-1:port.direction==='south'?1:0;
+        for(let offset=-20;offset<20;offset++){
+          const x=port.at.x+dz*offset,z=port.at.z+dx*offset;
+          assert.equal(containsHuntLandform(region,x,z),
+            containsHuntLandform(link,x+dx,z+dz),link.id+' boundary profile');
+        }
+      }
       assert.ok(band.maximumRouteGradeTenths<=5,link.id);
       assert.deepEqual(band,graph.link(link.id));
     }
@@ -60,8 +80,21 @@ test('graph region geometry matches its native port-aware source, preserving the
     const band=graph.region(region.id);
     const translate=items=>items.map(item=>({...item,x:item.x+region.offsetX,z:item.z+region.offsetZ}));
     assert.equal(band.sourceHash,source.hash);
-    assert.deepEqual(band.definition.runs,translate(source.definition.runs));
-    assert.deepEqual(band.definition.surfaceTiles??[],translate(source.definition.surfaceTiles??[]));
+    const columns=runs=>{
+      const result=new Map();
+      for(const run of runs)for(let x=run.x;x<run.x+run.length;x++){
+        result.set([x,run.y,run.z].join(','),run.material);
+      }
+      return result;
+    };
+    const sourceColumns=columns(translate(source.definition.runs));
+    const expected=new Map([...sourceColumns].filter(([key])=>{
+      const [x,,z]=key.split(',').map(Number);
+      return containsHuntLandform(region,x,z);
+    }));
+    assert.deepEqual(columns(band.definition.runs),expected);
+    assert.deepEqual(band.definition.surfaceTiles??[],translate(source.definition.surfaceTiles??[])
+      .filter(tile=>containsHuntLandform(region,tile.x,tile.z)));
   }
 });
 
@@ -101,5 +134,34 @@ test('each physical graph seam can be crossed both ways by the actual voxel acto
         assert.ok(direction>0?pos>=to:pos<=to,link.id+' direction '+direction+' '+JSON.stringify(actor));
       }
     } finally {loader.unload();}
+  }
+});
+
+test('each regional opportunity and port approach has a reversible physical route',()=>{
+  for(const [seed,scope] of [[7,'standard'],[8,'extended'],[19,'standard']]){
+    const {graph}=setup(seed,scope);
+    for(const region of graph.layout.regions){
+      const {definition}=graph.region(region.id);
+      const loader=new V2ExternalTerrainLoader(definition);
+      try {
+        while(!loader.progress.done)loader.loadStep(4096);
+        const targets=region.opportunities.map(item=>item.at);
+        for(const port of region.ports){
+          const dx=port.direction==='west'?3:port.direction==='east'?-3:0;
+          const dz=port.direction==='north'?3:port.direction==='south'?-3:0;
+          targets.push({x:port.at.x+dx,z:port.at.z+dz});
+        }
+        if(region.id===graph.layout.exitRegionId)
+          targets.push({x:region.offsetX,z:region.offsetZ-18});
+        const audit=analyzeCharacterReachability({terrain:loader.terrain.port,
+          bounds:{...region.bounds,minY:-3,maxY:30},
+          start:{x:region.offsetX,z:region.offsetZ},targets,
+          profile:{...DEFAULT_TRAVERSAL_PROFILE,maxNavigableDrop:.55}});
+        for(const target of targets){
+          const route=audit.routeTo(target.x,target.z);
+          assert.ok(route,JSON.stringify({seed,region:region.id,target}));
+        }
+      } finally {loader.unload();}
+    }
   }
 });
