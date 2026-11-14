@@ -21,13 +21,13 @@ export class V2TerrainResidencySet {
     this.#world=world;this.#limit=residentLimit;this.#maxBands=maxBands;
   }
 
-  register(id,definition,{resident=false}={}) {
+  register(id,definition,{resident=false,regenerate=null}={}) {
     if(this.#job)throw new Error('Cannot register during residency transition');
     if(typeof id!=='string'||!id||this.#bands.has(id)||this.#bands.size>=this.#maxBands)
       throw new RangeError('Invalid or duplicate terrain band ID');
     if(resident && this.residentIds.length>=this.#limit)
       throw new RangeError('Resident terrain band limit exceeded');
-    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident}));
+    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident,regenerate}));
     this.#peak=Math.max(this.#peak,this.residentIds.length);
   }
 
@@ -42,6 +42,17 @@ export class V2TerrainResidencySet {
       peakResident:this.#peak,limit:this.#limit,evictions:this.#evictions,loads:this.#loads,
       transition:job?{id:job.id,action:job.action,phase:job.phase,
         operations:job.band.progress.operations}:null});
+  }
+
+  get storageMetrics() {
+    let definitions=0,runs=0,microTiles=0,removedCells=0,surfaceOverrides=0;
+    for(const band of this.#bands.values()){
+      const retained=band.retainedDefinition;
+      if(retained){definitions++;runs+=retained.runs;microTiles+=retained.microTiles;}
+      removedCells+=band.progress.removedCells;
+      surfaceOverrides+=band.progress.surfaceOverrides;
+    }
+    return {definitions,runs,microTiles,removedCells,surfaceOverrides};
   }
 
   begin(id,action,{protectedIds=[]}={}) {
