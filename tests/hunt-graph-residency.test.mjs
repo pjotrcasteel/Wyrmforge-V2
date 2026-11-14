@@ -15,7 +15,7 @@ test('H08-02B: bounded graph residency follows a branching loop and retains entr
   const graph=generateAuthoredHuntTerrainGraph(entry);
   const initial=start.sites.map(s=>s.id);
   initial.push(graph.layout.links.find(l=>initial.includes(l.fromId)&&initial.includes(l.toId)).id);
-  const loader=new V2ExternalTerrainLoader(start.definition,{microSurfaceCapacity:2048});
+  const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initial),{microSurfaceCapacity:2048});
   try {
     while(!loader.progress.done)loader.loadStep(4096);
     const {world,port}=loader.terrain;
@@ -79,7 +79,7 @@ test('H08-02B: bounded graph residency follows a branching loop and retains entr
         assert.equal(actorOverlapsTerrain(world,actor),false);
         if(stream.location(actor.x,actor.z)===to.id)break;
       }
-      assert.equal(stream.location(actor.x,actor.z),to.id,link.id);
+      assert.equal(stream.location(actor.x,actor.z),to.id,link.id+' '+JSON.stringify(actor));
       if(to.id==='region-extraction')assert.ok(!stream.metrics.residentRegions.includes(entryRegion.id));
     }
     assert.ok(stream.metrics.evictions>0);
