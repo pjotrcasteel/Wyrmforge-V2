@@ -19,12 +19,14 @@ export class V2TerrainBandResidency {
   #dirty=new Set();
   #operations=0;
 
-  constructor(world,definition) {
+  constructor(world,definition,{resident=true}={}) {
+    if(typeof resident!=='boolean')throw new TypeError('Expected initial band residency');
     this.#definition=validateExternalTerrainDefinition(definition);
     if(!world || world.chunkEdge!==this.#definition.chunkEdge) {
       throw new TypeError('Expected the existing authoritative V2 world');
     }
     this.#world=world;
+    this.#phase=resident?'resident':'evicted';
   }
 
   get progress() {

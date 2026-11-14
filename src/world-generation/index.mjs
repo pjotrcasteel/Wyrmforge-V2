@@ -56,3 +56,5 @@ export function generateConnectedHuntContinuation(entrySite,start) {
   });
 }
 export { activateConnectedHuntContinuation } from './connected-hunt-start.mjs';
+
+export { composeAuthoredHuntLayout } from './authored-hunt-layout.mjs';
