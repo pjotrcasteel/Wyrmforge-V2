@@ -1,39 +1,24 @@
 import { projectVoxel } from './camera-presets.mjs';
-import { LIVE_TREES } from './wet-forest-tree-sprites.mjs';
+import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
 
 // H08-05 first visual slice. Placement IDs survive eviction and regenerated
 // instances choose the same original art. Cache only published regions.
 export class HuntTreePreview {
-  #regions=new Map();
+  objects;
   #image;
-  #graph;
   #scenery;
   constructor(graph,image){
-    this.#graph=graph;
+    this.objects=new HuntWoodlandObjects(graph);
     this.#image=image;
     this.#scenery=new ScenicForest(graph.layout);
   }
   update(regionIds,terrain){
-    for(const id of this.#regions.keys()){
-      if(!regionIds.includes(id))this.#regions.delete(id);
-    }
-    const next=regionIds.find(id=>!this.#regions.has(id));
-    if(next===undefined||!this.#image.complete||!this.#image.naturalWidth)return;
-    const trees=[];
-    for(const item of this.#graph.placement(next).placements){
-      if(item.kind!=='tree')continue;
-      const {x,z}=item.position;
-      const hit=terrain.raycast({origin:[x,32,z],direction:[0,-1,0],maxDistance:42});
-      if(hit&&Math.abs(hit.point.y-item.position.y)<=.5){
-        trees.push({x,y:hit.point.y,z,scale:item.scale,sprite:LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length]});
-      }
-    }
-    this.#regions.set(next,trees);
+    if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain);
   }
   paint(ctx,view,actor,paintActor){
     const layers=[];
-    const visible=[this.#scenery.trees(view),...this.#regions.values()];
+    const visible=[this.#scenery.trees(view),...this.objects.regions];
     if(this.#image.complete&&this.#image.naturalWidth){
       for(const trees of visible)for(const tree of trees){
         const layer=projectTreeSprite(tree,view);

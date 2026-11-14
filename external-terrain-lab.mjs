@@ -677,7 +677,7 @@ function updatePlayFrame(now) {
           playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
         const allowed=residency?residency.constrainInput(playActor,input):input;
         const before=playActor;
-        playActor=stepHuntExplorer(active.world,playActor,bounds,allowed);
+        playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects});
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
