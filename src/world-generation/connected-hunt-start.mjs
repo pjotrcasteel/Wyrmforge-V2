@@ -34,6 +34,16 @@ function boundaryProfile(site,z,microRow) {
   return columns;
 }
 
+// Read the dirt trail's actual width at both source edges. Do not stamp
+// a fixed-width rectangle across otherwise organic authored road ends.
+function roadSpan(profile,minX,maxX) {
+  if(profile.get(0)?.material!==2)return {left:-2,right:2};
+  let left=0,right=0;
+  while(left>minX && profile.get(left-1)?.material===2)left--;
+  while(right<maxX && profile.get(right+1)?.material===2)right++;
+  return {left,right};
+}
+
 function joinBoundaries(south,north,offsetZ) {
   const a=south.layout.footprint,b=north.layout.footprint;
   if(a.minX!==b.minX || a.maxX!==b.maxX) {
@@ -43,6 +53,8 @@ function joinBoundaries(south,north,offsetZ) {
   if(b.maxZ+offsetZ!==start-1)throw new Error('Hunt connection overlaps or leaves a gap');
   const southEdge=boundaryProfile(south,a.minZ,0);
   const northEdge=boundaryProfile(north,b.maxZ,9);
+  const southRoad=roadSpan(southEdge,a.minX,a.maxX);
+  const northRoad=roadSpan(northEdge,b.minX,b.maxX);
   const floor=Math.min(a.minY,b.minY);
   const runs=[],surfaceTiles=[],columns=new Map();
   let maximumRouteGradeTenths=0,maxY=floor;
@@ -51,11 +63,24 @@ function joinBoundaries(south,north,offsetZ) {
     let previous=n.topTenths;
     for(let z=start;z<a.minZ;z++){
       const t=(z-start+1)/(CONNECTOR_DEPTH+1);
-      const topTenths=Math.round(n.topTenths+(s.topTenths-n.topTenths)*t);
+      const interior=Math.sin(Math.PI*t);
+      // Break synchronized horizontal terraces in the grass outside the
+      // protected route. Low-amplitude coherent variation, zero at the
+      // source edges; route heights and their traversal audit stay intact.
+      const shoulder=Math.min(1,Math.max(0,(Math.abs(x)-3)/3));
+      const wave=Math.sin(x*.73+south.recipe.seed*.19)*1.6+
+        Math.sin(x*.31+z*.91)*.75;
+      const topTenths=Math.round(n.topTenths+(s.topTenths-n.topTenths)*t+
+        wave*interior*shoulder);
       const y=Math.ceil(topTenths/10)-1;
       const level=topTenths-y*10;
-      const material=Math.abs(x)<=2 ? 2 :
-        (t<.5?n.material:s.material);
+      const bend=interior*Math.sin(south.recipe.seed*.47)*1.2;
+      const left=northRoad.left+(southRoad.left-northRoad.left)*t+bend+interior*.6;
+      const right=northRoad.right+(southRoad.right-northRoad.right)*t+bend-interior*.6;
+      const edgeMaterial=t<.5?n.material:s.material;
+      const central=Math.abs(x)<=Math.max(Math.abs(left),Math.abs(right))+1;
+      const material=x>=left && x<=right?2:
+        (central && edgeMaterial===2?1:edgeMaterial);
       columns.set(x+','+z,{y,material});
       maxY=Math.max(maxY,y);
       if(level!==10)surfaceTiles.push({x,y,z,levels:Array(100).fill(level)});
@@ -86,6 +111,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   return {runs,surfaceTiles,seam:Object.freeze({
     direction:'north',minZ:start,maxZ:a.minZ-1,routeWidthMetres:7,
+    profile:'staggered-edge-v2',
     maximumRouteGradeTenths,depthMetres:CONNECTOR_DEPTH
   }),maxY};
 }
@@ -124,7 +150,7 @@ export function composeConnectedHuntStart(plan,south,{generateSite,createRecipe,
     ]),
     streaming:false,
     // The generated-site hashes remain intact; only the composition is new.
-    hash:'connected-'+south.hash+'-'+north.hash
+    hash:'connected-v2-'+south.hash+'-'+north.hash
   });
 }
 
