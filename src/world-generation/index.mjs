@@ -27,3 +27,21 @@ export function generateWorldExpeditionRegion(plan,regionId) {
     terrainAdapter:toVoxelTerrainDefinition
   });
 }
+
+import { createWorldSiteRecipe } from './site-recipe.mjs';
+import { createHuntExpeditionRecipe,composeHuntExpeditionPlan } from './hunt-expedition-plan.mjs';
+import { composeConnectedHuntStart } from './connected-hunt-start.mjs';
+
+export function generateConnectedHuntStart(entrySite) {
+  const recipe=entrySite.recipe;
+  const plan=composeHuntExpeditionPlan(createHuntExpeditionRecipe({
+    journeyId:'fire-tier-one',huntId:'preview-expedition',chapter:0,
+    kind:recipe.kind,seed:recipe.seed,worldRevision:recipe.worldRevision,
+    chunkEdge:recipe.chunkEdge,corruption:recipe.corruption
+  }));
+  return composeConnectedHuntStart(plan,entrySite,{
+    generateSite:generateWorldSite,createRecipe:createWorldSiteRecipe,
+    terrainAdapter:toVoxelTerrainDefinition
+  });
+}
+export { connectedHuntLocation } from './connected-hunt-start.mjs';
