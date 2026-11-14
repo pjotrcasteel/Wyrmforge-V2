@@ -156,7 +156,8 @@ function prepareGeometry(plan,seed) {
   const roadGrades=gradeNavigableRoads({
     radius,heights,routes:plan.routes,
     escapeRoutes:plan.escapeRoutes,flowLinks:plan.flowLinks,
-    approaches:plan.approaches,combatSpaces:plan.combatSpaces
+    approaches:plan.approaches,combatSpaces:plan.combatSpaces,
+    lateralPorts:plan.recipe.lateralPorts??[]
   });
   // Volcanic fissures are real rock cuts, but must never sever the
   // already-graded authored routes, protected combat floor or exits.
