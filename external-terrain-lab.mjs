@@ -25,7 +25,8 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
-  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP
+  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,
+  targetHuntFireball,isHuntCastTap
 } from './src/hunt-play-runtime.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
@@ -96,6 +97,11 @@ let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
+let playView=null;
+let playFireball=null;
+let playImpact=null;
+let playFireballCount=0;
+let playRemovedVoxels=0;
 const playFollowCamera=new HuntFollowCamera();
 let playStepAccumulator=0;
 let playFrameAt=null;
@@ -176,6 +182,7 @@ function paintEncounterGuide(view) {
     paintTraversalOverlay(ctx,view);
     paintDummyActor(ctx,view);
     paintPlayActor(ctx,view);
+    paintPlayFireball(ctx,view);
     return;
   }
   const guide=projectEncounterGuides(generatedSite,active.world,view);
@@ -261,6 +268,7 @@ function paintEncounterGuide(view) {
   paintTraversalOverlay(ctx,view);
   paintDummyActor(ctx,view);
   paintPlayActor(ctx,view);
+  paintPlayFireball(ctx,view);
 }
 
 // Navigation is a separate derived consumer of the current Voxel V2 Terrain
@@ -459,6 +467,73 @@ function paintPlayActor(ctx,view) {
   ctx.restore();
 }
 
+// One bounded projectile and one short-lived impact marker. They are visual
+// feedback only; the crater is always committed through the Voxel V2 port.
+function paintPlayFireball(ctx,view) {
+  if(!playMode)return;
+  const now=performance.now();
+  if(playFireball) {
+    const cast=playFireball;
+    const t=Math.min(1,Math.max(0,(now-cast.startedAt)/cast.duration));
+    const point=['x','y','z'].map(axis=>
+      cast.from[axis]+(cast.point[axis]-cast.from[axis])*t);
+    point[1]+=Math.sin(t*Math.PI)*0.75;
+    const screen=projectVoxel(...point,view);
+    const size=Math.max(3,view.scale*.18);
+    ctx.fillStyle='#d94a15';
+    ctx.fillRect(screen.x-size*1.5,screen.y-size*1.5,size*3,size*3);
+    ctx.fillStyle='#ffb542';
+    ctx.fillRect(screen.x-size,screen.y-size,size*2,size*2);
+    ctx.fillStyle='#fff3a3';
+    ctx.fillRect(screen.x-size*.5,screen.y-size*.5,size,size);
+  }
+  if(playImpact) {
+    const age=now-playImpact.at;
+    if(age>=330) {playImpact=null;return;}
+    const point=playImpact.point;
+    const screen=projectVoxel(point.x,point.y,point.z,view);
+    const radius=view.scale*(.4+age/330*2.3);
+    ctx.save();
+    ctx.globalAlpha=1-age/330;
+    ctx.strokeStyle='#ffc05c';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.ellipse(screen.x,screen.y,radius,radius*.65,0,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function castPlayFireball(clientX,clientY) {
+  if(!playMode || !playActor || !active || !playView || playFireball ||
+      pendingMesh || pendingEdit || restoring || errorMessage ||
+      !renderer?.ready || renderer.pendingUploads)return;
+  const rect=canvas.getBoundingClientRect();
+  if(rect.width<=0 || rect.height<=0)return;
+  const target=targetHuntFireball(active.port,playView,
+    (clientX-rect.left)*playView.width/rect.width,
+    (clientY-rect.top)*playView.height/rect.height);
+  if(!target)return;
+  const from={x:playActor.x,y:playActor.y+1.1,z:playActor.z};
+  const distance=Math.hypot(target.point.x-from.x,
+    target.point.y-from.y,target.point.z-from.z);
+  playFireball={...target,from,world:active.world,startedAt:performance.now(),
+    duration:Math.max(100,Math.min(420,distance*30))};
+}
+
+function advancePlayFireball(now) {
+  if(!playFireball || document.hidden)return;
+  const cast=playFireball;
+  if(now-cast.startedAt<cast.duration)return;
+  playFireball=null;
+  if(active?.world!==cast.world || active.port.revision!==cast.worldRevision)return;
+  const result=impactSpan(cast.target);
+  if(!result)return;
+  playFireballCount++;
+  playRemovedVoxels+=result.removedVoxels;
+  playImpact={point:cast.point,at:now};
+}
+
 function playMovementInput() {
   const pressed=code=>playKeys.has(code);
   const x=(pressed('KeyD')||pressed('ArrowRight')?1:0)-
@@ -499,6 +574,8 @@ function resetPlayActor() {
     direction:'south',at:{x:entry.x,z:entry.z}
   });
   playFollowCamera.reset(playActor);
+  playFireball=null;
+  playImpact=null;
   playStepAccumulator=0;
   resetPlayInput();
 }
@@ -548,7 +625,8 @@ function updatePlayFrame(now) {
       '\nVoxel memory ~'+(active?.world?
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
-      '\nTouch joystick / WASD · no enemies yet';
+      '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
+      '\nJoystick / WASD · tap ground to cast';
   }
 }
 
@@ -610,7 +688,8 @@ function updateStatus(now=performance.now()) {
     ? (generatedSite ? generatedSite.recipe.kind :
         expeditionSite ? 'Expedition '+expeditionSite.regionId :
         'Fixed voxel fixture')+
-      ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'
+      ' · '+loaded.chunkCount+' chunks · '+renderer.pendingUploads+' GPU jobs'+
+      (playMode?' · Tap terrain: Fireball':'')
     : 'Loading '+Math.round(100*progress.loadedCells/Math.max(1,progress.totalCells))+
       '% of terrain · '+progress.loadedCells+'/'+progress.totalCells+' cells';
 }
@@ -638,6 +717,11 @@ function resetSite() {
     renderer.setMeshes([]);
     generatedSite=null;
     playActor=null;
+    playView=null;
+    playFireball=null;
+    playImpact=null;
+    playFireballCount=0;
+    playRemovedVoxels=0;
     playFollowCamera.reset();
     resetPlayInput();
     expeditionSite=null;
@@ -721,7 +805,7 @@ function resetSite() {
   }
 }
 
-function impactSpan() {
+function impactSpan(targetOverride=null) {
   if(!active || restoring || pendingMesh || pendingEdit || errorMessage ||
       !renderer.ready || renderer.pendingUploads) return;
   if(typeof Worker!=='function' && active.world.chunkCount>8) {
@@ -731,8 +815,8 @@ function impactSpan() {
     return;
   }
   try {
-    let target=EXTERNAL_SITE_BREACH;
-    if(generatedSite || expeditionSite) {
+    let target=targetOverride??EXTERNAL_SITE_BREACH;
+    if(!targetOverride && (generatedSite || expeditionSite)) {
       const spot=generatedSite
         ? generatedSite.layout.clearings[0]
         : expeditionSite.layout.center;
@@ -745,7 +829,7 @@ function impactSpan() {
     }
     const result=active.port.apply({
       id:'v26-site-breach-'+(++breachCount),
-      type:'carve-sphere',...target,
+      type:targetOverride?'carve-crater':'carve-sphere',...target,
       expectedRevision:active.world.revision
     });
     lastImpactRemoved=result.removedVoxels;
@@ -771,9 +855,11 @@ function impactSpan() {
     }
     lastStatusAt=-Infinity;
     updateStatus();
+    return result;
   } catch(error) {
     errorMessage=error.message;
     updateStatus();
+    return null;
   }
 }
 
@@ -862,6 +948,7 @@ function frame(now) {
   const playCpuBegin=playMode?performance.now():0;
   try {
     updatePlayFrame(now);
+    if(playMode)advancePlayFireball(now);
     if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
@@ -908,14 +995,14 @@ function frame(now) {
       const panY=followed
         ? canvas.height*.51-followed.y
         : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
-      renderer.render({
-        width:canvas.width,height:canvas.height,
-        scale,panX,panY,camera
-      });
-      paintEncounterGuide({
-        width:canvas.width,height:canvas.height,
-        scale,panX,panY,camera
-      });
+      const view={width:canvas.width,height:canvas.height,
+        scale,panX,panY,camera};
+      if(renderer.render({width:canvas.width,height:canvas.height,
+          scale,panX,panY,camera,huntHeightContrast:playMode &&
+          camera===PLAY_HUNT_CAMERA})) {
+        if(playMode)playView=view;
+        paintEncounterGuide({...view});
+      }
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads ||
       Boolean(errorMessage) || Boolean(rendererErrorMessage) || Boolean(restoring) ||
@@ -1025,12 +1112,18 @@ focusButton.addEventListener('click',()=>{
 canvas.addEventListener('pointerdown',event=>{
   if(event.pointerType==='mouse' && event.button!==0) return;
   canvas.setPointerCapture?.(event.pointerId);
-  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  const tapAllowed=activePointers.size===0;
+  if(!tapAllowed)for(const pointer of activePointers.values())pointer.tapAllowed=false;
+  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY,
+    startX:event.clientX,startY:event.clientY,startedAt:performance.now(),tapAllowed});
 });
 canvas.addEventListener('pointermove',event=>{
   if(!activePointers.has(event.pointerId)) return;
   const before=[...activePointers.values()];
-  activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  const pointer=activePointers.get(event.pointerId);
+  const tapAllowed=pointer.tapAllowed && Math.hypot(
+    event.clientX-pointer.startX,event.clientY-pointer.startY)<=10;
+  activePointers.set(event.pointerId,{...pointer,x:event.clientX,y:event.clientY,tapAllowed});
   const after=[...activePointers.values()];
   if(before.length===1) {
     if(!playMode) {
@@ -1048,12 +1141,17 @@ canvas.addEventListener('pointermove',event=>{
   event.preventDefault();
 });
 function releasePointer(event) {
+  const pointer=activePointers.get(event.pointerId);
   activePointers.delete(event.pointerId);
+  if(playMode && event.type==='pointerup' && isHuntCastTap(pointer,
+      event.clientX,event.clientY,performance.now())) {
+    castPlayFireball(event.clientX,event.clientY);
+  }
 }
 canvas.addEventListener('pointerup',releasePointer);
 canvas.addEventListener('pointercancel',releasePointer);
 canvas.addEventListener('lostpointercapture',releasePointer);
-breachButton.addEventListener('click',impactSpan);
+breachButton.addEventListener('click',()=>impactSpan());
 saveButton.addEventListener('click',saveState);
 restoreButton.addEventListener('click',restoreState);
 if(playMode) {
@@ -1122,6 +1220,7 @@ if(playMode) {
         generatorHash:generatedSite?.hash??null,
         cameraPreset:viewCamera.value,
         fullWorldGenMaterialShading:true,
+        heightContrast:viewCamera.value===PLAY_HUNT_CAMERA,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
         microSurfaceTiles:generatedSite?.layout.microSurface.tileCount??null
       },
@@ -1136,6 +1235,7 @@ if(playMode) {
         frameWorkCpu:playCpuStats.snapshot,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
+      fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
         chunks:active?.world.chunkCount??null,
@@ -1165,6 +1265,8 @@ if(playMode) {
   playRespawn.addEventListener('click',resetPlayActor);
   window.addEventListener('blur',()=>{
     resetPlayInput();
+    activePointers.clear();
+    playFireball=null;
     playFrameAt=null;
   });
 }

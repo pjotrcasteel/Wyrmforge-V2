@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
 import { generateWorldSite } from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
-import { spawnHuntExplorer,stepHuntExplorer,HUNT_FIXED_STEP } from '../src/hunt-play-runtime.mjs';
+import { spawnHuntExplorer,stepHuntExplorer,HUNT_FIXED_STEP,targetHuntFireball,isHuntCastTap } from '../src/hunt-play-runtime.mjs';
+import { projectVoxel } from '../src/camera-presets.mjs';
 import { actorOverlapsTerrain } from '../src/terrain-actor.mjs';
 
 function canonicalWetForestRecipe() {
@@ -149,4 +150,51 @@ test('Play Hunt uses Wyrmforge 2.5D camera and the SAME real WorldGen material e
   assert.match(play,/<details id="play-hud">/);
   assert.match(host,/playHudDetails\.textContent=/);
   assert.doesNotMatch(play,/<details id="play-hud" open/);
+});
+
+
+test('tap Fireball hits real visible WorldGen terrain and commits a physical crater',()=>{
+  const generated=generateWorldSite(canonicalWetForestRecipe());
+  const loader=new V2ExternalTerrainLoader(generated.definition);
+  try {
+    while(!loader.progress.done)loader.loadStep(4096);
+    const {world,port}=loader.terrain;
+    const hit=port.raycast({origin:[0.5,30,0.5],direction:[0,-1,0],maxDistance:64});
+    assert.ok(hit);
+    const view={width:402,height:604,scale:16,panX:0,panY:0,camera:'hunt'};
+    const pixel=projectVoxel(hit.point.x,hit.point.y,hit.point.z,view);
+    const cast=targetHuntFireball(port,view,pixel.x,pixel.y);
+    assert.ok(cast);
+    assert.equal(cast.worldRevision,world.revision);
+    const {x,y,z}=cast.target;
+    assert.ok(world.get(x,y,z)>0);
+    const result=port.apply({id:'test-fireball-1',type:'carve-crater',
+      ...cast.target,expectedRevision:cast.worldRevision});
+    assert.ok(result.removedVoxels>0);
+    assert.equal(world.get(x,y,z),0);
+    assert.ok(result.dirtyChunks.length>0);
+    assert.ok(port.exportJournal().commands.some(c=>c.id==='test-fireball-1'));
+    assert.equal(targetHuntFireball(port,view,-1,20),null);
+  } finally {loader.unload();}
+});
+
+test('fireball taps exclude drags, pinch and long presses',()=>{
+  const tap={tapAllowed:true,startX:200,startY:300,startedAt:1000};
+  assert.equal(isHuntCastTap(tap,204,303,1150),true);
+  assert.equal(isHuntCastTap(tap,230,330,1150),false);
+  assert.equal(isHuntCastTap(tap,200,300,1500),false);
+  assert.equal(isHuntCastTap({...tap,tapAllowed:false},200,300,1150),false);
+  assert.equal(isHuntCastTap(null,200,300,1150),false);
+});
+
+test('Hunt tap casting reuses terrain port, localized meshes and full renderer',()=>{
+  const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+  const shader=readFileSync(new URL('../src/webgl-voxel-view.mjs',import.meta.url),'utf8');
+  assert.ok(host.includes('targetHuntFireball(active.port,playView,'));
+  assert.ok(host.includes("event.type==='pointerup' && isHuntCastTap"));
+  assert.ok(host.includes("type:targetOverride?'carve-crater':'carve-sphere'"));
+  assert.ok(host.includes('meshBridge.replace(active.world,dirty)'));
+  assert.ok(host.includes('huntHeightContrast:playMode &&'));
+  assert.ok(shader.includes('vWorld.y-4.0'));
+  assert.ok(shader.includes('if (uHuntHeightContrast)'));
 });

@@ -5,6 +5,7 @@ import {
   spawnTerrainActor,simulateTerrainActor,
   ACTOR_MOVE_SPEED
 } from './terrain-actor.mjs';
+import { terrainRayFromScreen } from './terrain-raycast.mjs';
 
 export const HUNT_EXPLORATION_SCHEMA='wyrmforge.hunt-exploration.v1';
 export const HUNT_WALK_SPEED=ACTOR_MOVE_SPEED;
@@ -115,6 +116,28 @@ export class HuntFollowCamera {
     this.#position.y+=Math.max(-maxTravel,Math.min(maxTravel,vertical));
     return {...this.#position};
   }
+}
+
+// Tap targeting: invert the *currently rendered* V2 camera, then query the
+// authoritative terrain port. Commit through its existing edit ledger.
+// The initial Fireball is a bounded terrain-only preview, not combat balance.
+export function targetHuntFireball(port,view,x,y) {
+  if(!port || typeof port.raycast!=='function' ||
+      !view || ![x,y].every(Number.isFinite))return null;
+  if(x<0 || y<0 || x>view.width || y>view.height)return null;
+  const hit=port.raycast(terrainRayFromScreen({...view,x,y}));
+  if(!hit)return null;
+  return {
+    point:{...hit.point},
+    target:{...hit.cell,radius:2.3,depth:2},
+    worldRevision:hit.worldRevision
+  };
+}
+
+export function isHuntCastTap(pointer,x,y,now) {
+  return Boolean(pointer?.tapAllowed &&
+    now-pointer.startedAt>=0 && now-pointer.startedAt<=350 &&
+    Math.hypot(x-pointer.startX,y-pointer.startY)<=10);
 }
 
 export class HuntPlayPerformance {
