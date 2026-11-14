@@ -243,3 +243,35 @@ export function activateConnectedHuntContinuation(start,continuation) {
     streaming:true,eviction:false,residentLimit:3
   });
 }
+
+// Reuse the identical physical road grammar for every north/south graph
+// edge, not only edges on the current playable main route.
+export function composeNorthSouthHuntConnector(layout,linkId,{southSite,northSite,terrainAdapter}={}) {
+  const link=layout?.links.find(l=>l.id===linkId);
+  if(!link||!['north','south'].includes(link.fromPort.direction)||
+      typeof terrainAdapter!=='function')throw new Error('Expected an authored north/south graph link');
+  const from=layout.regions.find(r=>r.id===link.fromId);
+  const to=layout.regions.find(r=>r.id===link.toId);
+  const [south,north]=from.offsetZ>to.offsetZ?[from,to]:[to,from];
+  if(!southSite||!northSite||
+      (south.id!==layout.entryRegionId&&southSite.recipe.regionId!==south.id)||
+      (north.id!==layout.entryRegionId&&northSite.recipe.regionId!==north.id)||
+      southSite.recipe.kind!==south.biome||northSite.recipe.kind!==north.biome||
+      southSite.recipe.seed!==northSite.recipe.seed||
+      southSite.recipe.worldRevision!==northSite.recipe.worldRevision||
+      southSite.recipe.corruption!==northSite.recipe.corruption||
+      southSite.recipe.chunkEdge!==northSite.recipe.chunkEdge)
+    throw new Error('Authored north/south source identity mismatch');
+  if(south.offsetX!==north.offsetX||link.bounds.maxZ!==south.bounds.minZ-1||
+      link.bounds.minZ!==north.bounds.maxZ+1||
+      link.bounds.maxZ-link.bounds.minZ!==CONNECTOR_DEPTH-1)
+    throw new Error('Invalid north/south seam envelope');
+  const connector=joinBoundaries(southSite,northSite,north.offsetZ-south.offsetZ);
+  const translate=items=>items.map(item=>({...item,x:item.x+south.offsetX,z:item.z+south.offsetZ}));
+  const definition=terrainAdapter({siteId:link.id,seed:southSite.recipe.seed,
+    chunkEdge:southSite.recipe.chunkEdge,generatorVersion:southSite.generatorVersion,
+    runs:translate(connector.runs),surfaceTiles:translate(connector.surfaceTiles)});
+  return Object.freeze({id:link.id,southId:south.id,northId:north.id,bounds:link.bounds,
+    maximumRouteGradeTenths:connector.seam.maximumRouteGradeTenths,
+    routeWidthMetres:connector.seam.routeWidthMetres,profile:connector.seam.profile,definition});
+}

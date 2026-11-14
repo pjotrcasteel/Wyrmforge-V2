@@ -88,3 +88,10 @@ export function generateLateralHuntConnector(layout,linkId,westSite,eastSite) {
     westSite,eastSite,terrainAdapter:toVoxelTerrainDefinition
   });
 }
+
+import {AuthoredHuntTerrainGraph} from './authored-hunt-terrain-graph.mjs';
+export function generateAuthoredHuntTerrainGraph(entrySite,plan=planForEntry(entrySite)) {
+  return new AuthoredHuntTerrainGraph(plan,entrySite,{
+    generateSite:generateWorldSite,createRecipe:createWorldSiteRecipe,terrainAdapter:toVoxelTerrainDefinition
+  });
+}
