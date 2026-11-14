@@ -4,7 +4,7 @@
 import { VoxelWorld, CHUNK_EDGE_CANDIDATES, MAX_SCENE_SEED } from './voxel-world.mjs';
 import { TerrainEditLedger } from './terrain-edit-ledger.mjs';
 import { V2TerrainPort } from './terrain-integration-port.mjs';
-import { validateMicroSurfaceTiles,MAX_MICRO_SURFACE_TILES } from './microvoxel-surface.mjs';
+import { validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
 import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 
 export const TERRAIN_INITIALIZATION_SCHEMA = 'voxel-v2.terrain-initialization.v1';
@@ -110,13 +110,13 @@ export class V2ExternalTerrainLoader {
   #loaded=0;
   #closed=false;
 
-  constructor(definition,{epoch=1}={}) {
+  constructor(definition,{epoch=1,microSurfaceCapacity}={}) {
     if(!Number.isSafeInteger(epoch) || epoch<1) {
       throw new RangeError('Expected a positive V2 terrain world epoch');
     }
     this.#definition=validateExternalTerrainDefinition(definition);
     this.#epoch=epoch;
-    this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge});
+    this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge,microSurfaceCapacity});
   }
 
   get progress() {
@@ -236,7 +236,7 @@ export class V2ExternalTerrainAppend {
         this.#definition.surfaceTiles?.some(t=>t.z>=previousMinZ)) {
       throw new RangeError('Streamed band must be north of the published footprint');
     }
-    if(world.microSurfaceCount+(this.#definition.surfaceTiles?.length??0)>MAX_MICRO_SURFACE_TILES)
+    if(world.microSurfaceCount+(this.#definition.surfaceTiles?.length??0)>world.microSurfaceCapacity)
       throw new RangeError('Streamed band exceeds resident microtile capacity');
     // The caller supplies an unopened band; no pre-existing world may own
     // chunks wholly beyond that band boundary. Shared edge chunks are allowed.
