@@ -39,8 +39,9 @@ export class TerrainViewResidencyPolicy {
     this.#retain=retain;
   }
 
-  next({view,residentIds,protectedIds=[],busy=false}){
+  next({view,lookahead,residentIds,protectedIds=[],busy=false}){
     rect(view);
+    if(lookahead)rect(lookahead);
     const resident=new Set(residentIds);
     const physical=new Set(protectedIds);
     if(resident.size>this.#limit||[...resident,...physical].some(id=>!this.#cells.has(id))){
@@ -56,20 +57,22 @@ export class TerrainViewResidencyPolicy {
       const dz=Math.max(bounds.minZ-centerZ,0,centerZ-bounds.maxZ-1);
       const distance=dx*dx+dz*dz;
       const required=physical.has(id),visible=touches(bounds,view);
+      const ahead=Boolean(lookahead&&touches(bounds,lookahead));
       if(resident.has(id)){
-        if(!required&&!visible)retire.push({id,distance,retained:touches(bounds,view,this.#retain)});
-      }else if(required||visible||touches(bounds,view,this.#preload)){
-        missing.push({id,distance,priority:required?0:visible?1:2});
+        if(!required&&!visible)retire.push({id,distance,ahead,retained:touches(bounds,view,this.#retain)});
+      }else if(required||visible||ahead||touches(bounds,view,this.#preload)){
+        missing.push({id,distance,priority:required?0:visible?1:ahead?2:3});
       }
     }
 
     missing.sort((a,b)=>a.priority-b.priority||a.distance-b.distance||compareId(a,b));
-    retire.sort((a,b)=>Number(a.retained)-Number(b.retained)||b.distance-a.distance||compareId(a,b));
+    retire.sort((a,b)=>Number(a.ahead)-Number(b.ahead)||Number(a.retained)-Number(b.retained)||b.distance-a.distance||compareId(a,b));
     const incoming=missing[0],outgoing=retire[0];
     if(incoming&&resident.size<this.#limit)return {job:{action:'load',id:incoming.id},reason:'requested'};
     // Keep offscreen neighbors in the retention ring to avoid churn on
     // reversals. An urgent load can use an unprotected offscreen slot.
-    if(outgoing&&(!outgoing.retained||(incoming&&incoming.priority<2))){
+    if(outgoing&&((!outgoing.ahead&&!outgoing.retained)||
+      (incoming&&(incoming.priority<2||(incoming.priority===2&&!outgoing.ahead))))){
       return {job:{action:'evict',id:outgoing.id},reason:'offscreen'};
     }
     if(incoming)return {job:null,reason:incoming.priority<2?'required-capacity':'preload-capacity'};

@@ -93,3 +93,14 @@ test('planner waits for real terrain publication and preserves an edit after mov
   assert.equal(world.get(-4,0,0),0);
   assert.equal(world.get(-3,0,0),1);
 });
+
+test('directional preload replaces trailing padding at capacity and settles',()=>{
+  const policy=new TerrainViewResidencyPolicy(cells,{limit:3,preload:8,retain:16});
+  const request={view:windowAt(6),lookahead:windowAt(14)};
+  assert.deepEqual(policy.next({...request,residentIds:['5','6','7']}).job,{action:'evict',id:'5'});
+  assert.deepEqual(policy.next({...request,residentIds:['6','7']}).job,{action:'load',id:'8'});
+  assert.equal(policy.next({...request,residentIds:['6','7','8']}).job,null);
+  assert.deepEqual(policy.next({...request,residentIds:['6','7'],protectedIds:['5']}).job,
+    {action:'load',id:'5'});
+  assert.equal(policy.next({...request,residentIds:['5','6','7'],protectedIds:['5']}).job,null);
+});

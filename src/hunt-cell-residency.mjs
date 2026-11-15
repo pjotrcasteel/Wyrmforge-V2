@@ -5,6 +5,7 @@ import {containsHuntLandform} from './world-generation/hunt-landform-footprint.m
 import {projectVoxel} from './camera-presets.mjs';
 import {HUNT_FIXED_STEP,HUNT_WALK_SPEED} from './hunt-play-runtime.mjs';
 
+const LOOKAHEAD_SECONDS=1.5;
 const at=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const visible=(b,v)=>b.minX<=v.maxX&&b.maxX+1>=v.minX&&b.minZ<=v.maxZ&&b.maxZ+1>=v.minZ;
 
@@ -130,7 +131,7 @@ export class HuntCellResidency {
     return this.#catalog.cells.every(cell=>!visible(cell.bounds,rect)||this.#published.has(cell.id));
   }
 
-  next(actor,{view,displayedView,respawn,prepareEncounter,holdEncounterResidency}){
+  next(actor,{view,displayedView,respawn,prepareEncounter,holdEncounterResidency,movement}){
     if(!view)return null;
     if(holdEncounterResidency&&!respawn&&this.covers(view))return null;
     let target=view;
@@ -153,7 +154,16 @@ export class HuntCellResidency {
       const cell=this.#at(actor.x+dx,actor.z+dz);
       if(cell)protectedIds.add(cell.id);
     }
-    const {ticket}=this.#session.begin({view:bounds,protectedIds});
+    let lookahead;
+    const {moveX=0,moveZ=0}=movement??{};
+    const magnitude=Math.hypot(moveX,moveZ);
+    if(!respawn&&!prepareEncounter&&!holdEncounterResidency&&magnitude>=.2){
+      const travel=HUNT_WALK_SPEED*LOOKAHEAD_SECONDS/Math.max(1,magnitude);
+      // Translating the camera along the ground translates its footprint equally.
+      const x=moveX*travel,z=moveZ*travel;
+      lookahead={minX:bounds.minX+x,maxX:bounds.maxX+x,minZ:bounds.minZ+z,maxZ:bounds.maxZ+z};
+    }
+    const {ticket}=this.#session.begin({view:bounds,lookahead,protectedIds});
     return ticket;
   }
 
