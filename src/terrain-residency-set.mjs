@@ -13,12 +13,14 @@ export class V2TerrainResidencySet {
   #peak=0;
   #evictions=0;
   #loads=0;
+  #removedCells;
 
-  constructor(world,{residentLimit=3,maxBands=14}={}) {
+  constructor(world,{residentLimit=3,maxBands=14,removedCells=null}={}) {
     if(!Number.isSafeInteger(residentLimit)||residentLimit<1||residentLimit>5||
         !Number.isSafeInteger(maxBands)||maxBands<residentLimit||maxBands>40)
       throw new RangeError('Invalid bounded residency limits');
     this.#world=world;this.#limit=residentLimit;this.#maxBands=maxBands;
+    this.#removedCells=removedCells;
   }
 
   register(id,definition,{resident=false,regenerate=null}={}) {
@@ -27,7 +29,7 @@ export class V2TerrainResidencySet {
       throw new RangeError('Invalid or duplicate terrain band ID');
     if(resident && this.residentIds.length>=this.#limit)
       throw new RangeError('Resident terrain band limit exceeded');
-    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident,regenerate}));
+    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident,regenerate,removedCells:this.#removedCells}));
     this.#peak=Math.max(this.#peak,this.residentIds.length);
   }
 

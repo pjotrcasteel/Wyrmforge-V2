@@ -4,6 +4,7 @@
 // Only destructive edits to authored occupancy are supported by this slice.
 import {validateExternalTerrainDefinition,MAX_INITIAL_TERRAIN_STEP_CELLS} from './external-terrain-loader.mjs';
 import {markDirtyForEditedVoxel} from './chunk-dirty.mjs';
+import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
 
 const key=(x,y,z)=>x+','+y+','+z;
 
@@ -32,8 +33,9 @@ export class V2TerrainBandResidency {
   #tile=0;
   #dirty=new Set();
   #operations=0;
+  #savedRemovals;
 
-  constructor(world,definition,{resident=true,regenerate=null}={}) {
+  constructor(world,definition,{resident=true,regenerate=null,removedCells=null}={}) {
     if(typeof resident!=='boolean')throw new TypeError('Expected initial band residency');
     this.#definition=validateExternalTerrainDefinition(definition);
     if(!world || world.chunkEdge!==this.#definition.chunkEdge) {
@@ -41,6 +43,7 @@ export class V2TerrainBandResidency {
     }
     if(regenerate!==null&&typeof regenerate!=='function')throw new TypeError('Expected terrain definition factory');
     this.#world=world;
+    this.#savedRemovals=removedCells;
     this.#regenerate=regenerate;
     this.#signature=definitionSignature(this.#definition);
     this.#phase=resident?'resident':'evicted';
@@ -111,7 +114,7 @@ export class V2TerrainBandResidency {
       }
     } else {
       if(actual!==0)throw new Error('Reload would overwrite authoritative occupancy');
-      if(!this.#removed.has(id)) {
+      if(!this.#removed.has(id)&&(material===V2_BEDROCK_MATERIAL||!this.#savedRemovals?.has(id))) {
         this.#world.set(x,y,z,material);
         this.#mark(x,y,z);
       }
