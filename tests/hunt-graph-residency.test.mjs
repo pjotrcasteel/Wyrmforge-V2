@@ -90,3 +90,36 @@ test('H08-02B: bounded graph residency follows a branching loop and retains entr
     assert.equal(loader.terrain.port,port);
   } finally {loader.unload();}
 });
+
+test('ambush dodges hold residency while an unloaded exit still prefetches on approach',()=>{
+  const site=generateWorldSite(createWorldSiteRecipe({
+    regionId:'starter-region',siteId:'preview-wet-forest',encounterId:'preview-001',
+    kind:'wet-forest',seed:7,chunkEdge:32}));
+  const graph=generateAuthoredHuntTerrainGraph(site);
+  const arena=graph.layout.regions.find(region=>region.role==='horde');
+  const initial=['region-entry','region-woodland-trail'];
+  initial.push(graph.layout.links.find(link=>[link.fromId,link.toId].every(id=>initial.includes(id))).id);
+  const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initial),{microSurfaceCapacity:2048});
+  try{
+    while(!loader.progress.done)loader.loadStep(4096);
+    const stream=new HuntGraphResidency(loader.terrain.world,graph,initial);
+    const trail=graph.layout.regions.find(region=>region.id==='region-woodland-trail');
+    const approach={x:trail.offsetX+.5,z:trail.bounds.minZ+2};
+    for(let i=0;i<12&&!stream.metrics.residentRegions.includes(arena.id);i++){
+      const job=stream.next(approach,{movement:{moveZ:-1}});
+      assert.ok(job);
+      stream.begin(job);
+      while(stream.metrics.transition.phase==='writing')stream.step(512);
+      stream.publish();
+    }
+    assert.ok(stream.metrics.residentRegions.includes(arena.id));
+    for(const offset of [-11,11,-11,11]){
+      const actor={x:arena.offsetX+.5,z:arena.offsetZ+offset};
+      assert.ok(stream.next(actor,{movement:{moveZ:Math.sign(offset)}}));
+      assert.equal(stream.next(actor,{movement:{moveZ:Math.sign(offset)},holdEncounterResidency:true}),null);
+    }
+    const north={x:arena.offsetX+.5,z:arena.bounds.minZ+2};
+    assert.ok(stream.next(north,{movement:{moveZ:-1},holdEncounterResidency:true}));
+    assert.ok(stream.next({x:arena.offsetX+.5,z:arena.offsetZ},{respawn:true,holdEncounterResidency:true}));
+  }finally{loader.unload();}
+});
