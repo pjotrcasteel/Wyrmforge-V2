@@ -32,3 +32,15 @@ test('grounded logs use a long narrow footprint and fall back to rock on steep g
   objects.update(['entry'],{raycast:({origin})=>({point:{y:origin[0]===0?5:4}})});
   assert.equal([...objects.regions][0][0].kind,'boulder');
 });
+
+test('the large oak blocks a side approach at the root base without making its canopy solid',()=>{
+  const tree={kind:'tree',id:'oak',position:{x:0,y:5,z:0},scale:1,
+    seed:4<<8,footprint:{radius:.46}};
+  const objects=new HuntWoodlandObjects({placement:()=>({placements:[tree]})});
+  objects.update(['entry'],{raycast:()=>({point:{y:5}})});
+  const [oak]=[...objects.regions][0];
+  assert.match(oak.sprite.name,/^tree\.oak_l\./);
+  assert.equal(oak.radius,.46);
+  assert.ok(objects.limitTravel({x:-2,y:5,z:.65},'x',4)<2);
+  assert.equal(objects.limitTravel({x:-2,y:5,z:.9},'x',4),4);
+});
