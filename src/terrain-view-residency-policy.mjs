@@ -39,7 +39,7 @@ export class TerrainViewResidencyPolicy {
     this.#retain=retain;
   }
 
-  next({view,lookahead,residentIds,protectedIds=[],busy=false}){
+  next({view,lookahead,lookaheadOnly=false,residentIds,protectedIds=[],busy=false}){
     rect(view);
     if(lookahead)rect(lookahead);
     const resident=new Set(residentIds);
@@ -60,7 +60,7 @@ export class TerrainViewResidencyPolicy {
       const ahead=Boolean(lookahead&&touches(bounds,lookahead));
       if(resident.has(id)){
         if(!required&&!visible)retire.push({id,distance,ahead,retained:touches(bounds,view,this.#retain)});
-      }else if(required||visible||ahead||touches(bounds,view,this.#preload)){
+      }else if(required||visible||ahead||(!lookaheadOnly&&touches(bounds,view,this.#preload))){
         missing.push({id,distance,priority:required?0:visible?1:ahead?2:3});
       }
     }
@@ -71,7 +71,7 @@ export class TerrainViewResidencyPolicy {
     if(incoming&&resident.size<this.#limit)return {job:{action:'load',id:incoming.id},reason:'requested'};
     // Keep offscreen neighbors in the retention ring to avoid churn on
     // reversals. An urgent load can use an unprotected offscreen slot.
-    if(outgoing&&((!outgoing.ahead&&!outgoing.retained)||
+    if(outgoing&&((!lookaheadOnly&&!outgoing.ahead&&!outgoing.retained)||
       (incoming&&(incoming.priority<2||(incoming.priority===2&&!outgoing.ahead))))){
       return {job:{action:'evict',id:outgoing.id},reason:'offscreen'};
     }

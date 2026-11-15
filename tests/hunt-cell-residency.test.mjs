@@ -65,3 +65,53 @@ test('an encounter waiting further up the trail leaves directional prefetch acti
     assert.match(ticket.id,/^link-region-horde-crossing-region-woodland-trail:/);
   }finally{loader.unload();}
 });
+
+test('active ambush prefetch covers the eastern dodge at the iPhone viewport and cell cap',()=>{
+  const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
+    siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
+  const graph=generateAuthoredHuntTerrainGraph(site);
+  const catalog=new HuntCellCatalog(graph);
+  while(!catalog.done)catalog.step();
+  const initialIds=['region-entry','region-woodland-trail','link-region-entry-region-woodland-trail'];
+  const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),{microSurfaceCapacity:2048});
+  try{
+    while(!loader.progress.done)loader.loadStep(512);
+    const residency=new HuntCellResidency(loader.terrain.world,graph,catalog,initialIds,
+      {entry:site.layout.topology.entry});
+    const z=-105.14,y=5;
+    const viewport=x=>({width:402,height:604,scale:16,camera:'hunt',
+      panX:Math.round(-x*16),panY:Math.round((.01*604)-(z*.77-(y+.85)*.64)*16)});
+    const prepare={x:.5,y,z};
+    const readyView=viewport(prepare.x);
+    function publish(){
+      while(residency.metrics.transition.phase==='writing')residency.step(512);
+      residency.publish();
+      assert.ok(residency.metrics.residentCellIds.length<=96);
+    }
+    for(let n=0;n<200;n++){
+      const ticket=residency.next(prepare,{view:readyView,prepareEncounter:true});
+      if(!ticket)break;
+      residency.begin(ticket);
+      publish();
+    }
+    assert.ok(residency.covers(readyView));
+    assert.ok(residency.encounterReady('region-horde-crossing'));
+    assert.equal(residency.next(prepare,{view:readyView,holdEncounterResidency:true}),null);
+    let displayedView=readyView;
+    for(let frame=0;frame<145;frame++){
+      const x=.5+frame*5.2/60;
+      const view=viewport(x);
+      if(frame%3===0){
+        if(residency.metrics.transition)publish();
+        const ticket=residency.next({x,y,z},{view,displayedView,
+          holdEncounterResidency:true,movement:{moveX:1}});
+        if(ticket){
+          assert.ok(ticket.action!=='evict'||!ticket.id.startsWith('region-horde-crossing:'));
+          residency.begin(ticket);
+        }
+      }
+      assert.ok(residency.covers(view),'unpublished terrain at frame '+frame+' and x='+x);
+      displayedView=view;
+    }
+  }finally{loader.unload();}
+});

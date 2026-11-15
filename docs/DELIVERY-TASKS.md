@@ -5,7 +5,7 @@
 **Current focus:** **Voxel V2 — camera-bounded terrain streaming cells ([#223](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/223))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
-**#223 camera-cell preview follow-up:** The seed 7 iPhone run on `1c4646e` completed all three ambush waves and extracted. It recorded zero terrain-blocked steps and a 1,032 ms camera hold. An authored-route regression reproduced directional prefetch being disabled on the approach while the distant encounter was waiting. Scope that exception to the encounter's own section and capture the location, phase and missing terrain cells at the start of the longest hold. Device verification remains open.
+**#223 camera-cell preview follow-up:** On seed 7 build `046f853`, the 1,251 ms camera hold began during the active horde crossing while moving toward the eastern side. The camera needed 12 unpublished cells after crossing into the next column. Active encounters now allow directional preloads and indispensable viewport loads, preserve resident arena terrain, and skip unrelated background loads and retirements. Verify the eastward dodge on device with the existing cell budget.
 
 ## GitHub issue tracking
 
