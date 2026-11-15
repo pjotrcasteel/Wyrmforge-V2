@@ -58,6 +58,7 @@ uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform bool uFastHuntMode;
 uniform bool uHuntHeightContrast;
+uniform float uHuntElevationReference;
 uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
 out vec4 outColor;
@@ -227,9 +228,9 @@ void main() {
   // Read actual physical elevation even where two adjacent surfaces share
   // grass. Simple world-height tonal separation, not a shadow/lighting engine.
   if (uHuntHeightContrast) {
-    float elevationTone=clamp(1.0+(vWorld.y-4.0)*0.16,0.58,1.42);
+    float elevationTone=clamp(1.0+(vWorld.y-uHuntElevationReference)*0.28,0.50,1.48);
     lighting*=elevationTone;
-    if (vNormal.y<0.5 && vNormal.y>-0.5) lighting*=0.82;
+    if (vNormal.y<0.5 && vNormal.y>-0.5) lighting*=0.66;
   }
   outColor = vec4(linearToSrgbColor(linearAlbedo * lighting), 1.0);
 }
@@ -623,6 +624,7 @@ export class WebGLVoxelView {
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
       fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
       huntHeightContrast: gl.getUniformLocation(this.#program, 'uHuntHeightContrast'),
+      huntElevationReference: gl.getUniformLocation(this.#program, 'uHuntElevationReference'),
       woodlandBackdrop: gl.getUniformLocation(this.#program, 'uWoodlandBackdrop'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
@@ -805,7 +807,7 @@ export class WebGLVoxelView {
     return true;
   }
 
-  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, depthOrigin = 0 }) {
+  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -820,6 +822,7 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
     gl.uniform1i(this.#uniforms.fastHuntMode,this.#fastHuntMode?1:0);
     gl.uniform1i(this.#uniforms.huntHeightContrast,huntHeightContrast?1:0);
+    gl.uniform1f(this.#uniforms.huntElevationReference,huntElevationReference);
     gl.uniform1i(this.#uniforms.woodlandBackdrop,this.#transparentBackground&&camera==='hunt'?1:0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];

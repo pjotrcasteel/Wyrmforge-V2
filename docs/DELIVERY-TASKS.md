@@ -208,6 +208,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 - **Status:** `IMPLEMENTED` — Play Hunt offers a local recovery after the player falls below their last grounded Fireball position. The recovery checks published safe ground and props, consumes the checkpoint on success, and is unavailable during active ambushes. Device review pending.
 - **Delivers:** an unstuck action that relocates the player to a nearby verified safe, supported position if destruction traps them or leaves them falling out of the world. Prefer reachable safe ground and a last safe checkpoint; no full world reset or undoing destruction.
 - **Gate:** validated collider/headroom, supported landing, preserved terrain edit ledger, no relocation inside solid voxels, no unlimited combat escape exploit. Exact cooldown/cost and rules are deferred to gameplay balancing.
+- **Player review, build `fdd3041`:** relocation works, but elevation is hard to read and some landings appear walkable while movement is blocked. Validate a walkable exit using normal Physics V2 movement and strengthen Hunt-only contrast between the player's elevation and exposed ledges. Device visual review pending.
 - **Done for now:** recover from representative self-created craters with terrain edits intact, using the actual Voxel V2 occupancy queries. No new physics engine.
 
 ### H08-03 — Natural regions and readable traversal
