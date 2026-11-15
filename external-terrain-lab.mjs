@@ -1143,9 +1143,8 @@ function frame(now) {
         ? Math.round(canvas.height*.51-followed.y)
         : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
       const view={width:canvas.width,height:canvas.height,
-        scale,panX,panY,camera};
-      if(renderer.render({width:canvas.width,height:canvas.height,
-          scale,panX,panY,camera,depthOrigin:followed?.depth??0,huntHeightContrast:playMode &&
+        scale,panX,panY,camera,depthOrigin:followed?.depth??0};
+      if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode){
           playView=view;

@@ -126,9 +126,9 @@ export function raycastTerrain(world, {
 // change axis angles without breaking targeting.
 export function terrainRayFromScreen({
   x, y, width, height, scale, panX = 0, panY = 0,
-  camera = 'hunt', nearDistance = 96
+  camera = 'hunt', nearDistance = 96, depthOrigin = 0
 } = {}) {
-  if (![x,y,width,height,scale,panX,panY,nearDistance].every(Number.isFinite) ||
+  if (![x,y,width,height,scale,panX,panY,nearDistance,depthOrigin].every(Number.isFinite) ||
       width <= 0 || height <= 0 || scale <= 0 ||
       nearDistance <= 0 || nearDistance > 128) {
     throw new RangeError('Invalid orthographic V2 terrain ray projection');
@@ -144,6 +144,10 @@ export function terrainRayFromScreen({
   // Cross(R,D) points from the camera toward the terrain for V2 presets.
   const direction = normalize(cross(right,down));
   const center = right.map((value,i) => value*a+down[i]*b);
-  const origin = center.map((value,i) => value-direction[i]*nearDistance);
+  // Start at the same depth reference as the rendered view, even far
+  // from world zero. Orthographic rays keep their screen coordinates.
+  const depthAlongRay=dot(direction,basis.depth);
+  const offset=(depthOrigin-dot(center,basis.depth))/depthAlongRay;
+  const origin = center.map((value,i) => value+direction[i]*(offset-nearDistance));
   return { origin, direction, maxDistance:Math.min(MAX_RAY_DISTANCE,nearDistance*2) };
 }

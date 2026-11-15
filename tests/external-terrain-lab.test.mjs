@@ -40,7 +40,7 @@ test('external site opens with diagonal 3D inspection, while keeping the optiona
   assert.match(html,/<option value="inspection" selected>3D inspection/);
   assert.match(html,/<option value="hunt">Hunt camera/);
   assert.match(host,/const camera=viewCamera\.value/);
-  assert.match(host,/renderer\.render\(\{[\s\S]*?scale,panX,panY,camera/);
+  assert.match(host,/renderer\.render\(\{\.\.\.view,huntHeightContrast/);
   assert.doesNotMatch(host,/camera:'hunt'/,
     'external proof must not force the nearly top-down Hunt camera');
   assert.match(host,/viewCamera\.addEventListener\('change',\(\)=>\{/);
