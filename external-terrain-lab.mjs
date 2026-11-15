@@ -50,6 +50,8 @@ const playRespawn=document.querySelector('#play-respawn');
 const playReport=document.querySelector('#play-report');
 const investigateButton=document.querySelector('#play-investigate');
 const investigationResult=document.querySelector('#play-investigation-result');
+const investigationMessage=document.querySelector('#play-investigation-message');
+const investigationDismiss=document.querySelector('#play-investigation-dismiss');
 const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
 const traversalLayout=document.querySelector('#traversal-layout');
@@ -919,7 +921,7 @@ function resetSite() {
           minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
         let findingStorage;
         try{findingStorage=window.localStorage;}catch{}
-        if(investigationResult)investigationResult.textContent='';
+        if(investigationResult)investigationResult.hidden=true;
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           investigation:new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage),
           trees:new HuntTreePreview(graph,playTreeAtlas),
@@ -1364,6 +1366,10 @@ if(playMode) {
   playReport.addEventListener('click',()=>{
     // Data is captured in the actual phone browser: no fabricated device
     // benchmarks, invented GPU timings or server-side profiler access.
+    const contact=playActor&&active?.port
+      ? active.port.raycast({origin:[playActor.x,playActor.y+.25,playActor.z],
+          direction:[0,-1,0],maxDistance:64})
+      : null;
     const report={
       schema:'wyrmforge.hunt-play-report.v1',
       build:{version:VERSION,commit:COMMIT},
@@ -1388,6 +1394,15 @@ if(playMode) {
           residency:{...playStream?.residency?.metrics,elapsedMs:playStream?.elapsedMs??null},
           prefetch:{phase:playStream?.phase??null,elapsedMs:playStream?.elapsedMs??null},currentSection:playActor?(playStream?.residency?.location(playActor.x,playActor.z)??connectedHuntLocation(playConnected,playActor.z)):null}:null
       },
+      actor:playActor?{
+        position:{x:playActor.x,y:playActor.y,z:playActor.z},
+        grounded:playActor.grounded,verticalVelocity:playActor.vy,
+        terrainBelowY:contact?.point.y??null,
+        clearanceAboveTerrain:contact?playActor.y-contact.point.y:null,
+        screenFoot:playView?projectVoxel(playActor.x,playActor.y,playActor.z,playView):null,
+        camera:playView
+      }:null,
+      investigation:{findings:playStream?.investigation.findings??[]},
       device:{
         userAgent:navigator.userAgent,
         devicePixelRatio:window.devicePixelRatio,
@@ -1429,10 +1444,14 @@ if(playMode) {
     resetPlayInput();
   });
   playRespawn.addEventListener('click',resetPlayActor);
+  investigationDismiss?.addEventListener('click',()=>{investigationResult.hidden=true;});
   investigateButton?.addEventListener('click',()=>{
     if(!playActor||streamingBusy())return;
     const result=playStream?.investigation.interact(playActor);
-    if(result)investigationResult.textContent=result;
+    if(result){
+      investigationMessage.textContent=result;
+      investigationResult.hidden=false;
+    }
   });
   window.addEventListener('blur',()=>{
     resetPlayInput();

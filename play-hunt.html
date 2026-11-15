@@ -116,8 +116,9 @@ body[data-play-hunt] #preview-message{
 #play-investigate{position:absolute;z-index:6;left:50%;bottom:24%;transform:translateX(-50%);
   min-height:44px;background:#51412a;color:#fff6de;font-weight:700}
 #play-investigation-result{position:absolute;z-index:6;top:100px;left:16px;max-width:min(85%,24rem);
-  padding:8px 12px;background:#201d16;color:#fff6de;border-radius:6px;pointer-events:none}
-#play-investigation-result:empty{display:none}
+  padding:8px 12px;background:#201d16;color:#fff6de;border-radius:6px;display:flex;align-items:center;gap:8px}
+#play-investigation-result[hidden]{display:none}
+#play-investigation-dismiss{min-width:44px;min-height:44px}
 body[data-play-hunt] canvas{touch-action:none}
 @media(max-width:360px){
   body[data-play-hunt] #play-joystick{width:116px;height:116px;left:14px}
@@ -163,7 +164,10 @@ body.focus-mode #site-summary{max-width:46%}
   <div id="play-joystick" aria-label="Move the Wizard with touch joystick">
     <div id="play-stick"></div>
   </div>
-  <p id="play-investigation-result" role="status"></p>
+  <div id="play-investigation-result" hidden>
+    <span id="play-investigation-message" role="status"></span>
+    <button id="play-investigation-dismiss" type="button" aria-label="Dismiss finding">×</button>
+  </div>
   <button id="play-investigate" type="button" hidden>Investigate</button>
   <button id="play-respawn" type="button">Respawn</button>
   <button id="play-report" type="button">Save report</button>
