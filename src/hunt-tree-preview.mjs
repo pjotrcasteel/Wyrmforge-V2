@@ -28,8 +28,8 @@ export class HuntTreePreview {
     this.#image=image;
     this.#scenery=new ScenicForest(graph.layout);
   }
-  update(regionIds,terrain){
-    if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain);
+  update(regionIds,terrain,coverage=null){
+    if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain,coverage);
   }
   paint(ctx,view,actor,paintActor,feature=null){
     const layers=[];
