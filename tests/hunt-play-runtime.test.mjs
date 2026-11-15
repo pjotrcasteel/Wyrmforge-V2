@@ -227,6 +227,9 @@ test('F07-03 recovers from edited ground without undoing the crater',()=>{
     assert.equal(recoverHuntExplorer(world,actor,checkpoint,()=>false),null);
     const recovered=recoverHuntExplorer(world,actor,checkpoint,()=>true);
     assert.ok(recovered?.grounded);
+    const isolated=recoverHuntExplorer(world,{...recovered,y:recovered.y-1},recovered,candidate=>
+      Math.hypot(candidate.x-recovered.x,candidate.z-recovered.z)<.15);
+    assert.equal(isolated,null,'a supported landing with no walkable exit is rejected');
     assert.ok(!actorOverlapsTerrain(world,recovered));
     assert.ok(recovered.y>=checkpoint.y-.25);
     assert.equal(world.revision,revision);

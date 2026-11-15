@@ -56,7 +56,18 @@ export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0,objects=nul
 
 export function recoverHuntExplorer(world,actor,checkpoint,canLand){
   if(!checkpoint||(!actor.error&&actor.y>checkpoint.y-.5)||Math.hypot(actor.x-checkpoint.x,actor.z-checkpoint.z)>8)return null;
-  const accepts=candidate=>candidate.y>=checkpoint.y-.25&&canLand(candidate);
+  const accepts=candidate=>{
+    if(candidate.y<checkpoint.y-.25||!canLand(candidate))return false;
+    const start={...candidate,vy:0,grounded:true};
+    return [[1,0],[-1,0],[0,1],[0,-1]].some(([moveX,moveZ])=>{
+      let step=start;
+      for(let frame=0;frame<14;frame++){
+        step=simulateTerrainActor(world,step,{moveX,moveZ,dt:HUNT_FIXED_STEP,moveSpeed:HUNT_WALK_SPEED});
+        if(step.error||step.y<candidate.y-.35||!canLand(step))return false;
+      }
+      return step.grounded&&Math.hypot(step.x-start.x,step.z-start.z)>=1;
+    });
+  };
   const exact=recoverTerrainActor(world,checkpoint,{horizontalRadius:0,verticalRange:0,accept:accepts});
   if(exact&&Math.hypot(exact.x-actor.x,exact.z-actor.z,exact.y-actor.y)>.25)return exact;
   return recoverTerrainActor(world,{...actor,y:checkpoint.y},{accept:candidate=>
@@ -100,6 +111,7 @@ export class HuntFollowCamera {
   #groundY=0;
   #levelY=0;
   #lastAt=null;
+  get smoothedGroundY(){return this.#position?.y??4;}
   reset(actor=null) {
     this.#position=actor?{x:actor.x,y:actor.y,z:actor.z}:null;
     this.#groundY=actor?.y??0;

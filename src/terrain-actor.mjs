@@ -264,7 +264,7 @@ export function recoverTerrainActor(world,position,{
 
   function supported(x,y,z) {
     const candidate={x,y,z};
-    return accept(candidate) && !actorOverlapsTerrain(world,candidate) && groundProbe(world,candidate);
+    return !actorOverlapsTerrain(world,candidate) && groundProbe(world,candidate) && accept(candidate);
   }
   function restored(x,y,z) {
     return {

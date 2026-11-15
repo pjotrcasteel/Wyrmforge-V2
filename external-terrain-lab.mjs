@@ -1273,7 +1273,7 @@ function frame(now) {
         playStream.cameraHoldStart=null;
       }
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA})) {
+          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY})) {
         if(playMode){
           playView=view;
           if(paintForest)paintForest(forestContext,view);
