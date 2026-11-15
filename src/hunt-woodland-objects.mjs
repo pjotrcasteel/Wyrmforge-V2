@@ -29,8 +29,12 @@ export class HuntWoodlandObjects {
       if(!hit||Math.abs(hit.point.y-y)>.5)continue;
       const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
       if(item.kind==='tree'){
-        instances.push({...base,radius:.23*item.scale,height:2*item.scale,
-          sprite:LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length]});
+        const sprite=LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length];
+        // Large oaks have a flared root base. Use the wider footprint
+        // that placement already reserves without colliding with the canopy.
+        const largeOak=sprite.name.startsWith('tree.oak_l.');
+        const radius=largeOak?(item.footprint?.radius??.46*item.scale):.23*item.scale;
+        instances.push({...base,radius,height:2*item.scale,sprite});
       }else if(item.kind==='boulder'){
         // Use the existing reserved footprint so neither prop moves into a route.
         const radius=item.footprint.radius;
