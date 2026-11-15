@@ -90,6 +90,13 @@ test('Hunt frame sampler reports bounded p50/p95/p99 without fake hardware metri
   for(let i=0;i<60;i++)stats.recordFrame(16.5);
   assert.equal(stats.snapshot.sampleCount,30);
   assert.equal(stats.snapshot.frames,70);
+  for(const ms of [50,50.1,100,100.1,1250])stats.recordFrame(ms);
+  for(let i=0;i<30;i++)stats.recordFrame(17);
+  const recent=stats.snapshot;
+  assert.equal(recent.p99Ms,17);
+  assert.equal(recent.hitchesOver50ms,4);
+  assert.equal(recent.hitchesOver100ms,2);
+  assert.equal(recent.maxFrameMs,1250);
   assert.throws(()=>stats.recordFrame(Number.NaN),RangeError);
 });
 

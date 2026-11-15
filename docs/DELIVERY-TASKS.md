@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **F07-03 — Player recovery after destructive terrain ([#169](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/169))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **F07-01 — Foundation acceptance evidence on the actual Hunt ([#165](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/165))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -130,7 +130,7 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 - **Delivers:** reliable real-device Voxel V2 baseline with a moving player in a generated Hunt, not a static 10-minute lab.
 - **Dependencies:** H08-01.
 - **Gate:** iPhone Safari and Android Chrome report build, route, seed, p50/p95/p99 frame intervals, >33/50/100 ms hitches, terrain memory/queue peaks, responsive controls, context-loss recovery and observed defects. No phone evidence = not accepted.
-- **Evidence:** none for the new playable Hunt yet; older standalone Voxel measurements are contextual only.
+- **Evidence:** iPhone Safari seed 7 in build `395d495` completed the full Hunt with 17 ms rolling p95, no terrain-blocked steps or camera holds, and a peak of 96 retained terrain definitions. Report now includes session >50/100 ms hitch counts, maximum foreground interval, and WebGL loss/restore counters. Broader device acceptance remains open.
 - **Done for now:** Measured Play Hunt baselines exist for the required named devices with no uninvestigated critical input, frame or memory fault; retain future full-load optimization for R10-02.
 
 ### F07-02 — Terrain edits, collision and replay in the moving Hunt
@@ -205,7 +205,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### F07-03 — Player recovery after destructive terrain (later)
 - **GitHub Issue:** [#169](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/169)
-- **Status:** `IMPLEMENTED` — Play Hunt offers a local recovery after the player falls below their last grounded Fireball position. The recovery checks published safe ground and props, retains the checkpoint for repeat recovery after re-entering the same trap, and is unavailable during active ambushes. Device review pending.
+- **Status:** `DEFERRED` by owner. Repeatable crater recovery shipped in #240. Revisit broader recovery rules and final acceptance in a later stage.
 - **Delivers:** an unstuck action that relocates the player to a nearby verified safe, supported position if destruction traps them or leaves them falling out of the world. Prefer reachable safe ground and a last safe checkpoint; no full world reset or undoing destruction.
 - **Gate:** validated collider/headroom, supported landing, preserved terrain edit ledger, no relocation inside solid voxels, no unlimited combat escape exploit. Exact cooldown/cost and rules are deferred to gameplay balancing.
 - **Player review, build `fdd3041`:** relocation works, but elevation is hard to read and some landings appear walkable while movement is blocked. Validate a walkable exit using normal Physics V2 movement and strengthen Hunt-only contrast between the player's elevation and exposed ledges. Device visual review pending.
