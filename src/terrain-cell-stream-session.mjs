@@ -24,8 +24,8 @@ export class TerrainCellStreamSession {
     return {...base,transition:this.#flight?{...base.transition,phase:this.#flight.phase}:null};
   }
 
-  begin({view,protectedIds=[]}){
-    const {job,reason}=this.#policy.next({view,protectedIds,
+  begin({view,lookahead,protectedIds=[]}){
+    const {job,reason}=this.#policy.next({view,lookahead,protectedIds,
       residentIds:this.#residency.residentIds,busy:Boolean(this.#flight)});
     if(!job)return {ticket:null,reason};
     this.#register(job.id,false);

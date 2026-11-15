@@ -5,6 +5,8 @@
 **Current focus:** **Voxel V2 — camera-bounded terrain streaming cells ([#223](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/223))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
+**#223 camera-cell preview follow-up:** The seed 7 iPhone run on `f089bd5` reported 115 camera-held frames and no blocked movement steps. The preview now prioritizes terrain ahead of travel within the existing cell cap and records total and longest camera hold durations. Repeat the route on device to assess the reported intermittent freezes.
+
 ## GitHub issue tracking
 
 Every stable task ID has a corresponding native [GitHub Issue](https://github.com/pjotrcasteel/Wyrmforge-V2/issues). Use status labels `status: backlog`, `status: ready`, `status: in progress`, `status: player review`, `status: done`; close only once the scoped exit criteria pass. Update issue, roadmap entry and evidence together. The issue links below are the task index. GitHub Projects board setup is pending (the connection supports Issues but not Projects administration). Do not mistake a label-filtered issue list for a native project board.

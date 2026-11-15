@@ -991,6 +991,7 @@ function resetSite() {
         playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
+          cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
@@ -1224,6 +1225,12 @@ function frame(now) {
       if(cellStream&&playView&&playView.width===view.width&&playView.height===view.height&&!cellStream.covers(view)){
         view=playView;
         playStream.cameraHeldFrames++;
+        playStream.cameraHoldStart??=now;
+      }else if(cellStream&&playStream.cameraHoldStart!==null){
+        const duration=now-playStream.cameraHoldStart;
+        playStream.cameraHeldMs+=duration;
+        playStream.longestCameraHoldMs=Math.max(playStream.longestCameraHoldMs,duration);
+        playStream.cameraHoldStart=null;
       }
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
@@ -1463,6 +1470,8 @@ if(playMode) {
       ? active.port.raycast({origin:[playActor.x,playActor.y+.25,playActor.z],
           direction:[0,-1,0],maxDistance:64})
       : null;
+    const holdStart=playStream?.cameraHoldStart;
+    const openCameraHoldMs=holdStart==null?0:Math.max(0,performance.now()-holdStart);
     const report={
       schema:'wyrmforge.hunt-play-report.v1',
       build:{version:VERSION,commit:COMMIT},
@@ -1520,6 +1529,8 @@ if(playMode) {
         chunkEdge:active?.world.chunkEdge??null,
         streamingMode:cellPreview?'camera-cells':'graph-bands',
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
+        cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
+        longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
         replayEdits:playStream?.terrainReplay??[],
         browserSave:playStream?{status:playStream.terrainSave.status,
           removedCells:playStream.terrainSave.removedCells.size}:null,
@@ -1573,6 +1584,7 @@ if(playMode) {
 document.addEventListener('visibilitychange',()=>{
   meshBridge?.setPaused(document.hidden);
   if(document.hidden){
+    if(playStream)playStream.cameraHoldStart=null;
     resetPlayInput();
     playFrameAt=null;
   }
