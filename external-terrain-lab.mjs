@@ -133,6 +133,7 @@ const playFollowCamera=new HuntFollowCamera();
 let playStepAccumulator=0;
 let playFrameAt=null;
 let playFrameStats=new HuntPlayPerformance();
+let webglRestores=0,webglRestoreFailures=0;
 let playCpuStats=new HuntPlayPerformance();
 let playWoodlandPaintStats=new HuntPlayPerformance();
 let playEvidence=new HuntStreamingEvidence();
@@ -747,7 +748,7 @@ function updatePlayFrame(now) {
   if(!playMode)return;
   if(playFrameAt!==null && !document.hidden) {
     const delta=now-playFrameAt;
-    if(delta>0 && delta<=1000){
+    if(delta>0){
       playFrameStats.recordFrame(delta);
       playEvidence.frame(delta);
     }
@@ -1561,6 +1562,9 @@ if(playMode) {
         frameIntervals:playFrameStats.snapshot,
         frameWorkCpu:playCpuStats.snapshot,
         streamingEvidence:playEvidence.snapshot,
+        webglContext:renderer?{losses:renderer.statistics.contextLosses,
+          restores:webglRestores,restoreFailures:webglRestoreFailures,
+          ready:renderer.ready,recovering:renderer.recovering}:null,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
@@ -1645,6 +1649,8 @@ try {
     // projections. The 2.5D game camera does not require 2D fake terrain.
     transparentBackground:Boolean(forestContext),fastHuntMode:false,
     onAvailabilityChange(ready,error) {
+      if(ready)webglRestores++;
+      else if(error)webglRestoreFailures++;
       // A restored GL context cannot clear an unrelated worker or replay failure.
       rendererErrorMessage=ready ? null : (error?.message ?? 'WebGL context lost');
       lastStatusAt=-Infinity;

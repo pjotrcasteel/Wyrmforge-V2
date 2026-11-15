@@ -166,6 +166,9 @@ export function isHuntCastTap(pointer,x,y,now) {
 export class HuntPlayPerformance {
   #samples=[];
   #hitches=0;
+  #hitchesOver50=0;
+  #hitchesOver100=0;
+  #maxFrameMs=0;
   #frames=0;
   #maxSamples;
   constructor(maxSamples=180) {
@@ -174,10 +177,12 @@ export class HuntPlayPerformance {
     this.#maxSamples=maxSamples;
   }
   recordFrame(frameMs) {
-    if(!Number.isFinite(frameMs) || frameMs<0 ||
-        frameMs>1000)throw new RangeError('Invalid frame duration');
+    if(!Number.isFinite(frameMs) || frameMs<0)throw new RangeError('Invalid frame duration');
     this.#frames++;
     if(frameMs>33.34)this.#hitches++;
+    if(frameMs>50)this.#hitchesOver50++;
+    if(frameMs>100)this.#hitchesOver100++;
+    this.#maxFrameMs=Math.max(this.#maxFrameMs,frameMs);
     this.#samples.push(frameMs);
     if(this.#samples.length>this.#maxSamples)this.#samples.shift();
   }
@@ -190,6 +195,8 @@ export class HuntPlayPerformance {
       frames:this.#frames,sampleCount:sorted.length,
       p50Ms:quantile(0.5),p95Ms:quantile(0.95),
       p99Ms:quantile(0.99),hitchesOver33ms:this.#hitches,
+      hitchesOver50ms:this.#hitchesOver50,hitchesOver100ms:this.#hitchesOver100,
+      maxFrameMs:this.#frames?Number(this.#maxFrameMs.toFixed(1)):null,
       // Local page-observed wall-clock RAF timing, NOT end-to-end
       // GPU frame time or a remotely measured phone benchmark.
       source:'request-animation-frame-local'
