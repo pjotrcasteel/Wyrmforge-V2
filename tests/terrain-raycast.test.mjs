@@ -141,3 +141,15 @@ test('bedrock never breaks from high-power spell, no chunk update is scheduled',
   assert.deepEqual(impact.dirtyChunks,[]);
   assert.equal(world.get(0,0,0),4);
 });
+
+test('Fireball targeting reaches streamed terrain at extraction depth',async()=>{
+  const {targetHuntFireball}=await import('../src/hunt-play-runtime.mjs');
+  const world=new VoxelWorld({chunkEdge:16});
+  world.set(0,4,-212,3);
+  const view={width:402,height:604,scale:16,panX:-6,panY:2679,camera:'hunt'};
+  const point=projectVoxel(.5,4.99,-211.5,view);
+  const port={raycast:ray=>raycastTerrain(world,ray)};
+  assert.equal(targetHuntFireball(port,view,point.x,point.y),null);
+  const target=targetHuntFireball(port,{...view,depthOrigin:point.depth},point.x,point.y);
+  assert.deepEqual(target?.target,{x:0,y:4,z:-212,radius:2.3,depth:2});
+});
