@@ -581,7 +581,8 @@ function updatePlayStreaming(now) {
   if(!residency.metrics.transition) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
     const job=residency.next(playActor,{
-      respawn:stream.respawnPending,movement:playMovementInput()
+      respawn:stream.respawnPending,movement:playMovementInput(),
+      holdEncounterResidency:stream.horde.active
     });
     if(!job)return;
     if(job.action==='respawn') {
@@ -591,6 +592,7 @@ function updatePlayStreaming(now) {
     }
     const beginAt=performance.now();
     residency.begin(job);
+    if(stream.horde.active)stream.hordeStreamingJobs++;
     playEvidence.begin(job,now,performance.now()-beginAt);
     stream.phase='residency-writing';
     stream.startedAt=now;
@@ -963,6 +965,7 @@ function resetSite() {
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           investigation,extraction,
+          hordeStreamingJobs:0,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
@@ -1452,7 +1455,7 @@ if(playMode) {
         screenFoot:playView?projectVoxel(playActor.x,playActor.y,playActor.z,playView):null,
         camera:playView
       }:null,
-      horde:playStream?.horde.report??null,
+      horde:playStream?{...playStream.horde.report,streamingJobs:playStream.hordeStreamingJobs}:null,
       extraction:{completed:playStream?.extraction.completed??false},
       investigation:{findings:playStream?.investigation.findings??[]},
       device:{

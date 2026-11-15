@@ -10,6 +10,7 @@ const distance=(b,x,z)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX-1),
 const contains=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const MARGIN=.65;
 const PREFETCH_LOOKAHEAD_METRES=8;
+const ENCOUNTER_EXIT_PREFETCH_METRES=5;
 
 export class HuntGraphResidency {
   #graph;
@@ -72,7 +73,7 @@ export class HuntGraphResidency {
   // Protect the actor's current band and any band supporting its clearance.
   // Pick the two closest neighboring ports; a small residency bias avoids
   // churn at an equal-distance junction. Never mutate while crossing a link.
-  next(actor,{respawn=false,movement}={}){
+  next(actor,{respawn=false,movement,holdEncounterResidency=false}={}){
     const metrics=this.metrics;
     if(metrics.transition)return null;
     const {x,z}=actor,at=this.location(x,z);
@@ -94,6 +95,13 @@ export class HuntGraphResidency {
     }
     if(this.#links.has(at))return null;
     const adjacent=[...this.#links.values()].filter(l=>l.fromId===at||l.toId===at);
+    if(holdEncounterResidency){
+      // Dodging within the arena should not exchange whole neighboring
+      // regions. A missing exit can still prefetch from its actual approach.
+      const needsExit=adjacent.some(link=>!metrics.residentLinks.includes(link.id)&&
+        distance(link.bounds,x,z)<=ENCOUNTER_EXIT_PREFETCH_METRES);
+      if(!needsExit)return null;
+    }
     const moveX=movement?.moveX??0,moveZ=movement?.moveZ??0;
     const magnitude=Math.max(1,Math.hypot(moveX,moveZ));
     const aheadX=x+moveX/magnitude*PREFETCH_LOOKAHEAD_METRES;
