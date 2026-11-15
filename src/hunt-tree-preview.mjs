@@ -2,19 +2,19 @@ import { projectVoxel } from './camera-presets.mjs';
 import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
 
-function paintProp(ctx,prop,view,foot){
-  const width=Math.max(2,Math.round(2*(prop.radius+(prop.halfLength??0))*view.scale));
-  const height=Math.max(2,Math.round(prop.height*view.scale));
-  const x=Math.round(foot.x-width/2), y=Math.round(foot.y-height*.85);
-  const log=prop.kind==='log';
-  const inset=Math.max(1,Math.round(width*(log?.08:.19)));
-  ctx.fillStyle=log?'#412c22':'#343a3d';
-  ctx.fillRect(x,y+Math.round(height*.25),width,Math.round(height*.75));
-  ctx.fillStyle=log?'#70503b':'#606b69';
-  ctx.fillRect(x+inset,y,width-inset*2,Math.max(1,Math.round(height*.58)));
-  ctx.fillStyle=log?'#a27b51':'#84918a';
-  ctx.fillRect(log?x:x+inset*2,y+Math.round(height*.25),
-    Math.max(1,Math.round(width*(log?.16:.38))),Math.max(1,Math.round(height*.25)));
+const BOULDER_SPRITE={x:0,y:416,w:26,h:27,ax:12,ay:26};
+const LUMP_SPRITE={x:32,y:416,w:16,h:14,ax:8,ay:13};
+const LOG_SPRITE={x:52,y:416,w:34,h:20,ax:17,ay:17};
+
+function paintProp(ctx,image,prop,view,foot){
+  const sprite=prop.kind==='log'?LOG_SPRITE:
+    prop.radius<.65?LUMP_SPRITE:BOULDER_SPRITE;
+  const footprintWidth=2*(prop.radius+(prop.halfLength??0))*view.scale;
+  const scale=footprintWidth/sprite.w;
+  const x=Math.round(foot.x-sprite.ax*scale);
+  const y=Math.round(foot.y-sprite.ay*scale);
+  ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,
+    Math.max(1,Math.round(sprite.w*scale)),Math.max(1,Math.round(sprite.h*scale)));
 }
 
 // H08-05 first visual slice. Placement IDs survive eviction and regenerated
@@ -56,7 +56,7 @@ export class HuntTreePreview {
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
       if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
-      else if(layer.prop)paintProp(ctx,layer.prop,view,layer.foot);
+      else if(layer.prop)paintProp(ctx,this.#image,layer.prop,view,layer.foot);
       else paintActor();
     }
     ctx.restore();

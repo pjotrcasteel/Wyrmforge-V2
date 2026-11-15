@@ -8,3 +8,8 @@ repacked into a small tree-only atlas. Source commit
 Gothic Forest Kit is based on Pixel Crawler Free Pack 2.11 by Anokolisa,
 recoloured for Wyrmforge. Original source credits are in the V1 repository
 under `art/source/environment/forest/README.md`.
+
+The same atlas now also packs the exact Wyrmforge grey rock sprites
+`rock.big.0.grey` and `rock.lump.0.grey`. The horizontal log uses a
+rotated crop of the existing live oak bark with a hand-pixeled cut end.
+The prop art occupies new rows below the original tree sprites.
