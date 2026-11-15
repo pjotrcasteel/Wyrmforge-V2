@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voxel terrain streaming lab</title>
+<style>
+body{margin:0 auto;max-width:38rem;padding:12px;background:#172224;color:#eef1ec;font:16px system-ui}
+h1{font-size:1.3rem;margin:0 0 8px}
+p{margin:8px 0}
+canvas{display:block;width:100%;height:min(62dvh,560px);background:#29373a;image-rendering:pixelated}
+button{min-height:44px;margin-top:10px;padding:8px 14px;background:#31544e;color:white;border:1px solid #77958f;border-radius:7px;font:inherit}
+button:disabled{opacity:.55}
+</style>
+<script type="module" src="./cell-stream-lab.mjs"></script>
+</head>
+<body>
+<h1>Voxel terrain streaming lab</h1>
+<p>Watch the trail during an automatic out-and-back camera pass.</p>
+<canvas id="view" aria-label="Streamed voxel terrain"></canvas>
+<button id="start" type="button" disabled>Run camera pass</button>
+<button id="save" type="button" disabled>Save report</button>
+<p id="status" role="status">Preparing terrain…</p>
+</body>
+</html>
