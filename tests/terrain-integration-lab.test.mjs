@@ -25,7 +25,7 @@ test('actual standalone lab routes every terrain writer through one V2.6 port', 
 
   // Port owns NO voxel storage; it only delegates the existing authority.
   assert.doesNotMatch(port,/new VoxelWorld|new TerrainEditLedger|\.set\(x,y,z/);
-  assert.match(port,/const result=this\.#ledger\.apply\(command\)/);
+  assert.match(port,/const result=this\.#ledger\.apply\(command,options\)/);
   assert.match(port,/const change=immutableChange\(command,result,this\.#epoch\)/);
 });
 
