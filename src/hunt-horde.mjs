@@ -21,6 +21,7 @@ export class HuntHorde {
   constructor(region){this.#region=region;}
   get enemies(){return this.#enemies;}
   get active(){return this.#phase==='active';}
+  get waiting(){return this.#phase==='waiting';}
   get report(){
     return {phase:this.#phase,wave:this.#wave,contacts:this.#contacts,
       spawned:this.#spawned,peakActive:this.#peak,secondsRemaining:Math.max(0,Math.ceil(WAVE_SECONDS-this.#time))};

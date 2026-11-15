@@ -10,7 +10,6 @@ const distance=(b,x,z)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX-1),
 const contains=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const MARGIN=.65;
 const PREFETCH_LOOKAHEAD_METRES=8;
-const ENCOUNTER_EXIT_PREFETCH_METRES=5;
 
 export class HuntGraphResidency {
   #graph;
@@ -70,10 +69,24 @@ export class HuntGraphResidency {
     if(ok(0,moveZ*HUNT_WALK_SPEED*dt))return {moveX:0,moveZ};
     return {moveX:0,moveZ:0};
   }
+  #encounterLinks(at){
+    const region=this.#regions.get(at);
+    if(region?.role!=='horde')return [];
+    const peers=new Set(region.ports.filter(port=>port.direction==='north'||port.direction==='south')
+      .map(port=>port.peerRegionId));
+    return [...this.#links.values()].filter(link=>
+      (link.fromId===at&&peers.has(link.toId))||(link.toId===at&&peers.has(link.fromId)));
+  }
+  encounterReady(at){
+    const links=this.#encounterLinks(at);
+    const resident=this.#set.residentIds;
+    return links.length===2&&links.every(link=>resident.includes(link.id)&&
+      resident.includes(link.fromId)&&resident.includes(link.toId));
+  }
   // Protect the actor's current band and any band supporting its clearance.
   // Pick the two closest neighboring ports; a small residency bias avoids
   // churn at an equal-distance junction. Never mutate while crossing a link.
-  next(actor,{respawn=false,movement,holdEncounterResidency=false}={}){
+  next(actor,{respawn=false,movement,holdEncounterResidency=false,prepareEncounter=false}={}){
     const metrics=this.metrics;
     if(metrics.transition)return null;
     const {x,z}=actor,at=this.location(x,z);
@@ -95,18 +108,16 @@ export class HuntGraphResidency {
     }
     if(this.#links.has(at))return null;
     const adjacent=[...this.#links.values()].filter(l=>l.fromId===at||l.toId===at);
-    if(holdEncounterResidency){
-      // Dodging within the arena should not exchange whole neighboring
-      // regions. A missing exit can still prefetch from its actual approach.
-      const needsExit=adjacent.some(link=>!metrics.residentLinks.includes(link.id)&&
-        distance(link.bounds,x,z)<=ENCOUNTER_EXIT_PREFETCH_METRES);
-      if(!needsExit)return null;
-    }
+    // The wave starts only once both main-route seams are published.
+    // Side branches can stream again as soon as the encounter ends.
+    if(holdEncounterResidency)return null;
+    const encounterLinks=prepareEncounter?this.#encounterLinks(at):[];
+    const choices=encounterLinks.length===2?encounterLinks:adjacent;
     const moveX=movement?.moveX??0,moveZ=movement?.moveZ??0;
     const magnitude=Math.max(1,Math.hypot(moveX,moveZ));
     const aheadX=x+moveX/magnitude*PREFETCH_LOOKAHEAD_METRES;
     const aheadZ=z+moveZ/magnitude*PREFETCH_LOOKAHEAD_METRES;
-    const candidates=adjacent.map(link=>{
+    const candidates=choices.map(link=>{
       const neighbor=link.fromId===at?link.toId:link.fromId;
       const d=distance(link.bounds,x,z);
       const approach=Math.min(d,distance(link.bounds,aheadX,aheadZ));
