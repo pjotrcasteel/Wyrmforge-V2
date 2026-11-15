@@ -11,11 +11,12 @@ export class TerrainCellStreamSession {
   #registered=new Set();
   #flight=null;
 
-  constructor(world,cells,{limit=48,preload=8,retain=16,removedCells=null}={}){
+  constructor(world,cells,{limit=48,preload=8,retain=16,removedCells=null,initialResidentIds=[]}={}){
     this.#policy=new TerrainViewResidencyPolicy(cells,{limit,preload,retain});
     this.#residency=new V2TerrainResidencySet(world,{residentLimit:limit,
       maxBands:Math.max(cells.length,limit),removedCells});
     this.#cells=new Map(cells.map(cell=>[cell.id,cell.definition]));
+    for(const id of initialResidentIds)this.#register(id,true);
   }
 
   get metrics(){
@@ -27,16 +28,21 @@ export class TerrainCellStreamSession {
     const {job,reason}=this.#policy.next({view,protectedIds,
       residentIds:this.#residency.residentIds,busy:Boolean(this.#flight)});
     if(!job)return {ticket:null,reason};
-    if(!this.#registered.has(job.id)){
-      const regenerate=()=>this.#cells.get(job.id);
-      this.#residency.register(job.id,regenerate(),{regenerate});
-      this.#registered.add(job.id);
-    }
-    this.#residency.begin(job.id,job.action,{protectedIds});
+    this.#register(job.id,false);
+    this.#residency.begin(job.id,job.action,{protectedIds:[...protectedIds]});
     const ticket=Object.freeze({...job});
     this.#flight={ticket,phase:'writing',dirty:null};
     return {ticket,reason};
   }
+
+  #register(id,resident){
+    if(this.#registered.has(id))return;
+    const regenerate=()=>this.#cells.get(id);
+    this.#residency.register(id,regenerate(),{resident,regenerate});
+    this.#registered.add(id);
+  }
+
+  get storageMetrics(){return this.#residency.storageMetrics;}
 
   write(ticket,maxCells){
     if(!this.#matches(ticket,'writing'))return null;

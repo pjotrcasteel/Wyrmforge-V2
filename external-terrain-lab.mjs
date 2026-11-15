@@ -1,3 +1,4 @@
+import {HuntCellCatalog,HuntCellResidency} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
@@ -43,6 +44,7 @@ import {
 } from './src/diagnostics/worldgen-viewport.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
+const cellPreview=playMode&&new URLSearchParams(location.search).get('stream')==='cells';
 const canvas=document.querySelector('#site-view');
 const playJoystick=document.querySelector('#play-joystick');
 const playStick=document.querySelector('#play-stick');
@@ -115,6 +117,7 @@ let playActor=null;
 let playConnected=null;
 let playStream=null;
 let playView=null;
+let playDesiredView=null;
 const playTreeAtlas=playMode?new Image():null;
 const forestCanvas=document.querySelector('#forest-backdrop');
 const forestContext=forestCanvas?.getContext('2d');
@@ -150,7 +153,7 @@ function resetPreviewView() {
 
 function updateSiteSummary() {
   if(playMode) {
-    siteSummary.textContent='Wet Forest · '+(
+    siteSummary.textContent=(cellPreview?'Wet Forest · Cell preview · ':'Wet Forest · ')+(
       playConnected ? (playStream?.graph.layout.regions.length??2)+
         ' planned sites · '+(playStream?.residency?.metrics.residentRegions.length??2)+' resident sites' :
       generatedSite ? generatedSite.generatorVersion+' · '+generatedSite.hash :
@@ -579,16 +582,21 @@ function updatePlayStreaming(now) {
       errorMessage || !renderer?.ready || pendingMesh || restoring)return;
   const stream=playStream;
   if(!stream.residency) {
-    stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
+    if(stream.cellCatalog){
+      if(!stream.cellCatalog.done)return;
+      stream.residency=new HuntCellResidency(active.world,stream.graph,stream.cellCatalog,stream.initialIds,
+        {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry});
+    }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
   }
   const residency=stream.residency;
   if(!residency.metrics.transition) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
+    const beginAt=performance.now();
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
-      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting,view:playView
+      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting,view:playDesiredView??playView,displayedView:playView
     });
     if(!job)return;
     if(job.action==='respawn') {
@@ -596,7 +604,6 @@ function updatePlayStreaming(now) {
       resetPlayActor();
       return;
     }
-    const beginAt=performance.now();
     residency.begin(job);
     if(stream.horde.active)stream.hordeStreamingJobs++;
     playEvidence.begin(job,now,performance.now()-beginAt);
@@ -685,7 +692,11 @@ function resetPlayInput() {
 }
 function resetPlayActor() {
   if(!playMode || !generatedSite || !active?.world)return;
-  if(playStream?.residency && (streamingBusy() || !playStream.residency.metrics.residentIds.includes(playConnected.sites[0].id))) {
+  const stream=playStream?.residency;
+  const startAt=generatedSite.layout.topology.entry;
+  const startReady=cellPreview?stream?.publishedAt(startAt.x+.5,startAt.z-2):
+    stream?.metrics.residentIds.includes(playConnected.sites[0].id);
+  if(stream&&(streamingBusy()||!startReady)) {
     playStream.respawnPending=true;
     resetPlayInput();
     return;
@@ -716,7 +727,7 @@ function updatePlayFrame(now) {
       playEvidence.frame(delta);
     }
     if(playActor && generatedSite && active?.world &&
-        !pendingMesh && !restoring) {
+        !pendingMesh && !restoring && (!cellPreview||playStream?.residency)) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
       const input=playStream?.respawnPending?{moveX:0,moveZ:0}:playMovementInput();
       let steps=0;
@@ -880,6 +891,7 @@ function resetSite() {
     playStream=null;
     playActor=null;
     playView=null;
+    playDesiredView=null;
     playFireball=null;
     playImpact=null;
     playFireballCount=0;
@@ -977,8 +989,8 @@ function resetSite() {
           [graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
             recipe.chunkEdge,recipe.corruption].join(':'));
         playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
-          investigation,extraction,
-          hordeStreamingJobs:0,terrainReplay:[],
+          investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
+          hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
@@ -1031,7 +1043,7 @@ function impactSpan(targetOverride=null) {
     const result=active.port.apply(command,{captureRemovedCells:playMode});
     if(playMode&&playStream?.residency&&result.status==='accepted'){
       playStream.terrainReplay.push(recordHuntTerrainEdit(
-        playStream.residency.metrics.residentIds,command,result));
+        playStream.residency.metrics.residentCellIds??playStream.residency.metrics.residentIds,command,result));
     }
     if(playMode)playStream?.terrainSave.commit(result.removedCells);
     lastImpactRemoved=result.removedVoxels;
@@ -1152,6 +1164,7 @@ function frame(now) {
     updatePlayFrame(now);
     if(playMode)advancePlayFireball(now);
     if(playMode){
+      if(playStream?.cellCatalog&&!playStream.cellCatalog.done)playStream.cellCatalog.step();
       updatePlayStreaming(now);
       if(active?.world)playEvidence.observe({world:active.world,
         section:playActor?playStream?.residency?.location(playActor.x,playActor.z):null,
@@ -1204,8 +1217,14 @@ function frame(now) {
       const panY=followed
         ? Math.round(canvas.height*.51-followed.y)
         : (fit?.panY ?? 0)*viewZoom+viewPanY*pixelRatio;
-      const view={width:canvas.width,height:canvas.height,
+      let view={width:canvas.width,height:canvas.height,
         scale,panX,panY,camera,depthOrigin:followed?.depth??0};
+      playDesiredView=playMode?view:null;
+      const cellStream=cellPreview?playStream?.residency:null;
+      if(cellStream&&playView&&playView.width===view.width&&playView.height===view.height&&!cellStream.covers(view)){
+        view=playView;
+        playStream.cameraHeldFrames++;
+      }
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode){
@@ -1213,7 +1232,9 @@ function frame(now) {
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
-            playStream.trees.update(residency.metrics.residentRegions,active.port);
+            const coverage=cellStream?{key:id=>cellStream.propRegionKey(id),
+              has:(x,z)=>cellStream.publishedAt(x,z)}:null;
+            playStream.trees.update(residency.metrics.residentRegions,active.port,coverage);
             playStream.investigation.update(residency.metrics.residentRegions,active.port);
             playStream.extraction.update(residency.metrics.residentRegions,active.port);
           }
@@ -1497,6 +1518,8 @@ if(playMode) {
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
+        streamingMode:cellPreview?'camera-cells':'graph-bands',
+        cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         replayEdits:playStream?.terrainReplay??[],
         browserSave:playStream?{status:playStream.terrainSave.status,
           removedCells:playStream.terrainSave.removedCells.size}:null,

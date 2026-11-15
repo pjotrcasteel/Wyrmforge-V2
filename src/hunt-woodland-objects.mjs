@@ -5,6 +5,8 @@ import {ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 export class HuntWoodlandObjects {
   #regions=new Map();
   #graph;
+  #regionKeys=new Map();
+  #placementCache=new Map();
   #peakResident=0;
   #sweeps=0;
   #candidates=0;
@@ -16,15 +18,26 @@ export class HuntWoodlandObjects {
   }
   constructor(graph){this.#graph=graph;}
   get regions(){return this.#regions.values();}
-  update(regionIds,terrain){
+  update(regionIds,terrain,coverage=null){
     for(const id of this.#regions.keys()){
-      if(!regionIds.includes(id))this.#regions.delete(id);
+      if(!regionIds.includes(id)||coverage&&this.#regionKeys.get(id)!==coverage.key(id)){
+        this.#regions.delete(id);
+        this.#regionKeys.delete(id);
+        if(!regionIds.includes(id))this.#placementCache.delete(id);
+      }
     }
     const next=regionIds.find(id=>!this.#regions.has(id));
     if(next===undefined)return;
     const instances=[];
-    for(const item of this.#graph.placement(next).placements){
+    let placements=this.#placementCache.get(next);
+    if(!placements){
+      placements=this.#graph.placement(next).placements;
+      this.#placementCache.set(next,placements);
+    }
+    if(coverage)this.#regionKeys.set(next,coverage.key(next));
+    for(const item of placements){
       const {x,y,z}=item.position;
+      if(coverage&&!coverage.has(x,z))continue;
       const hit=terrain.raycast({origin:[x,32,z],direction:[0,-1,0],maxDistance:42});
       if(!hit||Math.abs(hit.point.y-y)>.5)continue;
       const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
