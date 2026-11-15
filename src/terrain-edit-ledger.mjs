@@ -180,7 +180,7 @@ export class TerrainEditLedger {
     return stored?.material === material ? stored.amount : 0;
   }
 
-  apply(command) {
+  apply(command,{captureRemovedCells=false}={}) {
     const edit = validateEdit(command);
     const signature = JSON.stringify([
       edit.type, edit.x, edit.y, edit.z, edit.radius, edit.power,
@@ -215,6 +215,7 @@ export class TerrainEditLedger {
     }
 
     const dirty = new Set();
+    const removedCells=captureRemovedCells?[]:null;
     const planned = [];
     let removed = 0, damaged = 0, newDamageSlots = 0;
     let min = null, max = null;
@@ -295,6 +296,7 @@ export class TerrainEditLedger {
       this.#damage.delete(cell.cellKey);
       if (!this.#world.set(cell.x, cell.y, cell.z, 0)) continue;
       removed++;
+      removedCells?.push(cell.cellKey);
       markDirtyForEditedVoxel(dirty, this.#world.chunkEdge, cell.x, cell.y, cell.z);
       const { x, y, z } = cell;
       if (!min) {
@@ -334,6 +336,6 @@ export class TerrainEditLedger {
       recordedCommand.expectedEditRevision = edit.expectedEditRevision;
     }
     this.#history.set(edit.id, { signature, result, command: recordedCommand });
-    return result;
+    return removedCells?Object.freeze({...result,removedCells:Object.freeze(removedCells)}):result;
   }
 }

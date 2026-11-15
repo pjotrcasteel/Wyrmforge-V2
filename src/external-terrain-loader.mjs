@@ -2,7 +2,7 @@
 // The future Map Generation V2 engine owns the site recipe and produces runs.
 // This module owns no generation, V1 adapters, WebGL calls, or browser scheduling.
 import { VoxelWorld, CHUNK_EDGE_CANDIDATES, MAX_SCENE_SEED } from './voxel-world.mjs';
-import { TerrainEditLedger } from './terrain-edit-ledger.mjs';
+import { TerrainEditLedger,V2_BEDROCK_MATERIAL } from './terrain-edit-ledger.mjs';
 import { V2TerrainPort } from './terrain-integration-port.mjs';
 import { validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
 import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
@@ -109,13 +109,15 @@ export class V2ExternalTerrainLoader {
   #surfaceIndex=0;
   #loaded=0;
   #closed=false;
+  #removedCells;
 
-  constructor(definition,{epoch=1,microSurfaceCapacity}={}) {
+  constructor(definition,{epoch=1,microSurfaceCapacity,removedCells=null}={}) {
     if(!Number.isSafeInteger(epoch) || epoch<1) {
       throw new RangeError('Expected a positive V2 terrain world epoch');
     }
     this.#definition=validateExternalTerrainDefinition(definition);
     this.#epoch=epoch;
+    this.#removedCells=removedCells;
     this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge,microSurfaceCapacity});
   }
 
@@ -144,7 +146,10 @@ export class V2ExternalTerrainLoader {
       const run=this.#definition.runs[this.#runIndex];
       const count=Math.min(remaining,run.length-this.#runOffset);
       for(let offset=0;offset<count;offset++) {
-        this.#world.set(run.x+this.#runOffset+offset,run.y,run.z,run.material);
+        const x=run.x+this.#runOffset+offset;
+        if(run.material===V2_BEDROCK_MATERIAL||!this.#removedCells?.size||!this.#removedCells.has(x+','+run.y+','+run.z)){
+          this.#world.set(x,run.y,run.z,run.material);
+        }
       }
       this.#loaded+=count;
       remaining-=count;
@@ -160,7 +165,9 @@ export class V2ExternalTerrainLoader {
       while(remaining>0 &&
           this.#surfaceIndex<this.#definition.surfaceTiles.length) {
         const tile=this.#definition.surfaceTiles[this.#surfaceIndex++];
-        this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
+        if(this.#world.get(tile.x,tile.y,tile.z)){
+          this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
+        }
         remaining--;
       }
     }

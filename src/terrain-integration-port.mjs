@@ -148,10 +148,10 @@ export class V2TerrainPort {
   // A command either fails in the original ledger (no event), returns a
   // duplicate (no event), or publishes one synchronous ordered change.
   // Consumers cannot reenter the writer during delivery.
-  apply(command) {
+  apply(command,options) {
     this.#active();
     if (this.#notifying) throw new Error('Nested terrain command during change delivery');
-    const result=this.#ledger.apply(command);
+    const result=this.#ledger.apply(command,options);
     if(result.status!=='accepted') return result;
     const change=immutableChange(command,result,this.#epoch);
     if (change.sequence !== this.#ledger.editRevision) {

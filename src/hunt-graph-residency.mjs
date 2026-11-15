@@ -31,12 +31,12 @@ export class HuntGraphResidency {
   #all;
   #registered=new Set();
   #peakRegions=0;
-  constructor(world,graph,initialIds) {
+  constructor(world,graph,initialIds,{removedCells=null}={}) {
     this.#graph=graph;
     this.#regions=new Map(graph.layout.regions.map(r=>[r.id,r]));
     this.#links=new Map(graph.layout.links.map(l=>[l.id,l]));
     this.#all=new Map([...this.#regions,...this.#links]);
-    this.#set=new V2TerrainResidencySet(world,{residentLimit:5,maxBands:this.#all.size});
+    this.#set=new V2TerrainResidencySet(world,{residentLimit:5,maxBands:this.#all.size,removedCells});
     for(const id of initialIds)this.#register(id,true);
     this.#peakRegions=this.metrics.residentRegions.length;
   }

@@ -1,3 +1,4 @@
+import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
@@ -578,7 +579,8 @@ function updatePlayStreaming(now) {
       errorMessage || !renderer?.ready || pendingMesh || restoring)return;
   const stream=playStream;
   if(!stream.residency) {
-    stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds);
+    stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
+      {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
   }
   const residency=stream.residency;
@@ -971,14 +973,17 @@ function resetSite() {
         const investigation=new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage);
         const extraction=new HuntExtraction(graph.layout.regions.find(region=>region.role==='extraction'),
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
-        playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
+        const terrainSave=new HuntTerrainSave(findingStorage,
+          [graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
+            recipe.chunkEdge,recipe.corruption].join(':'));
+        playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,
           hordeStreamingJobs:0,terrainReplay:[],
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
-          {epoch:terrainEpochs.next(),microSurfaceCapacity:2048});
+          {epoch:terrainEpochs.next(),microSurfaceCapacity:2048,removedCells:terrainSave.removedCells});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
           {epoch:terrainEpochs.next()});
@@ -1023,11 +1028,12 @@ function impactSpan(targetOverride=null) {
       type:targetOverride?'carve-crater':'carve-sphere',...target,
       expectedRevision:active.world.revision
     };
-    const result=active.port.apply(command);
+    const result=active.port.apply(command,{captureRemovedCells:playMode});
     if(playMode&&playStream?.residency&&result.status==='accepted'){
       playStream.terrainReplay.push(recordHuntTerrainEdit(
         playStream.residency.metrics.residentIds,command,result));
     }
+    if(playMode)playStream?.terrainSave.commit(result.removedCells);
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {
@@ -1492,6 +1498,8 @@ if(playMode) {
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
         replayEdits:playStream?.terrainReplay??[],
+        browserSave:playStream?{status:playStream.terrainSave.status,
+          removedCells:playStream.terrainSave.removedCells.size}:null,
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
         gpuQueue:renderer?.uploadQueueStatistics??null,
