@@ -49,44 +49,38 @@ export class HuntExtraction {
   }
 }
 
-export function paintExtractionArch(ctx,view,gate){
-  const p=gate.ground;
-  if(!p||view.camera!=='hunt')return;
+export function extractionPortalLayer(view,gate){
+  const p=gate?.ground;
+  if(!p||view.camera!=='hunt')return null;
   const foot=projectVoxel(p.x,p.y,p.z,view);
-  const s=view.scale/8;
-  if(foot.x<-110*s||foot.x>view.width+110*s||foot.y<-12*s||foot.y>view.height+55*s)return;
-  ctx.save();
-  ctx.translate(Math.round(foot.x),Math.round(foot.y));
-  ctx.scale(s,s);
-  // Close the sightline beyond the terminal road with mossy forest rock.
-  ctx.fillStyle='#29332e';
-  ctx.fillRect(-108,-34,216,32);
-  for(let i=-6;i<=6;i++){
-    const top=-36-(i*i*7%11);
-    ctx.fillStyle=i%2?'#394439':'#454c40';
-    ctx.fillRect(i*16-8,top,15,-top-3);
-    ctx.fillStyle='#55604a';
-    ctx.fillRect(i*16-8,top,13,3);
-  }
-  ctx.fillStyle='#19221e';
-  ctx.fillRect(-13,-23,26,23);
-  ctx.fillRect(-9,-30,18,10);
-  ctx.fillStyle='#62645b';
-  ctx.fillRect(-22,-28,8,28);
-  ctx.fillRect(14,-28,8,28);
-  ctx.fillRect(-17,-35,34,7);
-  ctx.fillRect(-10,-39,20,4);
-  ctx.fillStyle='#92917e';
-  ctx.fillRect(-22,-28,2,26);
-  ctx.fillRect(14,-28,2,26);
-  ctx.fillRect(-16,-35,32,2);
-  ctx.fillStyle=gate.eligible?'#e7c56c':'#30352d';
-  for(const x of [-18,17]){
-    ctx.fillRect(x,-22,2,10);
-    ctx.fillRect(x-2,-20,6,2);
-    ctx.fillRect(x-1,-14,4,2);
-  }
-  ctx.fillRect(-3,-34,6,2);
-  ctx.fillRect(-1,-36,2,6);
-  ctx.restore();
+  const scale=view.scale/8;
+  const width=38*scale,height=37*scale;
+  const x=Math.round(foot.x-width/2),y=Math.round(foot.y-height);
+  if(x+width<0||x>view.width||y+height<0||y>view.height)return null;
+  return {x,y,w:width,h:height,depth:foot.depth,paint(ctx){
+    ctx.save();
+    ctx.translate(Math.round(foot.x),Math.round(foot.y));
+    ctx.scale(scale,scale);
+    const ready=gate.eligible&&!gate.completed;
+    // A dark opening when locked, bright bands of energy when traversal is available.
+    for(const [rx,ry,color] of [
+      [18,18,'#18251f'],[15,16,ready?'#34695e':'#37443b'],
+      [12,14,ready?'#79c7a2':'#202d27'],[9,12,ready?'#366d70':'#17211d']
+    ]){
+      ctx.fillStyle=color;
+      ctx.beginPath();
+      ctx.ellipse(0,-18,rx,ry,0,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle=ready?'#e2ffe0':'#546254';
+    ctx.fillRect(-2,-34,4,2);
+    ctx.fillRect(-14,-19,2,4);
+    ctx.fillRect(12,-19,2,4);
+    if(ready){
+      ctx.fillRect(-7,-13,8,2);
+      ctx.fillRect(1,-24,6,2);
+      ctx.fillRect(-2,-6,4,1);
+    }
+    ctx.restore();
+  }};
 }

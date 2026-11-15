@@ -1,5 +1,5 @@
 import {HuntHorde} from './src/hunt-horde.mjs';
-import {HuntExtraction,paintExtractionArch} from './src/hunt-extraction.mjs';
+import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
 import { HuntTreePreview,createForestBackdrop } from './src/hunt-tree-preview.mjs';
 // V2.6 end-to-end diagnostic host. It is a separate page, not World Generation V2.
@@ -238,10 +238,10 @@ function paintEncounterGuide(view) {
     if(playMode){
       paintInvestigation(ctx,view);
       paintHorde(ctx,view);
-      if(playStream?.extraction)paintExtractionArch(ctx,view,playStream.extraction);
     }
     if(playMode&&playActor&&playStream?.trees){
-      playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view));
+      playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
+        extractionPortalLayer(view,playStream.extraction));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
     return;
@@ -1201,7 +1201,7 @@ function frame(now) {
             extractButton.hidden=!near;
             extractButton.disabled=!gate?.eligible||gate.completed||streamingBusy();
             const label=gate?.completed?'Hunt complete':
-              gate?.eligible?'Extract':'Inspect Forgotten Ruins to unlock';
+              gate?.eligible?'Enter portal':'Inspect Forgotten Ruins to unlock';
             if(extractButton.textContent!==label)extractButton.textContent=label;
           }
           if(investigateButton){
