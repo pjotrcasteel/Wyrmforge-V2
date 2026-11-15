@@ -23,3 +23,28 @@ test('findings require a nearby resident site and survive reload for the same wo
   assert.deepEqual(new HuntInvestigation(regions,7,0,storage).findings,['cache','clue']);
   assert.deepEqual(new HuntInvestigation(regions,8,0,storage).findings,[]);
 });
+
+test('Buried Grove exposes a grounded cache that stays collected after reload',async()=>{
+  const {createWorldSiteRecipe}=await import('../src/world-generation/site-recipe.mjs');
+  const {generateWorldSite,generateAuthoredHuntTerrainGraph}=await import('../src/world-generation/index.mjs');
+  const {V2ExternalTerrainLoader}=await import('../src/external-terrain-loader.mjs');
+  const recipe=createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
+    siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:32,seed:7});
+  const graph=generateAuthoredHuntTerrainGraph(generateWorldSite(recipe));
+  const regionId='region-buried-grove';
+  const loader=new V2ExternalTerrainLoader(graph.region(regionId).definition);
+  const saved=new Map();
+  const storage={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)};
+  try{
+    while(!loader.progress.done)loader.loadStep(4096);
+    const hunt=new HuntInvestigation(graph.layout.regions,7,0,storage);
+    hunt.update([regionId],loader.terrain.port);
+    const [cache]=hunt.markers;
+    assert.equal(cache.action,'Search cache');
+    assert.match(hunt.interact(cache),/sealed cache/);
+    const restored=new HuntInvestigation(graph.layout.regions,7,0,storage);
+    restored.update([regionId],loader.terrain.port);
+    assert.deepEqual(restored.findings,[cache.id]);
+    assert.equal(restored.nearby(cache),undefined);
+  }finally{loader.unload();}
+});
