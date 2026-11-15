@@ -31,7 +31,7 @@ export class HuntTreePreview {
   update(regionIds,terrain){
     if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain);
   }
-  paint(ctx,view,actor,paintActor){
+  paint(ctx,view,actor,paintActor,feature=null){
     const layers=[];
     const visible=[this.#scenery.trees(view),...this.objects.regions];
     if(this.#image.complete&&this.#image.naturalWidth){
@@ -45,9 +45,15 @@ export class HuntTreePreview {
           continue;
         }
         const layer=projectTreeSprite(tree,view);
-        if(layer)layers.push(layer);
+        if(!layer)continue;
+        if(feature&&tree.scenic&&layer.x<feature.x+feature.w&&layer.x+layer.w>feature.x&&
+          layer.y<feature.y+feature.h&&layer.y+layer.h>feature.y){
+          layer.depth=Math.max(layer.depth,feature.depth+.000001);
+        }
+        layers.push(layer);
       }
     }
+    if(feature)layers.push(feature);
     const foot=projectVoxel(actor.x,actor.y,actor.z,view);
     layers.push({depth:foot.depth});
     layers.sort((a,b)=>b.depth-a.depth);
@@ -56,6 +62,7 @@ export class HuntTreePreview {
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
       if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+      else if(layer.paint)layer.paint(ctx);
       else if(layer.prop)paintProp(ctx,this.#image,layer.prop,view,layer.foot);
       else paintActor();
     }
