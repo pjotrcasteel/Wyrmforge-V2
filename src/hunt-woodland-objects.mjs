@@ -5,6 +5,15 @@ import {ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 export class HuntWoodlandObjects {
   #regions=new Map();
   #graph;
+  #peakResident=0;
+  #sweeps=0;
+  #candidates=0;
+  #maxCandidates=0;
+  get diagnostics(){
+    const resident=[...this.regions].reduce((count,props)=>count+props.length,0);
+    return {resident,peakResident:this.#peakResident,sweeps:this.#sweeps,
+      candidates:this.#candidates,maxCandidatesPerSweep:this.#maxCandidates};
+  }
   constructor(graph){this.#graph=graph;}
   get regions(){return this.#regions.values();}
   update(regionIds,terrain){
@@ -38,6 +47,7 @@ export class HuntWoodlandObjects {
       }
     }
     this.#regions.set(next,instances);
+    this.#peakResident=Math.max(this.#peakResident,this.diagnostics.resident);
   }
   // Sweep a horizontal actor axis against the prop footprint.
   // An actor already intersecting a newly published trunk can walk out.
@@ -46,7 +56,9 @@ export class HuntWoodlandObjects {
     const across=axis==='x'?'z':'x';
     const sign=Math.sign(distance);
     let travel=Math.abs(distance);
+    let considered=0;
     for(const instances of this.regions)for(const trunk of instances){
+      considered++;
       if(position.y>=trunk.y+trunk.height||position.y+ACTOR_HEIGHT<=trunk.y)continue;
       const halfLength=trunk.halfLength??0;
       const acrossExtent=ACTOR_HALF_WIDTH+(across==='x'?halfLength:0);
@@ -57,6 +69,9 @@ export class HuntWoodlandObjects {
       if(offset<=0)continue;
       travel=Math.min(travel,Math.max(0,offset-half-1e-5));
     }
+    this.#sweeps++;
+    this.#candidates+=considered;
+    this.#maxCandidates=Math.max(this.#maxCandidates,considered);
     return travel*sign;
   }
 }
