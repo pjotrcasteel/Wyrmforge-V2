@@ -1,10 +1,12 @@
 const CONTENT=Object.freeze({
   'investigation-location':{
     action:'Inspect ruins',
+    revisitAction:'Read ruins clue',
     result:'Fresh ash lies inside the old walls. Someone passed through recently.'
   },
   'optional-discovery':{
     action:'Search cache',
+    revisitAction:'Read cache finding',
     result:'You found a sealed cache with a scorched trail marker inside.'
   }
 });
@@ -40,7 +42,7 @@ export class HuntInvestigation {
     this.#revision=terrain.revision;
     this.#regionKey=key;
     this.#markers=this.#sites.filter(site=>regionIds.includes(site.regionId)).flatMap(site=>{
-      const {x,z}=site.at;
+      const x=site.at.x+.5,z=site.at.z+.5;
       const hit=terrain.raycast({origin:[x,32,z],direction:[0,-1,0],maxDistance:42});
       return hit&&hit.point.y>=0?[{...site,x,y:hit.point.y,z}]:[];
     });
@@ -51,15 +53,19 @@ export class HuntInvestigation {
   has(id){return this.#found.has(id);}
 
   nearby(actor){
-    return this.#markers.find(site=>!this.has(site.id)&&
-      Math.hypot(actor.x-site.x,actor.z-site.z)<=2.2&&Math.abs(actor.y-site.y)<=1);
+    const site=this.#markers.find(site=>
+      Math.hypot(actor.x-site.x,actor.z-site.z)<=3.5&&Math.abs(actor.y-site.y)<=2);
+    if(!site||!this.has(site.id))return site;
+    return {...site,action:site.revisitAction};
   }
 
   interact(actor){
     const site=this.nearby(actor);
     if(!site)return null;
-    this.#found.add(site.id);
-    try{this.#storage?.setItem(this.#key,JSON.stringify(this.findings));}catch{}
+    if(!this.has(site.id)){
+      this.#found.add(site.id);
+      try{this.#storage?.setItem(this.#key,JSON.stringify(this.findings));}catch{}
+    }
     return site.result;
   }
 }

@@ -17,7 +17,7 @@ test('findings require a nearby resident site and survive reload for the same wo
   assert.equal(hunt.interact({x:10,y:5,z:0}),null);
   assert.equal(hunt.interact({x:5,y:2,z:0}),null);
   assert.match(hunt.interact({x:5,y:5,z:0}),/Fresh ash/);
-  assert.equal(hunt.interact({x:5,y:5,z:0}),null);
+  assert.equal(hunt.nearby({x:5,y:5,z:0}).action,'Read ruins clue');
   hunt.update(['grove'],terrain);
   assert.match(hunt.interact({x:10,y:5,z:0}),/sealed cache/);
   assert.deepEqual(new HuntInvestigation(regions,7,0,storage).findings,['cache','clue']);
@@ -41,10 +41,14 @@ test('Buried Grove exposes a grounded cache that stays collected after reload',a
     hunt.update([regionId],loader.terrain.port);
     const [cache]=hunt.markers;
     assert.equal(cache.action,'Search cache');
-    assert.match(hunt.interact(cache),/sealed cache/);
+    const approach={x:cache.x+2.5,y:cache.y-1.25,z:cache.z};
+    assert.equal(hunt.nearby(approach).action,'Search cache');
+    assert.match(hunt.interact(approach),/sealed cache/);
     const restored=new HuntInvestigation(graph.layout.regions,7,0,storage);
     restored.update([regionId],loader.terrain.port);
     assert.deepEqual(restored.findings,[cache.id]);
-    assert.equal(restored.nearby(cache),undefined);
+    assert.equal(restored.nearby(cache).action,'Read cache finding');
+    assert.match(restored.interact(cache),/sealed cache/);
+    assert.deepEqual(restored.findings,[cache.id]);
   }finally{loader.unload();}
 });
