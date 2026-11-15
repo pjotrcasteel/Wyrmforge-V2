@@ -16,7 +16,7 @@ import {spawnHuntExplorer,stepHuntExplorer,HUNT_FIXED_STEP,HUNT_WALK_SPEED} from
 for(const seed of [7,8,19])test('H08-02B: uninterrupted branching loop and retained entry crater, seed '+seed, t=>{
   const entry=generateWorldSite(createWorldSiteRecipe({
     regionId:'starter-region',siteId:'preview-wet-forest',encounterId:'preview-001',
-    kind:'wet-forest',seed,chunkEdge:32}));
+    kind:'wet-forest',seed,chunkEdge:16}));
   const graph=generateAuthoredHuntTerrainGraph(entry);
   const start=generateConnectedHuntStart(entry);
   const initial=start.sites.map(s=>s.id);

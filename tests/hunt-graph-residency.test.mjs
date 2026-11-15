@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateConnectedHuntStart,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
-import {HuntGraphResidency} from '../src/hunt-graph-residency.mjs';
+import {HuntGraphResidency,huntPrefetchLookahead} from '../src/hunt-graph-residency.mjs';
 import {spawnTerrainActor,actorOverlapsTerrain} from '../src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_FIXED_STEP} from '../src/hunt-play-runtime.mjs';
 
@@ -131,4 +131,14 @@ test('ambush prepares both trail seams before dodges can freeze residency',()=>{
     assert.equal(stream.metrics.residentLinks.length,2);
     assert.ok(stream.next({x:arena.offsetX+.5,z:arena.offsetZ},{respawn:true,holdEncounterResidency:true}));
   }finally{loader.unload();}
+});
+
+test('Hunt prefetch looks beyond the phone viewport in the direction of travel',()=>{
+  const view={width:402,height:604,scale:16,camera:'hunt'};
+  const horizontal=huntPrefetchLookahead(view,1,0);
+  const vertical=huntPrefetchLookahead(view,0,-1);
+  assert.ok(horizontal*view.scale>view.width/2);
+  assert.ok(vertical*view.scale*.77>view.height/2);
+  assert.equal(huntPrefetchLookahead(view,0,0),8);
+  assert.equal(huntPrefetchLookahead({...view,scale:.1},1,0),48);
 });

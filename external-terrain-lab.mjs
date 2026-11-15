@@ -582,7 +582,7 @@ function updatePlayStreaming(now) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
-      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting
+      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting,view:playView
     });
     if(!job)return;
     if(job.action==='respawn') {
@@ -1476,6 +1476,7 @@ if(playMode) {
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
+        chunkEdge:active?.world.chunkEdge??null,
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
         gpuQueue:renderer?.uploadQueueStatistics??null,

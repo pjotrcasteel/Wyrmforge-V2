@@ -4,12 +4,24 @@
 import {V2TerrainResidencySet} from './terrain-residency-set.mjs';
 import {HUNT_WALK_SPEED,HUNT_FIXED_STEP} from './hunt-play-runtime.mjs';
 import {containsHuntLandform} from './world-generation/hunt-landform-footprint.mjs';
+import {CAMERA_PRESETS} from './camera-presets.mjs';
 
 const distance=(b,x,z)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX-1),
   Math.max(b.minZ-z,0,z-b.maxZ-1));
 const contains=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const MARGIN=.65;
 const PREFETCH_LOOKAHEAD_METRES=8;
+const PREFETCH_EDGE_MARGIN_METRES=4;
+
+export function huntPrefetchLookahead(view,moveX,moveZ){
+  const length=Math.hypot(moveX,moveZ);
+  if(!length||!view||view.camera!=='hunt'||view.scale<=0)return PREFETCH_LOOKAHEAD_METRES;
+  const screenX=Math.abs(moveX/length)*view.scale;
+  const screenY=Math.abs(moveZ/length)*view.scale*CAMERA_PRESETS.hunt.down[2];
+  const edge=Math.min(screenX?view.width*.5/screenX:Infinity,
+    screenY?view.height*.51/screenY:Infinity);
+  return Math.max(PREFETCH_LOOKAHEAD_METRES,Math.min(48,edge+PREFETCH_EDGE_MARGIN_METRES));
+}
 
 export class HuntGraphResidency {
   #graph;
@@ -86,7 +98,7 @@ export class HuntGraphResidency {
   // Protect the actor's current band and any band supporting its clearance.
   // Pick the two closest neighboring ports; a small residency bias avoids
   // churn at an equal-distance junction. Never mutate while crossing a link.
-  next(actor,{respawn=false,movement,holdEncounterResidency=false,prepareEncounter=false}={}){
+  next(actor,{respawn=false,movement,holdEncounterResidency=false,prepareEncounter=false,view}={}){
     const metrics=this.metrics;
     if(metrics.transition)return null;
     const {x,z}=actor,at=this.location(x,z);
@@ -115,8 +127,9 @@ export class HuntGraphResidency {
     const choices=encounterLinks.length===2?encounterLinks:adjacent;
     const moveX=movement?.moveX??0,moveZ=movement?.moveZ??0;
     const magnitude=Math.max(1,Math.hypot(moveX,moveZ));
-    const aheadX=x+moveX/magnitude*PREFETCH_LOOKAHEAD_METRES;
-    const aheadZ=z+moveZ/magnitude*PREFETCH_LOOKAHEAD_METRES;
+    const lookahead=huntPrefetchLookahead(view,moveX,moveZ);
+    const aheadX=x+moveX/magnitude*lookahead;
+    const aheadZ=z+moveZ/magnitude*lookahead;
     const candidates=choices.map(link=>{
       const neighbor=link.fromId===at?link.toId:link.fromId;
       const d=distance(link.bounds,x,z);
