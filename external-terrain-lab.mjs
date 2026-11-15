@@ -1,3 +1,4 @@
+import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,paintExtractionArch} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
 import { HuntTreePreview,createForestBackdrop } from './src/hunt-tree-preview.mjs';
@@ -212,6 +213,21 @@ function paintInvestigation(ctx,view){
   }
 }
 
+function paintHorde(ctx,view){
+  for(const enemy of playStream?.horde.enemies??[]){
+    const foot=projectVoxel(enemy.x,enemy.y,enemy.z,view);
+    const x=Math.round(foot.x),y=Math.round(foot.y);
+    if(x<-10||x>view.width+10||y<0||y>view.height+20)continue;
+    const size=Math.max(4,Math.round(view.scale*.55));
+    ctx.fillStyle='#342329';
+    ctx.fillRect(x-size/2,y-size,size,size);
+    ctx.fillStyle='#9e6f65';
+    ctx.fillRect(x-size/3,y-size-4,Math.ceil(size*.66),Math.ceil(size*.6));
+    ctx.fillStyle='#f2ae6a';
+    ctx.fillRect(x-2,y-size-2,3,2);
+  }
+}
+
 function paintEncounterGuide(view) {
   if(!combatGuideContext) return;
   const ctx=combatGuideContext;
@@ -221,6 +237,7 @@ function paintEncounterGuide(view) {
     paintDummyActor(ctx,view);
     if(playMode){
       paintInvestigation(ctx,view);
+      paintHorde(ctx,view);
       if(playStream?.extraction)paintExtractionArch(ctx,view,playStream.extraction);
     }
     if(playMode&&playActor&&playStream?.trees){
@@ -705,6 +722,11 @@ function updatePlayFrame(now) {
         const before=playActor;
         playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects});
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
+        if(residency&&!streamingBusy()){
+          playStream.horde.step({world:active.world,actor:playActor,
+            section:residency.location(playActor.x,playActor.z),
+            objects:playStream.trees.objects,dt:HUNT_FIXED_STEP});
+        }
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
       if(playActor.error){
@@ -715,6 +737,15 @@ function updatePlayFrame(now) {
   playFrameAt=now;
   if(playHud && now-lastHudAt>=350){
     lastHudAt=now;
+    const horde=playStream?.horde.report;
+    const hordeHud=document.querySelector('#play-horde');
+    if(hordeHud){
+      hordeHud.hidden=!horde||horde.phase==='waiting';
+      const label=horde?.phase==='active'
+        ? 'Wave '+horde.wave+'/3 · '+horde.secondsRemaining+'s · Hits '+horde.contacts+'/3'
+        : horde?.phase==='complete'?'Horde survived':'Horde failed · Leave and return to retry';
+      if(hordeHud.textContent!==label)hordeHud.textContent=label;
+    }
     const metrics=playFrameStats.snapshot;
     const ms=value=>value===null?'—':value.toFixed(1)+'ms';
     const p=playActor?[
@@ -932,6 +963,7 @@ function resetSite() {
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           investigation,extraction,
+          horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
@@ -1420,6 +1452,7 @@ if(playMode) {
         screenFoot:playView?projectVoxel(playActor.x,playActor.y,playActor.z,playView):null,
         camera:playView
       }:null,
+      horde:playStream?.horde.report??null,
       extraction:{completed:playStream?.extraction.completed??false},
       investigation:{findings:playStream?.investigation.findings??[]},
       device:{

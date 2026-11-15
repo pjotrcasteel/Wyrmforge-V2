@@ -113,6 +113,9 @@ body[data-play-hunt] #preview-message{
   bottom:calc(184px + env(safe-area-inset-bottom,0px));font:12px/1.3 system-ui;
   background:rgba(10,23,30,.82);white-space:normal;width:min(95%,330px);
 }
+#play-horde{position:absolute;z-index:5;top:105px;left:16px;background:#38252c;
+  color:#fff0df;border-radius:6px;padding:8px 12px;pointer-events:none}
+#play-horde[hidden]{display:none}
 #play-investigate,#play-extract{position:absolute;z-index:6;left:50%;bottom:24%;transform:translateX(-50%);
   min-height:44px;background:#51412a;color:#fff6de;font-weight:700}
 #play-investigation-result{position:absolute;z-index:6;top:100px;left:16px;max-width:min(85%,24rem);
@@ -168,6 +171,7 @@ body.focus-mode #site-summary{max-width:46%}
     <span id="play-investigation-message" role="status"></span>
     <button id="play-investigation-dismiss" type="button" aria-label="Dismiss finding">×</button>
   </div>
+  <p id="play-horde" hidden></p>
   <button id="play-extract" type="button" hidden>Extract</button>
   <button id="play-investigate" type="button" hidden>Investigate</button>
   <button id="play-respawn" type="button">Respawn</button>
