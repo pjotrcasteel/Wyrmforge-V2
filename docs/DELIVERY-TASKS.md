@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **H08-05 — World Objects V2 in Play Hunt**.
+**Current focus:** **H08-05 — World Objects V2 in Play Hunt**. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 ## GitHub issue tracking
@@ -239,7 +239,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-05 — Physical trees, large rocks and fallen logs in Play Hunt
 - **GitHub Issue:** [#160](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/160)
-- **Status:** `IN PROGRESS` — exact V1 live-tree sprite preview; physical objects and fog are still pending.
+- **Status:** `IN PROGRESS` — owner accepted prop art and collision; representative prop budget and device evidence are pending.
 - **Player experience:** walk around giant rocks and between tree trunks, use cover and see scale. Trees and rocks can be destroyed with later spells; initial static collision must be real.
 - **Technical boundary:** replaceable World Objects V2 instance API, Voxel V2 terrain grounding + object collider authority, proper renderer integration; simple temporary meshes/sprites until art approved.
 - **Gate:** hundreds of instances with bounded draw/collision budgets, no invisible walls or trunk/rock ghosts, persistent IDs across region unload/revisit; physical mobile frame metrics.

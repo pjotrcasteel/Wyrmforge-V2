@@ -127,6 +127,7 @@ let playStepAccumulator=0;
 let playFrameAt=null;
 let playFrameStats=new HuntPlayPerformance();
 let playCpuStats=new HuntPlayPerformance();
+let playWoodlandPaintStats=new HuntPlayPerformance();
 let playEvidence=new HuntStreamingEvidence();
 const playKeys=new Set();
 const playPointer={id:null,x:0,z:0};
@@ -240,8 +241,10 @@ function paintEncounterGuide(view) {
       paintHorde(ctx,view);
     }
     if(playMode&&playActor&&playStream?.trees){
+      const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
         extractionPortalLayer(view,playStream.extraction));
+      playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
     return;
@@ -881,6 +884,7 @@ function resetSite() {
     playFrameAt=null;
     playFrameStats=new HuntPlayPerformance();
     playCpuStats=new HuntPlayPerformance();
+    playWoodlandPaintStats=new HuntPlayPerformance();
     playEvidence=new HuntStreamingEvidence();
     playFollowCamera.reset();
     resetPlayInput();
@@ -1457,6 +1461,10 @@ if(playMode) {
         clearanceAboveTerrain:contact?playActor.y-contact.point.y:null,
         screenFoot:playView?projectVoxel(playActor.x,playActor.y,playActor.z,playView):null,
         camera:playView
+      }:null,
+      worldObjects:playStream?{
+        ...playStream.trees.objects.diagnostics,
+        woodlandOverlayCpu:playWoodlandPaintStats.snapshot
       }:null,
       horde:playStream?{...playStream.horde.report,streamingJobs:playStream.hordeStreamingJobs}:null,
       extraction:{completed:playStream?.extraction.completed??false},
