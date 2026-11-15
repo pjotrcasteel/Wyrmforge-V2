@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wyrmforge World Objects benchmark</title>
+<style>
+body{margin:0 auto;max-width:34rem;padding:12px;background:#171c1c;color:#eff1e9;font:16px system-ui}
+h1{font-size:1.2rem;margin:0 0 8px}
+p{margin:8px 0}
+button{min-height:44px;padding:8px 16px;background:#2d564d;color:white;border:1px solid #789e94;border-radius:7px;font:inherit}
+button:disabled{opacity:.55}
+canvas{display:block;width:100%;height:min(60dvh,604px);margin-top:10px;background:#46543d;image-rendering:pixelated}
+</style>
+<script type="module" src="./prop-benchmark.mjs"></script>
+</head>
+<body>
+<h1>World Objects benchmark</h1>
+<p>Run both prop loads. Keep this page visible and save the report when it finishes.</p>
+<button id="run" type="button" disabled>Run benchmark</button>
+<button id="save" type="button" disabled>Save report</button>
+<p id="status" role="status">Loading woodland art…</p>
+<canvas id="scene" aria-label="Moving woodland prop benchmark"></canvas>
+</body>
+</html>

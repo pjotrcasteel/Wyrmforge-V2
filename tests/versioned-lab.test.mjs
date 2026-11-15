@@ -21,6 +21,8 @@ function withRoot(run, sha = COMMIT) {
     writeFileSync(join(root,'play-hunt.html'),
       '<title>Play Hunt</title>\n<span id="build">Build loading…</span>\n'+
       '<script type="module" src="./external-terrain-lab.mjs"></script>');
+    writeFileSync(join(root,'prop-benchmark.html'),'<script type="module" src="./prop-benchmark.mjs"></script>');
+    writeFileSync(join(root,'prop-benchmark.mjs'),"import './src/build-info.mjs';");
     writeFileSync(join(root,'src','build-info.mjs'),
       `export const VERSION = "0.0.028";\nexport const COMMIT = "${sha}";\n`);
     writeFileSync(join(root,'src','terrain-actor.mjs'),'export const ACTOR = true;\n');
@@ -40,6 +42,8 @@ test('versioned lab keeps complete module graph together at a fresh URL', () => 
     assert.ok(existsSync(join(result.path,'external-terrain-lab.html')));
     assert.ok(existsSync(join(result.path,'external-terrain-lab.mjs')));
     assert.ok(existsSync(join(result.path,'play-hunt.html')));
+    assert.ok(existsSync(join(result.path,'prop-benchmark.html')));
+    assert.ok(existsSync(join(result.path,'prop-benchmark.mjs')));
     const hunt=readFileSync(join(result.path,'play-hunt.html'),'utf8');
     assert.match(hunt,/Build fffffff · initializing/);
     assert.ok(hunt.includes('src="./external-terrain-lab.mjs"'));
