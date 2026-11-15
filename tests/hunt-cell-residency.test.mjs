@@ -44,3 +44,24 @@ test('cell preview streams the authored main trail and preserves a saved crater 
     assert.equal(world.get(hit.cell.x,hit.cell.y,hit.cell.z),0);
   }finally{loader.unload();}
 });
+
+test('an encounter waiting further up the trail leaves directional prefetch active',()=>{
+  const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
+    siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
+  const graph=generateAuthoredHuntTerrainGraph(site);
+  const catalog=new HuntCellCatalog(graph);
+  while(!catalog.done)catalog.step();
+  const initialIds=['region-entry','region-woodland-trail','link-region-entry-region-woodland-trail'];
+  const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),{microSurfaceCapacity:2048});
+  try{
+    while(!loader.progress.done)loader.loadStep(512);
+    const residency=new HuntCellResidency(loader.terrain.world,graph,catalog,initialIds,
+      {entry:site.layout.topology.entry});
+    const actor={x:.5,y:5,z:-26};
+    const view={width:402,height:604,scale:16,camera:'hunt',panX:0,panY:-(actor.z*.77-5*.64)*16};
+    assert.ok(residency.covers(view));
+    const ticket=residency.next(actor,{view,prepareEncounter:true,movement:{moveZ:-1}});
+    assert.equal(ticket?.action,'load');
+    assert.match(ticket.id,/^link-region-horde-crossing-region-woodland-trail:/);
+  }finally{loader.unload();}
+});
