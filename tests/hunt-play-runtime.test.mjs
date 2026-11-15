@@ -8,7 +8,7 @@ import {
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import {
   HUNT_FIXED_STEP,HuntPlayPerformance,HuntFollowCamera,spawnHuntExplorer,
-  stepHuntExplorer,findHuntRegionCrossing
+  stepHuntExplorer,recoverHuntExplorer,findHuntRegionCrossing
 } from '../src/hunt-play-runtime.mjs';
 import { actorOverlapsTerrain } from '../src/terrain-actor.mjs';
 
@@ -209,4 +209,27 @@ test('north-up Hunt locks camera elevation while tracking horizontal movement',(
   }
   follow.reset({x:0,y:7,z:0});
   assert.equal(follow.update({x:0,y:7,z:0},2000,{level:true}).y,7);
+});
+
+test('F07-03 recovers from edited ground without undoing the crater',()=>{
+  const {region,loader,world}=fixture();
+  try{
+    const checkpoint=spawnHuntExplorer(world,region);
+    const port=loader.terrain.port;
+    const target=port.raycast({origin:[checkpoint.x,checkpoint.y+2,checkpoint.z],
+      direction:[0,-1,0],maxDistance:5});
+    const edit=port.apply({id:'recovery-crater',type:'carve-crater',...target.cell,radius:2.3,depth:3});
+    assert.ok(edit.removedVoxels>0);
+    let actor=checkpoint;
+    for(let i=0;i<80;i++)actor=stepHuntExplorer(world,actor,region.bounds);
+    assert.ok(actor.y<checkpoint.y-.5);
+    const revision=world.revision;
+    assert.equal(recoverHuntExplorer(world,actor,checkpoint,()=>false),null);
+    const recovered=recoverHuntExplorer(world,actor,checkpoint,()=>true);
+    assert.ok(recovered?.grounded);
+    assert.ok(!actorOverlapsTerrain(world,recovered));
+    assert.ok(recovered.y>=checkpoint.y-.25);
+    assert.equal(world.revision,revision);
+    assert.equal(world.get(target.cell.x,target.cell.y,target.cell.z),0);
+  }finally{loader.unload();}
 });

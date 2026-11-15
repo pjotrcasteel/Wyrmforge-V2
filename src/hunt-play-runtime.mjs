@@ -2,7 +2,7 @@
 // Uses the already-owned Voxel V2 actor physics; NO second collider, hidden
 // jump, scene-geometry raycast, invented enemy AI or object engine.
 import {
-  spawnTerrainActor,simulateTerrainActor
+  spawnTerrainActor,simulateTerrainActor,recoverTerrainActor
 } from './terrain-actor.mjs';
 import { terrainRayFromScreen } from './terrain-raycast.mjs';
 
@@ -52,6 +52,15 @@ export function stepHuntExplorer(world,actor,bounds,{moveX=0,moveZ=0,objects=nul
   const moved=simulateTerrainActor(world,actor,{moveX,moveZ,dt,moveSpeed:HUNT_WALK_SPEED,limitHorizontal:objects?.limitTravel.bind(objects)});
   if(moved.error)return Object.freeze({...moved});
   return Object.freeze(clipToRegion(moved,bounds));
+}
+
+export function recoverHuntExplorer(world,actor,checkpoint,canLand){
+  if(!checkpoint||(!actor.error&&actor.y>checkpoint.y-.5)||Math.hypot(actor.x-checkpoint.x,actor.z-checkpoint.z)>8)return null;
+  const accepts=candidate=>candidate.y>=checkpoint.y-.25&&canLand(candidate);
+  const exact=recoverTerrainActor(world,checkpoint,{horizontalRadius:0,verticalRange:0,accept:accepts});
+  if(exact&&Math.hypot(exact.x-actor.x,exact.z-actor.z,exact.y-actor.y)>.25)return exact;
+  return recoverTerrainActor(world,{...actor,y:checkpoint.y},{accept:candidate=>
+    accepts(candidate)&&Math.hypot(candidate.x-actor.x,candidate.y-actor.y,candidate.z-actor.z)>.25});
 }
 
 export function findHuntRegionCrossing(plan,regionId,actor) {

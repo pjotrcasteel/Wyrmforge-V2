@@ -2,10 +2,10 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **Voxel V2 — camera-bounded terrain streaming cells ([#223](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/223))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **F07-03 — Player recovery after destructive terrain ([#169](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/169))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
-**#223 camera-cell preview follow-up:** On seed 7 build `046f853`, the 1,251 ms camera hold began during the active horde crossing while moving toward the eastern side. The camera needed 12 unpublished cells after crossing into the next column. Active encounters now allow directional preloads and indispensable viewport loads, preserve resident arena terrain, and skip unrelated background loads and retirements. Verify the eastward dodge on device with the existing cell budget.
+**#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
 
 ## GitHub issue tracking
 
@@ -205,7 +205,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### F07-03 — Player recovery after destructive terrain (later)
 - **GitHub Issue:** [#169](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/169)
-- **Status:** `PLANNED` — requested by player on 2026-11-14; not part of the current connection task.
+- **Status:** `IMPLEMENTED` — Play Hunt offers a local recovery after the player falls below their last grounded Fireball position. The recovery checks published safe ground and props, consumes the checkpoint on success, and is unavailable during active ambushes. Device review pending.
 - **Delivers:** an unstuck action that relocates the player to a nearby verified safe, supported position if destruction traps them or leaves them falling out of the world. Prefer reachable safe ground and a last safe checkpoint; no full world reset or undoing destruction.
 - **Gate:** validated collider/headroom, supported landing, preserved terrain edit ledger, no relocation inside solid voxels, no unlimited combat escape exploit. Exact cooldown/cost and rules are deferred to gameplay balancing.
 - **Done for now:** recover from representative self-created craters with terrain edits intact, using the actual Voxel V2 occupancy queries. No new physics engine.

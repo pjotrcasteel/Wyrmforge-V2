@@ -36,7 +36,7 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
-  spawnHuntExplorer,stepHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,
+  spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,
   targetHuntFireball,isHuntCastTap
 } from './src/hunt-play-runtime.mjs';
 import {
@@ -53,6 +53,7 @@ const playHudDetails=document.querySelector('#play-hud-details');
 const playHudSummary=document.querySelector('#play-hud-summary');
 const playCameraToggle=document.querySelector('#play-camera-toggle');
 const playRespawn=document.querySelector('#play-respawn');
+const playRecover=document.querySelector('#play-recover');
 const playReport=document.querySelector('#play-report');
 const extractButton=document.querySelector('#play-extract');
 const investigateButton=document.querySelector('#play-investigate');
@@ -114,6 +115,7 @@ let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
+let playRecoveryCheckpoint=null;
 let playConnected=null;
 let playStream=null;
 let playView=null;
@@ -661,6 +663,7 @@ function advancePlayFireball(now) {
   if(!result)return;
   playFireballCount++;
   playRemovedVoxels+=result.removedVoxels;
+  if(result.removedVoxels>0&&playActor?.grounded)playRecoveryCheckpoint=playActor;
   playImpact={point:cast.point,at:now};
 }
 
@@ -712,12 +715,34 @@ function resetPlayActor() {
   playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:{x:entry.x,z:entry.z}
   });
+  playRecoveryCheckpoint=null;
   playFollowCamera.reset(playActor);
   playFireball=null;
   playImpact=null;
   playStepAccumulator=0;
   resetPlayInput();
 }
+function recoverPlayActor(){
+  const stream=playStream?.residency;
+  if(!playActor||!playRecoveryCheckpoint||!stream||playStream.horde.active||streamingBusy()||
+      pendingMesh||pendingEdit||restoring||renderer.pendingUploads)return;
+  const section=stream.location(playActor.x,playActor.z);
+  const recovered=recoverHuntExplorer(active.world,playActor,playRecoveryCheckpoint,candidate=>{
+    if(!section||stream.location(candidate.x,candidate.z)!==section)return false;
+    if(cellPreview&&![-.65,.65].every(dx=>[-.65,.65].every(dz=>
+      stream.publishedAt(candidate.x+dx,candidate.z+dz))))return false;
+    return !playStream.trees.objects.overlapsActor(candidate);
+  });
+  if(!recovered){
+    previewMessage.textContent='No safe recovery spot nearby.';
+    return;
+  }
+  playActor=recovered;
+  playRecoveryCheckpoint=null;
+  playStepAccumulator=0;
+  resetPlayInput();
+}
+
 function updatePlayFrame(now) {
   if(!playMode)return;
   if(playFrameAt!==null && !document.hidden) {
@@ -751,6 +776,8 @@ function updatePlayFrame(now) {
         }
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }
+      if(playRecover)playRecover.hidden=!playRecoveryCheckpoint||playStream?.horde.active||
+        (!playActor.error&&playActor.y>playRecoveryCheckpoint.y-.5);
       if(playActor.error){
         previewMessage.textContent='Physics: '+playActor.error+' · Respawn to recover';
       }
@@ -890,6 +917,7 @@ function resetSite() {
     playConnected=null;
     playStream=null;
     playActor=null;
+    playRecoveryCheckpoint=null;
     playView=null;
     playDesiredView=null;
     playFireball=null;
@@ -1574,6 +1602,7 @@ if(playMode) {
     resetPlayInput();
   });
   playRespawn.addEventListener('click',resetPlayActor);
+  playRecover?.addEventListener('click',recoverPlayActor);
   extractButton?.addEventListener('click',()=>{
     if(streamingBusy()||!playStream?.extraction.extract(playActor))return;
     investigationMessage.textContent='Hunt complete. You extracted from the Wet Forest.';

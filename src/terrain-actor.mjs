@@ -252,7 +252,7 @@ export function spawnTerrainActor(world,{
 // Search nearest horizontal grid cells first and nearest vertical support
 // heights next. If nothing is safe, return null rather than spawn inside rock.
 export function recoverTerrainActor(world,position,{
-  horizontalRadius=4,verticalRange=6
+  horizontalRadius=4,verticalRange=6,accept=()=>true
 }={}) {
   validateWorld(world);
   validatePosition(position);
@@ -264,7 +264,7 @@ export function recoverTerrainActor(world,position,{
 
   function supported(x,y,z) {
     const candidate={x,y,z};
-    return !actorOverlapsTerrain(world,candidate) && groundProbe(world,candidate);
+    return accept(candidate) && !actorOverlapsTerrain(world,candidate) && groundProbe(world,candidate);
   }
   function restored(x,y,z) {
     return {

@@ -104,6 +104,10 @@ body[data-play-hunt] #play-respawn{
   display:block;position:absolute;right:16px;bottom:calc(45px + env(safe-area-inset-bottom,0px));
   z-index:5;background:#275548;font-weight:700;min-width:100px;min-height:47px
 }
+body[data-play-hunt] #play-recover:not([hidden]){
+  position:absolute;left:50%;transform:translateX(-50%);bottom:calc(45px + env(safe-area-inset-bottom,0px));
+  z-index:5;background:#51412a;min-height:47px;font-weight:700
+}
 body[data-play-hunt] #play-report{
   display:block;position:absolute;right:16px;
   bottom:calc(108px + env(safe-area-inset-bottom,0px));
@@ -174,6 +178,7 @@ body.focus-mode #site-summary{max-width:46%}
   <p id="play-horde" hidden></p>
   <button id="play-extract" type="button" hidden>Extract</button>
   <button id="play-investigate" type="button" hidden>Investigate</button>
+  <button id="play-recover" type="button" hidden>Unstuck</button>
   <button id="play-respawn" type="button">Respawn</button>
   <button id="play-report" type="button">Save report</button>
   <button id="play-camera-toggle" type="button"
