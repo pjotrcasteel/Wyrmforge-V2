@@ -582,7 +582,7 @@ function updatePlayStreaming(now) {
     if(playFireball || pendingEdit || renderer.pendingUploads)return;
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
-      holdEncounterResidency:stream.horde.active
+      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting
     });
     if(!job)return;
     if(job.action==='respawn') {
@@ -725,9 +725,12 @@ function updatePlayFrame(now) {
         playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects});
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
         if(residency&&!streamingBusy()){
-          playStream.horde.step({world:active.world,actor:playActor,
-            section:residency.location(playActor.x,playActor.z),
-            objects:playStream.trees.objects,dt:HUNT_FIXED_STEP});
+          const horde=playStream.horde;
+          const section=residency.location(playActor.x,playActor.z);
+          if(!horde.waiting||residency.encounterReady(section)){
+            horde.step({world:active.world,actor:playActor,section,
+              objects:playStream.trees.objects,dt:HUNT_FIXED_STEP});
+          }
         }
         playStepAccumulator-=HUNT_FIXED_STEP;steps++;
       }

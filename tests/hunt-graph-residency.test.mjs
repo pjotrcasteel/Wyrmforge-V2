@@ -91,7 +91,7 @@ test('H08-02B: bounded graph residency follows a branching loop and retains entr
   } finally {loader.unload();}
 });
 
-test('ambush dodges hold residency while an unloaded exit still prefetches on approach',()=>{
+test('ambush prepares both trail seams before dodges can freeze residency',()=>{
   const site=generateWorldSite(createWorldSiteRecipe({
     regionId:'starter-region',siteId:'preview-wet-forest',encounterId:'preview-001',
     kind:'wet-forest',seed:7,chunkEdge:32}));
@@ -113,13 +113,22 @@ test('ambush dodges hold residency while an unloaded exit still prefetches on ap
       stream.publish();
     }
     assert.ok(stream.metrics.residentRegions.includes(arena.id));
-    for(const offset of [-11,11,-11,11]){
+    const center={x:arena.offsetX+.5,z:arena.offsetZ};
+    assert.equal(stream.encounterReady(arena.id),false);
+    for(let i=0;i<12&&!stream.encounterReady(arena.id);i++){
+      const job=stream.next(center,{movement:{moveX:1},prepareEncounter:true});
+      assert.ok(job);
+      stream.begin(job);
+      while(stream.metrics.transition.phase==='writing')stream.step(512);
+      stream.publish();
+    }
+    assert.equal(stream.encounterReady(arena.id),true);
+    for(const offset of [-18,18,-18,18]){
       const actor={x:arena.offsetX+.5,z:arena.offsetZ+offset};
-      assert.ok(stream.next(actor,{movement:{moveZ:Math.sign(offset)}}));
       assert.equal(stream.next(actor,{movement:{moveZ:Math.sign(offset)},holdEncounterResidency:true}),null);
     }
-    const north={x:arena.offsetX+.5,z:arena.bounds.minZ+2};
-    assert.ok(stream.next(north,{movement:{moveZ:-1},holdEncounterResidency:true}));
+    assert.equal(stream.metrics.residentRegions.length,3);
+    assert.equal(stream.metrics.residentLinks.length,2);
     assert.ok(stream.next({x:arena.offsetX+.5,z:arena.offsetZ},{respawn:true,holdEncounterResidency:true}));
   }finally{loader.unload();}
 });
