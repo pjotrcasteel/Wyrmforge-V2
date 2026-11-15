@@ -66,6 +66,15 @@ export class HuntWoodlandObjects {
     this.#regions.set(next,instances);
     this.#peakResident=Math.max(this.#peakResident,this.diagnostics.resident);
   }
+  overlapsActor({x,y,z}){
+    for(const instances of this.regions)for(const prop of instances){
+      if(y>=prop.y+prop.height||y+ACTOR_HEIGHT<=prop.y)continue;
+      const dx=Math.max(0,Math.abs(x-prop.x)-ACTOR_HALF_WIDTH-(prop.halfLength??0));
+      const dz=Math.max(0,Math.abs(z-prop.z)-ACTOR_HALF_WIDTH);
+      if(dx*dx+dz*dz<prop.radius*prop.radius)return true;
+    }
+    return false;
+  }
   // Sweep a horizontal actor axis against the prop footprint.
   // An actor already intersecting a newly published trunk can walk out.
   limitTravel(position,axis,distance){
