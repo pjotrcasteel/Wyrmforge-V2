@@ -1,3 +1,4 @@
+import {HuntExtraction,paintExtractionArch} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
 import { HuntTreePreview,createForestBackdrop } from './src/hunt-tree-preview.mjs';
 // V2.6 end-to-end diagnostic host. It is a separate page, not World Generation V2.
@@ -48,6 +49,7 @@ const playHudSummary=document.querySelector('#play-hud-summary');
 const playCameraToggle=document.querySelector('#play-camera-toggle');
 const playRespawn=document.querySelector('#play-respawn');
 const playReport=document.querySelector('#play-report');
+const extractButton=document.querySelector('#play-extract');
 const investigateButton=document.querySelector('#play-investigate');
 const investigationResult=document.querySelector('#play-investigation-result');
 const investigationMessage=document.querySelector('#play-investigation-message');
@@ -217,7 +219,10 @@ function paintEncounterGuide(view) {
   if(!combatLayout.checked || !generatedSite || !active?.world) {
     paintTraversalOverlay(ctx,view);
     paintDummyActor(ctx,view);
-    if(playMode)paintInvestigation(ctx,view);
+    if(playMode){
+      paintInvestigation(ctx,view);
+      if(playStream?.extraction)paintExtractionArch(ctx,view,playStream.extraction);
+    }
     if(playMode&&playActor&&playStream?.trees){
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view));
     }else paintPlayActor(ctx,view);
@@ -922,8 +927,11 @@ function resetSite() {
         let findingStorage;
         try{findingStorage=window.localStorage;}catch{}
         if(investigationResult)investigationResult.hidden=true;
+        const investigation=new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage);
+        const extraction=new HuntExtraction(graph.layout.regions.find(region=>region.role==='extraction'),
+          investigation,recipe.seed,recipe.worldRevision,findingStorage);
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
-          investigation:new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage),
+          investigation,extraction,
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
@@ -1153,6 +1161,16 @@ function frame(now) {
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
             playStream.trees.update(residency.metrics.residentRegions,active.port);
             playStream.investigation.update(residency.metrics.residentRegions,active.port);
+            playStream.extraction.update(residency.metrics.residentRegions,active.port);
+          }
+          if(extractButton){
+            const gate=playStream?.extraction;
+            const near=gate?.nearby(playActor);
+            extractButton.hidden=!near;
+            extractButton.disabled=!gate?.eligible||gate.completed||streamingBusy();
+            const label=gate?.completed?'Hunt complete':
+              gate?.eligible?'Extract':'Inspect Forgotten Ruins to unlock';
+            if(extractButton.textContent!==label)extractButton.textContent=label;
           }
           if(investigateButton){
             const site=playActor&&residency&&!streamingBusy()?playStream.investigation.nearby(playActor):null;
@@ -1402,6 +1420,7 @@ if(playMode) {
         screenFoot:playView?projectVoxel(playActor.x,playActor.y,playActor.z,playView):null,
         camera:playView
       }:null,
+      extraction:{completed:playStream?.extraction.completed??false},
       investigation:{findings:playStream?.investigation.findings??[]},
       device:{
         userAgent:navigator.userAgent,
@@ -1444,6 +1463,11 @@ if(playMode) {
     resetPlayInput();
   });
   playRespawn.addEventListener('click',resetPlayActor);
+  extractButton?.addEventListener('click',()=>{
+    if(streamingBusy()||!playStream?.extraction.extract(playActor))return;
+    investigationMessage.textContent='Hunt complete. You extracted from the Wet Forest.';
+    investigationResult.hidden=false;
+  });
   investigationDismiss?.addEventListener('click',()=>{investigationResult.hidden=true;});
   investigateButton?.addEventListener('click',()=>{
     if(!playActor||streamingBusy())return;
