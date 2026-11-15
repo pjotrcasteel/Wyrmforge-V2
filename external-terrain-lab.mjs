@@ -1,3 +1,4 @@
+import {HuntInvestigation} from './src/hunt-investigation.mjs';
 import { HuntTreePreview,createForestBackdrop } from './src/hunt-tree-preview.mjs';
 // V2.6 end-to-end diagnostic host. It is a separate page, not World Generation V2.
 // Input -> bounded V2 initializer -> authoritative world/port -> existing
@@ -47,6 +48,8 @@ const playHudSummary=document.querySelector('#play-hud-summary');
 const playCameraToggle=document.querySelector('#play-camera-toggle');
 const playRespawn=document.querySelector('#play-respawn');
 const playReport=document.querySelector('#play-report');
+const investigateButton=document.querySelector('#play-investigate');
+const investigationResult=document.querySelector('#play-investigation-result');
 const combatGuide=document.querySelector('#combat-guide');
 const combatLayout=document.querySelector('#combat-layout');
 const traversalLayout=document.querySelector('#traversal-layout');
@@ -190,6 +193,21 @@ function resizeCanvas() {
   }
 }
 
+function paintInvestigation(ctx,view){
+  const investigation=playStream?.investigation;
+  if(!investigation)return;
+  for(const marker of investigation.markers){
+    const foot=projectVoxel(marker.x,marker.y,marker.z,view);
+    const x=Math.round(foot.x),y=Math.round(foot.y);
+    if(x<0||x>view.width||y<0||y>view.height)continue;
+    ctx.fillStyle='#231d15';
+    ctx.fillRect(x-6,y-10,12,10);
+    ctx.fillStyle=investigation.has(marker.id)?'#7d765a':'#edce72';
+    ctx.fillRect(x-4,y-8,8,5);
+    ctx.fillRect(x-1,y-3,2,2);
+  }
+}
+
 function paintEncounterGuide(view) {
   if(!combatGuideContext) return;
   const ctx=combatGuideContext;
@@ -197,6 +215,7 @@ function paintEncounterGuide(view) {
   if(!combatLayout.checked || !generatedSite || !active?.world) {
     paintTraversalOverlay(ctx,view);
     paintDummyActor(ctx,view);
+    if(playMode)paintInvestigation(ctx,view);
     if(playMode&&playActor&&playStream?.trees){
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view));
     }else paintPlayActor(ctx,view);
@@ -898,7 +917,11 @@ function resetSite() {
         const all=graph.layout.regions.map(region=>region.bounds);
         const footprint={minX:Math.min(...all.map(b=>b.minX)),maxX:Math.max(...all.map(b=>b.maxX)),
           minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
+        let findingStorage;
+        try{findingStorage=window.localStorage;}catch{}
+        if(investigationResult)investigationResult.textContent='';
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
+          investigation:new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
@@ -1127,6 +1150,12 @@ function frame(now) {
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
             playStream.trees.update(residency.metrics.residentRegions,active.port);
+            playStream.investigation.update(residency.metrics.residentRegions,active.port);
+          }
+          if(investigateButton){
+            const site=playActor&&residency&&!streamingBusy()?playStream.investigation.nearby(playActor):null;
+            investigateButton.hidden=!site;
+            if(site&&investigateButton.textContent!==site.action)investigateButton.textContent=site.action;
           }
         }
         paintEncounterGuide({...view});
@@ -1400,6 +1429,11 @@ if(playMode) {
     resetPlayInput();
   });
   playRespawn.addEventListener('click',resetPlayActor);
+  investigateButton?.addEventListener('click',()=>{
+    if(!playActor||streamingBusy())return;
+    const result=playStream?.investigation.interact(playActor);
+    if(result)investigationResult.textContent=result;
+  });
   window.addEventListener('blur',()=>{
     resetPlayInput();
     activePointers.clear();
