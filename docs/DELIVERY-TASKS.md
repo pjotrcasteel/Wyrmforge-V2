@@ -131,6 +131,7 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 - **Dependencies:** H08-01.
 - **Gate:** iPhone Safari and Android Chrome report build, route, seed, p50/p95/p99 frame intervals, >33/50/100 ms hitches, terrain memory/queue peaks, responsive controls, context-loss recovery and observed defects. No phone evidence = not accepted.
 - **Evidence:** iPhone Safari seed 7 in build `395d495` completed the full Hunt with 17 ms rolling p95, no terrain-blocked steps or camera holds, and a peak of 96 retained terrain definitions. Report now includes session >50/100 ms hitch counts, maximum foreground interval, and WebGL loss/restore counters. Broader device acceptance remains open.
+- **Context-loss test:** Add `contextTest=1` to the immutable Play Hunt URL. Open frame details, trigger a real browser context loss and restore, then verify movement resumes on the same terrain after queued uploads drain. Save the report. Unsupported browser extensions leave this check pending.
 - **Done for now:** Measured Play Hunt baselines exist for the required named devices with no uninvestigated critical input, frame or memory fault; retain future full-load optimization for R10-02.
 
 ### F07-02 — Terrain edits, collision and replay in the moving Hunt

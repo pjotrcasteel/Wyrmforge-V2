@@ -174,6 +174,24 @@ test('context loss during queued uploads restores latest authoritative meshes on
   view.dispose();
 });
 
+test('a worker replacement arriving while WebGL is lost wins during recovery', () => {
+  const {canvas,now} = fakeCanvas();
+  const states = [];
+  const view = new WebGLVoxelView(canvas,{onAvailabilityChange:ready=>states.push(ready)});
+  view.setMeshes([mesh('deleted'),mesh('kept')]);
+  drain(view,now);
+  assert.equal(view.simulateContextTransition('lose'),true);
+  view.queueReplacementMeshes(['deleted','added'],[mesh('added')],{sceneEpoch:view.sceneEpoch});
+  assert.equal(view.flushQueuedUploads({budgetMs:2,now}).chunks,0);
+  assert.equal(view.simulateContextTransition('restore'),true);
+  assert.deepEqual(states,[false,true]);
+  drain(view,now);
+  assert.equal(view.statistics.drawCalls,2);
+  assert.equal(view.pendingUploads,0);
+  assert.equal(view.recovering,false);
+  view.dispose();
+});
+
 test('scene reset during lost context does not restore old-world meshes', () => {
   const {canvas,now} = fakeCanvas();
   const view = new WebGLVoxelView(canvas);

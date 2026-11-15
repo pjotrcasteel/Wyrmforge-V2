@@ -44,7 +44,10 @@ import {
 } from './src/diagnostics/worldgen-viewport.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
-const cellPreview=playMode&&new URLSearchParams(location.search).get('stream')==='cells';
+const playQuery=new URLSearchParams(location.search);
+const cellPreview=playMode&&playQuery.get('stream')==='cells';
+const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
+  ?document.querySelector('#play-context-test'):null;
 const canvas=document.querySelector('#site-view');
 const playJoystick=document.querySelector('#play-joystick');
 const playStick=document.querySelector('#play-stick');
@@ -134,6 +137,7 @@ let playStepAccumulator=0;
 let playFrameAt=null;
 let playFrameStats=new HuntPlayPerformance();
 let webglRestores=0,webglRestoreFailures=0;
+let awaitingPlayContext=false;
 let playCpuStats=new HuntPlayPerformance();
 let playWoodlandPaintStats=new HuntPlayPerformance();
 let playEvidence=new HuntStreamingEvidence();
@@ -638,7 +642,7 @@ function updatePlayStreaming(now) {
 }
 
 function castPlayFireball(clientX,clientY) {
-  if(!playMode || !playActor || !active || !playView || playFireball ||
+  if(!playMode || awaitingPlayContext || !playActor || !active || !playView || playFireball ||
       pendingMesh || pendingEdit || restoring || errorMessage || streamingBusy() ||
       !renderer?.ready || renderer.pendingUploads)return;
   const rect=canvas.getBoundingClientRect();
@@ -725,7 +729,7 @@ function resetPlayActor() {
 }
 function recoverPlayActor(){
   const stream=playStream?.residency;
-  if(!playActor||!playRecoveryCheckpoint||!stream||playStream.horde.active||streamingBusy()||
+  if(awaitingPlayContext||!playActor||!playRecoveryCheckpoint||!stream||playStream.horde.active||streamingBusy()||
       pendingMesh||pendingEdit||restoring||renderer.pendingUploads)return;
   const section=stream.location(playActor.x,playActor.z);
   const recovered=recoverHuntExplorer(active.world,playActor,playRecoveryCheckpoint,candidate=>{
@@ -752,7 +756,7 @@ function updatePlayFrame(now) {
       playFrameStats.recordFrame(delta);
       playEvidence.frame(delta);
     }
-    if(playActor && generatedSite && active?.world &&
+    if(!awaitingPlayContext && playActor && generatedSite && active?.world &&
         !pendingMesh && !restoring && (!cellPreview||playStream?.residency)) {
       playStepAccumulator=Math.min(.05,playStepAccumulator+Math.min(.05,delta/1000));
       const input=playStream?.respawnPending?{moveX:0,moveZ:0}:playMovementInput();
@@ -1191,6 +1195,14 @@ function stageTerrainMeshes(terrain,kind) {
 function frame(now) {
   const playCpuBegin=playMode?performance.now():0;
   try {
+    if(awaitingPlayContext&&renderer?.ready&&!renderer.pendingUploads&&!pendingEdit&&!pendingMesh){
+      awaitingPlayContext=false;
+      resetPlayInput();
+      if(contextTestButton){
+        contextTestButton.textContent='Test WebGL loss';
+        contextTestButton.disabled=false;
+      }
+    }
     updatePlayFrame(now);
     if(playMode)advancePlayFireball(now);
     if(playMode){
@@ -1217,7 +1229,7 @@ function frame(now) {
     }
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
     resizeCanvas();
-    if(renderer?.ready) {
+    if(renderer?.ready&&!awaitingPlayContext) {
       // Follow the stabilized presentation target, not the actor's
       // ballistic height. Both projections retain the same voxel geometry.
       const camera=viewCamera.value; // 2.5D north-up Hunt; 3D inspector opt-in only
@@ -1564,7 +1576,8 @@ if(playMode) {
         streamingEvidence:playEvidence.snapshot,
         webglContext:renderer?{losses:renderer.statistics.contextLosses,
           restores:webglRestores,restoreFailures:webglRestoreFailures,
-          ready:renderer.ready,recovering:renderer.recovering}:null,
+          ready:renderer.ready,recovering:renderer.recovering,
+          movementPaused:awaitingPlayContext}:null,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
@@ -1649,6 +1662,16 @@ try {
     // projections. The 2.5D game camera does not require 2D fake terrain.
     transparentBackground:Boolean(forestContext),fastHuntMode:false,
     onAvailabilityChange(ready,error) {
+      if(playMode&&!ready){
+        awaitingPlayContext=true;
+        resetPlayInput();
+        playFireball=null;
+        playStepAccumulator=0;
+      }
+      if(contextTestButton){
+        contextTestButton.textContent=error?'WebGL restore failed':ready?'Restoring terrain…':'Restore WebGL';
+        contextTestButton.disabled=Boolean(error)||ready;
+      }
       if(ready)webglRestores++;
       else if(error)webglRestoreFailures++;
       // A restored GL context cannot clear an unrelated worker or replay failure.
@@ -1657,6 +1680,17 @@ try {
       updateStatus();
     }
   });
+  if(contextTestButton){
+    contextTestButton.hidden=false;
+    contextTestButton.addEventListener('click',()=>{
+      const action=renderer.ready?'lose':'restore';
+      contextTestButton.disabled=true;
+      contextTestButton.textContent=action==='lose'?'Waiting for context loss…':'Restoring WebGL…';
+      if(!renderer.simulateContextTransition(action)){
+        contextTestButton.textContent='WebGL test unavailable';
+      }
+    });
+  }
   meshBridge=new V2ExternalTerrainMeshBridge({
     createWorker:()=>new Worker(new URL('./src/terrain-mesh.worker.mjs',import.meta.url),
       {type:'module'}),
