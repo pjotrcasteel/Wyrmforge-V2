@@ -738,7 +738,7 @@ function recoverPlayActor(){
     return;
   }
   playActor=recovered;
-  playRecoveryCheckpoint=null;
+  // The edited terrain still exists, so the same trap can need recovery again.
   playStepAccumulator=0;
   resetPlayInput();
 }

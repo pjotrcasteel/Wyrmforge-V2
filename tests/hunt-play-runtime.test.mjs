@@ -232,6 +232,20 @@ test('F07-03 recovers from edited ground without undoing the crater',()=>{
     assert.equal(isolated,null,'a supported landing with no walkable exit is rejected');
     assert.ok(!actorOverlapsTerrain(world,recovered));
     assert.ok(recovered.y>=checkpoint.y-.25);
+    // Walk back into the crater using the same movement path the player uses.
+    let returned=recovered;
+    for(let i=0;i<120;i++){
+      const dx=checkpoint.x-returned.x,dz=checkpoint.z-returned.z;
+      const distance=Math.max(Math.hypot(dx,dz),.15);
+      returned=stepHuntExplorer(world,returned,region.bounds,{moveX:dx/distance,moveZ:dz/distance});
+    }
+    assert.ok(returned.y<checkpoint.y-.5,'re-entering the crater drops the player again');
+    const recoveredAgain=recoverHuntExplorer(world,returned,checkpoint,()=>true);
+    assert.ok(recoveredAgain?.grounded,'the same checkpoint provides another safe exit');
+    assert.ok(!actorOverlapsTerrain(world,recoveredAgain));
+    const host=readFileSync(new URL('../external-terrain-lab.mjs',import.meta.url),'utf8');
+    const recoveryHandler=host.slice(host.indexOf('function recoverPlayActor'),host.indexOf('function updatePlayFrame'));
+    assert.doesNotMatch(recoveryHandler,/playRecoveryCheckpoint\s*=/,'the Play Hunt button preserves the checkpoint');
     assert.equal(world.revision,revision);
     assert.equal(world.get(target.cell.x,target.cell.y,target.cell.z),0);
   }finally{loader.unload();}
