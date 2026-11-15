@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **H08-05 — World Objects V2 in Play Hunt**. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **F07-02 — terrain edit replay in moving Play Hunt (Voxel V2)**. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 ## GitHub issue tracking
@@ -239,7 +239,7 @@ The first goal is a **walkable Wet Forest expedition**. A Hunt is not accepted b
 
 ### H08-05 — Physical trees, large rocks and fallen logs in Play Hunt
 - **GitHub Issue:** [#160](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/160)
-- **Status:** `IN PROGRESS` — owner accepted prop art and collision; representative prop budget and device evidence are pending.
+- **Status:** `DONE FOR NOW` — owner accepted props and the large oak correction. Scoped device evidence and handoff are recorded in O08-99.
 - **Player experience:** walk around giant rocks and between tree trunks, use cover and see scale. Trees and rocks can be destroyed with later spells; initial static collision must be real.
 - **Technical boundary:** replaceable World Objects V2 instance API, Voxel V2 terrain grounding + object collider authority, proper renderer integration; simple temporary meshes/sprites until art approved.
 - **Gate:** hundreds of instances with bounded draw/collision budgets, no invisible walls or trunk/rock ghosts, persistent IDs across region unload/revisit; physical mobile frame metrics.
@@ -267,6 +267,12 @@ view counts. CPU Canvas renders of the actual scenic code over an approximated
 seed-7 terrain surface were inspected at entry, east, west and north. These are
 not WebGL or iPhone performance evidence. Actual device visual acceptance and
 H08-05 physical-object completion remain open.
+
+### O08-99 — World Objects V2 static-prop acceptance and handoff
+- **GitHub Issue:** [#227](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/227)
+- **Status:** `DONE FOR NOW` — static prop appearance/collision accepted; stable IDs verified across residency.
+- **Evidence:** normal Hunt iPhone baseline at 36 props; isolated iPhone Safari at 108 and 324 props, both 17 ms p95/p99 with zero intervals over 33 ms across 601 samples per load.
+- **Boundary:** large combinations of props, terrain streaming and enemies still require integrated performance acceptance. Handoff goes to F07-02 in Voxel. Object damage belongs to the World Objects side of H08-08 after its prerequisites.
 
 ### H08-06 — Exploratory ruins, secrets and investigations
 - **GitHub Issue:** [#161](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/161)

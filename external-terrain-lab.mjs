@@ -1,3 +1,4 @@
+import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
@@ -972,7 +973,7 @@ function resetSite() {
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
         playStream={phase:'waiting',graph,initialIds,initialFootprint,footprint,
           investigation,extraction,
-          hordeStreamingJobs:0,
+          hordeStreamingJobs:0,terrainReplay:[],
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
@@ -1017,11 +1018,16 @@ function impactSpan(targetOverride=null) {
       if(top===null) throw new Error('Generated landmark has no terrain surface');
       target={x:spot.x,y:top,z:spot.z,radius:2.3};
     }
-    const result=active.port.apply({
+    const command={
       id:'v26-site-breach-'+(++breachCount),
       type:targetOverride?'carve-crater':'carve-sphere',...target,
       expectedRevision:active.world.revision
-    });
+    };
+    const result=active.port.apply(command);
+    if(playMode&&playStream?.residency&&result.status==='accepted'){
+      playStream.terrainReplay.push(recordHuntTerrainEdit(
+        playStream.residency.metrics.residentIds,command,result));
+    }
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {
@@ -1485,6 +1491,7 @@ if(playMode) {
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
+        replayEdits:playStream?.terrainReplay??[],
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
         gpuQueue:renderer?.uploadQueueStatistics??null,
