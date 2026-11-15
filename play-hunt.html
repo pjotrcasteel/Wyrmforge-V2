@@ -113,6 +113,11 @@ body[data-play-hunt] #preview-message{
   bottom:calc(184px + env(safe-area-inset-bottom,0px));font:12px/1.3 system-ui;
   background:rgba(10,23,30,.82);white-space:normal;width:min(95%,330px);
 }
+#play-investigate{position:absolute;z-index:6;left:50%;bottom:24%;transform:translateX(-50%);
+  min-height:44px;background:#51412a;color:#fff6de;font-weight:700}
+#play-investigation-result{position:absolute;z-index:6;top:100px;left:16px;max-width:min(85%,24rem);
+  padding:8px 12px;background:#201d16;color:#fff6de;border-radius:6px;pointer-events:none}
+#play-investigation-result:empty{display:none}
 body[data-play-hunt] canvas{touch-action:none}
 @media(max-width:360px){
   body[data-play-hunt] #play-joystick{width:116px;height:116px;left:14px}
@@ -158,6 +163,8 @@ body.focus-mode #site-summary{max-width:46%}
   <div id="play-joystick" aria-label="Move the Wizard with touch joystick">
     <div id="play-stick"></div>
   </div>
+  <p id="play-investigation-result" role="status"></p>
+  <button id="play-investigate" type="button" hidden>Investigate</button>
   <button id="play-respawn" type="button">Respawn</button>
   <button id="play-report" type="button">Save report</button>
   <button id="play-camera-toggle" type="button"
