@@ -1131,6 +1131,7 @@ function frame(now) {
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;
       const followTarget=playMode && playActor
         ? playFollowCamera.update(playActor,now,{level:camera===PLAY_HUNT_CAMERA}):null;
+      // Recenter WebGL depth as well as screen position for long expeditions.
       const followed=followTarget
         ? projectVoxel(followTarget.x,followTarget.y+0.85,followTarget.z,{
           width:canvas.width,height:canvas.height,scale,camera})
@@ -1144,7 +1145,7 @@ function frame(now) {
       const view={width:canvas.width,height:canvas.height,
         scale,panX,panY,camera};
       if(renderer.render({width:canvas.width,height:canvas.height,
-          scale,panX,panY,camera,huntHeightContrast:playMode &&
+          scale,panX,panY,camera,depthOrigin:followed?.depth??0,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA})) {
         if(playMode){
           playView=view;

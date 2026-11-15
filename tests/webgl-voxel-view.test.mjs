@@ -76,3 +76,14 @@ test('WebGL2 shader exports include the complete fast Hunt and legacy paths',()=
   // syntax error, so the real shader compiler runs separately in CI.
   assert.doesNotMatch(WEBGL_V2_FRAGMENT_SHADER_SOURCE,/\bpatch\b/);
 });
+
+test('camera-relative WebGL depth keeps distant extraction terrain inside the clip volume',()=>{
+  const view={width:402,height:604,scale:16,camera:'hunt'};
+  const origin=projectVoxel(0,5,-208,view).depth;
+  const terrain=projectVoxel(0,4,-211,view).depth;
+  const nearer=projectVoxel(0,4,-209,view).depth;
+  assert.ok(terrain>1,'the former world-origin projection clipped extraction terrain');
+  assert.ok(Math.abs(terrain-origin)<1);
+  assert.ok(nearer-origin<terrain-origin);
+  assert.match(WEBGL_V2_VERTEX_SHADER_SOURCE,/dot\(world, uCameraDepth\) - uDepthOrigin/);
+});
