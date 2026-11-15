@@ -991,7 +991,7 @@ function resetSite() {
         playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
-          cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,
+          cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
           trees:new HuntTreePreview(graph,playTreeAtlas),
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
@@ -1223,13 +1223,25 @@ function frame(now) {
       playDesiredView=playMode?view:null;
       const cellStream=cellPreview?playStream?.residency:null;
       if(cellStream&&playView&&playView.width===view.width&&playView.height===view.height&&!cellStream.covers(view)){
+        if(playStream.cameraHoldStart===null){
+          playStream.cameraHoldStart=now;
+          playStream.cameraHoldContext={
+            section:cellStream.location(playActor.x,playActor.z),
+            position:{x:playActor.x,z:playActor.z},
+            encounter:playStream.horde.report.phase,
+            streamPhase:playStream.phase,
+            ...cellStream.cameraHold(view)
+          };
+        }
         view=playView;
         playStream.cameraHeldFrames++;
-        playStream.cameraHoldStart??=now;
       }else if(cellStream&&playStream.cameraHoldStart!==null){
         const duration=now-playStream.cameraHoldStart;
         playStream.cameraHeldMs+=duration;
-        playStream.longestCameraHoldMs=Math.max(playStream.longestCameraHoldMs,duration);
+        if(duration>playStream.longestCameraHoldMs){
+          playStream.longestCameraHoldMs=duration;
+          playStream.longestCameraHold=playStream.cameraHoldContext;
+        }
         playStream.cameraHoldStart=null;
       }
       if(renderer.render({...view,huntHeightContrast:playMode &&
@@ -1531,6 +1543,8 @@ if(playMode) {
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
+        longestCameraHold:cellPreview?(openCameraHoldMs>(playStream?.longestCameraHoldMs??0)
+          ?playStream.cameraHoldContext:playStream?.longestCameraHold??null):null,
         replayEdits:playStream?.terrainReplay??[],
         browserSave:playStream?{status:playStream.terrainSave.status,
           removedCells:playStream.terrainSave.removedCells.size}:null,

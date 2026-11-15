@@ -53,6 +53,7 @@ export class HuntCellResidency {
   #entry;
   #ready=null;
   #encounterCells=new Map();
+  #planningReason=null;
 
   constructor(world,graph,catalog,initialIds,{removedCells,entry}){
     this.#catalog=catalog;
@@ -131,9 +132,19 @@ export class HuntCellResidency {
     return this.#catalog.cells.every(cell=>!visible(cell.bounds,rect)||this.#published.has(cell.id));
   }
 
+  cameraHold(view){
+    const bounds=terrainViewFootprint(view,this.#catalog.height);
+    const missing=this.#catalog.cells.filter(cell=>visible(cell.bounds,bounds)&&!this.#published.has(cell.id));
+    return {missingCellCount:missing.length,missingCellIds:missing.slice(0,8).map(cell=>cell.id),
+      planningReason:this.#planningReason,transition:this.#session.metrics.transition};
+  }
+
   next(actor,{view,displayedView,respawn,prepareEncounter,holdEncounterResidency,movement}){
     if(!view)return null;
-    if(holdEncounterResidency&&!respawn&&this.covers(view))return null;
+    if(holdEncounterResidency&&!respawn&&this.covers(view)){
+      this.#planningReason='encounter-hold';
+      return null;
+    }
     let target=view;
     if(respawn){
       const focus=projectVoxel(this.#entry.x,actor.y,this.#entry.z-2,view);
@@ -147,9 +158,8 @@ export class HuntCellResidency {
     for(const cell of this.#catalog.cells){
       if(!respawn&&visible(cell.bounds,old)&&this.#published.has(cell.id))protectedIds.add(cell.id);
     }
-    if(prepareEncounter&&!respawn){
-      for(const id of this.#encounterCells.get(section)??[])protectedIds.add(id);
-    }
+    const preparationCells=prepareEncounter&&!respawn?this.#encounterCells.get(section):null;
+    for(const id of preparationCells??[])protectedIds.add(id);
     for(const dx of [-.65,.65])for(const dz of [-.65,.65]){
       const cell=this.#at(actor.x+dx,actor.z+dz);
       if(cell)protectedIds.add(cell.id);
@@ -157,13 +167,14 @@ export class HuntCellResidency {
     let lookahead;
     const {moveX=0,moveZ=0}=movement??{};
     const magnitude=Math.hypot(moveX,moveZ);
-    if(!respawn&&!prepareEncounter&&!holdEncounterResidency&&magnitude>=.2){
+    if(!respawn&&!preparationCells&&!holdEncounterResidency&&magnitude>=.2){
       const travel=HUNT_WALK_SPEED*LOOKAHEAD_SECONDS/Math.max(1,magnitude);
       // Translating the camera along the ground translates its footprint equally.
       const x=moveX*travel,z=moveZ*travel;
       lookahead={minX:bounds.minX+x,maxX:bounds.maxX+x,minZ:bounds.minZ+z,maxZ:bounds.maxZ+z};
     }
-    const {ticket}=this.#session.begin({view:bounds,lookahead,protectedIds});
+    const {ticket,reason}=this.#session.begin({view:bounds,lookahead,protectedIds});
+    this.#planningReason=reason;
     return ticket;
   }
 
