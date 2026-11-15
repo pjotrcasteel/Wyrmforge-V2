@@ -26,8 +26,8 @@ its existing materials and does not acquire emission from its shape.
 
 H08-05 accepts grounded props, stable identity, collision across residency,
 and representative prop cost evidence. The owner confirmed collision and
-approved art in #160. Measure prop workload and record device evidence before
-claiming the gate complete. H08-07 is a cross-engine encounter integration
+approved art in #160. O08-99 (#227) records the scoped device evidence and
+handoff to F07-02 in Voxel. H08-07 is a cross-engine encounter integration
 with separate Encounter and AI responsibilities, not a World Objects gate.
 H08-08 coordinates spell hits, terrain edits and object damage after its
 prerequisite contracts are in place. Terrain visibility and streaming work
