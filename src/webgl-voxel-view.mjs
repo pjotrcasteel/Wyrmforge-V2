@@ -19,6 +19,7 @@ uniform float uScale;
 uniform vec3 uCameraRight;
 uniform vec3 uCameraDown;
 uniform vec3 uCameraDepth;
+uniform float uDepthOrigin;
 out vec3 vNormal;
 out vec3 vWorld;
 flat out float vMaterial;
@@ -28,7 +29,7 @@ void main() {
   vec2 pixel = vec2(dot(world, uCameraRight),
                     dot(world, uCameraDown)) * uScale
                + uViewport * 0.5 + uPan;
-  float depth = dot(world, uCameraDepth);
+  float depth = dot(world, uCameraDepth) - uDepthOrigin;
   gl_Position = vec4(2.0 * pixel.x / uViewport.x - 1.0,
                      1.0 - 2.0 * pixel.y / uViewport.y,
                      depth, 1.0);
@@ -617,6 +618,7 @@ export class WebGLVoxelView {
       cameraRight: gl.getUniformLocation(this.#program, 'uCameraRight'),
       cameraDown: gl.getUniformLocation(this.#program, 'uCameraDown'),
       cameraDepth: gl.getUniformLocation(this.#program, 'uCameraDepth'),
+      depthOrigin: gl.getUniformLocation(this.#program, 'uDepthOrigin'),
       grassTexture: gl.getUniformLocation(this.#program, 'uGrassTexture'),
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
       fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
@@ -803,7 +805,7 @@ export class WebGLVoxelView {
     return true;
   }
 
-  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false }) {
+  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, depthOrigin = 0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -862,6 +864,7 @@ export class WebGLVoxelView {
     gl.uniform3fv(this.#uniforms.cameraRight, basis.right);
     gl.uniform3fv(this.#uniforms.cameraDown, basis.down);
     gl.uniform3fv(this.#uniforms.cameraDepth, basis.depth);
+    gl.uniform1f(this.#uniforms.depthOrigin, depthOrigin);
     for (const mesh of this.#gpuMeshes.values()) {
       gl.uniform3fv(this.#uniforms.origin, mesh.origin);
       gl.bindVertexArray(mesh.vao);
