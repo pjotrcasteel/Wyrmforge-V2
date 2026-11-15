@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **F07-02 — terrain edit replay in moving Play Hunt (Voxel V2)**. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **Voxel V2 — camera-bounded terrain streaming cells ([#223](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/223))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 ## GitHub issue tracking
@@ -133,11 +133,11 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 
 ### F07-02 — Terrain edits, collision and replay in the moving Hunt
 - **GitHub Issue:** [#166](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/166)
-- **Status:** `PLANNED`
+- **Status:** `DONE FOR NOW`
 - **Delivers:** Wizard can destroy a local obstacle and immediately walk through the same physically edited terrain; save/restore reproduces it.
 - **Dependencies:** H08-01, H08-02.
 - **Gate:** zero ghost collider, no desynchronized meshing or stale reply, deterministic replay through a region transition, bounded per-frame edits.
-- **Evidence:** existing Voxel V2 lab edit/ledger code; **game integration open**.
+- **Evidence:** cross-seam eviction and replay tests in #228; bounded browser persistence in #229; owner confirmed crater survival across iPhone refresh on 9c1f346.
 - **Done for now:** Walk after a real terrain edit, observe immediate authoritative collision, unload/revisit and replay it; all covered by regression tests and bounded update measurements. Defer unrelated destruction effects.
 
 ## V2.8 — First playable Hunt (current integrated milestone)
