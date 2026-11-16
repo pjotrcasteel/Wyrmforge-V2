@@ -9,6 +9,7 @@ import { terrainRayFromScreen } from './terrain-raycast.mjs';
 export const HUNT_EXPLORATION_SCHEMA='wyrmforge.hunt-exploration.v1';
 // Gameplay tuning is separate from the default Voxel V2 actor policy.
 export const HUNT_WALK_SPEED=5.2;
+export const HUNT_PIXELS_PER_VOXEL=16;
 export const HUNT_FIXED_STEP=1/60;
 const MARGIN=0.65;
 const PORT_WIDTH=2.7;

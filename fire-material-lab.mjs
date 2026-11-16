@@ -1,11 +1,20 @@
 import {COMMIT} from './src/build-info.mjs';
 import {projectVoxel} from './src/camera-presets.mjs';
 import {buildExposedFaceMeshes} from './src/exposed-face-mesher.mjs';
-import {FIRE_HUNT_MATERIALS,createMaterialLabTerrain} from './src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
+import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
+import {spawnTerrainActor,ACTOR_HEIGHT} from './src/terrain-actor.mjs';
+import {stepHuntExplorer,HUNT_PIXELS_PER_VOXEL,HUNT_FIXED_STEP} from './src/hunt-play-runtime.mjs';
+import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
 import {inspectTerrainArtPngHeader,validateTerrainArtInput,terrainArtKey} from './src/terrain-material-handoff.mjs';
 import {WebGLVoxelView} from './src/webgl-voxel-view.mjs';
 
 const canvas=document.querySelector('#terrain');
+const overlay=document.querySelector('#actors');
+const context=overlay.getContext('2d');
+const huntControls=document.querySelector('#hunt-controls');
+const cast=document.querySelector('#cast');
+const blend=document.querySelector('#blend');
 const picker=document.querySelector('#material');
 const description=document.querySelector('#description');
 const channel=document.querySelector('#channel');
@@ -18,7 +27,13 @@ const uploadStatus=document.querySelector('#upload-status');
 const modes=[...document.querySelectorAll('[data-scene]')];
 const drafts=new Map();
 let renderer,fixture,scheduled,loading=false;
-let scene='sample',camera='hunt',excavated=false;
+let scene='hunt',camera='hunt',excavated=false;
+let actor,enemy,projectile,lastFrame,accumulator=0;
+const pressed=new Set();
+const directions=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
+const art=new Map();
+const tileCanvas=document.querySelector('#tile');
+const repeatCanvas=document.querySelector('#tile-repeat');
 
 const groups=new Map();
 for(const material of FIRE_HUNT_MATERIALS){
@@ -34,65 +49,66 @@ const current=()=>FIRE_HUNT_MATERIALS.find(material=>material.id===picker.value)
 const draftKey=(material,kind)=>material.id+'/'+kind;
 document.querySelector('#build').textContent='Build '+COMMIT.slice(0,7);
 
-function makeSwatch(color){
-  const tile=document.createElement('canvas');
-  tile.width=tile.height=64;
-  const ctx=tile.getContext('2d');
-  const pixels=ctx.createImageData(64,64);
-  for(let index=0;index<pixels.data.length;index+=4){
-    const variation=((Math.imul((index>>2)+1,2654435761)>>>25)%9)-4;
-    color.forEach((value,component)=>{pixels.data[index+component]=value+variation;});
-    pixels.data[index+3]=255;
-  }
-  ctx.putImageData(pixels,0,0);
-  return tile;
+function albedo(material){
+  return drafts.get(draftKey(material,'albedo'))??art.get(material.asset);
+}
+
+function isBark(material){
+  return material.id==='bark'||material.id==='charred-bark';
+}
+
+function selectedSlots(material){
+  if(material.slot==='grass/rooted-soil'||material.voxel===3)return [material.slot];
+  if(material.voxel===2)return ['dirt/earth','dirt/earth-dark'];
+  if(isBark(material))return ['grass/meadow','grass/meadow-dark','grass/rooted-soil'];
+  return ['grass/meadow','grass/meadow-dark'];
 }
 
 function applyTextures(){
   renderer.clearTerrainAlbedoTiles();
-  for(const material of FIRE_HUNT_MATERIALS){
-    if(material.swatch)continue;
-    for(const kind of ['albedo','normal','orm']){
-      const image=drafts.get(draftKey(material,kind));
-      if(image)renderer.setTerrainMaterialTile(kind,terrainArtKey(material.slot,kind),image);
-    }
+  for(const [slot,asset] of Object.entries(TERRAIN_BASE_TILES)){
+    const entry=FIRE_HUNT_MATERIALS.find(item=>item.asset===asset);
+    renderer.setTerrainMaterialTile('albedo',terrainArtKey(slot,'albedo'),albedo(entry));
   }
   const selected=current();
-  if(selected.swatch){
-    const slots=selected.voxel===2?['dirt/earth','dirt/earth-dark']:[selected.slot];
-    const swatch=drafts.get(draftKey(selected,'albedo'))??makeSwatch(selected.swatch);
-    for(const slot of slots){
-      renderer.setTerrainMaterialTile('albedo',terrainArtKey(slot,'albedo'),swatch);
+  if(scene!=='hunt'||!isBark(selected)){
+    for(const slot of selectedSlots(selected)){
+      renderer.setTerrainMaterialTile('albedo',terrainArtKey(slot,'albedo'),albedo(selected));
       for(const kind of ['normal','orm']){
         const image=drafts.get(draftKey(selected,kind));
         if(image)renderer.setTerrainMaterialTile(kind,terrainArtKey(slot,kind),image);
       }
     }
   }
+  const image=albedo(selected);
+  tileCanvas.getContext('2d').drawImage(image,0,0);
+  const repeat=repeatCanvas.getContext('2d');
+  for(const x of [0,64])for(const y of [0,64])repeat.drawImage(image,x,y);
   requestRender();
 }
 
 function updateSelection(){
   const material=current();
-  description.textContent=material.swatch
-    ?material.id==='lava'
-      ?'Concept swatch on a voxel sample. Glow, flow and damage belong to later Hunt work.'
-      :'Concept swatch on a voxel sample for texture review.'
-    :material.id==='roots'
-      ?'Live terrain surface on the vertical face beneath grass.'
-      :'Live terrain slot · '+material.slot;
+  description.textContent=material.usage;
   clear.disabled=loading||!drafts.has(draftKey(material,channel.value));
   texture.disabled=loading;
 }
 
 function setScene(){
-  fixture=createMaterialLabTerrain(picker.value,scene,excavated);
+  fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value);
+  actor=scene==='hunt'?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
+  enemy=scene==='hunt'?spawnTerrainActor(fixture.world,{x:3.5,z:-2,searchTopY:10}):null;
+  projectile=null;
+  cast.disabled=false;
+  huntControls.hidden=scene!=='hunt';
+  lastFrame=null;
+  accumulator=0;
   renderer.setMeshes(buildExposedFaceMeshes(fixture.world));
   for(const button of modes)button.setAttribute('aria-pressed',String(button.dataset.scene===scene));
   excavate.hidden=scene!=='layers';
   excavate.textContent=excavated?'Restore surface':'Excavate';
   excavate.setAttribute('aria-pressed',String(excavated));
-  status.textContent=excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
+  status.textContent=scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
     scene==='layers'?'Surface over dirt and stone. Excavate to expose the layers.':
       scene==='repeats'?'Repeated material at world scale.':'Top and exposed faces.';
   requestRender();
@@ -102,7 +118,59 @@ function requestRender(){
   scheduled??=requestAnimationFrame(render);
 }
 
-function render(){
+function stepScene(now){
+  if(!actor)return;
+  const delta=lastFrame===null?0:Math.min((now-lastFrame)/1000,.05);
+  accumulator+=delta;
+  const radius=fixture.radius;
+  const bounds={minX:-radius,maxX:radius-1,minZ:-radius,maxZ:radius-1};
+  while(accumulator>=HUNT_FIXED_STEP){
+    const moveX=Number(pressed.has('ArrowRight'))-Number(pressed.has('ArrowLeft'));
+    const moveZ=Number(pressed.has('ArrowDown'))-Number(pressed.has('ArrowUp'));
+    actor=stepHuntExplorer(fixture.world,actor,bounds,{moveX,moveZ});
+    accumulator-=HUNT_FIXED_STEP;
+  }
+  if(projectile&&now-projectile.started>=340){
+    const result=new TerrainEditLedger(fixture.world).apply({
+      id:'hunt-material-crater',type:'carve-crater',...MATERIAL_LAB_TARGET,radius:2.3,depth:2
+    });
+    renderer.setMeshes(buildExposedFaceMeshes(fixture.world));
+    projectile=null;
+    status.textContent=result.removedVoxels+' voxels removed. Walk up to the crater to inspect the exposed layers.';
+  }
+}
+
+function paintMarkers(view,now,density){
+  if(overlay.width!==view.width)overlay.width=view.width;
+  if(overlay.height!==view.height)overlay.height=view.height;
+  context.clearRect(0,0,view.width,view.height);
+  if(!actor)return;
+  const paint=(figure,shade,head)=>{
+    const foot=projectVoxel(figure.x,figure.y,figure.z,view);
+    const top=projectVoxel(figure.x,figure.y+ACTOR_HEIGHT,figure.z,view);
+    const width=Math.max(5*density,(foot.y-top.y)*.5);
+    context.save();
+    clipHuntActor(context,fixture.world,view,figure,
+      {left:foot.x-width,right:foot.x+width,top:top.y-density,bottom:foot.y+density},fixture.highest,[]);
+    context.fillStyle=shade;
+    context.fillRect(foot.x-width/2,top.y+4*density,width,foot.y-top.y-4*density);
+    context.fillStyle=head;
+    context.fillRect(foot.x-3*density,top.y,6*density,5*density);
+    context.restore();
+  };
+  if(enemy)paint(enemy,'#8e483a','#b86a4f');
+  paint(actor,'#465986','#e7c68a');
+  if(projectile){
+    const t=Math.min(1,(now-projectile.started)/340);
+    const target=MATERIAL_LAB_TARGET;
+    const point=projectVoxel(projectile.x+(target.x+.5-projectile.x)*t,
+      projectile.y+(target.y+1-projectile.y)*t,projectile.z+(target.z+.5-projectile.z)*t,view);
+    context.fillStyle='#fba144';
+    context.fillRect(point.x-3*density,point.y-2*density,6*density,4*density);
+  }
+}
+
+function render(now){
   scheduled=null;
   if(!renderer?.ready||!fixture)return;
   try{
@@ -111,6 +179,7 @@ function render(){
     if(!width||!height)return;
     if(canvas.width!==width)canvas.width=width;
     if(canvas.height!==height)canvas.height=height;
+    stepScene(now);
     renderer.flushQueuedUploads();
     const corners=[];
     for(const x of [-fixture.radius,fixture.radius])for(const z of [-fixture.radius,fixture.radius]){
@@ -118,13 +187,26 @@ function render(){
     }
     const minX=Math.min(...corners.map(p=>p.x)),maxX=Math.max(...corners.map(p=>p.x));
     const minY=Math.min(...corners.map(p=>p.y)),maxY=Math.max(...corners.map(p=>p.y));
-    const scale=.82*Math.min(width/(maxX-minX),height/(maxY-minY));
-    renderer.render({width,height,scale,camera,panX:-(minX+maxX)*scale/2,panY:-(minY+maxY)*scale/2});
-    if(renderer.pendingUploads)requestRender();
+    const scale=actor?HUNT_PIXELS_PER_VOXEL*density:.82*Math.min(width/(maxX-minX),height/(maxY-minY));
+    const follow=actor?projectVoxel(actor.x,actor.y+.85,actor.z,{width,height,scale,camera}):null;
+    const view={width,height,scale,camera,depthOrigin:follow?.depth??0,
+      panX:follow?Math.round(width/2-follow.x):-(minX+maxX)*scale/2,
+      panY:follow?Math.round(height*.51-follow.y):-(minY+maxY)*scale/2};
+    renderer.render(view);
+    paintMarkers(view,now,density);
+    const moving=actor&&(pressed.size||projectile||!actor.grounded);
+    lastFrame=moving?now:null;
+    if(renderer.pendingUploads||moving)requestRender();
   }catch(error){status.textContent=error.message;}
 }
 
 try{
+  await Promise.all(FIRE_HUNT_MATERIALS.map(async material=>{
+    const image=new Image();
+    image.src=new URL('./art/fire-hunt-materials/'+material.asset+'.png',import.meta.url);
+    await image.decode();
+    art.set(material.asset,image);
+  }));
   renderer=new WebGLVoxelView(canvas,{onAvailabilityChange:(ready,error)=>{
     if(ready)setScene();
     else status.textContent=error?.message??'Waiting for WebGL to recover…';
@@ -133,6 +215,7 @@ try{
     scene=button.dataset.scene;
     excavated=false;
     setScene();
+    applyTextures();
   });
   cameraButton.addEventListener('click',()=>{
     camera=camera==='hunt'?'inspection':'hunt';
@@ -141,7 +224,41 @@ try{
     requestRender();
   });
   excavate.addEventListener('click',()=>{excavated=!excavated;setScene();});
-  picker.addEventListener('change',()=>{updateSelection();applyTextures();setScene();});
+  picker.addEventListener('change',()=>{
+    if(scene==='hunt'&&isBark(current()))scene='sample';
+    if(scene!=='hunt')setScene();
+    updateSelection();
+    applyTextures();
+  });
+  blend.addEventListener('change',()=>{scene='hunt';setScene();applyTextures();});
+  document.querySelector('#reset').addEventListener('click',setScene);
+  cast.addEventListener('click',()=>{
+    if(!actor||cast.disabled)return;
+    cast.disabled=true;
+    projectile={x:actor.x,y:actor.y+1.1,z:actor.z,started:performance.now()};
+    requestRender();
+  });
+  const move=(key,active)=>{
+    if(active)pressed.add(key);
+    else pressed.delete(key);
+    requestRender();
+  };
+  for(const button of document.querySelectorAll('[data-move]')){
+    button.addEventListener('pointerdown',event=>{
+      button.setPointerCapture(event.pointerId);
+      move(button.dataset.move,true);
+    });
+    for(const type of ['pointerup','pointercancel','lostpointercapture']){
+      button.addEventListener(type,()=>move(button.dataset.move,false));
+    }
+  }
+  window.addEventListener('keydown',event=>{
+    if(scene!=='hunt'||!directions.includes(event.key)||['SELECT','INPUT'].includes(event.target?.tagName))return;
+    event.preventDefault();
+    move(event.key,true);
+  });
+  window.addEventListener('keyup',event=>{if(directions.includes(event.key))move(event.key,false);});
+  window.addEventListener('blur',()=>pressed.clear());
   channel.addEventListener('change',updateSelection);
   clear.addEventListener('click',()=>{
     drafts.delete(draftKey(current(),channel.value));
@@ -177,6 +294,7 @@ try{
   new ResizeObserver(requestRender).observe(canvas);
   updateSelection();
   setScene();
+  applyTextures();
 }catch(error){
   status.textContent=error.message;
   for(const control of document.querySelectorAll('button,select,input'))control.disabled=true;
