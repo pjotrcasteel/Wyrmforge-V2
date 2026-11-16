@@ -99,8 +99,9 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
         assert.equal(unfinished.collapse.landed,null);
         assert.deepEqual(preview.stepSupportScan(1),[]);
         assert.equal(world.revision,revision);
-        for(let frame=0;frame<100&&preview.checkingSupport;frame++)preview.stepSupportScan(96);
+        for(let frame=0;frame<100&&preview.checkingSupport;frame++)preview.stepSupportScan(longSpan?192:96);
         assert.equal(preview.checkingSupport,false);
+        if(longSpan)assert.ok(preview.supportReport.slices<=11);
       }else assert.ok(preview.acceptImpact(impact).length);
       assert.equal(save.removedCells.has(supportKey),false);
     }
@@ -276,4 +277,35 @@ for(const {length,wide} of [{length:24,wide:true},{length:25,wide:true},{length:
   for(let tick=0;tick<120&&preview.holdsFixture;tick++)preview.tick([]);
   assert.equal(save.additions.length,24);
   for(let x=0;x<length;x++)assert.equal(world.get(x,1,0),1+x%3);
+});
+
+test('a live support scan yields to both its elapsed work target and its operation cap',()=>{
+  const world=new VoxelWorld();
+  for(let x=0;x<20;x++){
+    world.set(x,0,0,4);
+    world.set(x,3,0,3);
+  }
+  const run=clockStep=>{
+    let clock=0;
+    const preview=new HuntCollapsePreview(world,null,{
+      publishedAt:()=>true,ownerAt:()=>'terrain',trackAddedCells:()=>{}
+    },new HuntTerrainSave(null,'scan-budget'),{fixture:false,mixedTerrain:true,now:()=>(clock+=clockStep)});
+    preview.acceptImpact({editRevision:1,removedCells:['0,2,0']},{defer:true});
+    preview.stepSupportScan(64,{workBudgetMs:2});
+    return preview;
+  };
+
+  const slow=run(2);
+  const fast=run(0);
+  assert.equal(slow.checkingSupport,true);
+  assert.equal(fast.checkingSupport,true);
+  assert.equal(slow.supportReport.slices,1);
+  assert.equal(fast.supportReport.slices,1);
+  assert.ok(slow.supportReport.scannedPositions<=32);
+  assert.ok(fast.supportReport.scannedPositions>slow.supportReport.scannedPositions);
+  assert.ok(fast.supportReport.scannedPositions<=64);
+  assert.equal(world.get(0,3,0),3);
+
+  for(let frame=0;frame<30&&fast.checkingSupport;frame++)fast.stepSupportScan(64,{workBudgetMs:2});
+  assert.equal(fast.supportReport.status,'detached');
 });

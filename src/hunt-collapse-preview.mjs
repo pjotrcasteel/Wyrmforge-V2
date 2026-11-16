@@ -18,6 +18,7 @@ const MAX_DEFERRED_CLUSTER_CELLS=256;
 const MAX_DEFERRED_SCAN_READS=4096;
 const MAX_DEFERRED_CLUSTER_EXTENT=24;
 const MAX_TERRAIN_ADDITIONS=256;
+const SUPPORT_TIMING_BATCH=32;
 const MAX_TERRAIN_DROP=12;
 const FALL_COLORS={
   1:['#668f47','#435f2f'],
@@ -139,11 +140,12 @@ export class HuntCollapsePreview {
     return [];
   }
 
-  stepSupportScan(maxOperations){
+  stepSupportScan(maxOperations,{workBudgetMs}={}){
     const pending=this.#pendingScan;
     if(!pending)return [];
     const started=this.#now();
-    const scan=pending.job.step(maxOperations);
+    const scan=workBudgetMs===undefined?pending.job.step(maxOperations):
+      this.#stepTimedSupportScan(pending.job,maxOperations,started+workBudgetMs);
     this.#recordScanSlice(scan,started,pending.started);
     if(scan.status==='scanning')return [];
     this.#pendingScan=null;
@@ -152,6 +154,17 @@ export class HuntCollapsePreview {
     const dirty=this.#applyScan(pending.edit,scan,true,pending.wide);
     if(!this.holdsFixture)this.#save.commit(pending.edit.removedCells);
     return dirty;
+  }
+
+  #stepTimedSupportScan(job,maxOperations,deadline){
+    let remaining=maxOperations;
+    let scan;
+    do{
+      const batch=Math.min(SUPPORT_TIMING_BATCH,remaining);
+      scan=job.step(batch);
+      remaining-=batch;
+    }while(scan.status==='scanning'&&remaining>0&&this.#now()<deadline);
+    return scan;
   }
 
   #applyScan(edit,scan,deferred=false,wide=false){
