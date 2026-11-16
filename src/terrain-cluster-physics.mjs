@@ -44,7 +44,11 @@ export class TerrainClusterPhysics {
   get bodies(){return [...this.#states.values()].map(state=>Object.freeze({...state}));}
 
   #sync(){
-    for(const body of this.#handoff.bodies){
+    const bodies=this.#handoff.bodies;
+    for(const id of this.#states.keys()){
+      if(!bodies.some(body=>body.id===id))this.#states.delete(id);
+    }
+    for(const body of bodies){
       if(!this.#states.has(body.id))this.#states.set(body.id,{body,offsetY:0,vy:0,phase:'falling',contact:null});
     }
   }
@@ -78,12 +82,8 @@ export class TerrainClusterPhysics {
 
   step(ticks=1,{actors=[]}={}){
     if(!Number.isSafeInteger(ticks)||ticks<1||ticks>4)throw new RangeError('Cluster tick budget exceeded');
-    if(!Array.isArray(actors)||actors.length>32||
-        actors.some(actor=>![actor?.x,actor?.y,actor?.z].every(Number.isFinite))){
-      throw new RangeError('Invalid cluster actor collision inputs');
-    }
     this.#sync();
-    const actorBoxes=actors.map(terrainActorBounds);
+    const actorBoxes=this.#actorBoxes(actors);
     const states=[...this.#states.values()];
     const columns=indexColumns(states);
     for(let tick=0;tick<ticks;tick++){
@@ -91,6 +91,32 @@ export class TerrainClusterPhysics {
       for(const state of states)this.#advance(state,columns,actorBoxes);
     }
     return this.bodies;
+  }
+
+  #actorBoxes(actors){
+    if(!Array.isArray(actors)||actors.length>32||
+        actors.some(actor=>![actor?.x,actor?.y,actor?.z].every(Number.isFinite))){
+      throw new RangeError('Invalid cluster actor collision inputs');
+    }
+    return actors.map(terrainActorBounds);
+  }
+
+  settle(id,{actors=[]}={}){
+    this.#sync();
+    const state=this.#states.get(id);
+    if(state?.phase!=='resting'||state.contact!=='terrain')return {status:'not-resting-on-terrain'};
+    const offsetY=Math.round(state.offsetY);
+    if(Math.abs(state.offsetY-offsetY)>EPSILON)return {status:'not-grid-aligned'};
+    const actorBoxes=this.#actorBoxes(actors);
+    const probe={...state,offsetY,vy:0};
+    const states=[...this.#states.values()].map(other=>other===state?probe:other);
+    const revision=this.#world.revision;
+    this.#advance(probe,indexColumns(states),actorBoxes);
+    if(probe.phase!=='resting'||probe.contact!=='terrain'||probe.offsetY!==offsetY||
+        this.#world.revision!==revision)return {status:'blocked-settlement'};
+    const result=this.#handoff.settle(state.body,offsetY,this.#isKnown);
+    if(result.status==='settled')this.#states.delete(id);
+    return result;
   }
 
   #advance(state,columns,actorBoxes){
