@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {sweepActorAxis,simulateTerrainActor,actorOverlapsTerrain,ACTOR_HEIGHT} from '../src/terrain-actor.mjs';
 import {VoxelWorld} from '../src/voxel-world.mjs';
 import {scanTerrainSupport} from '../src/terrain-support-scan.mjs';
 import {TerrainClusterHandoff} from '../src/terrain-cluster-handoff.mjs';
@@ -84,4 +85,40 @@ test('an intersecting terrain edit freezes the body and a void fall stops at the
   const [bounded]=tick(physics,300);
   assert.equal(bounded.phase,'drop-limit');
   assert.equal(bounded.offsetY,-64);
+});
+
+test('the regular actor solver sweeps fractional cluster walls, ceilings and floors',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  const handoff=new TerrainClusterHandoff(world);
+  detach(world,handoff,0,8);
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
+  const [state]=tick(physics,12);
+  const bottom=8+state.offsetY,top=bottom+1;
+  assert.notEqual(bottom,Math.round(bottom));
+  const side=sweepActorAxis(world,{x:-2,y:bottom-.4,z:.5},'x',4,physics);
+  assert.ok(side.collided&&side.position<0);
+  const ceiling=sweepActorAxis(world,{x:.5,y:bottom-3,z:.5},'y',4,physics);
+  assert.ok(ceiling.collided&&Math.abs(ceiling.position+ACTOR_HEIGHT-bottom)<.001);
+  const landing=sweepActorAxis(world,{x:.5,y:top+3,z:.5},'y',-4,physics);
+  assert.ok(landing.collided&&Math.abs(landing.position-top)<.001);
+  const actor=simulateTerrainActor(world,{x:.5,y:landing.position,z:.5,vy:0},{dynamicCollision:physics});
+  assert.equal(actor.grounded,true);
+  assert.equal(actorOverlapsTerrain(world,actor,physics),false);
+});
+
+test('a falling cluster pauses at actor contact and resumes when the actor leaves',()=>{
+  const world=new VoxelWorld({chunkEdge:32});
+  const handoff=new TerrainClusterHandoff(world);
+  world.set(0,0,0,4);
+  detach(world,handoff,0,8);
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
+  const actor={x:.5,y:1,z:.5};
+  for(let i=0;i<90;i++)physics.step(1,{actors:[actor]});
+  const [onActor]=physics.bodies;
+  assert.equal(onActor.contact,'actor');
+  assert.ok(Math.abs(8+onActor.offsetY-actor.y-ACTOR_HEIGHT)<.001);
+  assert.equal(actorOverlapsTerrain(world,actor,physics),false);
+  const [onTerrain]=tick(physics,120);
+  assert.equal(onTerrain.contact,'terrain');
+  assert.equal(onTerrain.offsetY,-7);
 });

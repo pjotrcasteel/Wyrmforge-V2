@@ -38,7 +38,7 @@ function validatePosition(position) {
   }
 }
 
-function box(position) {
+export function terrainActorBounds(position) {
   return {
     x: [position.x - ACTOR_HALF_WIDTH, position.x + ACTOR_HALF_WIDTH],
     y: [position.y, position.y + ACTOR_HEIGHT],
@@ -50,10 +50,11 @@ function voxelSpan(min,max) {
   return [Math.floor(min + SKIN), Math.floor(max - SKIN)];
 }
 
-export function actorOverlapsTerrain(world,position) {
+export function actorOverlapsTerrain(world,position,dynamicCollision=null) {
   validateWorld(world);
   validatePosition(position);
-  const bounds=box(position);
+  const bounds=terrainActorBounds(position);
+  if(dynamicCollision?.intersects(bounds))return true;
   if(world.microSurfaceCount>0 &&
       typeof world.intersectsPhysicalBox==='function') {
     return world.intersectsPhysicalBox(bounds);
@@ -97,7 +98,17 @@ function occupiedAtBoundary(world,bounds,axis,cellIndex) {
 // cannot tunnel through a 1-cell wall even if its end position is empty.
 // Return the first contact and stop just outside it; sweeping each horizontal
 // axis independently gives simple, deterministic wall sliding.
-export function sweepActorAxis(world,position,axis,distance) {
+export function sweepActorAxis(world,position,axis,distance,dynamicCollision=null) {
+  const terrain=sweepStaticActorAxis(world,position,axis,distance);
+  if(!dynamicCollision||distance===0)return terrain;
+  const travel=dynamicCollision.sweep(terrainActorBounds(position),axis,distance);
+  if(travel===null)return terrain;
+  const sign=Math.sign(distance);
+  const safe=position[axis]+sign*Math.max(0,Math.abs(travel)-SKIN);
+  return sign*(safe-terrain.position)<=0?{position:safe,collided:true}:terrain;
+}
+
+function sweepStaticActorAxis(world,position,axis,distance) {
   validateWorld(world);
   validatePosition(position);
   if (!AXES.includes(axis) || !Number.isFinite(distance) ||
@@ -135,7 +146,7 @@ export function sweepActorAxis(world,position,axis,distance) {
     }
     return {position:position[axis]+distance,collided:false};
   }
-  const bounds=box(position);
+  const bounds=terrainActorBounds(position);
   if(axis==='y' && distance<0 && world.microSurfaceCount>0 &&
       typeof world.groundContactHeight==='function') {
     const floor=world.groundContactHeight(
@@ -182,29 +193,29 @@ export function actorHeadClearance(world, position, maxDistance=16) {
   };
 }
 
-function groundProbe(world,position) {
-  return sweepActorAxis(world,position,'y',-0.06).collided;
+function groundProbe(world,position,dynamicCollision) {
+  return sweepActorAxis(world,position,'y',-0.06,dynamicCollision).collided;
 }
 
-function moveHorizontal(world,position,axis,distance,canStep) {
-  const initial=sweepActorAxis(world,position,axis,distance);
+function moveHorizontal(world,position,axis,distance,canStep,dynamicCollision) {
+  const initial=sweepActorAxis(world,position,axis,distance,dynamicCollision);
   if(!initial.collided || !canStep || distance===0) {
     return {position:{...position,[axis]:initial.position},
       blocked:initial.collided,stepped:false};
   }
-  const risen=sweepActorAxis(world,position,'y',ACTOR_STEP_HEIGHT);
+  const risen=sweepActorAxis(world,position,'y',ACTOR_STEP_HEIGHT,dynamicCollision);
   if(risen.collided) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
   }
   const elevated={...position,y:risen.position};
-  const forward=sweepActorAxis(world,elevated,axis,distance);
+  const forward=sweepActorAxis(world,elevated,axis,distance,dynamicCollision);
   if(forward.collided) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
   }
   const reached={...elevated,[axis]:forward.position};
-  const landing=sweepActorAxis(world,reached,'y',-(ACTOR_STEP_HEIGHT+0.12));
+  const landing=sweepActorAxis(world,reached,'y',-(ACTOR_STEP_HEIGHT+0.12),dynamicCollision);
   if(!landing.collided || landing.position < position.y-0.11) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
@@ -304,7 +315,7 @@ export function recoverTerrainActor(world,position,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED,limitHorizontal=null
+  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED,limitHorizontal=null,dynamicCollision=null
 }={}) {
   validateWorld(world);
   validatePosition(actor);
@@ -314,7 +325,7 @@ export function simulateTerrainActor(world,actor,{
       ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1)) {
     throw new RangeError('Actor inputs or fixed-step delta outside supported bounds');
   }
-  if (actorOverlapsTerrain(world,actor)) {
+  if (actorOverlapsTerrain(world,actor,dynamicCollision)) {
     return {...actor,worldRevision:world.revision,
       error:'actor-overlap',grounded:false};
   }
@@ -322,12 +333,12 @@ export function simulateTerrainActor(world,actor,{
   const divisor=Math.max(1,length);
   const dx=moveX/divisor*moveSpeed*dt;
   const dz=moveZ/divisor*moveSpeed*dt;
-  const initialSupport=groundProbe(world,actor);
+  const initialSupport=groundProbe(world,actor,dynamicCollision);
   // Short ledge steps are automatic walking. No player jump mechanic.
   const canStep=initialSupport && actor.vy<=0;
   const advance=(position,axis,distance)=>{
     const travel=limitHorizontal?.(position,axis,distance)??distance;
-    const motion=moveHorizontal(world,position,axis,travel,canStep);
+    const motion=moveHorizontal(world,position,axis,travel,canStep,dynamicCollision);
     if(travel!==distance)motion.blocked=true;
     return motion;
   };
@@ -344,7 +355,7 @@ export function simulateTerrainActor(world,actor,{
     Math.min(ACTOR_MAX_UPWARD_SPEED,requestedVy-ACTOR_GRAVITY*dt));
   // Sweep both ascending AND descending travel. The first hit on an upward
   // sweep is a ceiling; it must stop ascent, not count as grounded.
-  const vertical=sweepActorAxis(world,position,'y',vy*dt);
+  const vertical=sweepActorAxis(world,position,'y',vy*dt,dynamicCollision);
   position={...position,y:vertical.position};
   const ceilingContact=vertical.collided && vy>0;
   const grounded=vertical.collided && vy<0;
