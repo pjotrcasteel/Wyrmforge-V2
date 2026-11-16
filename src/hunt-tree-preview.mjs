@@ -17,6 +17,10 @@ function paintProp(ctx,image,prop,view,foot){
   const y=Math.round(foot.y-sprite.ay*scale);
   ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,
     Math.max(1,Math.round(sprite.w*scale)),Math.max(1,Math.round(sprite.h*scale)));
+  if(prop.damaged){
+    ctx.fillStyle='#392e28';
+    ctx.fillRect(Math.round(foot.x)-1,Math.round(y+sprite.h*scale*.35),2,Math.max(2,Math.round(sprite.h*scale*.35)));
+  }
 }
 
 // H08-05 first visual slice. Placement IDs survive eviction and regenerated
@@ -37,8 +41,8 @@ export class HuntTreePreview {
   terrainChanged(bounds,terrain,isPublished,now,animate=true){
     this.#animate(this.objects.terrainChanged(bounds,terrain,isPublished),now,animate);
   }
-  hitTree(id,terrain,isPublished,now,animate){
-    const hit=this.objects.hitTree(id,terrain,isPublished);
+  hitProp(id,terrain,isPublished,now,animate){
+    const hit=this.objects.hitProp(id,terrain,isPublished);
     if(hit)this.#animate(hit.falls,now,animate);
     return hit;
   }

@@ -1,7 +1,7 @@
 import {HuntCellCatalog,HuntCellResidency} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
-import {HuntTreeDamage} from './src/hunt-tree-damage.mjs';
+import {HuntWoodlandDamage} from './src/hunt-woodland-damage.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
@@ -666,16 +666,20 @@ function advancePlayFireball(now) {
   if(now-cast.startedAt<cast.duration)return;
   playFireball=null;
   if(active?.world!==cast.world || active.port.revision!==cast.worldRevision)return;
-  if(cast.treeId){
+  if(cast.propId){
     const residency=playStream.residency;
     const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
-    const hit=playStream.trees.hitTree(cast.treeId,active.port,isPublished,now,
+    const hit=playStream.trees.hitProp(cast.propId,active.port,isPublished,now,
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     if(hit){
       playFireballCount++;
-      playStream.directTreeHits++;
+      const boulder=cast.propKind==='boulder';
+      if(boulder)playStream.directBoulderHits++;
+      else playStream.directTreeHits++;
       playImpact={point:cast.point,at:now};
-      previewMessage.textContent=hit.hits===1?'Tree damaged · Tap the trunk again':'Tree felled';
+      previewMessage.textContent=boulder
+        ?(hit.hits===1?'Boulder cracked · Tap it again':'Boulder shattered')
+        :(hit.hits===1?'Tree damaged · Tap the trunk again':'Tree felled');
     }
     return;
   }
@@ -1043,8 +1047,8 @@ function resetSite() {
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
-          trees:new HuntTreePreview(graph,playTreeAtlas,new HuntTreeDamage(findingStorage,saveIdentity)),
-          directTreeHits:0,
+          trees:new HuntTreePreview(graph,playTreeAtlas,new HuntWoodlandDamage(findingStorage,saveIdentity)),
+          directTreeHits:0,directBoulderHits:0,
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
           {epoch:terrainEpochs.next(),microSurfaceCapacity:2048,removedCells:terrainSave.removedCells});
@@ -1592,6 +1596,7 @@ if(playMode) {
       worldObjects:playStream?{
         ...playStream.trees.objects.diagnostics,
         directTreeHits:playStream.directTreeHits,
+        directBoulderHits:playStream.directBoulderHits,
         woodlandOverlayCpu:playWoodlandPaintStats.snapshot
       }:null,
       horde:playStream?{...playStream.horde.report,streamingJobs:playStream.hordeStreamingJobs}:null,

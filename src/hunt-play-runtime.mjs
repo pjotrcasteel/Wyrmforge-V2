@@ -150,8 +150,8 @@ export function targetHuntFireball(port,view,x,y,objects=null) {
   if(x<0 || y<0 || x>view.width || y>view.height)return null;
   const ray=terrainRayFromScreen({...view,x,y});
   const hit=port.raycast(ray);
-  const tree=objects?.raycastTree({...ray,maxDistance:hit?.distance??ray.maxDistance});
-  if(tree)return {point:tree.point,treeId:tree.id,worldRevision:port.revision};
+  const prop=objects?.raycastDamageable({...ray,maxDistance:hit?.distance??ray.maxDistance});
+  if(prop)return {point:prop.point,propId:prop.id,propKind:prop.kind,worldRevision:port.revision};
   if(!hit)return null;
   return {
     point:{...hit.point},

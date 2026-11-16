@@ -1,5 +1,5 @@
 // Resident, grounded woodland instances shared by rendering and movement.
-import {HuntTreeDamage} from './hunt-tree-damage.mjs';
+import {HuntWoodlandDamage} from './hunt-woodland-damage.mjs';
 import {LIVE_TREES} from './wet-forest-tree-sprites.mjs';
 import {ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 
@@ -22,7 +22,7 @@ export class HuntWoodlandObjects {
       candidates:this.#candidates,maxCandidatesPerSweep:this.#maxCandidates,treesFelled:this.#treesFelled,
       treesWithoutLanding:this.#treesWithoutLanding,recentTreeFalls:this.#recentTreeFalls.slice()};
   }
-  constructor(graph,damage=new HuntTreeDamage()){this.#graph=graph;this.#damage=damage;}
+  constructor(graph,damage=new HuntWoodlandDamage()){this.#graph=graph;this.#damage=damage;}
   get regions(){return this.#regions.values();}
   update(regionIds,terrain,coverage=null){
     for(const id of this.#regions.keys()){
@@ -48,6 +48,8 @@ export class HuntWoodlandObjects {
         const tree=this.#treeInstance(item,terrain,coverage?.has);
         if(tree)instances.push(tree);
       }else if(item.kind==='boulder'){
+        const hits=this.#damage.hits(item.id);
+        if(hits===2)continue;
         const hit=this.#floor(terrain,x,z);
         if(!hit||Math.abs(hit.point.y-y)>.5)continue;
         const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
@@ -58,10 +60,10 @@ export class HuntWoodlandObjects {
           const end=terrain.raycast({origin:[x+offset,32,z],direction:[0,-1,0],maxDistance:42});
           return end&&Math.abs(end.point.y-base.y)<=.25;
         });
-        if(supported){
+        if(supported&&!hits){
           instances.push({...base,kind:'log',radius:radius-halfLength,halfLength,height:.55*item.scale});
         }else{
-          instances.push({...base,kind:'boulder',radius,height:1.18*item.scale});
+          instances.push({...base,kind:'boulder',radius,height:1.18*item.scale,damaged:hits===1});
         }
       }
     }
@@ -124,12 +126,12 @@ export class HuntWoodlandObjects {
     }
     return falls;
   }
-  raycastTree({origin,direction,maxDistance}){
+  raycastDamageable({origin,direction,maxDistance}){
     let closest=maxDistance,hit=null;
-    for(const instances of this.regions)for(const tree of instances){
-      if(!tree.sprite)continue;
-      const min=[tree.x-tree.radius,tree.y,tree.z-tree.radius];
-      const max=[tree.x+tree.radius,tree.y+tree.height,tree.z+tree.radius];
+    for(const instances of this.regions)for(const prop of instances){
+      if(!prop.sprite&&prop.kind!=='boulder')continue;
+      const min=[prop.x-prop.radius,prop.y,prop.z-prop.radius];
+      const max=[prop.x+prop.radius,prop.y+prop.height,prop.z+prop.radius];
       let near=0,far=closest;
       for(let axis=0;axis<3&&near<=far;axis++){
         const start=origin[axis],delta=direction[axis];
@@ -144,19 +146,26 @@ export class HuntWoodlandObjects {
       if(near>far||near>=closest)continue;
       closest=near;
       const [x,y,z]=origin.map((value,axis)=>value+near*direction[axis]);
-      hit={id:tree.id,point:{x,y,z}};
+      hit={id:prop.id,kind:prop.kind??'tree',point:{x,y,z}};
     }
     return hit;
   }
 
-  hitTree(id,terrain,isPublished){
-    for(const instances of this.regions){
-      const index=instances.findIndex(tree=>tree.id===id&&tree.sprite);
+  hitProp(id,terrain,isPublished){
+    for(const [region,instances] of this.#regions){
+      const index=instances.findIndex(prop=>prop.id===id&&(prop.sprite||prop.kind==='boulder'));
       if(index<0)continue;
       const hits=this.#damage.hit(id);
       if(!hits)return null;
-      const tree=instances[index];
-      const {x,z}=tree;
+      const prop=instances[index];
+      if(prop.kind==='boulder'){
+        const updated=instances.slice();
+        if(hits===2)updated.splice(index,1);
+        else updated[index]={...prop,damaged:true};
+        this.#regions.set(region,updated);
+        return {hits,falls:[]};
+      }
+      const {x,z}=prop;
       const falls=this.terrainChanged({min:{x,z},max:{x,z}},terrain,isPublished);
       return {hits,falls};
     }
