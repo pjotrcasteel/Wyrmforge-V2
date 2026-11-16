@@ -1,6 +1,7 @@
 import {HuntCellCatalog,HuntCellResidency} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
+import {HuntTreeDamage} from './src/hunt-tree-damage.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
 import {HuntInvestigation} from './src/hunt-investigation.mjs';
@@ -650,7 +651,7 @@ function castPlayFireball(clientX,clientY) {
   if(rect.width<=0 || rect.height<=0)return;
   const target=targetHuntFireball(active.port,playView,
     (clientX-rect.left)*playView.width/rect.width,
-    (clientY-rect.top)*playView.height/rect.height);
+    (clientY-rect.top)*playView.height/rect.height,playStream?.trees.objects);
   if(!target)return;
   const from={x:playActor.x,y:playActor.y+1.1,z:playActor.z};
   const distance=Math.hypot(target.point.x-from.x,
@@ -665,6 +666,19 @@ function advancePlayFireball(now) {
   if(now-cast.startedAt<cast.duration)return;
   playFireball=null;
   if(active?.world!==cast.world || active.port.revision!==cast.worldRevision)return;
+  if(cast.treeId){
+    const residency=playStream.residency;
+    const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
+    const hit=playStream.trees.hitTree(cast.treeId,active.port,isPublished,now,
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if(hit){
+      playFireballCount++;
+      playStream.directTreeHits++;
+      playImpact={point:cast.point,at:now};
+      previewMessage.textContent=hit.hits===1?'Tree damaged · Tap the trunk again':'Tree felled';
+    }
+    return;
+  }
   const result=impactSpan(cast.target);
   if(!result)return;
   playFireballCount++;
@@ -1021,15 +1035,16 @@ function resetSite() {
         const investigation=new HuntInvestigation(graph.layout.regions,recipe.seed,recipe.worldRevision,findingStorage);
         const extraction=new HuntExtraction(graph.layout.regions.find(region=>region.role==='extraction'),
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
-        const terrainSave=new HuntTerrainSave(findingStorage,
-          [graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
-            recipe.chunkEdge,recipe.corruption].join(':'));
+        const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
+          recipe.chunkEdge,recipe.corruption].join(':');
+        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity);
         playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
           horde:new HuntHorde(graph.layout.regions.find(region=>region.role==='horde')),
-          trees:new HuntTreePreview(graph,playTreeAtlas),
+          trees:new HuntTreePreview(graph,playTreeAtlas,new HuntTreeDamage(findingStorage,saveIdentity)),
+          directTreeHits:0,
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
           {epoch:terrainEpochs.next(),microSurfaceCapacity:2048,removedCells:terrainSave.removedCells});
@@ -1576,6 +1591,7 @@ if(playMode) {
       }:null,
       worldObjects:playStream?{
         ...playStream.trees.objects.diagnostics,
+        directTreeHits:playStream.directTreeHits,
         woodlandOverlayCpu:playWoodlandPaintStats.snapshot
       }:null,
       horde:playStream?{...playStream.horde.report,streamingJobs:playStream.hordeStreamingJobs}:null,
