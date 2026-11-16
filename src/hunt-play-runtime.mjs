@@ -203,3 +203,45 @@ export class HuntPlayPerformance {
     });
   }
 }
+
+// Evidence for the latest renderer recovery only. Browser wait before a
+// restore request is separate from the time spent uploading terrain.
+export class HuntContextRecoveryEvidence {
+  #latest=null;
+  #restoredAt=null;
+
+  lose(state){
+    this.#latest={phase:'lost',before:state};
+    this.#restoredAt=null;
+  }
+
+  restore(now){
+    if(this.#latest?.phase!=='lost')return;
+    this.#latest.phase='uploading';
+    this.#restoredAt=now;
+  }
+
+  fail(){
+    if(this.#latest)this.#latest.phase='failed';
+  }
+
+  resume(now,state){
+    if(this.#latest?.phase!=='uploading')return;
+    const before=this.#latest.before;
+    const sameTerrain=before.terrainEpoch!==null&&before.terrainEpoch===state.terrainEpoch;
+    this.#latest={...this.#latest,phase:'ready',after:state,
+      sameTerrain,uploadDrainMs:Math.round(now-this.#restoredAt),
+      firstMovement:null};
+  }
+
+  movement(now,before,after,input,terrainEpoch){
+    if(this.#latest?.phase!=='ready'||this.#latest.firstMovement||
+        terrainEpoch!==this.#latest.after.terrainEpoch||!Math.hypot(input.moveX,input.moveZ))return;
+    const metres=Math.hypot(after.x-before.x,after.z-before.z);
+    if(metres<.001)return;
+    this.#latest.firstMovement={msSinceRestore:Math.round(now-this.#restoredAt),
+      metres:Number(metres.toFixed(3))};
+  }
+
+  get snapshot(){return this.#latest&&{...this.#latest};}
+}
