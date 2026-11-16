@@ -306,3 +306,67 @@ for(const mixedTerrain of [false,true])test(
     assert.equal(restarted.save.additions.length,4);
   }finally{restarted.close();}
 });
+
+test('one crater commits disconnected landings together and replays across streamed owners',async()=>{
+  const {HuntTerrainSave}=await import('../src/hunt-terrain-save.mjs');
+  const {TerrainStreamCellBuilder}=await import('../src/terrain-stream-cells.mjs');
+  const {TerrainCellStreamSession}=await import('../src/terrain-cell-stream-session.mjs');
+  const {HuntCollapsePreview}=await import('../src/hunt-collapse-preview.mjs');
+  const definition={schema:'voxel-v2.terrain-initialization.v1',siteId:'two-shelves',
+    generatorVersion:'test',seed:7,chunkEdge:16,runs:[-1,1].flatMap(x=>[
+      {x,y:0,z:0,length:1,material:4},
+      {x,y:3,z:0,length:1,material:2},
+      {x,y:4,z:0,length:1,material:3}
+    ])};
+  const builder=new TerrainStreamCellBuilder(definition);
+  while(!builder.done)builder.step();
+  const cells=builder.cells,ids=cells.map(cell=>cell.id);
+  const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
+  const open=identity=>{
+    const save=new HuntTerrainSave(storage,identity);
+    const loader=new V2ExternalTerrainLoader(definition,{removedCells:save.removedCells,addedCells:save.additions});
+    while(!loader.progress.done)loader.loadStep(1);
+    const {world,port}=loader.terrain;
+    const stream=new TerrainCellStreamSession(world,cells,{limit:2,initialResidentIds:ids,
+      removedCells:save.removedCells,addedCells:save.additions});
+    const collapse=new HuntCollapsePreview(world,port,{
+      publishedAt:()=>true,ownerAt:x=>ids[x<0?0:1],trackAddedCells:(id,added)=>stream.trackAddedCells(id,added)
+    },save,{fixture:false,mixedTerrain:true});
+    return {world,port,collapse,save,close:()=>loader.unload()};
+  };
+
+  const live=open('live'),replayed=open('replayed');
+  try{
+    const command={id:'two-supports',type:'carve-crater',x:0,y:3,z:0,radius:2.3,depth:2};
+    const result=live.port.apply(command,{captureRemovedCells:true});
+    assert.deepEqual([...result.removedCells].sort(),['-1,3,0','1,3,0']);
+    live.collapse.acceptImpact(result,{defer:true,multiple:true});
+    while(live.collapse.checkingSupport)live.collapse.stepSupportScan(96);
+    assert.equal(live.collapse.supportReport.detachedClusters,2);
+    assert.deepEqual(live.collapse.protectedIds,ids);
+    const actor={x:1.5,y:1,z:.5};
+    for(let tick=0;tick<120;tick++)live.collapse.tick([actor]);
+    assert.equal(live.world.get(-1,1,0),3);
+    assert.equal(live.world.get(1,1,0),0);
+    assert.equal(live.collapse.replay.landed,null);
+    assert.equal(live.save.additions.length,0);
+    assert.deepEqual(live.collapse.protectedIds,ids);
+
+    for(let tick=0;tick<120&&live.collapse.holdsFixture;tick++)live.collapse.tick([]);
+    assert.equal(live.collapse.phase,'settled');
+    const [entry]=JSON.parse(JSON.stringify(exportHuntTerrainEdits(
+      [recordHuntTerrainEdit(ids,command,result)],live.collapse.outcomes)));
+    assert.equal(entry.collapse.clusterCount,2);
+    assert.equal(entry.collapse.landed.length,2);
+    replayHuntTerrainEdit(replayed.port,ids,entry,{collapse:replayed.collapse,save:replayed.save});
+    assert.deepEqual(replayed.save.additions,live.save.additions);
+    assert.equal(occupancyDigest(replayed.world),occupancyDigest(live.world));
+    const reloaded=open('live');
+    try{
+      assert.equal(occupancyDigest(reloaded.world),occupancyDigest(live.world));
+    }finally{reloaded.close();}
+  }finally{
+    live.close();
+    replayed.close();
+  }
+});

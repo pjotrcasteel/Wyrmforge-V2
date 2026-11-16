@@ -19,6 +19,7 @@ const MAX_DEFERRED_CLUSTER_CELLS=256;
 const MAX_DEFERRED_SCAN_READS=4096;
 const MAX_DEFERRED_CLUSTER_EXTENT=24;
 const MAX_TERRAIN_ADDITIONS=256;
+const MAX_CLUSTERS_PER_IMPACT=4;
 const SUPPORT_TIMING_BATCH=32;
 const MAX_TERRAIN_DROP=12;
 const FALL_COLORS={
@@ -49,6 +50,7 @@ export class HuntCollapsePreview {
   #handoff;
   #physics;
   #removed=[];
+  #landed=[];
   #outcomes=new Map();
   #replay=null;
   #pendingScan=null;
@@ -106,11 +108,11 @@ export class HuntCollapsePreview {
     return {command:SUPPORT,edit,dirtyChunks:[...new Set([...edit.dirtyChunks,...dirty])]};
   }
 
-  acceptImpact(edit,{defer=false,wide=defer}={}){
+  acceptImpact(edit,{defer=false,wide=defer,multiple=false}={}){
     if(!this.canAcceptImpact||!edit.removedCells?.length||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     this.#reportSupport({editRevision:edit.editRevision,removedCells:edit.removedCells.length,
-      status:'checking',scanStatus:null,scannedPositions:0,oversizedComponents:0,candidates:0,slices:0,
+      status:'checking',scanStatus:null,scannedPositions:0,oversizedComponents:0,candidates:0,detachedClusters:0,slices:0,
       scanWorkMs:0,scanElapsedMs:0,maxSliceMs:0});
     if(edit.removedCells.length>256){
       this.#reportSupport({status:'impact-too-large'});
@@ -130,10 +132,10 @@ export class HuntCollapsePreview {
     if(!defer){
       const scan=scanTerrainSupport(this.#world,removed,options);
       this.#recordScanSlice(scan,started,started);
-      return this.#applyScan(edit,scan);
+      return this.#applyScan(edit,scan,{multiple});
     }
     const job=beginTerrainSupportScan(this.#world,removed,options);
-    this.#pendingScan={edit,job,started,wide:options.maxExtent!==undefined,previousPhase:this.#phase};
+    this.#pendingScan={edit,job,started,wide:options.maxExtent!==undefined,multiple,previousPhase:this.#phase};
     const setupMs=this.#now()-started;
     this.#reportSupport({scanWorkMs:setupMs,scanElapsedMs:setupMs});
     this.#phase='checking-support';
@@ -152,7 +154,7 @@ export class HuntCollapsePreview {
     this.#pendingScan=null;
     this.#phase=pending.previousPhase;
     this.#outcomes.delete(pending.edit.editRevision);
-    const dirty=this.#applyScan(pending.edit,scan,true,pending.wide);
+    const dirty=this.#applyScan(pending.edit,scan,{deferred:true,wide:pending.wide,multiple:pending.multiple});
     if(!this.holdsFixture)this.#save.commit(pending.edit.removedCells);
     return dirty;
   }
@@ -168,7 +170,7 @@ export class HuntCollapsePreview {
     return scan;
   }
 
-  #applyScan(edit,scan,deferred=false,wide=false){
+  #applyScan(edit,scan,policy){
     this.#reportSupport({scannedPositions:scan.reads,oversizedComponents:scan.oversized,
       candidates:scan.candidates.length,scanStatus:scan.status,status:scan.status});
     // Each candidate was proved independently. Components touching unknown
@@ -182,6 +184,13 @@ export class HuntCollapsePreview {
       if(scan.candidates.length)this.#reportSupport({status:'fixture-mismatch'});
       return this.#decline();
     }
+    if(policy.multiple&&!this.#fixture&&candidates.length>1){
+      const batch=this.#detachIndependentClusters(candidates,edit.removedCells);
+      if(batch){
+        this.#reportSupport({status:'detached',detachedClusters:batch.bodies.length});
+        return this.#startFall(edit,batch,policy);
+      }
+    }
     for(const candidate of candidates){
       const admission=this.#fixture?{owners:new Map(candidate.cells.map(cell=>[columnKey(cell),OWNER]))}:
         this.#qualifyTerrain(candidate.cells,edit.removedCells);
@@ -193,9 +202,28 @@ export class HuntCollapsePreview {
       this.#reportSupport({status:detached.status});
       if(detached.status!=='detached')continue;
       this.#owners=admission.owners;
-      return this.#startFall(edit,detached,deferred,wide);
+      this.#reportSupport({detachedClusters:1});
+      return this.#startFall(edit,{bodies:[detached.body],dirtyChunks:detached.dirtyChunks},policy);
     }
     return this.#decline();
+  }
+
+  #detachIndependentClusters(candidates,impactRemovals){
+    const selected=[],sourceCells=[],owners=new Map();
+    for(const candidate of candidates){
+      const admission=this.#qualifyTerrain(candidate.cells,impactRemovals,sourceCells);
+      if(!admission.owners||[...admission.owners.keys()].some(key=>owners.has(key))||
+          !this.#handoff.isEligibleCandidate(candidate))continue;
+      selected.push(candidate);
+      sourceCells.push(...candidate.cells);
+      for(const [key,owner] of admission.owners)owners.set(key,owner);
+      if(selected.length===MAX_CLUSTERS_PER_IMPACT)break;
+    }
+    if(selected.length<2)return null;
+    const batch=this.#handoff.detachBatch(selected);
+    if(batch.status!=='detached')return null;
+    this.#owners=owners;
+    return batch;
   }
 
   #recordScanSlice(scan,sliceStarted,scanStarted){
@@ -216,11 +244,11 @@ export class HuntCollapsePreview {
     return [];
   }
 
-  #qualifyTerrain(cells,impactRemovals){
+  #qualifyTerrain(cells,impactRemovals,previousCells=[]){
     const moving=new Set(cells.map(cellKey)),owners=new Map();
-    const removals=new Set([...moving,...impactRemovals]);
+    const removals=new Set([...moving,...previousCells.map(cellKey),...impactRemovals]);
     const remaining=this.#save.countAdditionsAfterRemoving(removals);
-    if(remaining+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
+    if(remaining+previousCells.length+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
     let drop=MAX_TERRAIN_DROP+1;
     for(const {x,y,z} of cells){
       if(y < -64+MAX_TERRAIN_DROP||y>64)return {status:'outside-height-range'};
@@ -245,24 +273,38 @@ export class HuntCollapsePreview {
     return {owners};
   }
 
-  #startFall(edit,detached,deferred,wide){
-    this.#removed=[...edit.removedCells,...detached.body.cells.map(cellKey)];
+  #startFall(edit,{bodies,dirtyChunks},{deferred,wide,multiple}){
+    this.#removed=[...edit.removedCells,...bodies.flatMap(body=>body.cells.map(cellKey))];
+    this.#landed=[];
     this.#replay=Object.freeze({sequence:edit.editRevision,
-      removed:Object.freeze(this.#removed.slice().sort()),landed:null,...(deferred?{deferred:true}:{}),...(wide?{wide:true}:{})});
+      removed:Object.freeze(this.#removed.slice().sort()),landed:null,
+      ...(deferred?{deferred:true}:{}),...(wide?{wide:true}:{}),
+      ...(multiple?{multiple:true,clusterCount:bodies.length}:{})});
     this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase='falling';
-    return detached.dirtyChunks;
+    return dirtyChunks;
   }
 
   tick(actors){
     if(!this.holdsFixture)return [];
-    const [body]=this.#physics.step(1,{actors});
-    this.#phase=body.contact==='actor'?'actor-blocked':'falling';
-    if(body.phase!=='resting'||body.contact!=='terrain')return [];
-    const result=this.#physics.settle(body.body.id,{actors});
-    if(result.status!=='settled')return [];
+    const states=this.#physics.step(1,{actors});
+    this.#phase=states.some(state=>state.contact==='actor')?'actor-blocked':'falling';
+    const dirty=new Set();
+    for(const {body,phase,contact} of states){
+      if(phase!=='resting'||contact!=='terrain')continue;
+      const result=this.#physics.settle(body.id,{actors});
+      if(result.status!=='settled')continue;
+      this.#landed.push(...result.cells);
+      for(const chunk of result.dirtyChunks)dirty.add(chunk);
+    }
+    if(!this.#physics.bodies.length)this.#publishLanding();
+    return [...dirty].sort();
+  }
+
+  #publishLanding(){
     const grouped=new Map();
-    const additions=result.cells.map(cell=>{
+    const landed=Object.freeze(this.#landed.slice().sort((a,b)=>a.x-b.x||a.y-b.y||a.z-b.z));
+    const additions=landed.map(cell=>{
       const owner=this.#owners.get(columnKey(cell));
       const addition={...cell,owner};
       if(!grouped.has(owner))grouped.set(owner,[]);
@@ -270,10 +312,9 @@ export class HuntCollapsePreview {
       return addition;
     });
     for(const [owner,cells] of grouped)this.#residency.trackAddedCells(owner,cells);
-    this.#replay=Object.freeze({...this.#replay,landed:result.cells});
+    this.#replay=Object.freeze({...this.#replay,landed});
     this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase=this.#save.commitCollapse(this.#removed,additions)?'settled':'settled-unsaved';
-    return result.dirtyChunks;
   }
 
   get renderCells(){
