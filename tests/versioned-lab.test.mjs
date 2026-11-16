@@ -25,6 +25,8 @@ function withRoot(run, sha = COMMIT) {
     writeFileSync(join(root,'prop-benchmark.mjs'),"import './src/build-info.mjs';");
     writeFileSync(join(root,'cell-stream-lab.html'),'<script type="module" src="./cell-stream-lab.mjs"></script>');
     writeFileSync(join(root,'cell-stream-lab.mjs'),"import './src/build-info.mjs';");
+    writeFileSync(join(root,'fire-material-lab.html'),'<script type="module" src="./fire-material-lab.mjs"></script>');
+    writeFileSync(join(root,'fire-material-lab.mjs'),'export {};');
     writeFileSync(join(root,'terrain-collapse-lab.html'),'<script type="module" src="./terrain-collapse-lab.mjs"></script>');
     writeFileSync(join(root,'terrain-collapse-lab.mjs'),"import './src/build-info.mjs';");
     writeFileSync(join(root,'src','build-info.mjs'),
@@ -51,6 +53,8 @@ test('versioned lab keeps complete module graph together at a fresh URL', () => 
     assert.ok(existsSync(join(result.path,'cell-stream-lab.html')));
     assert.ok(existsSync(join(result.path,'cell-stream-lab.mjs')));
     assert.ok(existsSync(join(result.path,'terrain-collapse-lab.html')));
+    assert.ok(existsSync(join(result.path,'fire-material-lab.html')));
+    assert.ok(existsSync(join(result.path,'fire-material-lab.mjs')));
     assert.ok(existsSync(join(result.path,'terrain-collapse-lab.mjs')));
     const hunt=readFileSync(join(result.path,'play-hunt.html'),'utf8');
     assert.match(hunt,/Build fffffff · initializing/);
