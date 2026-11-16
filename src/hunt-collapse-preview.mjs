@@ -48,6 +48,7 @@ export class HuntCollapsePreview {
   #outcomes=new Map();
   #replay=null;
   #pendingScan=null;
+  #supportReport=null;
   #fixture;
   #guidedSupport;
   #cohesive;
@@ -75,6 +76,7 @@ export class HuntCollapsePreview {
 
   get replay(){return this.#replay;}
   get outcomes(){return [...this.#outcomes.values()];}
+  get supportReport(){return this.#supportReport;}
   get checkingSupport(){return this.#pendingScan!==null;}
   get canAcceptImpact(){return this.#fixture?this.#phase==='ready':!this.holdsFixture&&!this.checkingSupport;}
   get phase(){return this.#phase;}
@@ -101,14 +103,23 @@ export class HuntCollapsePreview {
   }
 
   acceptImpact(edit,{defer=false}={}){
-    if(!this.canAcceptImpact||!edit.removedCells?.length||edit.removedCells.length>256||
+    if(!this.canAcceptImpact||!edit.removedCells?.length||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
+    this.#reportSupport({editRevision:edit.editRevision,removedCells:edit.removedCells.length,
+      status:'checking',scannedPositions:0,oversizedComponents:0,candidates:0,slices:0});
+    if(edit.removedCells.length>256){
+      this.#reportSupport({status:'impact-too-large'});
+      return [];
+    }
     const removed=edit.removedCells.map(key=>{
       const [x,y,z]=key.split(',').map(Number);
       return {x,y,z};
     });
     const options={isKnown:this.#isKnown,cohesive:this.#cohesive,anchors:ANCHORS,foundationY:this.#foundationY};
-    if(!defer)return this.#applyScan(edit,scanTerrainSupport(this.#world,removed,options));
+    if(!defer){
+      this.#reportSupport({slices:1});
+      return this.#applyScan(edit,scanTerrainSupport(this.#world,removed,options));
+    }
     const job=beginTerrainSupportScan(this.#world,removed,options);
     this.#pendingScan={edit,job,previousPhase:this.#phase};
     this.#phase='checking-support';
@@ -120,6 +131,7 @@ export class HuntCollapsePreview {
     const pending=this.#pendingScan;
     if(!pending)return [];
     const scan=pending.job.step(maxOperations);
+    this.#reportSupport({scannedPositions:scan.reads,slices:this.#supportReport.slices+1});
     if(scan.status==='scanning')return [];
     this.#pendingScan=null;
     this.#phase=pending.previousPhase;
@@ -130,21 +142,35 @@ export class HuntCollapsePreview {
   }
 
   #applyScan(edit,scan){
+    this.#reportSupport({scannedPositions:scan.reads,oversizedComponents:scan.oversized,
+      candidates:scan.status==='complete'?scan.candidates.length:0,status:scan.status});
     if(scan.status!=='complete')return this.#decline();
     const candidates=this.#fixture?scan.candidates.filter(candidate=>
       candidate.cells.some(isShelf)&&candidate.cells.every(isScaffold)):scan.candidates;
-    if(this.#fixture&&candidates.length!==1)return this.#decline();
+    this.#reportSupport({status:scan.oversized?'component-too-large':'no-unsupported-component'});
+    if(this.#fixture&&candidates.length!==1){
+      if(scan.candidates.length)this.#reportSupport({status:'fixture-mismatch'});
+      return this.#decline();
+    }
     for(const candidate of candidates){
-      const owners=this.#fixture?new Map(candidate.cells.map(cell=>[columnKey(cell),OWNER])):
+      const admission=this.#fixture?{owners:new Map(candidate.cells.map(cell=>[columnKey(cell),OWNER]))}:
         this.#qualifyTerrain(candidate.cells);
-      if(!owners)continue;
+      if(!admission.owners){
+        this.#reportSupport({status:admission.status});
+        continue;
+      }
       const detached=this.#handoff.detach(candidate);
+      this.#reportSupport({status:detached.status});
       if(detached.status!=='detached')continue;
-      this.#owners=owners;
+      this.#owners=admission.owners;
       this.#admitted+=candidate.cells.length;
       return this.#startFall(edit,detached);
     }
     return this.#decline();
+  }
+
+  #reportSupport(update){
+    this.#supportReport=Object.freeze({...this.#supportReport,...update});
   }
 
   #decline(){
@@ -153,15 +179,16 @@ export class HuntCollapsePreview {
   }
 
   #qualifyTerrain(cells){
-    if(cells.length>MAX_TERRAIN_CLUSTER_CELLS||this.#admitted+cells.length>MAX_TERRAIN_ADDITIONS)return null;
+    if(cells.length>MAX_TERRAIN_CLUSTER_CELLS)return {status:'component-too-large'};
+    if(this.#admitted+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
     const moving=new Set(cells.map(cellKey)),owners=new Map();
     let drop=MAX_TERRAIN_DROP+1;
     for(const {x,y,z} of cells){
-      if(y < -64+MAX_TERRAIN_DROP||y>64)return null;
+      if(y < -64+MAX_TERRAIN_DROP||y>64)return {status:'outside-height-range'};
       const key=columnKey({x,z});
       if(!owners.has(key)){
         const owner=this.#residency.ownerAt(x+.5,z+.5);
-        if(!owner)return null;
+        if(!owner)return {status:'missing-owner'};
         owners.set(key,owner);
       }
       for(let d=0;d<=MAX_TERRAIN_DROP;d++){
@@ -171,11 +198,12 @@ export class HuntCollapsePreview {
         break;
       }
     }
-    if(drop===0||drop>MAX_TERRAIN_DROP)return null;
+    if(drop===0)return {status:'blocked-drop'};
+    if(drop>MAX_TERRAIN_DROP)return {status:'no-landing-in-range'};
     for(const {x,y,z} of cells){
-      if(this.#world.microSurfaceTile(x,y-drop-1,z))return null;
+      if(this.#world.microSurfaceTile(x,y-drop-1,z))return {status:'partial-landing-surface'};
     }
-    return owners;
+    return {owners};
   }
 
   #startFall(edit,detached){
