@@ -131,6 +131,8 @@ const paintForest=forestContext?createForestBackdrop():null;
 if(playTreeAtlas)playTreeAtlas.src='./art/wet-forest/live-trees.png';
 let playFireball=null;
 let playImpact=null;
+let pendingTerrainPresentation=null;
+let terrainPresentationStats=new HuntPlayPerformance();
 let playFireballCount=0;
 let playRemovedVoxels=0;
 const playFollowCamera=new HuntFollowCamera();
@@ -601,7 +603,7 @@ function updatePlayStreaming(now) {
   }
   const residency=stream.residency;
   if(!residency.metrics.transition) {
-    if(playFireball || pendingEdit || renderer.pendingUploads)return;
+    if(playFireball || pendingEdit || pendingTerrainPresentation || renderer.pendingUploads)return;
     const beginAt=performance.now();
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
@@ -947,6 +949,8 @@ function resetSite() {
     playDesiredView=null;
     playFireball=null;
     playImpact=null;
+    pendingTerrainPresentation=null;
+    terrainPresentationStats=new HuntPlayPerformance();
     playFireballCount=0;
     playRemovedVoxels=0;
     playFrameAt=null;
@@ -1097,6 +1101,9 @@ function impactSpan(targetOverride=null) {
       expectedRevision:active.world.revision
     };
     const result=active.port.apply(command,{captureRemovedCells:playMode});
+    if(playMode&&result.removedVoxels>0&&result.dirtyChunks.length){
+      pendingTerrainPresentation={terrainEpoch:active.port.epoch,committedAt:performance.now()};
+    }
     if(playMode&&playStream?.residency&&result.status==='accepted'){
       playStream.terrainReplay.push(recordHuntTerrainEdit(
         playStream.residency.metrics.residentCellIds??playStream.residency.metrics.residentIds,command,result));
@@ -1324,6 +1331,11 @@ function frame(now) {
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY})) {
         if(playMode){
+          if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
+              !pendingEdit&&!errorMessage&&!renderer.pendingUploads){
+            terrainPresentationStats.recordFrame(performance.now()-pendingTerrainPresentation.committedAt);
+            pendingTerrainPresentation=null;
+          }
           playView=view;
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
@@ -1561,6 +1573,7 @@ if(playMode) {
       : null;
     const holdStart=playStream?.cameraHoldStart;
     const openCameraHoldMs=holdStart==null?0:Math.max(0,performance.now()-holdStart);
+    const terrainTiming=terrainPresentationStats.snapshot;
     const report={
       schema:'wyrmforge.hunt-play-report.v1',
       build:{version:VERSION,commit:COMMIT},
@@ -1611,6 +1624,10 @@ if(playMode) {
       performance:{
         frameIntervals:playFrameStats.snapshot,
         frameWorkCpu:playCpuStats.snapshot,
+        terrainEditToRender:{editsRendered:terrainTiming.frames,sampleCount:terrainTiming.sampleCount,
+          p50Ms:terrainTiming.p50Ms,p95Ms:terrainTiming.p95Ms,p99Ms:terrainTiming.p99Ms,
+          maxMs:terrainTiming.maxFrameMs,source:'committed-edit-to-render-submission',
+          awaitingRender:Boolean(pendingTerrainPresentation)},
         streamingEvidence:playEvidence.snapshot,
         webglContext:renderer?{losses:renderer.statistics.contextLosses,
           restores:webglRestores,restoreFailures:webglRestoreFailures,
