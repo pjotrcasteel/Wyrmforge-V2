@@ -16,6 +16,7 @@ const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:
 const SUPPORT_KEY='5,6,10';
 const MAX_DEFERRED_CLUSTER_CELLS=256;
 const MAX_DEFERRED_SCAN_READS=4096;
+const MAX_DEFERRED_CLUSTER_EXTENT=24;
 const MAX_TERRAIN_ADDITIONS=256;
 const MAX_TERRAIN_DROP=12;
 const FALL_COLORS={
@@ -103,7 +104,7 @@ export class HuntCollapsePreview {
     return {command:SUPPORT,edit,dirtyChunks:[...new Set([...edit.dirtyChunks,...dirty])]};
   }
 
-  acceptImpact(edit,{defer=false}={}){
+  acceptImpact(edit,{defer=false,wide=defer}={}){
     if(!this.canAcceptImpact||!edit.removedCells?.length||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     this.#reportSupport({editRevision:edit.editRevision,removedCells:edit.removedCells.length,
@@ -122,6 +123,7 @@ export class HuntCollapsePreview {
     if(defer&&this.#cohesive===TERRAIN){
       options.maxCells=MAX_DEFERRED_CLUSTER_CELLS;
       options.maxReads=MAX_DEFERRED_SCAN_READS;
+      if(wide)options.maxExtent=MAX_DEFERRED_CLUSTER_EXTENT;
     }
     if(!defer){
       const scan=scanTerrainSupport(this.#world,removed,options);
@@ -129,7 +131,7 @@ export class HuntCollapsePreview {
       return this.#applyScan(edit,scan);
     }
     const job=beginTerrainSupportScan(this.#world,removed,options);
-    this.#pendingScan={edit,job,started,previousPhase:this.#phase};
+    this.#pendingScan={edit,job,started,wide:options.maxExtent!==undefined,previousPhase:this.#phase};
     const setupMs=this.#now()-started;
     this.#reportSupport({scanWorkMs:setupMs,scanElapsedMs:setupMs});
     this.#phase='checking-support';
@@ -147,12 +149,12 @@ export class HuntCollapsePreview {
     this.#pendingScan=null;
     this.#phase=pending.previousPhase;
     this.#outcomes.delete(pending.edit.editRevision);
-    const dirty=this.#applyScan(pending.edit,scan,true);
+    const dirty=this.#applyScan(pending.edit,scan,true,pending.wide);
     if(!this.holdsFixture)this.#save.commit(pending.edit.removedCells);
     return dirty;
   }
 
-  #applyScan(edit,scan,deferred=false){
+  #applyScan(edit,scan,deferred=false,wide=false){
     this.#reportSupport({scannedPositions:scan.reads,oversizedComponents:scan.oversized,
       candidates:scan.candidates.length,scanStatus:scan.status,status:scan.status});
     // Each candidate was proved independently. Components touching unknown
@@ -177,7 +179,7 @@ export class HuntCollapsePreview {
       this.#reportSupport({status:detached.status});
       if(detached.status!=='detached')continue;
       this.#owners=admission.owners;
-      return this.#startFall(edit,detached,deferred);
+      return this.#startFall(edit,detached,deferred,wide);
     }
     return this.#decline();
   }
@@ -229,10 +231,10 @@ export class HuntCollapsePreview {
     return {owners};
   }
 
-  #startFall(edit,detached,deferred){
+  #startFall(edit,detached,deferred,wide){
     this.#removed=[...edit.removedCells,...detached.body.cells.map(cellKey)];
     this.#replay=Object.freeze({sequence:edit.editRevision,
-      removed:Object.freeze(this.#removed.slice().sort()),landed:null,...(deferred?{deferred:true}:{})});
+      removed:Object.freeze(this.#removed.slice().sort()),landed:null,...(deferred?{deferred:true}:{}),...(wide?{wide:true}:{})});
     this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase='falling';
     return detached.dirtyChunks;

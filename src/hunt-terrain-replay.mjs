@@ -25,7 +25,7 @@ export function replayHuntTerrainEdit(port,residentIds,entry,{collapse,save}={})
     return result;
   }
 
-  collapse.acceptImpact(result,{defer:expected.deferred===true});
+  collapse.acceptImpact(result,{defer:expected.deferred===true,wide:expected.wide===true});
   while(collapse.checkingSupport)collapse.stepSupportScan(4096);
   for(let tick=0;tick<MAX_FALL_TICKS&&collapse.holdsFixture;tick++)collapse.tick([]);
   const actual=collapse.replay;

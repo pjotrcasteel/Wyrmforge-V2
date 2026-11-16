@@ -245,3 +245,34 @@ test('a proven cluster can settle while a separate component touches unloaded te
   assert.equal(world.get(0,1,0),3);
   assert.equal(world.get(5,3,0),3);
 });
+
+for(const {length,wide} of [{length:24,wide:true},{length:25,wide:true},{length:24,wide:false}])test(
+  'deferred collapse checks the '+(wide?'extended':'legacy')+' extent limit at '+length+' voxels',()=>{
+  const world=new VoxelWorld();
+  for(let x=0;x<length;x++){
+    world.set(x,0,0,4);
+    world.set(x,3,0,1+x%3);
+  }
+  const save=new HuntTerrainSave(null,'long-span');
+  const preview=new HuntCollapsePreview(world,null,{
+    publishedAt:()=>true,ownerAt:x=>x<16?'left':'right',trackAddedCells:()=>{}
+  },save,{fixture:false,mixedTerrain:true});
+
+  preview.acceptImpact({editRevision:1,removedCells:['0,2,0']},{defer:true,wide});
+  for(let frame=0;frame<100&&preview.checkingSupport;frame++)preview.stepSupportScan(96);
+  assert.ok(preview.supportReport.slices>1);
+  if(length===25||!wide){
+    assert.equal(preview.supportReport.status,'component-too-large');
+    assert.equal(preview.supportReport.oversizedComponents,1);
+    assert.equal(world.get(0,3,0),1);
+    assert.equal(world.get(length-1,3,0),1+(length-1)%3);
+    return;
+  }
+
+  assert.equal(preview.supportReport.status,'detached');
+  assert.deepEqual(preview.protectedIds,['left','right']);
+  assert.equal(preview.replay.wide,true);
+  for(let tick=0;tick<120&&preview.holdsFixture;tick++)preview.tick([]);
+  assert.equal(save.additions.length,24);
+  for(let x=0;x<length;x++)assert.equal(world.get(x,1,0),1+x%3);
+});
