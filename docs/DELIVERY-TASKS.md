@@ -356,7 +356,7 @@ H08-05 physical-object completion remain open.
 - **Player experience:** supported arches, cliffs and stone shelves collapse plausibly after destruction.
 - **Gate:** bounded connectivity work; never one rigid body per voxel; no duplicate terrain/object collision; verified in the playable Hunt.
 - **Dependencies:** H08-08.
-- **Engine handoff:** trusted support candidates are revision- and world-bound. Preflight rejects protected, partial or over-budget terrain. Transfer removes static voxels before one immutable body becomes visible and reports mesh invalidation across chunk seams. Fixed-step vertical motion checks terrain and other bodies. The optional actor collision queries cover side, floor and ceiling contacts. Durable settlement, residency/replay and Play Hunt activation are pending.
+- **Engine handoff:** trusted support candidates are revision- and world-bound. Preflight rejects protected, partial or over-budget terrain. Transfer removes static voxels before one immutable body becomes visible and reports mesh invalidation across chunk seams. Fixed-step vertical motion checks terrain and other bodies. The optional actor collision queries cover side, floor and ceiling contacts. Static settlement now rechecks live support and destination clearance, restores exact voxels and releases dynamic capacity. Durable replay, residency and Play Hunt activation are pending.
 - **Done for now:** A controlled collapse follows a removed support in the running Hunt, preserves a single collision authority and respects bounded search/body limits. Stop before advanced rubble visuals.
 
 ### G09-02 — Falling-material physics and persistence

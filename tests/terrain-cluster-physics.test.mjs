@@ -122,3 +122,46 @@ test('a falling cluster pauses at actor contact and resumes when the actor leave
   assert.equal(onTerrain.contact,'terrain');
   assert.equal(onTerrain.offsetY,-7);
 });
+
+test('a resting cluster settles once, retains collision and releases its body slot',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  const handoff=new TerrainClusterHandoff(world);
+  world.set(-1,0,0,4);
+  detach(world,handoff,-1,6);
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
+  const [resting]=tick(physics,100);
+  const actor={x:-.5,y:3,z:.5};
+  const before=sweepActorAxis(world,actor,'y',-2,physics);
+  const result=physics.settle(resting.body.id);
+  assert.equal(result.status,'settled');
+  assert.deepEqual(result.cells,[{x:-1,y:1,z:0,material:3}]);
+  assert.ok(result.dirtyChunks.includes('0,0,0'));
+  assert.equal(world.get(-1,1,0),3);
+  assert.deepEqual(handoff.bodies,[]);
+  assert.deepEqual(physics.bodies,[]);
+  assert.deepEqual(sweepActorAxis(world,actor,'y',-2,physics),before);
+  assert.equal(physics.settle(resting.body.id).status,'not-resting-on-terrain');
+  detach(world,handoff,2,6);
+  assert.ok(handoff.bodies[0].id>resting.body.id);
+});
+
+test('stale support, actors and unknown coverage block settlement without changing ownership',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  const handoff=new TerrainClusterHandoff(world);
+  world.set(0,0,0,3);
+  detach(world,handoff,0,6);
+  let knownFloor=true;
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:(x,y)=>knownFloor||y>0});
+  const [resting]=tick(physics,100);
+  const id=resting.body.id;
+  const revision=world.revision;
+  assert.equal(physics.settle(id,{actors:[{x:.5,y:1,z:.5}]}).status,'blocked-settlement');
+  knownFloor=false;
+  assert.equal(physics.settle(id).status,'blocked-settlement');
+  assert.equal(world.revision,revision);
+  knownFloor=true;
+  world.set(0,0,0,0);
+  assert.equal(physics.settle(id).status,'blocked-settlement');
+  assert.equal(world.get(0,1,0),0);
+  assert.equal(handoff.bodies[0].id,id);
+});
