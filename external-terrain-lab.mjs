@@ -49,7 +49,8 @@ import {
 const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
-const collapseButton=cellPreview&&playQuery.get('gravity')==='preview'
+const gravityMode=playQuery.get('gravity');
+const collapseButton=cellPreview&&['preview','impact'].includes(gravityMode)
   ?document.querySelector('#play-collapse-preview'):null;
 const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
   ?document.querySelector('#play-context-test'):null;
@@ -662,7 +663,7 @@ function updatePlayStreaming(now) {
 
 function castPlayFireball(clientX,clientY) {
   if(!playMode || awaitingPlayContext || playStream?.collapse?.holdsFixture ||
-      playStream?.collapse?.phase==='ready' || !playActor || !active || !playView || playFireball ||
+      !playActor || !active || !playView || playFireball ||
       pendingMesh || pendingEdit || restoring || errorMessage || streamingBusy() ||
       !renderer?.ready || renderer.pendingUploads)return;
   const rect=canvas.getBoundingClientRect();
@@ -802,7 +803,8 @@ function updateCollapseButton(){
   const label=labels[collapse?.phase]??'Preparing stone shelf…';
   if(collapseButton.textContent!==label)collapseButton.textContent=label;
   collapseButton.disabled=collapse?.phase!=='ready'||!renderer?.ready||Boolean(pendingEdit)||
-    Boolean(renderer?.pendingUploads)||streamingBusy()||!playStream?.residency?.publishedAt(5.5,10.5);
+    Boolean(renderer?.pendingUploads)||Boolean(playFireball)||streamingBusy()||
+    !playStream?.residency?.publishedAt(5.5,10.5);
 }
 
 function updatePlayFrame(now) {
@@ -1086,7 +1088,7 @@ function resetSite() {
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
         const gravityPreview=Boolean(collapseButton)&&recipe.seed===7;
-        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(gravityPreview?':gravity-preview':''));
+        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(gravityPreview?':gravity-'+gravityMode:''));
         const scaffold=gravityPreview?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,graph,initialIds,initialFootprint,footprint,
@@ -1152,7 +1154,9 @@ function impactSpan(targetOverride=null) {
       playStream.terrainReplay.push(recordHuntTerrainEdit(
         playStream.residency.metrics.residentCellIds??playStream.residency.metrics.residentIds,command,result));
     }
-    if(playMode)playStream?.terrainSave.commit(result.removedCells);
+    const collapse=playMode?playStream?.collapse:null;
+    const collapseDirty=collapse?.acceptImpact(result)??[];
+    if(playMode&&!collapse?.holdsFixture)playStream?.terrainSave.commit(result.removedCells);
     if(playMode&&result.removedVoxels>0&&playStream?.residency){
       const residency=playStream.residency;
       const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
@@ -1160,7 +1164,7 @@ function impactSpan(targetOverride=null) {
         !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
     lastImpactRemoved=result.removedVoxels;
-    const dirty=new Set(result.dirtyChunks);
+    const dirty=new Set([...result.dirtyChunks,...collapseDirty]);
     if(dirty.size) {
       if(typeof Worker==='function') {
         // Authoritative edits are immediately visible to queries; derived
@@ -1720,7 +1724,7 @@ if(playMode) {
     resetPlayInput();
   });
   collapseButton?.addEventListener('click',()=>{
-    if(collapseButton.disabled)return;
+    if(collapseButton.disabled||playFireball)return;
     try{queueCollapseMeshes(playStream.collapse.release());}
     catch(error){errorMessage=error.message;updateStatus();}
   });
