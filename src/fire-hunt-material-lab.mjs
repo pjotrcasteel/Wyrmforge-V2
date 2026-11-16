@@ -6,7 +6,8 @@ import {TerrainEditLedger} from './terrain-edit-ledger.mjs';
 const material=(id,name,group,voxel,slot,asset,usage)=>Object.freeze({id,name,group,voxel,slot,asset,usage});
 
 export const FIRE_HUNT_MATERIALS=Object.freeze([
-  material('grass','Moss and grass','Wet Forest',1,'grass/meadow','grass','Moist woodland ground and the top lip of mossy cliffs.'),
+  material('grass','Forest moss','Wet Forest',1,'grass/meadow','grass','Olive moss in large, irregular patches. Compare it at the trail edge and along the cliff lip.'),
+  material('grass-clearing','Clearing grass','Wet Forest',1,'grass/meadow','grass-clearing','Lighter grass with broad, quiet variation for open ground.'),
   material('grass-shade','Shaded moss','Wet Forest',1,'grass/meadow-dark','grass-shade','Low-contrast variation beneath canopy and around boulders.'),
   material('roots','Rooted bank','Wet Forest',1,'grass/rooted-soil','roots','Vertical soil banks directly below the grass lip.'),
   material('dirt','Trampled earth','Wet Forest',2,'dirt/earth','earth','Navigable paths and the upper layer of fresh craters.'),
@@ -16,6 +17,8 @@ export const FIRE_HUNT_MATERIALS=Object.freeze([
   material('charred-bark','Charred bark','Scorched Approach',1,'grass/meadow','charred','Burned trunks and deadwood, with its grain oriented vertically.'),
   material('dark-rock','Dark fractured rock','Cliff study',3,'stone/bedrock','dark-rock','Cooler, cross-grain alternative for comparison on the same wall.')
 ]);
+
+export const LAB_GRASS_PROFILES=Object.freeze({grass:1,'grass-clearing':2,'grass-shade':3});
 
 export const TERRAIN_BASE_TILES=Object.freeze({
   'grass/meadow':'grass','grass/meadow-dark':'grass-shade','grass/rooted-soil':'roots',

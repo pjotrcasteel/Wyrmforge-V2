@@ -1,7 +1,7 @@
 import {COMMIT} from './src/build-info.mjs';
 import {projectVoxel} from './src/camera-presets.mjs';
 import {buildExposedFaceMeshes} from './src/exposed-face-mesher.mjs';
-import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
 import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
 import {spawnTerrainActor,ACTOR_HEIGHT} from './src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_PIXELS_PER_VOXEL,HUNT_FIXED_STEP} from './src/hunt-play-runtime.mjs';
@@ -28,6 +28,7 @@ const excavate=document.querySelector('#excavate');
 const status=document.querySelector('#status');
 const uploadStatus=document.querySelector('#upload-status');
 const modes=[...document.querySelectorAll('[data-scene]')];
+const grassButtons=[...document.querySelectorAll('[data-grass]')];
 const drafts=new Map();
 let renderer,fixture,scheduled,loading=false;
 let scene=new URLSearchParams(location.search).get('scene')==='lava'?'lava':'hunt';
@@ -94,6 +95,7 @@ function applyTextures(){
 function updateSelection(){
   const material=current();
   description.textContent=material.usage;
+  for(const button of grassButtons)button.setAttribute('aria-pressed',String(button.dataset.grass===material.id));
   clear.disabled=loading||!drafts.has(draftKey(material,channel.value));
   texture.disabled=loading;
 }
@@ -216,7 +218,7 @@ function render(now){
     const view={width,height,scale,camera,depthOrigin:follow?.depth??0,
       panX:follow?Math.round(width/2-follow.x):-(minX+maxX)*scale/2,
       panY:follow?Math.round(height*.51-follow.y):-(minY+maxY)*scale/2};
-    renderer.render({...view,labBlend:surfaceBlend.checked,labTime:lavaTime});
+    renderer.render({...view,labBlend:surfaceBlend.checked,labTime:lavaTime,labGrassStyle:LAB_GRASS_PROFILES[current().id]??0});
     paintMarkers(view,now,density);
     const moving=actor&&(pressed.size||projectile||!actor.grounded);
     lastFrame=moving?now:null;
@@ -248,6 +250,13 @@ try{
     requestRender();
   });
   excavate.addEventListener('click',()=>{excavated=!excavated;setScene();});
+  for(const button of grassButtons)button.addEventListener('click',()=>{
+    picker.value=button.dataset.grass;
+    if(scene==='lava'){scene='hunt';setScene();}
+    else if(scene==='sample'||scene==='repeats'||scene==='layers')setScene();
+    updateSelection();
+    applyTextures();
+  });
   picker.addEventListener('change',()=>{
     if(scene==='hunt'&&isBark(current()))scene='sample';
     if(scene!=='hunt')setScene();
