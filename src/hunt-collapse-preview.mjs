@@ -2,6 +2,7 @@ import {TerrainClusterHandoff} from './terrain-cluster-handoff.mjs';
 import {TerrainClusterPhysics} from './terrain-cluster-physics.mjs';
 import {scanTerrainSupport} from './terrain-support-scan.mjs';
 import {projectVoxel} from './camera-presets.mjs';
+import {targetHuntFireball} from './hunt-play-runtime.mjs';
 
 const OWNER='region-entry:cell:8:0:1';
 const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:10,radius:1.1};
@@ -46,6 +47,13 @@ export class HuntCollapsePreview {
   get holdsFixture(){return this.#phase==='falling'||this.#phase==='actor-blocked';}
   get collision(){return this.#physics;}
   get protectedIds(){return this.holdsFixture?[OWNER]:[];}
+
+  supportTarget(view){
+    if(this.#phase!=='ready'||view?.camera!=='hunt'||!this.#residency.publishedAt(5.5,10.5))return null;
+    const screen=projectVoxel(5.5,6.2,11,view);
+    const cast=targetHuntFireball(this.#port,view,screen.x,screen.y);
+    return cast&&cellKey(cast.target)===SUPPORT_KEY?{screen,cast}:null;
+  }
 
   release(){
     if(this.#phase!=='ready'||!this.#residency.publishedAt(5.5,10.5))return [];

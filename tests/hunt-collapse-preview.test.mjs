@@ -6,7 +6,6 @@ import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from '../src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from '../src/hunt-terrain-save.mjs';
 import {VoxelWorld} from '../src/voxel-world.mjs';
-import {targetHuntFireball} from '../src/hunt-play-runtime.mjs';
 import {projectVoxel} from '../src/camera-presets.mjs';
 import {huntActorPixelOccluded} from '../src/diagnostics/hunt-actor-occlusion.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from '../src/hunt-collapse-preview.mjs';
@@ -44,8 +43,8 @@ for(const trigger of ['control','fireball'])test(
       assert.deepEqual(preview.acceptImpact(unrelated),[]);
       assert.equal(preview.phase,'ready');
       const view={width:402,height:604,scale:16,camera:'hunt',panY:-100};
-      const aim=projectVoxel(5.5,6.2,11,view);
-      const cast=targetHuntFireball(port,view,aim.x,aim.y);
+      assert.equal(preview.supportTarget({...view,panY:-2000}),null);
+      const {cast}=preview.supportTarget(view);
       assert.deepEqual(cast.target,{x:5,y:6,z:10,radius:2.3,depth:2});
       const impact=port.apply({id:'aimed-fireball',type:'carve-crater',...cast.target,
         expectedRevision:cast.worldRevision},{captureRemovedCells:true});
@@ -60,6 +59,7 @@ for(const trigger of ['control','fireball'])test(
     for(let i=0;i<120;i++)preview.tick([]);
     assert.equal(preview.phase,'settled');
     assert.deepEqual(preview.renderCells,[]);
+    assert.equal(preview.supportTarget({camera:'hunt'}),null);
     assert.deepEqual(preview.protectedIds,[]);
     assert.equal(save.removedCells.has('5,6,10'),true);
     const landingY=trigger==='control'?5:6;

@@ -50,7 +50,7 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const collapseButton=cellPreview&&['preview','impact'].includes(gravityMode)
+const collapseButton=cellPreview&&['preview','impact','guided'].includes(gravityMode)
   ?document.querySelector('#play-collapse-preview'):null;
 const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
   ?document.querySelector('#play-context-test'):null;
@@ -269,6 +269,20 @@ function paintEncounterGuide(view) {
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
+    if(gravityMode==='guided'&&!collapseButton?.disabled){
+      const aim=playStream?.collapse?.supportTarget(view);
+      if(aim){
+        const {x,y}=aim.screen;
+        ctx.beginPath();
+        ctx.arc(x,y,9,0,2*Math.PI);
+        ctx.strokeStyle='#362413';
+        ctx.lineWidth=5;
+        ctx.stroke();
+        ctx.strokeStyle='#ffd774';
+        ctx.lineWidth=2;
+        ctx.stroke();
+      }
+    }
     return;
   }
   const guide=projectEncounterGuides(generatedSite,active.world,view);
@@ -661,14 +675,18 @@ function updatePlayStreaming(now) {
   }
 }
 
-function castPlayFireball(clientX,clientY) {
-  if(!playMode || awaitingPlayContext || playStream?.collapse?.holdsFixture ||
-      !playActor || !active || !playView || playFireball ||
-      pendingMesh || pendingEdit || restoring || errorMessage || streamingBusy() ||
-      !renderer?.ready || renderer.pendingUploads)return;
+function canCastPlayFireball(){
+  return playMode&&!awaitingPlayContext&&!playStream?.collapse?.holdsFixture&&
+    playActor&&active&&playView&&!playFireball&&!pendingMesh&&!pendingEdit&&
+    !restoring&&!errorMessage&&!streamingBusy()&&renderer?.ready&&!renderer.pendingUploads;
+}
+
+function castPlayFireball(clientX,clientY,{guided=false}={}) {
+  if(!canCastPlayFireball())return;
   const rect=canvas.getBoundingClientRect();
   if(rect.width<=0 || rect.height<=0)return;
-  const target=targetHuntFireball(active.port,playView,
+  const target=guided?playStream?.collapse?.supportTarget(playView)?.cast:
+    targetHuntFireball(active.port,playView,
     (clientX-rect.left)*playView.width/rect.width,
     (clientY-rect.top)*playView.height/rect.height,playStream?.trees.objects);
   if(!target)return;
@@ -800,8 +818,16 @@ function updateCollapseButton(){
   collapseButton.hidden=!playStream?.gravityPreview;
   const labels={ready:'Break stone support',falling:'Stone falling…','actor-blocked':'Move clear of the shelf',
     settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
+  const guided=gravityMode==='guided';
+  const aim=guided?collapse?.supportTarget(playView):null;
+  if(guided)labels.ready=playFireball?'Fireball incoming…':aim?'Fireball the marked support':
+    playView?.camera!=='hunt'?'Switch to 2.5D Hunt':'Move toward the stone shelf';
   const label=labels[collapse?.phase]??'Preparing stone shelf…';
   if(collapseButton.textContent!==label)collapseButton.textContent=label;
+  if(guided){
+    collapseButton.disabled=!aim||!canCastPlayFireball();
+    return;
+  }
   collapseButton.disabled=collapse?.phase!=='ready'||!renderer?.ready||Boolean(pendingEdit)||
     Boolean(renderer?.pendingUploads)||Boolean(playFireball)||streamingBusy()||
     !playStream?.residency?.publishedAt(5.5,10.5);
@@ -1725,6 +1751,7 @@ if(playMode) {
   });
   collapseButton?.addEventListener('click',()=>{
     if(collapseButton.disabled||playFireball)return;
+    if(gravityMode==='guided'){castPlayFireball(null,null,{guided:true});return;}
     try{queueCollapseMeshes(playStream.collapse.release());}
     catch(error){errorMessage=error.message;updateStatus();}
   });
