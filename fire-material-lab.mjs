@@ -50,6 +50,7 @@ const forestPlantings=[
   [9.5,-2.5,7,1.11],[4.5,-5.5,13,.9],[-8.5,-8.5,10,.92],[8.5,-9.5,8,1.04]
 ];
 let forestTrees=[];
+let waysideStone=null;
 const tileCanvas=document.querySelector('#tile');
 const repeatCanvas=document.querySelector('#tile-repeat');
 
@@ -127,6 +128,7 @@ function setScene(){
     const position=spawnTerrainActor(fixture.world,{x,z,searchTopY:10});
     return position?[{...position,sprite:LIVE_TREES[index],scale}]:[];
   }):[];
+  waysideStone=scene==='hunt'?spawnTerrainActor(fixture.world,{x:-2.5,z:2.5,searchTopY:10}):null;
   actor=canWalk()?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
   enemy=canWalk()?spawnTerrainActor(fixture.world,{x:scene==='lava'?5.5:3.5,z:scene==='lava'?-4:-2,searchTopY:10}):null;
   projectile=null;
@@ -230,6 +232,37 @@ const labMagePalette={
   R:'#555679',L:'#8589aa',M:'#706d91',W:'#79513b',G:'#ffca71'
 };
 
+const waysidePixels=[
+  '.............',
+  '......QQ.....',
+  '....QQQQQ....',
+  '....QASTQD...',
+  '....QAATDD...',
+  '....QASTDD...',
+  '....QAATDD...',
+  '....QASTDD...',
+  '...LAAAADDL..',
+  '..LAAADDDDLL.',
+  '.LLDDDDDDDLLL'
+];
+const waysidePalette={
+  forest:{Q:'#a5a18b',A:'#6f796e',S:'#c7bca0',T:'#4f564e',D:'#414846',L:'#537039'},
+  fading:{Q:'#989483',A:'#71736d',S:'#b3a289',T:'#524c48',D:'#414046',L:'#785b3a'},
+  approach:{Q:'#84726a',A:'#514647',S:'#ea8047',T:'#302c32',D:'#332c34',L:'#685054'}
+};
+
+function paintPixelSprite(rows,palette,foot,unit){
+  const left=Math.round(foot.x-rows[0].length*unit/2);
+  const top=Math.round(foot.y-rows.length*unit);
+  for(const [row,strip] of rows.entries()){
+    for(const [column,pixel] of Array.from(strip).entries()){
+      if(pixel==='.')continue;
+      context.fillStyle=palette[pixel];
+      context.fillRect(left+column*unit,top+row*unit,unit,unit);
+    }
+  }
+}
+
 function paintMarkers(view,now,density){
   if(overlay.width!==view.width)overlay.width=view.width;
   if(overlay.height!==view.height)overlay.height=view.height;
@@ -244,15 +277,7 @@ function paintMarkers(view,now,density){
       {left:foot.x-width,right:foot.x+width,top:top.y-density,bottom:foot.y+density},fixture.highest,[]);
     if(scene==='hunt'&&figure===actor){
       const unit=Math.max(1,Math.round((foot.y-top.y)/labMagePixels.length));
-      const left=Math.round(foot.x-5*unit);
-      const start=Math.round(foot.y-labMagePixels.length*unit);
-      for(const [row,strip] of labMagePixels.entries()){
-        for(const [column,pixel] of Array.from(strip).entries()){
-          if(pixel==='.')continue;
-          context.fillStyle=labMagePalette[pixel];
-          context.fillRect(left+column*unit,start+row*unit,unit,unit);
-        }
-      }
+      paintPixelSprite(labMagePixels,labMagePalette,foot,unit);
       context.restore();
       return;
     }
@@ -264,6 +289,12 @@ function paintMarkers(view,now,density){
   };
   const figures=[];
   const layer=(unit,draw)=>figures.push({depth:projectVoxel(unit.x,unit.y,unit.z,view).depth,draw});
+  if(waysideStone)layer(waysideStone,()=>{
+    const foot=projectVoxel(waysideStone.x,waysideStone.y,waysideStone.z,view);
+    const top=projectVoxel(waysideStone.x,waysideStone.y+1,waysideStone.z,view);
+    const unit=Math.max(1,Math.round((foot.y-top.y)/7));
+    paintPixelSprite(waysidePixels,waysidePalette[forestStage.value],foot,unit);
+  });
   if(enemy)layer(enemy,()=>paint(enemy,'#8e483a','#b86a4f'));
   layer(actor,()=>paint(actor,'#465986','#e7c68a'));
   for(const [index,tree] of forestTrees.entries()){
