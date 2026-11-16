@@ -255,7 +255,7 @@ function paintEncounterGuide(view) {
     if(playMode&&playActor&&playStream?.trees){
       const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
-        extractionPortalLayer(view,playStream.extraction));
+        extractionPortalLayer(view,playStream.extraction),started);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
@@ -1083,7 +1083,8 @@ function impactSpan(targetOverride=null) {
     if(playMode&&result.removedVoxels>0&&playStream?.residency){
       const residency=playStream.residency;
       const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
-      playStream.trees.objects.terrainChanged(result.changedBounds,active.port,isPublished);
+      playStream.trees.terrainChanged(result.changedBounds,active.port,isPublished,performance.now(),
+        !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     }
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);

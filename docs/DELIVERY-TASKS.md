@@ -313,7 +313,7 @@ H08-05 physical-object completion remain open.
 - **Technical boundary:** gameplay commands via Voxel V2 edit ledger and World Object V2 damage; one collision truth, worker meshing and effects as derived consumers.
 - **Gate:** repeated hits and burst edits stay replayable, collision updates immediately, no ghost geometry, consistent frame and edit-to-visible latency.
 - **Dependencies:** F07-02, H08-05, H08-07.
-- **World Objects prerequisite:** When a committed terrain edit removes a live tree's root support, the resident trunk and its collider are replaced by a fallen log if the lower floor supports it. Otherwise the unsupported tree collider is removed. Regeneration uses current terrain and stable placement IDs. Direct-hit damage and dynamic fall animation remain separate.
+- **World Objects prerequisite:** When a committed terrain edit removes a live tree's root support, the resident trunk and its collider are replaced by a fallen log if the lower floor supports it. Otherwise the unsupported tree collider is removed. Regeneration uses current terrain and stable placement IDs. Live support loss plays a short presentation-only fall and reports up to eight recent outcomes. Reload reconstructs the settled prop. Direct-hit damage and dynamic rigid-body motion are separate.
 - **Done for now:** At least one Wizard spell visibly damages terrain and a physical object, changes authoritative collision/pathing, and survives repeated hits and replay without unacceptable frame or edit latency. Stop; extra spell VFX/upgrades can follow.
 
 ### H08-09 — Extraction, upgrades and cross-Hunt journey continuity

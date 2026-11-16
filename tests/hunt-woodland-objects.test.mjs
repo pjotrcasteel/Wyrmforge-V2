@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {VoxelWorld} from '../src/voxel-world.mjs';
 import {V2TerrainPort} from '../src/terrain-integration-port.mjs';
 import {TerrainEditLedger} from '../src/terrain-edit-ledger.mjs';
+import {HuntTreePreview} from '../src/hunt-tree-preview.mjs';
 import {HuntWoodlandObjects} from '../src/hunt-woodland-objects.mjs';
 
 test('grounded trunks stop both approaches, preserve canopy clearance and evict with the region',()=>{
@@ -57,12 +58,25 @@ test('removing root support replaces the trunk and reconstructs the fallen log a
   const terrain=new V2TerrainPort(world,new TerrainEditLedger(world));
   const tree={kind:'tree',id:'edited-trunk',position:{x:.5,y:4,z:.5},
     scale:1,seed:7,footprint:{radius:.46}};
-  const objects=new HuntWoodlandObjects({placement:()=>({placements:[tree]})});
-  objects.update(['entry'],terrain);
+  const preview=new HuntTreePreview({layout:{regions:[],links:[]},placement:()=>({placements:[tree]})},
+    {complete:true,naturalWidth:1});
+  const objects=preview.objects;
+  preview.update(['entry'],terrain);
   assert.ok(objects.limitTravel({x:-1,y:4,z:.5},'x',3)<3);
   const result=terrain.apply({id:'root-crater',type:'carve-crater',x:0,y:3,z:0,radius:2.3,depth:2});
   assert.ok(result.removedVoxels>0);
-  objects.terrainChanged(result.changedBounds,terrain);
+  preview.terrainChanged(result.changedBounds,terrain,null,1000);
+  const angles=[];
+  const ctx={save(){},restore(){},translate(){},rotate(angle){angles.push(angle);},drawImage(){}};
+  const view={camera:'inspection',width:400,height:400,scale:16};
+  preview.paint(ctx,view,tree.position,()=>{},null,1250);
+  assert.equal(angles.length,1);
+  assert.ok(Math.abs(angles[0])>.3);
+  preview.paint(ctx,view,tree.position,()=>{},null,1500);
+  assert.equal(angles.length,1,'finished fall no longer renders the standing sprite');
+  assert.equal(objects.diagnostics.treesFelled,1);
+  assert.equal(objects.diagnostics.treesWithoutLanding,0);
+  assert.deepEqual(objects.terrainChanged(result.changedBounds,terrain),[]);
   const [fallen]=[...objects.regions][0];
   assert.equal(fallen.id,tree.id);
   assert.equal(fallen.kind,'log');
@@ -72,4 +86,5 @@ test('removing root support replaces the trunk and reconstructs the fallen log a
   objects.update([],terrain);
   objects.update(['entry'],terrain);
   assert.deepEqual([...objects.regions][0],[fallen]);
+  assert.equal(objects.diagnostics.treesFelled,1);
 });

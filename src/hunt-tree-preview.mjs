@@ -4,6 +4,8 @@ import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
 
 const BOULDER_SPRITE={x:0,y:416,w:26,h:27,ax:12,ay:26};
 const LUMP_SPRITE={x:32,y:416,w:16,h:14,ax:8,ay:13};
+const FALL_DURATION_MS=500;
+const MAX_VISIBLE_FALLS=24;
 const LOG_SPRITE={x:52,y:416,w:34,h:20,ax:17,ay:17};
 
 function paintProp(ctx,image,prop,view,foot){
@@ -23,6 +25,7 @@ export class HuntTreePreview {
   objects;
   #image;
   #scenery;
+  #falls=new Map();
   constructor(graph,image){
     this.objects=new HuntWoodlandObjects(graph);
     this.#image=image;
@@ -31,8 +34,40 @@ export class HuntTreePreview {
   update(regionIds,terrain,coverage=null){
     if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain,coverage);
   }
-  paint(ctx,view,actor,paintActor,feature=null){
+  terrainChanged(bounds,terrain,isPublished,now,animate=true){
+    const falls=this.objects.terrainChanged(bounds,terrain,isPublished);
+    if(!animate)return;
+    for(const {tree,landingY} of falls){
+      if(this.#falls.size>=MAX_VISIBLE_FALLS)this.#falls.delete(this.#falls.keys().next().value);
+      this.#falls.set(tree.id,{tree,landingY,startedAt:now});
+    }
+  }
+  paint(ctx,view,actor,paintActor,feature=null,now=performance.now()){
     const layers=[];
+    for(const [id,fall] of this.#falls){
+      const progress=Math.min(1,Math.max(0,(now-fall.startedAt)/FALL_DURATION_MS));
+      if(progress>=1){
+        this.#falls.delete(id);
+        continue;
+      }
+      const {tree,landingY}=fall;
+      const {sprite}=tree;
+      const drop=tree.y-(landingY??tree.y-1);
+      const foot=projectVoxel(tree.x,tree.y-drop*progress*progress,tree.z,view);
+      const scale=view.scale*tree.scale/32;
+      const radius=Math.max(sprite.w,sprite.h)*scale;
+      if(foot.x<-radius||foot.x>view.width+radius||foot.y<-radius||foot.y>view.height+radius)continue;
+      const angle=(Math.sin(tree.x+tree.z)<0?-1:1)*Math.PI*.46*progress*progress;
+      layers.push({depth:foot.depth,paint:()=>{
+        ctx.save();
+        ctx.translate(Math.round(foot.x),Math.round(foot.y));
+        ctx.rotate(angle);
+        ctx.globalAlpha=Math.min(1,(1-progress)*5);
+        ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,
+          -sprite.ax*scale,-sprite.ay*scale,sprite.w*scale,sprite.h*scale);
+        ctx.restore();
+      }});
+    }
     const visible=[this.#scenery.trees(view),...this.objects.regions];
     if(this.#image.complete&&this.#image.naturalWidth){
       for(const trees of visible)for(const tree of trees){
@@ -40,7 +75,9 @@ export class HuntTreePreview {
           const foot=projectVoxel(tree.x,tree.y,tree.z,view);
           const margin=2*view.scale;
           if(foot.x>=-margin&&foot.x<=view.width+margin&&foot.y>=-margin&&foot.y<=view.height+margin){
-            layers.push({depth:foot.depth,prop:tree,foot});
+            const fall=this.#falls.get(tree.id);
+            const alpha=fall?Math.max(0,Math.min(1,((now-fall.startedAt)/FALL_DURATION_MS-.8)*5)):1;
+            layers.push({depth:foot.depth,prop:tree,foot,alpha});
           }
           continue;
         }
@@ -63,7 +100,11 @@ export class HuntTreePreview {
       const {sprite,x,y,w,h}=layer;
       if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
       else if(layer.paint)layer.paint(ctx);
-      else if(layer.prop)paintProp(ctx,this.#image,layer.prop,view,layer.foot);
+      else if(layer.prop){
+        ctx.globalAlpha=layer.alpha;
+        paintProp(ctx,this.#image,layer.prop,view,layer.foot);
+        ctx.globalAlpha=1;
+      }
       else paintActor();
     }
     ctx.restore();
