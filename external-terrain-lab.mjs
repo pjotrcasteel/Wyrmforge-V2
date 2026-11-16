@@ -1,3 +1,4 @@
+import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
@@ -259,13 +260,13 @@ function paintEncounterGuide(view) {
       paintInvestigation(ctx,view);
       paintHorde(ctx,view);
     }
+    if(!pendingEdit&&!renderer.pendingUploads)playStream?.collapse?.paint(ctx,view);
     if(playMode&&playActor&&playStream?.trees){
       const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
         extractionPortalLayer(view,playStream.extraction),started);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
-    if(!pendingEdit&&!renderer.pendingUploads)playStream?.collapse?.paint(ctx,view);
     paintPlayFireball(ctx,view);
     return;
   }
@@ -518,6 +519,13 @@ function paintPlayActor(ctx,view) {
   const headRadius=Math.max(2,graphic.projectedHeight*0.11);
   const hatY=top.y-4*pixelRatio;
   ctx.save();
+  const movingCells=(!pendingEdit&&!renderer.pendingUploads)
+    ?playStream?.collapse?.renderCells??[]:[];
+  const margin=Math.max(bodyWidth*.85,headRadius)+2*pixelRatio+1;
+  clipHuntActor(ctx,active.world,view,playActor,{
+    left:Math.min(foot.x,top.x)-margin,right:Math.max(foot.x,top.x)+margin,
+    top:hatY-1,bottom:foot.y+2*pixelRatio+Math.max(2,bodyWidth*.33)+1
+  },playStream?.cellCatalog?.height.maxY,movingCells);
   ctx.imageSmoothingEnabled=false;
   ctx.fillStyle='rgba(0,0,0,.45)';
   ctx.beginPath();
