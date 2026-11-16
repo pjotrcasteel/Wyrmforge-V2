@@ -51,7 +51,7 @@ vec3 labForestGrade(vec3 color,int material,vec2 uv) {
   if(uLabForestStage==3)return burned;
 
   // World position drives the transition, so approaching or retreating never
-  // changes the color of a stationary patch of ground.
+  // changes the color of a stationary piece of ground.
   float depth=-uv.y+(pockets-.5)*3.0;
   float fading=smoothstep(${-FIRE_ROAD_FADING_Z-2}.0,${-FIRE_ROAD_FADING_Z+2}.0,depth);
   float fire=smoothstep(${-FIRE_ROAD_APPROACH_Z-3}.0,${-FIRE_ROAD_APPROACH_Z+3}.0,depth);
