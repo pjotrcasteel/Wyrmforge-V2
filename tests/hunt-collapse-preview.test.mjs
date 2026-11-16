@@ -14,21 +14,23 @@ import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT
 import {spawnHuntExplorer} from '../src/hunt-play-runtime.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from '../src/hunt-collapse-preview.mjs';
 
-for(const trigger of ['control','fireball','region seam Fireball'])test(
+for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball'])test(
   'actual seed 7 Hunt settles, streams and reloads the shelf after '+trigger,()=>{
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
     siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
   const graph=generateAuthoredHuntTerrainGraph(site);
-  const seam=trigger==='region seam Fireball';
+  const mixed=trigger==='mixed terrain Fireball';
+  const seam=mixed||trigger==='region seam Fireball';
   const entry=seam?REGION_COLLAPSE_ENTRY:site.layout.topology.entry;
   const support=seam?REGION_COLLAPSE_SUPPORT:{x:5,y:6,z:10};
   const supportKey=[support.x,support.y,support.z].join(',');
   const sampleX=seam?4:2,sampleZ=seam?-21:10,shelfY=seam?9:8;
+  const sampleMaterial=mixed?1:3;
   const initialIds=['region-entry','region-woodland-trail','link-region-entry-region-woodland-trail'];
   const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
   function load(identity='gravity-preview'){
     const save=new HuntTerrainSave(storage,identity);
-    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save):huntCollapseScaffold(save);
+    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save,{mixed}):huntCollapseScaffold(save);
     const addedCells=huntSavedAdditions(graph.layout,[...save.additions,...scaffold]);
     const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),{
       microSurfaceCapacity:2048,removedCells:save.removedCells,addedCells});
@@ -39,7 +41,7 @@ for(const trigger of ['control','fireball','region seam Fireball'])test(
     const residency=new HuntCellResidency(world,graph,catalog,initialIds,
       {removedCells:save.removedCells,entry,addedCells});
     const preview=new HuntCollapsePreview(world,port,residency,save,
-      {fixture:!seam,guidedSupport:seam?support:undefined});
+      {fixture:!seam,guidedSupport:seam?support:undefined,mixedTerrain:mixed,foundationY:catalog.height.minY});
     return {loader,world,port,residency,save,preview};
   }
   const live=load();
@@ -50,7 +52,7 @@ for(const trigger of ['control','fireball','region seam Fireball'])test(
   const digest=terrain=>replayDataDigest(
     terrain.snapshots().map(chunk=>[chunk.id,Array.from(chunk.data)]));
   try{
-    assert.equal(world.get(sampleX,shelfY,sampleZ),3);
+    assert.equal(world.get(sampleX,shelfY,sampleZ),sampleMaterial);
     if(trigger==='control'){
       const {command,edit,dirtyChunks}=preview.release();
       assert.ok(dirtyChunks.length);
@@ -99,12 +101,13 @@ for(const trigger of ['control','fireball','region seam Fireball'])test(
     assert.equal(preview.replay.landed,null);
     for(let i=0;i<120;i++)preview.tick([]);
     assert.equal(preview.phase,'settled');
+    if(mixed)assert.deepEqual([...new Set(save.additions.map(cell=>cell.material))].sort(),[1,2,3]);
     assert.deepEqual(preview.renderCells,[]);
     assert.equal(preview.supportTarget({camera:'hunt'}),null);
     assert.deepEqual(preview.protectedIds,[]);
     assert.equal(save.removedCells.has(supportKey),true);
     const landingY=seam?7:trigger==='control'?5:6;
-    assert.equal(world.get(sampleX,landingY,sampleZ),3);
+    assert.equal(world.get(sampleX,landingY,sampleZ),sampleMaterial);
     const recorded=JSON.parse(JSON.stringify(exportHuntTerrainEdits(entries,preview.outcomes)));
     const replayed=load('isolated-replay');
     try{
@@ -129,12 +132,12 @@ for(const trigger of ['control','fireball','region seam Fireball'])test(
     streamTo(-144);
     assert.equal(world.get(sampleX,landingY,sampleZ),0);
     streamTo(seam?-34:12);
-    assert.equal(world.get(sampleX,landingY,sampleZ),3);
+    assert.equal(world.get(sampleX,landingY,sampleZ),sampleMaterial);
     const restored=load();
     try{
       assert.equal(restored.preview.phase,'settled');
       assert.equal(restored.world.get(sampleX,shelfY,sampleZ),0);
-      assert.equal(restored.world.get(sampleX,landingY,sampleZ),3);
+      assert.equal(restored.world.get(sampleX,landingY,sampleZ),sampleMaterial);
     }finally{restored.loader.unload();}
   }finally{live.loader.unload();}
 });

@@ -11,16 +11,17 @@ export function isCurrentTerrainSupportCandidate(world,candidate){
 }
 
 export function scanTerrainSupport(world,removed,{
-  cohesive,anchors,isKnown,maxReads=2048,maxCells=128,maxExtent=12
+  cohesive,anchors,isKnown,foundationY=null,maxReads=2048,maxCells=128,maxExtent=12
 }){
   if(!Array.isArray(removed)||removed.length>256||!bounded(maxReads,8192)||
       !bounded(maxCells,256)||!bounded(maxExtent,32))throw new RangeError('Invalid support scan limits');
+  if(foundationY!==null&&!Number.isSafeInteger(foundationY))throw new TypeError('Invalid foundation level');
   if(typeof isKnown!=='function'||!(cohesive instanceof Set)||!(anchors instanceof Set)||
       cohesive.size>255||anchors.size>255||cohesive.has(0)||anchors.has(0)||[...cohesive].some(id=>anchors.has(id))){
     throw new TypeError('Support scan requires explicit residency and distinct material classes');
   }
   const worldRevision=world.revision;
-  const reads=new Map(),visited=new Set(),candidates=[];
+  const reads=new Map(),visited=new Set(),anchored=new Set(),candidates=[];
   let unknown=false,oversized=0;
   const limit=Symbol('support read budget');
 
@@ -33,6 +34,20 @@ export function scanTerrainSupport(world,removed,{
     return reads.get(id);
   }
 
+  const isAnchor=(material,y)=>anchors.has(material)||(y===foundationY&&cohesive.has(material));
+
+  function groundedColumn(x,y,z){
+    // Most authored ground has a direct path to bedrock. Probe that path
+    // before exploring laterally through a wide, connected terrain mass.
+    for(let depth=1;depth<=16;depth++){
+      const belowY=y-depth;
+      const material=sample(x,belowY,z);
+      if(isAnchor(material,belowY)||anchored.has(key(x,belowY,z)))return true;
+      if(!cohesive.has(material))break;
+    }
+    return false;
+  }
+
   function scan(x,y,z){
     const id=key(x,y,z);
     const material=sample(x,y,z);
@@ -41,15 +56,24 @@ export function scanTerrainSupport(world,removed,{
     const queue=[{x,y,z,material}];
     const min={x,y,z},max={x,y,z};
     visited.add(id);
-    let supported=false,incomplete=false;
+    let incomplete=false;
     for(let i=0;i<queue.length;i++){
       const cell=queue[i];
+      if(isAnchor(cell.material,cell.y)||groundedColumn(cell.x,cell.y,cell.z)){
+        for(const item of queue)anchored.add(key(item.x,item.y,item.z));
+        return;
+      }
       for(const [dx,dy,dz] of FACES){
         const nx=cell.x+dx,ny=cell.y+dy,nz=cell.z+dz;
         const neighbor=sample(nx,ny,nz);
         const neighborId=key(nx,ny,nz);
         if(neighbor===null)incomplete=true;
-        if(anchors.has(neighbor))supported=true;
+        if(isAnchor(neighbor,ny)||anchored.has(neighborId)){
+          // Every discovered cell is connected to this anchor through the
+          // queue. Keep that proof so nearby seeds avoid flooding solid ground.
+          for(const item of queue)anchored.add(key(item.x,item.y,item.z));
+          return;
+        }
         if(!cohesive.has(neighbor)||visited.has(neighborId))continue;
         visited.add(neighborId);
         queue.push({x:nx,y:ny,z:nz,material:neighbor});
@@ -57,7 +81,6 @@ export function scanTerrainSupport(world,removed,{
         max.x=Math.max(max.x,nx);max.y=Math.max(max.y,ny);max.z=Math.max(max.z,nz);
       }
     }
-    if(supported)return;
     if(incomplete){unknown=true;return;}
     if(queue.length>maxCells||Math.max(max.x-min.x,max.y-min.y,max.z-min.z)>=maxExtent){
       oversized++;

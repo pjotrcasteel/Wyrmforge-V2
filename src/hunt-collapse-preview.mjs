@@ -3,6 +3,13 @@ import {TerrainClusterPhysics} from './terrain-cluster-physics.mjs';
 import {scanTerrainSupport} from './terrain-support-scan.mjs';
 import {projectVoxel} from './camera-presets.mjs';
 import {targetHuntFireball} from './hunt-play-runtime.mjs';
+import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
+
+const STONE=new Set([3]);
+const ANCHORS=new Set([V2_BEDROCK_MATERIAL]);
+// Voxel storage supports material IDs 1–255. Bedrock remains the protected anchor.
+const TERRAIN=new Set(Array.from({length:255},(_,index)=>index+1)
+  .filter(material=>!ANCHORS.has(material)));
 
 const OWNER='region-entry:cell:8:0:1';
 const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:10,radius:1.1};
@@ -10,6 +17,11 @@ const SUPPORT_KEY='5,6,10';
 const MAX_TERRAIN_CLUSTER_CELLS=64;
 const MAX_TERRAIN_ADDITIONS=256;
 const MAX_TERRAIN_DROP=12;
+const FALL_COLORS={
+  1:['#668f47','#435f2f'],
+  2:['#95704d','#654b38'],
+  3:['#b7ae99','#787468']
+};
 const columnKey=({x,z})=>x+','+z;
 const cellKey=({x,y,z})=>x+','+y+','+z;
 const isShelf=({x,y,z})=>y===8&&x>=2&&x<=5&&z>=10&&z<=11;
@@ -37,17 +49,21 @@ export class HuntCollapsePreview {
   #replay=null;
   #fixture;
   #guidedSupport;
+  #cohesive;
+  #foundationY;
   #owners=new Map();
   #admitted=0;
   #isKnown;
   #phase;
 
-  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null}={}){
+  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null,mixedTerrain=false,foundationY=null}={}){
     this.#world=world;
     this.#port=port;
     this.#residency=residency;
     this.#save=save;
     this.#fixture=fixture;
+    this.#cohesive=mixedTerrain?TERRAIN:STONE;
+    this.#foundationY=mixedTerrain?foundationY:null;
     this.#guidedSupport=guidedSupport;
     this.#admitted=fixture?0:save.additions.length;
     this.#phase=guidedSupport&&save.removedCells.has(cellKey(guidedSupport))?'settled':'ready';
@@ -90,7 +106,7 @@ export class HuntCollapsePreview {
       return {x,y,z};
     });
     const scan=scanTerrainSupport(this.#world,removed,{
-      isKnown:this.#isKnown,cohesive:new Set([3]),anchors:new Set([4])
+      isKnown:this.#isKnown,cohesive:this.#cohesive,anchors:ANCHORS,foundationY:this.#foundationY
     });
     if(scan.status!=='complete')return this.#decline();
     const candidates=this.#fixture?scan.candidates.filter(candidate=>
@@ -190,10 +206,11 @@ export class HuntCollapsePreview {
     };
     const cells=this.renderCells;
     const occupied=new Set(cells.map(cell=>cellKey({...cell,y:Math.round(cell.y)})));
-    for(const {x,y,z} of cells){
-      if(!occupied.has(cellKey({x,y:Math.round(y),z:z+1})))face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],'#787468');
+    for(const {x,y,z,material} of cells){
+      const [top,front]=FALL_COLORS[material]??FALL_COLORS[3];
+      if(!occupied.has(cellKey({x,y:Math.round(y),z:z+1})))face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],front);
       if(!occupied.has(cellKey({x,y:Math.round(y)+1,z}))){
-        face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],'#b7ae99');
+        face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],top);
       }
     }
   }
