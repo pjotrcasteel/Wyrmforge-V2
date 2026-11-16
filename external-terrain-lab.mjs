@@ -1,3 +1,4 @@
+import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
 import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
@@ -50,7 +51,8 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const collapseButton=cellPreview&&['preview','impact','guided'].includes(gravityMode)
+const guidedCollapse=['guided','seam'].includes(gravityMode);
+const collapseButton=cellPreview&&['preview','impact','guided','seam'].includes(gravityMode)
   ?document.querySelector('#play-collapse-preview'):null;
 const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
   ?document.querySelector('#play-context-test'):null;
@@ -269,7 +271,7 @@ function paintEncounterGuide(view) {
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
-    if(gravityMode==='guided'&&!collapseButton?.disabled){
+    if(guidedCollapse&&!collapseButton?.disabled){
       const aim=playStream?.collapse?.supportTarget(view);
       if(aim){
         const {x,y}=aim.screen;
@@ -623,10 +625,10 @@ function updatePlayStreaming(now) {
     if(stream.cellCatalog){
       if(!stream.cellCatalog.done)return;
       stream.residency=new HuntCellResidency(active.world,stream.graph,stream.cellCatalog,stream.initialIds,
-        {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry,
+        {removedCells:stream.terrainSave.removedCells,entry:stream.entry,
           addedCells:stream.savedAdditions});
       if(stream.structuralGravity)stream.collapse=new HuntCollapsePreview(active.world,active.port,
-        stream.residency,stream.terrainSave,{fixture:stream.gravityPreview});
+        stream.residency,stream.terrainSave,{fixture:stream.gravityFixture,guidedSupport:stream.regionCollapse?REGION_COLLAPSE_SUPPORT:undefined});
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
@@ -758,7 +760,7 @@ function resetPlayInput() {
 function resetPlayActor() {
   if(!playMode || !generatedSite || !active?.world)return;
   const stream=playStream?.residency;
-  const startAt=generatedSite.layout.topology.entry;
+  const startAt=playStream?.entry??generatedSite.layout.topology.entry;
   const startReady=cellPreview?stream?.publishedAt(startAt.x+.5,startAt.z-2):
     stream?.metrics.residentIds.includes(playConnected.sites[0].id);
   if(stream&&(streamingBusy()||!startReady)) {
@@ -770,12 +772,11 @@ function resetPlayActor() {
   // same WorldGeneratorV2 that powers the WorldGen lab. The Voxel V2 actor
   // never spawns inside a synthetic expedition-region flat-height fixture.
   const footprint=playConnected?.footprint??generatedSite.layout.footprint;
-  const entry=generatedSite.layout.topology.entry;
   const region={
     bounds:footprint,origin:{x:0,z:0}
   };
   playActor=spawnHuntExplorer(active.world,region,{
-    direction:'south',at:{x:entry.x,z:entry.z}
+    direction:'south',at:startAt
   });
   playRecoveryCheckpoint=null;
   playFollowCamera.reset(playActor);
@@ -826,7 +827,7 @@ function updateCollapseButton(){
   collapseButton.hidden=!playStream?.gravityPreview;
   const labels={ready:'Break stone support',falling:'Stone falling…','actor-blocked':'Move clear of the shelf',
     settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
-  const guided=gravityMode==='guided';
+  const guided=guidedCollapse;
   const aim=guided?collapse?.supportTarget(playView):null;
   if(guided)labels.ready=playFireball?'Fireball incoming…':aim?'Fireball the marked support':
     playView?.camera!=='hunt'?'Switch to 2.5D Hunt':'Move toward the stone shelf';
@@ -1122,11 +1123,16 @@ function resetSite() {
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
         const gravityPreview=Boolean(collapseButton)&&recipe.seed===7;
+        const regionCollapse=gravityPreview&&gravityMode==='seam';
+        const gravityFixture=gravityPreview&&!regionCollapse;
+        const entry=regionCollapse?REGION_COLLAPSE_ENTRY:generatedSite.layout.topology.entry;
         const structuralGravity=gravityPreview||(cellPreview&&gravityMode==='terrain');
         const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(structuralGravity?':gravity-'+gravityMode:''));
-        const scaffold=gravityPreview?huntCollapseScaffold(terrainSave):[];
+        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave):
+          gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
-        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,structuralGravity,graph,initialIds,initialFootprint,footprint,
+        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,entry,
+          graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
@@ -1722,6 +1728,7 @@ if(playMode) {
         chunkEdge:active?.world.chunkEdge??null,
         streamingMode:cellPreview?'camera-cells':'graph-bands',
         collapsePreview:playStream?.collapse?.phase??null,
+        collapseMode:playStream?.structuralGravity?gravityMode:null,
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
@@ -1730,7 +1737,9 @@ if(playMode) {
         replayEdits:exportHuntTerrainEdits(playStream?.terrainReplay??[],playStream?.collapse?.outcomes),
         browserSave:playStream?{status:playStream.terrainSave.status,
           removedCells:playStream.terrainSave.removedCells.size,
-          addedCells:playStream.terrainSave.additions.length}:null,
+          addedCells:playStream.terrainSave.additions.length,
+          collapseOwners:playStream.structuralGravity?
+            [...new Set(playStream.terrainSave.additions.map(cell=>cell.owner))].sort():[]}:null,
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
         gpuQueue:renderer?.uploadQueueStatistics??null,
@@ -1758,7 +1767,7 @@ if(playMode) {
   });
   collapseButton?.addEventListener('click',()=>{
     if(collapseButton.disabled||playFireball)return;
-    if(gravityMode==='guided'){castPlayFireball(null,null,{guided:true});return;}
+    if(guidedCollapse){castPlayFireball(null,null,{guided:true});return;}
     try{
       const release=playStream.collapse.release();
       if(!release)return;

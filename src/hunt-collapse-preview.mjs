@@ -36,19 +36,21 @@ export class HuntCollapsePreview {
   #outcomes=new Map();
   #replay=null;
   #fixture;
+  #guidedSupport;
   #owners=new Map();
   #admitted=0;
   #isKnown;
   #phase;
 
-  constructor(world,port,residency,save,{fixture=true}={}){
+  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null}={}){
     this.#world=world;
     this.#port=port;
     this.#residency=residency;
     this.#save=save;
     this.#fixture=fixture;
+    this.#guidedSupport=guidedSupport;
     this.#admitted=fixture?0:save.additions.length;
-    this.#phase=fixture&&save.removedCells.has(SUPPORT_KEY)?'settled':'ready';
+    this.#phase=guidedSupport&&save.removedCells.has(cellKey(guidedSupport))?'settled':'ready';
     this.#handoff=new TerrainClusterHandoff(world);
     this.#isKnown=(x,y,z)=>residency.publishedAt(x+.5,z+.5);
     this.#physics=new TerrainClusterPhysics(world,this.#handoff,{isKnown:this.#isKnown});
@@ -63,10 +65,13 @@ export class HuntCollapsePreview {
   get protectedIds(){return this.holdsFixture?[...new Set(this.#owners.values())]:[];}
 
   supportTarget(view){
-    if(!this.#fixture||this.#phase!=='ready'||view?.camera!=='hunt'||!this.#residency.publishedAt(5.5,10.5))return null;
-    const screen=projectVoxel(5.5,6.2,11,view);
+    const support=this.#guidedSupport;
+    if(!support||this.#phase!=='ready'||view?.camera!=='hunt')return null;
+    const {x,y,z}=support;
+    if(!this.#residency.publishedAt(x+.5,z+.5))return null;
+    const screen=projectVoxel(x+.5,y+.2,z+1,view);
     const cast=targetHuntFireball(this.#port,view,screen.x,screen.y);
-    return cast&&cellKey(cast.target)===SUPPORT_KEY?{screen,cast}:null;
+    return cast&&cellKey(cast.target)===cellKey(support)?{screen,cast}:null;
   }
 
   release(){
