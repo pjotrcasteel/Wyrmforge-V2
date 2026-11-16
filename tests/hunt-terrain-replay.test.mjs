@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {V2TerrainResidencySet} from '../src/terrain-residency-set.mjs';
-import {recordHuntTerrainEdit,replayHuntTerrainEdit} from '../src/hunt-terrain-replay.mjs';
+import {exportHuntTerrainEdits,recordHuntTerrainEdit,replayHuntTerrainEdit} from '../src/hunt-terrain-replay.mjs';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
 import {replayDataDigest} from '../src/replay-checkpoint.mjs';
@@ -160,26 +160,27 @@ test('one falling cluster survives eviction and restart across a stream and chun
   const {HuntTerrainSave}=await import('../src/hunt-terrain-save.mjs');
   const {TerrainStreamCellBuilder}=await import('../src/terrain-stream-cells.mjs');
   const {TerrainCellStreamSession}=await import('../src/terrain-cell-stream-session.mjs');
-  const {TerrainClusterHandoff}=await import('../src/terrain-cluster-handoff.mjs');
-  const {TerrainClusterPhysics}=await import('../src/terrain-cluster-physics.mjs');
-  const {scanTerrainSupport}=await import('../src/terrain-support-scan.mjs');
+  const {HuntCollapsePreview}=await import('../src/hunt-collapse-preview.mjs');
   const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
   const definition={schema:'voxel-v2.terrain-initialization.v1',siteId:'fall-seam',
     generatorVersion:'test',seed:7,chunkEdge:16,runs:[
       {x:-1,y:0,z:0,length:2,material:4},
       {x:-1,y:3,z:0,length:1,material:2},
-      {x:-1,y:4,z:0,length:2,material:3}
+      {x:-1,y:4,z:0,length:2,material:3},
+      {x:-1,y:0,z:4,length:2,material:4},
+      {x:-1,y:2,z:4,length:2,material:2},
+      {x:-1,y:3,z:4,length:2,material:3}
     ]};
   const builder=new TerrainStreamCellBuilder(definition);
   while(!builder.done)builder.step(1);
   const cells=builder.cells;
   const ids=cells.map(cell=>cell.id);
-  const owner=x=>cells.find(({bounds})=>x>=bounds.minX&&x<=bounds.maxX).id;
+  const owner=x=>cells.find(({bounds})=>x>=bounds.minX&&x<bounds.maxX+1)?.id;
   const near={minX:-1,maxX:1,minZ:0,maxZ:1};
   const away={...near,minX:32,maxX:33};
 
-  function open(budget){
-    const save=new HuntTerrainSave(storage,'fall-seam');
+  function open(budget,identity='fall-seam'){
+    const save=new HuntTerrainSave(storage,identity);
     const loader=new V2ExternalTerrainLoader(definition,{removedCells:save.removedCells,addedCells:save.additions});
     while(!loader.progress.done)loader.loadStep(budget);
     const {world,port}=loader.terrain;
@@ -196,46 +197,65 @@ test('one falling cluster survives eviction and restart across a stream and chun
       }
       assert.fail('Unexpected number of residency transitions');
     };
-    return {world,port,stream,save,move,close:()=>loader.unload()};
+    const ownerAt=(x,z)=>z>=0&&stream.metrics.residentIds.includes(owner(x))?owner(x):null;
+    const collapse=new HuntCollapsePreview(world,port,{
+      ownerAt,publishedAt:(x,z)=>z<0||Boolean(ownerAt(x,z)),
+      trackAddedCells:(id,cells)=>stream.trackAddedCells(id,cells)
+    },save,{fixture:false});
+    return {world,port,stream,save,move,collapse,close:()=>loader.unload()};
   }
 
   const live=open(3);
   let expected;
   try{
-    const {world,port,stream,save,move}=live;
-    const edit=port.apply({id:'seam-support',type:'carve-sphere',x:-1,y:3,z:0,radius:.9},
-      {captureRemovedCells:true});
-    const known=(x,y,z)=>z>=0?stream.metrics.residentIds.includes(owner(x)):true;
-    const scan=scanTerrainSupport(world,[{x:-1,y:3,z:0}],{
-      cohesive:new Set([3]),anchors:new Set([4]),isKnown:known
-    });
-    assert.equal(scan.status,'complete');
-    assert.equal(scan.candidates.length,1);
-    const handoff=new TerrainClusterHandoff(world);
-    const detached=handoff.detach(scan.candidates[0]);
-    assert.equal(detached.status,'detached');
-    assert.ok(detached.dirtyChunks.includes('-1,0,0'));
-    assert.ok(detached.dirtyChunks.includes('0,0,0'));
+    const {world,port,stream,save,move,collapse}=live;
+    const edits=[];
+    const cut=(id,x,y,z)=>{
+      const command={id,type:'carve-crater',x,y,z,radius:.9,depth:2};
+      const result=port.apply(command,{captureRemovedCells:true});
+      edits.push(recordHuntTerrainEdit(ids,command,result));
+      return result;
+    };
+
+    const supported=cut('supported-stone',-1,2,4);
+    // The other half still sits on dirt, so the structure should stay put.
+    assert.deepEqual(collapse.acceptImpact(supported),[]);
+    save.commit(supported.removedCells);
+    assert.equal(world.get(-1,3,4),3);
+    assert.equal(world.get(0,3,4),3);
+
+    const dirty=collapse.acceptImpact(cut('seam-support',-1,3,0));
+    assert.ok(dirty.includes('-1,0,0'));
+    assert.ok(dirty.includes('0,0,0'));
     assert.equal(world.get(-1,4,0),0);
     assert.equal(world.get(0,4,0),0);
-    move(away,ids);
+    assert.deepEqual(collapse.protectedIds,ids);
+    move(away,collapse.protectedIds);
     assert.equal(stream.metrics.residentIds.length,2);
-    const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
-    for(let step=0;step<120;step++)physics.step();
-    const [body]=physics.bodies;
-    assert.equal(body.contact,'terrain');
+    const actor={x:0,y:1,z:.5};
+    for(let step=0;step<120&&collapse.phase==='falling';step++)collapse.tick([actor]);
+    assert.equal(collapse.phase,'actor-blocked');
     assert.equal(world.get(-1,1,0),0);
     assert.equal(world.get(0,1,0),0);
-    assert.equal(physics.intersects({x:[-.2,.2],y:[1.2,1.8],z:[.2,.8]}),true);
-    const landed=physics.settle(body.body.id,{actors:[]});
-    assert.equal(landed.status,'settled');
-    assert.equal(physics.bodies.length,0);
-    const additions=landed.cells.map(cell=>({...cell,owner:owner(cell.x)}));
-    assert.deepEqual(additions.map(({owner})=>owner),ids);
-    for(const cell of additions)stream.trackAddedCells(cell.owner,[cell]);
-    assert.equal(save.commitCollapse([...edit.removedCells,...body.body.cells.map(({x,y,z})=>[x,y,z].join(','))],
-      additions),true);
+    for(let step=0;step<120&&collapse.holdsFixture;step++)collapse.tick([]);
+    assert.equal(collapse.phase,'settled');
+    assert.deepEqual(collapse.protectedIds,[]);
+    assert.equal(collapse.collision.bodies.length,0);
+    assert.deepEqual(save.additions.map(({owner})=>owner),ids);
+    assert.ok(collapse.acceptImpact(cut('remaining-support',0,2,4)).length);
+    for(let step=0;step<120&&collapse.holdsFixture;step++)collapse.tick([]);
+    assert.equal(collapse.phase,'settled');
+    assert.deepEqual(collapse.outcomes.map(outcome=>outcome.sequence),[2,3]);
     expected=occupancyDigest(world);
+    const replay=open(2,'replay-seam');
+    try{
+      const report=JSON.parse(JSON.stringify(exportHuntTerrainEdits(edits,collapse.outcomes)));
+      assert.deepEqual(report.map(entry=>Boolean(entry.collapse)),[false,true,true]);
+      for(const entry of report){
+        replayHuntTerrainEdit(replay.port,ids,entry,{collapse:replay.collapse,save:replay.save});
+      }
+      assert.equal(occupancyDigest(replay.world),expected);
+    }finally{replay.close();}
     move(away);
     assert.equal(stream.metrics.residentIds.length,0);
     assert.equal(world.get(-1,1,0),0);
@@ -246,6 +266,6 @@ test('one falling cluster survives eviction and restart across a stream and chun
   const restarted=open(1);
   try{
     assert.equal(occupancyDigest(restarted.world),expected);
-    assert.equal(restarted.save.additions.length,2);
+    assert.equal(restarted.save.additions.length,4);
   }finally{restarted.close();}
 });

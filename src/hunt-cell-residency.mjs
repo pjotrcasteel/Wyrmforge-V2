@@ -118,7 +118,11 @@ export class HuntCellResidency {
     const key=Math.floor(x/8)*8+','+Math.floor(z/8)*8;
     return (this.#grid.get(key)??[]).find(cell=>containsHuntLandform(cell.band,x,z));
   }
-  publishedAt(x,z){return this.#published.has(this.#at(x,z)?.id);}
+  ownerAt(x,z){
+    const id=this.#at(x,z)?.id;
+    return this.#published.has(id)?id:null;
+  }
+  publishedAt(x,z){return this.ownerAt(x,z)!==null;}
   trackAddedCells(owner,cells){this.#session.trackAddedCells(owner,cells);}
 
   constrainInput(actor,input){

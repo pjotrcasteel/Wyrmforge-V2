@@ -625,7 +625,8 @@ function updatePlayStreaming(now) {
       stream.residency=new HuntCellResidency(active.world,stream.graph,stream.cellCatalog,stream.initialIds,
         {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry,
           addedCells:stream.savedAdditions});
-      if(stream.gravityPreview)stream.collapse=new HuntCollapsePreview(active.world,active.port,stream.residency,stream.terrainSave);
+      if(stream.structuralGravity)stream.collapse=new HuntCollapsePreview(active.world,active.port,
+        stream.residency,stream.terrainSave,{fixture:stream.gravityPreview});
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
@@ -1121,10 +1122,11 @@ function resetSite() {
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
         const gravityPreview=Boolean(collapseButton)&&recipe.seed===7;
-        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(gravityPreview?':gravity-'+gravityMode:''));
+        const structuralGravity=gravityPreview||(cellPreview&&gravityMode==='terrain');
+        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(structuralGravity?':gravity-'+gravityMode:''));
         const scaffold=gravityPreview?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
-        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,graph,initialIds,initialFootprint,footprint,
+        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,structuralGravity,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
@@ -1725,7 +1727,7 @@ if(playMode) {
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
         longestCameraHold:cellPreview?(openCameraHoldMs>(playStream?.longestCameraHoldMs??0)
           ?playStream.cameraHoldContext:playStream?.longestCameraHold??null):null,
-        replayEdits:exportHuntTerrainEdits(playStream?.terrainReplay??[],playStream?.collapse?.replay),
+        replayEdits:exportHuntTerrainEdits(playStream?.terrainReplay??[],playStream?.collapse?.outcomes),
         browserSave:playStream?{status:playStream.terrainSave.status,
           removedCells:playStream.terrainSave.removedCells.size,
           addedCells:playStream.terrainSave.additions.length}:null,
