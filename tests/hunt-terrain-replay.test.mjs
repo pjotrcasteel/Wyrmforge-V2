@@ -6,6 +6,8 @@ import {exportHuntTerrainEdits,recordHuntTerrainEdit,replayHuntTerrainEdit} from
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
 import {replayDataDigest} from '../src/replay-checkpoint.mjs';
+import {containsHuntLandform} from '../src/world-generation/hunt-landform-footprint.mjs';
+import {resolveHuntTerrainGravity,huntTerrainSaveIdentity} from '../src/hunt-gravity-mode.mjs';
 
 function occupancyDigest(world){
   return replayDataDigest({
@@ -63,8 +65,9 @@ test('a Fireball crossing a trail seam replays after both sides stream out and b
   assert.equal(restored.expected,first.expected);
 });
 
-test('browser restore keeps exact removed cells on initial and later-streamed terrain',async()=>{
+test('regular authored Hunt craters survive reload through the gravity bypass',async()=>{
   const {HuntTerrainSave}=await import('../src/hunt-terrain-save.mjs');
+  const {HuntCollapsePreview}=await import('../src/hunt-collapse-preview.mjs');
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
     siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
   const graph=generateAuthoredHuntTerrainGraph(site);
@@ -84,29 +87,44 @@ test('browser restore keeps exact removed cells on initial and later-streamed te
     set.publish();
     return loader;
   };
-  const save=new HuntTerrainSave(storage,'seed7');
+  const identity=mode=>{
+    const {terrain,defaultEnabled}=resolveHuntTerrainGravity(true,mode);
+    return huntTerrainSaveIdentity('seed7',mode,{structuralGravity:terrain,defaultEnabled});
+  };
+  const save=new HuntTerrainSave(storage,identity(null));
   const first=make(save);
   let expected;
   try{
     const {port,world}=first.terrain;
+    const resident=new Set([...ids,later]);
+    const bands=[...graph.layout.regions,...graph.layout.links].filter(band=>resident.has(band.id));
+    const ownerAt=(x,z)=>bands.find(band=>containsHuntLandform(band,x,z))?.id;
+    const collapse=new HuntCollapsePreview(world,port,{
+      publishedAt:(x,z)=>Boolean(ownerAt(x,z)),ownerAt
+    },save,{fixture:false,mixedTerrain:true,preserveMicroSurfaces:true});
     for(const [i,z] of [link.bounds.maxZ+.5,-95.5].entries()){
       const hit=port.raycast({origin:[.5,32,z],direction:[0,-1,0],maxDistance:42});
       assert.ok(hit);
       const edit=port.apply({id:'save-'+i,type:'carve-crater',...hit.cell,radius:2.3,depth:2},
         {captureRemovedCells:true});
       assert.equal(edit.removedCells.length,edit.removedVoxels);
-      save.commit(edit.removedCells);
+      collapse.acceptImpact(edit,{defer:true,multiple:true});
+      while(collapse.checkingSupport)collapse.stepSupportScan(192);
+      assert.notEqual(collapse.supportReport.status,'detached');
+      assert.equal(collapse.supportReport.editRevision,i+1);
     }
     assert.equal(save.status,'saved');
     expected=occupancyDigest(world);
   }finally{first.unload();}
-  const restored=new HuntTerrainSave(storage,'seed7');
-  const second=make(restored);
-  try{
-    assert.equal(occupancyDigest(second.terrain.world),expected);
-    assert.equal(restored.removedCells.size,save.removedCells.size);
-    assert.equal(new HuntTerrainSave(storage,'seed8').removedCells.size,0);
-  }finally{second.unload();}
+  for(const mode of ['off',null]){
+    const restored=new HuntTerrainSave(storage,identity(mode));
+    const second=make(restored);
+    try{
+      assert.equal(occupancyDigest(second.terrain.world),expected);
+      assert.equal(restored.removedCells.size,save.removedCells.size);
+    }finally{second.unload();}
+  }
+  assert.equal(new HuntTerrainSave(storage,'seed8').removedCells.size,0);
 });
 
 for(const shaped of [false,true])test(
@@ -312,7 +330,9 @@ test('one crater commits disconnected landings together and replays across strea
   const {TerrainStreamCellBuilder}=await import('../src/terrain-stream-cells.mjs');
   const {TerrainCellStreamSession}=await import('../src/terrain-cell-stream-session.mjs');
   const {HuntCollapsePreview}=await import('../src/hunt-collapse-preview.mjs');
-  const definition={schema:'voxel-v2.terrain-initialization.v1',siteId:'two-shelves',
+  const levels=Array.from({length:100},(_,index)=>1+index%10);
+  const definition={schema:'voxel-v2.terrain-initialization.v2',siteId:'two-shelves',
+    surfaceTiles:[-1,1].map(x=>({x,y:4,z:0,levels})),
     generatorVersion:'test',seed:7,chunkEdge:16,runs:[-1,1].flatMap(x=>[
       {x,y:0,z:0,length:1,material:4},
       {x,y:3,z:0,length:1,material:2},
@@ -322,21 +342,25 @@ test('one crater commits disconnected landings together and replays across strea
   while(!builder.done)builder.step();
   const cells=builder.cells,ids=cells.map(cell=>cell.id);
   const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
-  const open=identity=>{
-    const save=new HuntTerrainSave(storage,identity);
+  const open=(identity,mode=null)=>{
+    const {terrain,defaultEnabled}=resolveHuntTerrainGravity(true,mode);
+    const save=new HuntTerrainSave(storage,huntTerrainSaveIdentity(identity,mode,{
+      structuralGravity:terrain,defaultEnabled
+    }));
     const loader=new V2ExternalTerrainLoader(definition,{removedCells:save.removedCells,addedCells:save.additions});
     while(!loader.progress.done)loader.loadStep(1);
     const {world,port}=loader.terrain;
     const stream=new TerrainCellStreamSession(world,cells,{limit:2,initialResidentIds:ids,
       removedCells:save.removedCells,addedCells:save.additions});
-    const collapse=new HuntCollapsePreview(world,port,{
+    const collapse=terrain?new HuntCollapsePreview(world,port,{
       publishedAt:()=>true,ownerAt:x=>ids[x<0?0:1],trackAddedCells:(id,added)=>stream.trackAddedCells(id,added)
-    },save,{fixture:false,mixedTerrain:true});
+    },save,{fixture:false,mixedTerrain:true,preserveMicroSurfaces:true}):null;
     return {world,port,collapse,save,close:()=>loader.unload()};
   };
 
   const live=open('live'),replayed=open('replayed');
   try{
+    const initial=occupancyDigest(live.world);
     const command={id:'two-supports',type:'carve-crater',x:0,y:3,z:0,radius:2.3,depth:2};
     const result=live.port.apply(command,{captureRemovedCells:true});
     assert.deepEqual([...result.removedCells].sort(),['-1,3,0','1,3,0']);
@@ -351,6 +375,13 @@ test('one crater commits disconnected landings together and replays across strea
     assert.equal(live.collapse.replay.landed,null);
     assert.equal(live.save.additions.length,0);
     assert.deepEqual(live.collapse.protectedIds,ids);
+    // Reload during a partially landed batch must restore the last complete save.
+    const reset=open('live');
+    try{
+      assert.equal(occupancyDigest(reset.world),initial);
+      assert.equal(reset.save.removedCells.size,0);
+      assert.equal(reset.collapse.phase,'ready');
+    }finally{reset.close();}
 
     for(let tick=0;tick<120&&live.collapse.holdsFixture;tick++)live.collapse.tick([]);
     assert.equal(live.collapse.phase,'settled');
@@ -361,10 +392,14 @@ test('one crater commits disconnected landings together and replays across strea
     replayHuntTerrainEdit(replayed.port,ids,entry,{collapse:replayed.collapse,save:replayed.save});
     assert.deepEqual(replayed.save.additions,live.save.additions);
     assert.equal(occupancyDigest(replayed.world),occupancyDigest(live.world));
-    const reloaded=open('live');
-    try{
-      assert.equal(occupancyDigest(reloaded.world),occupancyDigest(live.world));
-    }finally{reloaded.close();}
+    for(const mode of [null,'off']){
+      const reloaded=open('live',mode);
+      try{
+        assert.equal(Boolean(reloaded.collapse),mode===null);
+        assert.equal(occupancyDigest(reloaded.world),occupancyDigest(live.world));
+        for(const x of [-1,1])assert.deepEqual(Array.from(reloaded.world.microSurfaceTile(x,1,0)),levels);
+      }finally{reloaded.close();}
+    }
   }finally{
     live.close();
     replayed.close();
