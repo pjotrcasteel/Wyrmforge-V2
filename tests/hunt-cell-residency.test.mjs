@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {HuntCellCatalog,HuntCellResidency} from '../src/hunt-cell-residency.mjs';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite,generateAuthoredHuntTerrainGraph} from '../src/world-generation/index.mjs';
+import {HuntWoodlandObjects} from '../src/hunt-woodland-objects.mjs';
+import {HuntWoodlandDamage} from '../src/hunt-woodland-damage.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 
 for(const seed of [7,19,42]){
@@ -48,6 +50,64 @@ for(const seed of [7,19,42]){
     }finally{loader.unload();}
   });
 }
+
+test('seed 7 preserves a cracked boulder, cleared collision and a crater through a streamed round trip',()=>{
+  const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
+    siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
+  const graph=generateAuthoredHuntTerrainGraph(site);
+  const catalog=new HuntCellCatalog(graph);
+  while(!catalog.done)catalog.step();
+  const ids=['region-entry','region-woodland-trail','link-region-entry-region-woodland-trail'];
+  const removedCells=new Set(),records=new Map();
+  const storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
+  const loader=new V2ExternalTerrainLoader(graph.initialTerrain(ids),{microSurfaceCapacity:2048,removedCells});
+  try{
+    while(!loader.progress.done)loader.loadStep(512);
+    const {world,port}=loader.terrain;
+    const residency=new HuntCellResidency(world,graph,catalog,ids,{entry:site.layout.topology.entry,removedCells});
+    const newObjects=()=>new HuntWoodlandObjects(graph,new HuntWoodlandDamage(storage,'seed-7-mixed'));
+    const objects=newObjects();
+    const coverage={key:id=>residency.propRegionKey(id),has:(x,z)=>residency.publishedAt(x,z)};
+    const settle=z=>{
+      const view={width:402,height:604,scale:16,camera:'hunt',panX:0,panY:-(z*.77-5*.64)*16};
+      for(let i=0;i<200;i++){
+        const ticket=residency.next({x:.5,y:5,z},{view});
+        if(!ticket)break;
+        residency.begin(ticket);
+        while(residency.metrics.transition.phase==='writing')residency.step(512);
+        residency.publish();
+        assert.ok(residency.metrics.residentCellIds.length<=96);
+      }
+      assert.ok(residency.covers(view));
+      objects.update(residency.metrics.residentRegions,port,coverage);
+    };
+    const rock=()=>[...objects.regions].flat().find(prop=>prop.kind==='boulder'&&prop.x===-5.5&&prop.z===-3.5);
+    settle(0);
+    const original=rock();
+    assert.ok(original);
+    assert.equal(objects.hitProp(original.id,port,coverage.has).hits,1);
+    const ground=port.raycast({origin:[.5,32,10.5],direction:[0,-1,0],maxDistance:42});
+    const edit=port.apply({id:'mixed-crater',type:'carve-crater',...ground.cell,radius:2.3,depth:2},
+      {captureRemovedCells:true});
+    assert.ok(edit.removedVoxels>0);
+    for(const id of edit.removedCells)removedCells.add(id);
+    objects.terrainChanged(edit.changedBounds,port,coverage.has);
+    for(const z of [-48,-96,-144,-208])settle(z);
+    assert.equal(rock(),undefined);
+    assert.equal(coverage.has(ground.cell.x,ground.cell.z),false);
+    for(const z of [-144,-96,-48,0])settle(z);
+    assert.ok(rock()?.damaged);
+    assert.equal(world.get(ground.cell.x,ground.cell.y,ground.cell.z),0);
+    const point={x:original.x,y:original.y,z:original.z};
+    assert.ok(objects.overlapsActor(point));
+    assert.equal(objects.hitProp(original.id,port,coverage.has).hits,2);
+    assert.equal(objects.overlapsActor(point),false);
+    const reloaded=newObjects();
+    reloaded.update(['region-entry'],port,coverage);
+    assert.ok(![...reloaded.regions].flat().some(prop=>prop.id===original.id));
+    assert.equal(world.get(ground.cell.x,ground.cell.y,ground.cell.z),0);
+  }finally{loader.unload();}
+});
 
 test('an encounter waiting further up the trail leaves directional prefetch active',()=>{
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
