@@ -73,7 +73,7 @@ The opt-in handoff preflights a candidate against its original VoxelWorld and re
 
 ### Initial fixed-step Physics consumer
 
-The in-process solver advances cohesive bodies vertically at 60 Hz with up to four ticks per call. It sweeps full voxel volumes against static terrain and other bodies, processing lower bodies first so supported stacks move in a deterministic order. It pauses on unknown coverage or existing overlap and caps unsupported travel at 64 m. A resting body remains Physics-owned and can resume falling if its support disappears. Partial static surfaces are conservatively treated as full cells. Play Hunt activation still requires actor collision, residency and replay integration. The solver does not settle bodies into static terrain yet.
+The in-process solver advances cohesive bodies vertically at 60 Hz with up to four ticks per call. It sweeps full voxel volumes against static terrain and other bodies, processing lower bodies first so supported stacks move in a deterministic order. It pauses on unknown coverage or existing overlap and caps unsupported travel at 64 m. A resting body remains Physics-owned and can resume falling if its support disappears. Partial static surfaces are conservatively treated as full cells. The actor solver can opt in to exact side, floor and ceiling sweeps against Physics-owned bodies. To keep the initial collision policy neutral, a falling body stops at actor contact and resumes once that space is clear. Play Hunt activation still requires residency, replay and scene integration. The solver does not settle bodies into static terrain yet.
 
 ## 6. iOS and Android constraints
 
