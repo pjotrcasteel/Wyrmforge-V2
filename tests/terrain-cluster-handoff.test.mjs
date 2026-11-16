@@ -68,3 +68,36 @@ test('one partial surface rejects the entire cluster without discarding microvox
   assert.equal(world.microSurfaceTile(1,2,0)[0],5);
   assert.deepEqual(handoff.bodies,[]);
 });
+
+test('shape-preserving handoff keeps exact microvoxels through settlement and retry',()=>{
+  const world=new VoxelWorld({chunkEdge:16,microSurfaceCapacity:1});
+  const handoff=new TerrainClusterHandoff(world,{preserveMicroSurfaces:true});
+  const levels=Array.from({length:100},(_,index)=>1+index%10);
+  world.set(0,0,0,4);
+  world.set(0,2,0,3);
+  world.setMicroSurfaceTile(0,2,0,levels);
+  const detached=handoff.detach(scan(world));
+  assert.equal(detached.status,'detached');
+  assert.deepEqual(detached.body.cells[0].levels,levels);
+  assert.ok(Object.isFrozen(detached.body.cells[0].levels));
+  assert.equal(world.microSurfaceCount,0);
+
+  world.set(0,2,0,3);
+  assert.equal(handoff.settle(detached.body,-1,options.isKnown).status,'blocked-settlement');
+  world.set(0,2,0,0);
+
+  world.set(4,0,0,3);
+  world.setMicroSurfaceTile(4,0,0,levels);
+  const revision=world.revision;
+  assert.equal(handoff.settle(detached.body,-1,options.isKnown).status,'surface-capacity');
+  assert.equal(world.revision,revision);
+  assert.equal(world.get(0,1,0),0);
+  assert.equal(handoff.bodies.length,1);
+
+  world.set(4,0,0,0);
+  const settled=handoff.settle(detached.body,-1,options.isKnown);
+  assert.equal(settled.status,'settled');
+  assert.deepEqual(settled.cells,[{x:0,y:1,z:0,material:3,levels}]);
+  assert.deepEqual(Array.from(world.microSurfaceTile(0,1,0)),levels);
+  assert.deepEqual(handoff.bodies,[]);
+});

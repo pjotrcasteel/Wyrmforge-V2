@@ -13,10 +13,12 @@ export class TerrainClusterHandoff {
   #bodies=[];
   #cellCount=0;
   #nextId=1;
+  #preserveMicroSurfaces;
 
-  constructor(world){
+  constructor(world,{preserveMicroSurfaces=false}={}){
     if(!(world instanceof VoxelWorld))throw new TypeError('Expected an authoritative V2 voxel world');
     this.#world=world;
+    this.#preserveMicroSurfaces=preserveMicroSurfaces;
   }
 
   get bodies(){return this.#bodies.slice();}
@@ -29,17 +31,18 @@ export class TerrainClusterHandoff {
     if(this.#bodies.length>=MAX_CLUSTERS||this.#cellCount+cells.length>MAX_DYNAMIC_CELLS){
       return {status:'capacity'};
     }
-    const dirty=new Set();
-    for(const {x,y,z,material} of cells){
-      // Full-voxel payloads cannot preserve a partial surface or an invalidated
-      // tile on the solid beneath them. Defer until the payload represents both.
-      if(material===V2_BEDROCK_MATERIAL||world.get(x,y,z)!==material||
-          world.microSurfaceTile(x,y,z)||world.microSurfaceTile(x,y-1,z)){
+    const dirty=new Set(),payload=[];
+    for(const cell of cells){
+      const {x,y,z,material}=cell;
+      if(material===V2_BEDROCK_MATERIAL||world.get(x,y,z)!==material||world.microSurfaceTile(x,y-1,z)){
         return {status:'ineligible-terrain'};
       }
+      const levels=world.microSurfaceTile(x,y,z);
+      if(levels&&!this.#preserveMicroSurfaces)return {status:'ineligible-terrain'};
+      payload.push(levels?Object.freeze({...cell,levels:Object.freeze(Array.from(levels))}):cell);
       markDirtyForEditedVoxel(dirty,world.chunkEdge,x,y,z);
     }
-    const body=Object.freeze({id:this.#nextId++,cells,bounds});
+    const body=Object.freeze({id:this.#nextId++,cells:Object.freeze(payload),bounds});
     const dirtyChunks=Object.freeze([...dirty].sort());
     for(const {x,y,z} of cells)world.set(x,y,z,0);
     this.#bodies.push(body);
@@ -56,24 +59,34 @@ export class TerrainClusterHandoff {
     }
     const world=this.#world,revision=world.revision;
     const dirty=new Set(),cells=[];
-    let supported=false;
-    for(const {x,y,z,material} of body.cells){
+    let supported=false,tileCount=0;
+    for(const {x,y,z,material,levels} of body.cells){
       const targetY=y+offsetY;
       if(!isKnown(x,targetY,z)||!isKnown(x,targetY-1,z)||world.get(x,targetY,z)!==0||
           world.microSurfaceTile(x,targetY-1,z)){
         return {status:'blocked-settlement'};
       }
       if(world.get(x,targetY-1,z)!==0)supported=true;
-      cells.push(Object.freeze({x,y:targetY,z,material}));
+      if(levels){
+        if(!isKnown(x,targetY+1,z)||world.get(x,targetY+1,z)!==0){
+          return {status:'blocked-settlement'};
+        }
+        tileCount++;
+      }
+      cells.push(Object.freeze({x,y:targetY,z,material,...(levels?{levels}:{})}));
       markDirtyForEditedVoxel(dirty,world.chunkEdge,x,targetY,z);
     }
     if(world.revision!==revision)return {status:'stale-settlement'};
     if(!supported)return {status:'blocked-settlement'};
+    if(world.microSurfaceCount+tileCount>world.microSurfaceCapacity)return {status:'surface-capacity'};
     const dirtyChunks=Object.freeze([...dirty].sort());
     // Synchronous ownership transfer. No callback runs between release and write.
     this.#bodies.splice(index,1);
     this.#cellCount-=body.cells.length;
     for(const {x,y,z,material} of cells)world.set(x,y,z,material);
+    for(const {x,y,z,levels} of cells){
+      if(levels)world.setMicroSurfaceTile(x,y,z,levels);
+    }
     return {status:'settled',id:body.id,cells:Object.freeze(cells),dirtyChunks,worldRevision:world.revision};
   }
 }
