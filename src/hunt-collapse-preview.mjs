@@ -14,7 +14,7 @@ const TERRAIN=new Set(Array.from({length:255},(_,index)=>index+1)
 const OWNER='region-entry:cell:8:0:1';
 const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:10,radius:1.1};
 const SUPPORT_KEY='5,6,10';
-const MAX_TERRAIN_CLUSTER_CELLS=64;
+const MAX_TERRAIN_CLUSTER_CELLS=128;
 const MAX_TERRAIN_ADDITIONS=256;
 const MAX_TERRAIN_DROP=12;
 const FALL_COLORS={
