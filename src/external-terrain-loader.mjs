@@ -110,14 +110,24 @@ export class V2ExternalTerrainLoader {
   #loaded=0;
   #closed=false;
   #removedCells;
+  #addedCells;
+  #addedKeys;
+  #addedIndex=0;
 
-  constructor(definition,{epoch=1,microSurfaceCapacity,removedCells=null}={}) {
+  constructor(definition,{epoch=1,microSurfaceCapacity,removedCells=null,addedCells=[]}={}) {
     if(!Number.isSafeInteger(epoch) || epoch<1) {
       throw new RangeError('Expected a positive V2 terrain world epoch');
     }
     this.#definition=validateExternalTerrainDefinition(definition);
     this.#epoch=epoch;
     this.#removedCells=removedCells;
+    if(!Array.isArray(addedCells)||addedCells.length>4096)throw new RangeError('Too many loaded voxel additions');
+    this.#addedCells=addedCells.map(({x,y,z,material})=>{
+      if(![x,y,z].every(Number.isSafeInteger)||!Number.isInteger(material)||material<1||material>255||
+          material===V2_BEDROCK_MATERIAL)throw new TypeError('Invalid loaded voxel addition');
+      return {x,y,z,material};
+    });
+    this.#addedKeys=new Set(this.#addedCells.map(({x,y,z})=>x+','+y+','+z));
     this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge,microSurfaceCapacity});
   }
 
@@ -127,6 +137,7 @@ export class V2ExternalTerrainLoader {
       loadedCells:this.#loaded,
       totalCells:this.#definition.totalCells,
       done:this.#runIndex===this.#definition.runs.length &&
+        this.#addedIndex===this.#addedCells.length &&
         this.#surfaceIndex===(this.#definition.surfaceTiles?.length??0) &&
         !this.#closed,
       surfaceTilesLoaded:this.#surfaceIndex,
@@ -159,13 +170,20 @@ export class V2ExternalTerrainLoader {
         this.#runOffset=0;
       }
     }
-    if(this.#runIndex===this.#definition.runs.length &&
+    while(remaining>0&&this.#runIndex===this.#definition.runs.length&&this.#addedIndex<this.#addedCells.length){
+      const {x,y,z,material}=this.#addedCells[this.#addedIndex++];
+      if(this.#world.get(x,y,z))throw new Error('Saved terrain addition overlaps authored occupancy');
+      this.#world.set(x,y,z,material);
+      remaining--;
+    }
+    if(this.#runIndex===this.#definition.runs.length&&this.#addedIndex===this.#addedCells.length&&
         this.#definition.surfaceTiles) {
       // Microtile occupancy is budgeted alongside coarse voxel writes.
       while(remaining>0 &&
           this.#surfaceIndex<this.#definition.surfaceTiles.length) {
         const tile=this.#definition.surfaceTiles[this.#surfaceIndex++];
-        if(this.#world.get(tile.x,tile.y,tile.z)){
+        if(this.#world.get(tile.x,tile.y,tile.z)&&!this.#world.get(tile.x,tile.y+1,tile.z)&&
+            !this.#addedKeys.has(tile.x+','+tile.y+','+tile.z)){
           this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
         }
         remaining--;

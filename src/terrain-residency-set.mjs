@@ -23,13 +23,13 @@ export class V2TerrainResidencySet {
     this.#removedCells=removedCells;
   }
 
-  register(id,definition,{resident=false,regenerate=null}={}) {
+  register(id,definition,{resident=false,regenerate=null,addedCells=[]}={}) {
     if(this.#job)throw new Error('Cannot register during residency transition');
     if(typeof id!=='string'||!id||this.#bands.has(id)||this.#bands.size>=this.#maxBands)
       throw new RangeError('Invalid or duplicate terrain band ID');
     if(resident && this.residentIds.length>=this.#limit)
       throw new RangeError('Resident terrain band limit exceeded');
-    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident,regenerate,removedCells:this.#removedCells}));
+    this.#bands.set(id,new V2TerrainBandResidency(this.#world,definition,{resident,regenerate,removedCells:this.#removedCells,addedCells}));
     this.#peak=Math.max(this.#peak,this.residentIds.length);
   }
 

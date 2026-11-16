@@ -1,4 +1,4 @@
-import {HuntCellCatalog,HuntCellResidency} from './src/hunt-cell-residency.mjs';
+import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
 import {HuntWoodlandDamage} from './src/hunt-woodland-damage.mjs';
@@ -596,7 +596,8 @@ function updatePlayStreaming(now) {
     if(stream.cellCatalog){
       if(!stream.cellCatalog.done)return;
       stream.residency=new HuntCellResidency(active.world,stream.graph,stream.cellCatalog,stream.initialIds,
-        {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry});
+        {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry,
+          addedCells:stream.savedAdditions});
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
@@ -1046,7 +1047,8 @@ function resetSite() {
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
         const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity);
-        playStream={phase:'waiting',terrainSave,graph,initialIds,initialFootprint,footprint,
+        const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,terrainSave.additions):[];
+        playStream={phase:'waiting',terrainSave,savedAdditions,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
@@ -1055,7 +1057,8 @@ function resetSite() {
           directTreeHits:0,directBoulderHits:0,
           residency:null,respawnPending:false,startedAt:null,elapsedMs:null};
         loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),
-          {epoch:terrainEpochs.next(),microSurfaceCapacity:2048,removedCells:terrainSave.removedCells});
+          {epoch:terrainEpochs.next(),microSurfaceCapacity:2048,removedCells:terrainSave.removedCells,
+            addedCells:savedAdditions.filter(cell=>initialIds.includes(cell.owner.split(':cell:')[0]))});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
           {epoch:terrainEpochs.next()});
