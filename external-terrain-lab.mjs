@@ -42,7 +42,7 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
-  spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,
+  spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,HUNT_PIXELS_PER_VOXEL,
   targetHuntFireball,isHuntCastTap,HuntContextRecoveryEvidence
 } from './src/hunt-play-runtime.mjs';
 import {
@@ -1433,7 +1433,7 @@ function frame(now) {
         })
         : null;
       const scale=playMode
-        ? 16*pixelRatio*viewZoom
+        ? HUNT_PIXELS_PER_VOXEL*pixelRatio*viewZoom
         : fit ? fit.scale*viewZoom
         : Math.max(9,Math.min(20,
           canvas.width/(camera==='inspection' ? 37 : 34)))*viewZoom;

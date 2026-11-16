@@ -3,30 +3,48 @@
 import {VoxelWorld} from './voxel-world.mjs';
 import {TerrainEditLedger} from './terrain-edit-ledger.mjs';
 
-export const FIRE_HUNT_MATERIALS=Object.freeze([
-  {id:'grass',name:'Wet Forest grass',group:'Wet Forest',voxel:1,slot:'grass/meadow'},
-  {id:'grass-shade',name:'Shaded grass',group:'Wet Forest',voxel:1,slot:'grass/meadow-dark'},
-  {id:'roots',name:'Rooted soil · grass edge',group:'Wet Forest',voxel:1,slot:'grass/rooted-soil'},
-  {id:'dirt',name:'Trail dirt',group:'Wet Forest',voxel:2,slot:'dirt/earth'},
-  {id:'damp-dirt',name:'Damp forest soil',group:'Wet Forest',voxel:2,slot:'dirt/earth-dark'},
-  {id:'stone',name:'Cliff stone',group:'Wet Forest',voxel:3,slot:'stone/bedrock'},
-  {id:'bark',name:'Forest bark',group:'Forest props',voxel:3,slot:'stone/bedrock',swatch:[82,62,43]},
-  {id:'charred-bark',name:'Charred bark',group:'Scorched Approach',voxel:3,slot:'stone/bedrock',swatch:[48,38,32]},
-  {id:'scorched-soil',name:'Scorched soil',group:'Scorched Approach',voxel:2,slot:'dirt/earth',swatch:[79,51,40]},
-  {id:'ash',name:'Ash',group:'Scorched Approach',voxel:2,slot:'dirt/earth',swatch:[119,108,99]},
-  {id:'basalt',name:'Volcanic basalt',group:'Volcanic Lair',voxel:3,slot:'stone/bedrock',swatch:[58,56,61]},
-  {id:'lava-crust',name:'Cooled lava crust',group:'Volcanic Lair',voxel:3,slot:'stone/bedrock',swatch:[64,42,37]},
-  {id:'lava',name:'Molten lava',group:'Volcanic Lair',voxel:3,slot:'stone/bedrock',swatch:[222,83,24]}
-].map(material=>Object.freeze({...material,...(material.swatch?{swatch:Object.freeze(material.swatch)}:{})})));
+const material=(id,name,group,voxel,slot,asset,usage)=>Object.freeze({id,name,group,voxel,slot,asset,usage});
 
-export function createMaterialLabTerrain(materialId,scene,excavated=false){
+export const FIRE_HUNT_MATERIALS=Object.freeze([
+  material('grass','Moss and grass','Wet Forest',1,'grass/meadow','grass','Moist woodland ground and the top lip of mossy cliffs.'),
+  material('grass-shade','Shaded moss','Wet Forest',1,'grass/meadow-dark','grass-shade','Low-contrast variation beneath canopy and around boulders.'),
+  material('roots','Rooted bank','Wet Forest',1,'grass/rooted-soil','roots','Vertical soil banks directly below the grass lip.'),
+  material('dirt','Trampled earth','Wet Forest',2,'dirt/earth','earth','Navigable paths and the upper layer of fresh craters.'),
+  material('damp-dirt','Wet mud','Wet Forest',2,'dirt/earth-dark','mud','Low-lying damp patches and shaded pockets off the main trail.'),
+  material('stone','Layered cliff rock','Wet Forest',3,'stone/bedrock','stone','Vertical cliff faces and rock exposed by deep excavation.'),
+  material('bark','Forest bark','Wet Forest',1,'grass/meadow','bark','Vertical tree trunks and fallen wood surfaces.'),
+  material('charred-bark','Charred bark','Scorched Approach',1,'grass/meadow','charred','Burned trunks and deadwood, with its grain oriented vertically.'),
+  material('dark-rock','Dark fractured rock','Cliff study',3,'stone/bedrock','dark-rock','Cooler, cross-grain alternative for comparison on the same wall.')
+]);
+
+export const TERRAIN_BASE_TILES=Object.freeze({
+  'grass/meadow':'grass','grass/meadow-dark':'grass-shade','grass/rooted-soil':'roots',
+  'dirt/earth':'earth','dirt/earth-dark':'mud','stone/bedrock':'stone'
+});
+
+export const MATERIAL_LAB_TARGET=Object.freeze({x:1,y:2,z:-1});
+export const MATERIAL_LAB_SPAWN=Object.freeze({x:.5,z:5});
+export function createMaterialLabTerrain(materialId,scene,excavated=false,boundary='broken'){
   const material=FIRE_HUNT_MATERIALS.find(item=>item.id===materialId);
-  if(!material||!['sample','repeats','layers'].includes(scene))throw new RangeError('Unknown material or scene');
+  if(!material||!['hunt','sample','repeats','layers','cliff'].includes(scene))throw new RangeError('Unknown material or scene');
   const world=new VoxelWorld();
-  const radius={sample:3,repeats:7,layers:6}[scene];
+  const radius={sample:3,repeats:7,layers:6,cliff:6,hunt:19}[scene];
   for(let x=-radius;x<radius;x++){
     for(let z=-radius;z<radius;z++){
-      if(scene==='layers'){
+      if(scene==='hunt'){
+        const wallZ=-3+Math.round(1.6*Math.sin(x*.29));
+        const shelf=z<wallZ;
+        const height=shelf?6:2;
+        const edgeOffset=boundary==='hard'?0:Math.round(.7*Math.sin(z*.9)+.55*Math.cos(z*.43));
+        const path=Math.abs(x-edgeOffset)<=1;
+        for(let y=0;y<=height;y++){
+          const surface=y===height;
+          world.set(x,y,z,surface?(path&&!shelf?2:1):y===height-1?2:3);
+        }
+      }else if(scene==='cliff'){
+        const height=z<0?5:0;
+        for(let y=0;y<=height;y++)world.set(x,y,z,y===5?1:y===4?2:3);
+      }else if(scene==='layers'){
         world.set(x,0,z,3);
         world.set(x,1,z,3);
         world.set(x,2,z,2);
@@ -37,8 +55,8 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false){
       }
     }
   }
-  const edit=scene==='layers'&&excavated?new TerrainEditLedger(world).apply({
-    id:'material-lab-crater',type:'carve-crater',x:0,y:3,z:0,radius:3.5,depth:3
+  const edit=(scene==='layers'||scene==='hunt')&&excavated?new TerrainEditLedger(world).apply({
+    id:'material-lab-crater',type:'carve-crater',...(scene==='hunt'?MATERIAL_LAB_TARGET:{x:0,y:3,z:0}),radius:scene==='hunt'?2.3:3.5,depth:scene==='hunt'?2:3
   }):null;
-  return {world,radius,highest:scene==='layers'?4:2,removedVoxels:edit?.removedVoxels??0};
+  return {world,radius,highest:scene==='hunt'?7:scene==='cliff'?6:scene==='layers'?4:2,removedVoxels:edit?.removedVoxels??0};
 }

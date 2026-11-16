@@ -1,17 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FIRE_HUNT_MATERIALS,createMaterialLabTerrain} from '../src/fire-hunt-material-lab.mjs';
+import {readFileSync} from 'node:fs';
+import {spawnTerrainActor} from '../src/terrain-actor.mjs';
+import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
 import {terrainArtKey,TERRAIN_ART_CHANNELS,TERRAIN_ART_SLOTS} from '../src/terrain-material-handoff.mjs';
 import {terrainMaterial} from '../src/terrain-materials.mjs';
 import {buildExposedFaceMeshes} from '../src/exposed-face-mesher.mjs';
 
 test('Fire Hunt lab includes every current authoring slot and valid preview carriers',()=>{
-  assert.deepEqual(new Set(FIRE_HUNT_MATERIALS.filter(item=>!item.swatch).map(item=>item.slot)),new Set(TERRAIN_ART_SLOTS));
+  assert.deepEqual(new Set(Object.keys(TERRAIN_BASE_TILES)),new Set(TERRAIN_ART_SLOTS));
   assert.equal(new Set(FIRE_HUNT_MATERIALS.map(item=>item.id)).size,FIRE_HUNT_MATERIALS.length);
   for(const item of FIRE_HUNT_MATERIALS){
     assert.ok(terrainMaterial(item.voxel));
+    const tile=readFileSync(new URL('../art/fire-hunt-materials/'+item.asset+'.png',import.meta.url));
+    assert.equal(tile.readUInt32BE(16),64);
+    assert.equal(tile.readUInt32BE(20),64);
     for(const channel of TERRAIN_ART_CHANNELS)assert.ok(terrainArtKey(item.slot,channel));
-    for(const scene of ['sample','repeats','layers']){
+    for(const scene of ['sample','repeats','layers','cliff']){
       const {world}=createMaterialLabTerrain(item.id,scene);
       assert.ok(buildExposedFaceMeshes(world).length);
     }
@@ -28,4 +33,18 @@ test('the material lab crater exposes stone and dirt through a real terrain edit
   const restored=createMaterialLabTerrain('grass','layers');
   assert.equal(restored.world.get(0,3,0),1);
   assert.equal(restored.removedVoxels,0);
+});
+
+test('Hunt-scale comparison preserves the same cliff and damage geometry across materials',()=>{
+  const layered=createMaterialLabTerrain('stone','hunt',true);
+  const dark=createMaterialLabTerrain('dark-rock','hunt',true);
+  assert.equal(layered.world.revision,dark.world.revision);
+  assert.equal(layered.removedVoxels,dark.removedVoxels);
+  assert.ok(layered.removedVoxels>0);
+  const {x,y,z}=MATERIAL_LAB_TARGET;
+  assert.equal(layered.world.get(x,y,z),0);
+  assert.equal(layered.world.get(8,4,-12),3);
+  assert.equal(layered.world.get(8,5,-12),2);
+  assert.equal(layered.world.get(8,6,-12),1);
+  assert.ok(Math.abs(spawnTerrainActor(layered.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}).y-3)<.001);
 });
