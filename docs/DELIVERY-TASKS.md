@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **F07-01 — Foundation acceptance evidence on the actual Hunt ([#165](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/165))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **H08-08 — World Objects damage slice ([#171](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/171))**. Gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -126,15 +126,16 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 
 ### F07-01 — Foundation acceptance evidence on the actual Hunt
 - **GitHub Issue:** [#165](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/165)
-- **Status:** `READY` (parallel recurring check, never blocks first playable movement unless it reveals a critical defect)
+- **Status:** `DONE FOR NOW` — owner accepted iPhone Safari, Android Firefox and Android Chrome. Android Firefox has the recorded Android telemetry. Chrome acceptance is owner-reported.
 - **Delivers:** reliable real-device Voxel V2 baseline with a moving player in a generated Hunt, not a static 10-minute lab.
 - **Dependencies:** H08-01.
 - **Gate:** iPhone Safari and Android Chrome report build, route, seed, p50/p95/p99 frame intervals, >33/50/100 ms hitches, terrain memory/queue peaks, responsive controls, context-loss recovery and observed defects. No phone evidence = not accepted.
-- **Evidence:** iPhone Safari seed 7 in build `395d495` completed the full Hunt with 17 ms rolling p95, no terrain-blocked steps or camera holds, and a peak of 96 retained terrain definitions. Report now includes session >50/100 ms hitch counts, maximum foreground interval, and WebGL loss/restore counters. Broader device acceptance remains open.
+- **Evidence:** iPhone Safari seed 7 in build `395d495` completed the full Hunt with 17 ms rolling p95, no terrain-blocked steps or camera holds, and a peak of 96 retained terrain definitions. Report now includes session >50/100 ms hitch counts, maximum foreground interval, and WebGL loss/restore counters. Sustained release testing remains under R10-02.
 - **iPhone Safari context-loss evidence:** Build `60500c3` reported one loss, one successful restore, zero restore failures, drained uploads and cleared movement pause. Both Fireball edits remained in the saved journal. This run covered 16.7 m at 17 ms rolling p95 with a 48 ms maximum interval.
 - **Context-loss test:** Add `contextTest=1` to the immutable Play Hunt URL. Open frame details, trigger a real browser context loss and restore, then verify movement resumes on the same terrain after queued uploads drain. Save the report. Unsupported browser extensions leave this check pending.
 - **Recovery evidence follow-up:** Reports capture terrain authority, committed edit count, persisted removals and actor position before loss and after upload drain, plus the first observed horizontal movement in response to input after restore. Upload drain is timed separately from the manual wait to request restoration. Directional tree falls are deferred to Physics and remain tracked under #171.
 - **Foundation audit:** [Current evidence matrix](VOXEL-V2-FOUNDATION-AUDIT.md#play-hunt-foundation-review--2026-11-16) records the scoped iPhone evidence and remaining gates. The camera-cell regression verifies eviction, recreation and crater persistence for seeds 7, 19 and 42 under the 96-cell cap.
+- **Android evidence, build `9a8794b`:** Firefox 160 completed 266.4 m through extraction, 8.3 ms rolling p95, zero camera holds, zero terrain-blocked steps, and one WebGL restore with 14 ms upload drain. Both edits and actor position matched before and after restore. The owner also accepted Chrome separately. [Device acceptance](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/165#issuecomment-6910407442).
 - **Done for now:** Measured Play Hunt baselines exist for the required named devices with no uninvestigated critical input, frame or memory fault; retain future full-load optimization for R10-02.
 
 ### F07-02 — Terrain edits, collision and replay in the moving Hunt
@@ -316,6 +317,7 @@ H08-05 physical-object completion remain open.
 - **Gate:** repeated hits and burst edits stay replayable, collision updates immediately, no ghost geometry, consistent frame and edit-to-visible latency.
 - **Dependencies:** F07-02, H08-05, H08-07.
 - **World Objects prerequisite:** When a committed terrain edit removes a live tree's root support, the resident trunk and its collider are replaced by a fallen log if the lower floor supports it. Otherwise the unsupported tree collider is removed. Regeneration uses current terrain and stable placement IDs. Live support loss plays a short presentation-only fall and reports up to eight recent outcomes. Reload reconstructs the settled prop. A direct Fireball hit to the trunk now marks the tree, and a second hit fells it. World Objects owns the saved hit state and settled collider. Dynamic rigid-body motion remains a Physics follow-up.
+- **Boulder damage:** Fireball resolves a direct boulder hit against the same world ray as terrain and trees. The first hit cracks it, the second removes its collider, and the state persists by placement ID. Existing logs remain scenery or settled prop colliders. The integrated encounter gate remains open.
 - **Done for now:** At least one Wizard spell visibly damages terrain and a physical object, changes authoritative collision/pathing, and survives repeated hits and replay without unacceptable frame or edit latency. Stop; extra spell VFX/upgrades can follow.
 
 ### H08-09 — Extraction, upgrades and cross-Hunt journey continuity
