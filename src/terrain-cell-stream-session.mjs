@@ -9,6 +9,7 @@ export class TerrainCellStreamSession {
   #residency;
   #cells;
   #registered=new Set();
+  #bounds;
   #flight=null;
 
   constructor(world,cells,{limit=48,preload=8,retain=16,removedCells=null,initialResidentIds=[]}={}){
@@ -16,6 +17,7 @@ export class TerrainCellStreamSession {
     this.#residency=new V2TerrainResidencySet(world,{residentLimit:limit,
       maxBands:Math.max(cells.length,limit),removedCells});
     this.#cells=new Map(cells.map(cell=>[cell.id,cell.definition]));
+    this.#bounds=new Map(cells.map(cell=>[cell.id,cell.bounds]));
     for(const id of initialResidentIds)this.#register(id,true);
   }
 
@@ -40,6 +42,15 @@ export class TerrainCellStreamSession {
     const regenerate=()=>this.#cells.get(id);
     this.#residency.register(id,regenerate(),{resident,regenerate});
     this.#registered.add(id);
+  }
+
+  trackAddedCells(id,cells){
+    const bounds=this.#bounds.get(id);
+    if(!bounds||!Array.isArray(cells)||cells.length>256||cells.some(({x,z})=>
+      x<bounds.minX||x>bounds.maxX||z<bounds.minZ||z>bounds.maxZ)){
+      throw new RangeError('Added voxels are outside their streaming cell');
+    }
+    this.#residency.trackAddedCells(id,cells);
   }
 
   get storageMetrics(){return this.#residency.storageMetrics;}

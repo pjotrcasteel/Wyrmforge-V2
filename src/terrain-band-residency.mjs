@@ -1,7 +1,7 @@
 // H08-02B: bounded residency of one authored terrain band.
 // The caller owns admission, movement safety, mesh publication and exclusive
 // access while a transition runs. The world/port/edit ledger never change.
-// Only destructive edits to authored occupancy are supported by this slice.
+// Full-voxel additions have an explicit owner and share the write budget.
 import {validateExternalTerrainDefinition,MAX_INITIAL_TERRAIN_STEP_CELLS} from './external-terrain-loader.mjs';
 import {markDirtyForEditedVoxel} from './chunk-dirty.mjs';
 import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
@@ -26,6 +26,9 @@ export class V2TerrainBandResidency {
   #regenerate;
   #signature;
   #removed=new Set();
+  #additions=new Map();
+  #additionQueue=[];
+  #additionIndex=0;
   #surfaceOverrides=new Map();
   #phase='resident';
   #run=0;
@@ -56,13 +59,31 @@ export class V2TerrainBandResidency {
 
   get progress() {
     return Object.freeze({phase:this.#phase,operations:this.#operations,
-      removedCells:this.#removed.size,surfaceOverrides:this.#surfaceOverrides.size,
+      removedCells:this.#removed.size,addedCells:this.#additions.size,surfaceOverrides:this.#surfaceOverrides.size,
       done:['resident','evicted'].includes(this.#phase)});
   }
 
   get dirtyChunks() {
     if(!this.progress.done)throw new Error('Terrain residency transition incomplete');
     return new Set(this.#dirty);
+  }
+
+  get addedCellKeys(){return this.#additions.keys();}
+
+  trackAddedCells(cells){
+    if(this.#phase!=='resident')throw new Error('Added voxels require a resident owner');
+    if(!Array.isArray(cells)||cells.length>256)throw new RangeError('Invalid added voxel batch');
+    const next=new Map(this.#additions);
+    for(const {x,y,z,material} of cells){
+      if(![x,y,z].every(Number.isSafeInteger)||!Number.isInteger(material)||material<1||material>255||
+          material===V2_BEDROCK_MATERIAL||this.#world.get(x,y,z)!==material||
+          this.#world.microSurfaceTile(x,y,z)){
+        throw new RangeError('Expected a committed full voxel addition');
+      }
+      next.set(key(x,y,z),{x,y,z,material});
+    }
+    if(next.size>512)throw new RangeError('Terrain band addition capacity exceeded');
+    this.#additions=next;
   }
 
   beginEviction() {
@@ -88,6 +109,7 @@ export class V2TerrainBandResidency {
     this.#phase=phase;
     this.#run=0;this.#offset=0;this.#tile=0;
     this.#operations=0;this.#dirty.clear();
+    this.#additionQueue=[...this.#additions.values()];this.#additionIndex=0;
   }
 
   #mark(x,y,z) {
@@ -106,7 +128,7 @@ export class V2TerrainBandResidency {
     const x=run.x+this.#offset,{y,z,material}=run;
     const id=key(x,y,z),actual=this.#world.get(x,y,z);
     if(this.#phase==='evicting') {
-      if(actual===0)this.#removed.add(id);
+      if(actual===0||this.#additions.has(id))this.#removed.add(id);
       else {
         if(actual!==material)throw new Error('Unsupported non-destructive terrain mutation');
         this.#world.set(x,y,z,0);
@@ -124,13 +146,31 @@ export class V2TerrainBandResidency {
 
   #restoreSurface(tile) {
     const {x,y,z,levels}=tile;
-    if(!this.#world.get(x,y,z))return;
     const id=key(x,y,z);
+    if(!this.#world.get(x,y,z)||this.#world.get(x,y+1,z)||this.#additions.has(id))return;
     const actual=this.#surfaceOverrides.has(id)?this.#surfaceOverrides.get(id):levels;
     if(actual!==null) {
       this.#world.setMicroSurfaceTile(x,y,z,actual);
       this.#mark(x,y,z);
     }
+  }
+
+  #visitAddition({x,y,z,material}){
+    const actual=this.#world.get(x,y,z);
+    if(this.#phase==='evicting'){
+      if(!actual){
+        this.#additions.delete(key(x,y,z));
+        return;
+      }
+      if(actual!==material||this.#world.microSurfaceTile(x,y,z)){
+        throw new Error('Unsupported mutation of a tracked terrain addition');
+      }
+      this.#world.set(x,y,z,0);
+    }else{
+      if(actual!==0)throw new Error('Added voxel would overwrite authoritative occupancy');
+      this.#world.set(x,y,z,material);
+    }
+    this.#mark(x,y,z);
   }
 
   step(maxCells=512) {
@@ -145,12 +185,15 @@ export class V2TerrainBandResidency {
         this.#captureSurface(tiles[this.#tile++]);
       } else if(this.#run<runs.length) {
         this.#visitCell(runs[this.#run]);
+      } else if(this.#additionIndex<this.#additionQueue.length) {
+        this.#visitAddition(this.#additionQueue[this.#additionIndex++]);
       } else if(this.#phase==='reloading'&&this.#tile<tiles.length) {
         this.#restoreSurface(tiles[this.#tile++]);
       } else break;
       remaining--;this.#operations++;
     }
-    if(this.#run===runs.length&&this.#tile===tiles.length) {
+    if(this.#run===runs.length&&this.#tile===tiles.length&&this.#additionIndex===this.#additionQueue.length) {
+      this.#additionQueue=[];
       this.#phase=this.#phase==='evicting'?'evicted':'resident';
       if(this.#phase==='evicted'&&this.#regenerate)this.#definition=null;
       if(this.#phase==='resident') {

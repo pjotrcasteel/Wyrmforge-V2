@@ -57,6 +57,24 @@ export class V2TerrainResidencySet {
     return {definitions,runs,microTiles,removedCells,surfaceOverrides};
   }
 
+  trackAddedCells(id,cells){
+    if(this.#job)throw new Error('Cannot track terrain writes during a residency transition');
+    const band=this.#bands.get(id);
+    if(!band)throw new RangeError('Unknown owner of added terrain');
+    if(!Array.isArray(cells)||cells.length>256)throw new RangeError('Invalid added voxel batch');
+    const owners=new Map();
+    for(const [owner,entry] of this.#bands){
+      for(const key of entry.addedCellKeys)owners.set(key,owner);
+    }
+    for(const {x,y,z} of cells){
+      const key=x+','+y+','+z;
+      if(owners.has(key)&&owners.get(key)!==id)throw new RangeError('Added voxel already has an owner');
+      owners.set(key,id);
+    }
+    if(owners.size>4096)throw new RangeError('Terrain addition capacity exceeded');
+    band.trackAddedCells(cells);
+  }
+
   begin(id,action,{protectedIds=[]}={}) {
     if(this.#job)throw new Error('Residency transition already running');
     const band=this.#bands.get(id);

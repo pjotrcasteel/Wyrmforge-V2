@@ -357,7 +357,7 @@ H08-05 physical-object completion remain open.
 - **Gate:** bounded connectivity work; never one rigid body per voxel; no duplicate terrain/object collision; verified in the playable Hunt.
 - **Dependencies:** H08-08.
 - **Engine handoff:** trusted support candidates are revision- and world-bound. Preflight rejects protected, partial or over-budget terrain. Transfer removes static voxels before one immutable body becomes visible and reports mesh invalidation across chunk seams. Fixed-step vertical motion checks terrain and other bodies. The optional actor collision queries cover side, floor and ceiling contacts. Static settlement now rechecks live support and destination clearance, restores exact voxels and releases dynamic capacity. Durable replay, residency and Play Hunt activation are pending.
-- **Playable fixture:** The terrain collapse lab exercises a real support cut, visible fall, actor collision, static settlement and local replay. Play Hunt integration remains gated on positive writes surviving terrain eviction and reload.
+- **Playable fixture:** The terrain collapse lab exercises a real support cut, visible fall, actor collision, static settlement and local replay. The Voxel stream now preserves settled additions and detach removals across a controlled two-cell round trip. Play Hunt still needs the runtime ownership, body residency and durable save wiring.
 - **Done for now:** A controlled collapse follows a removed support in the running Hunt, preserves a single collision authority and respects bounded search/body limits. Stop before advanced rubble visuals.
 
 ### G09-02 — Falling-material physics and persistence
