@@ -64,7 +64,7 @@ export class HuntCollapseEvidence {
     if(this.#active)this.#active.interrupted=true;
   }
 
-  presented(now,landed,saveStatus){
+  presented(now,landed,saveStatus,clusters){
     const a=this.#active;
     if(!a)return;
     if(!landed){
@@ -74,7 +74,8 @@ export class HuntCollapseEvidence {
     const {at,maxFrameMs,maxPhysicsStepCpuMs,...sample}=a;
     this.#recent.push({...sample,maxFrameMs:round(maxFrameMs),
       maxPhysicsStepCpuMs:round(maxPhysicsStepCpuMs),
-      settlementVisibleMs:round(now-at),landedVoxels:landed.length,saveStatus});
+      settlementVisibleMs:round(now-at),landedVoxels:landed.length,saveStatus,
+      ...(Array.isArray(clusters)?{clusters:clusters.map(cluster=>({...cluster}))}:{})});
     if(this.#recent.length>MAX_RECENT)this.#recent.shift();
     this.#active=null;
     try{
@@ -84,7 +85,9 @@ export class HuntCollapseEvidence {
 
   get snapshot(){
     return {schema:SCHEMA,restoredSamples:this.#restored,tracking:this.tracking,
-      recent:this.#recent.map(({supportScan,...sample})=>
-        supportScan?{...sample,supportScan:{...supportScan}}:sample)};
+      recent:this.#recent.map(({supportScan,clusters,...sample})=>({
+        ...sample,...(supportScan?{supportScan:{...supportScan}}:{}),
+        ...(Array.isArray(clusters)?{clusters:clusters.map(cluster=>({...cluster}))}:{})
+      }))};
   }
 }

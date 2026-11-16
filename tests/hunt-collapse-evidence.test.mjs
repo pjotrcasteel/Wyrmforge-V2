@@ -20,14 +20,15 @@ test('collapse timing ends at static render and survives reload in the same tab'
   evidence.step(2.145,true);
   evidence.step(3.234,false);
   evidence.frame(41.23);
-  evidence.presented(190,[{},{}],'saved');
+  const clusters=[{voxelCount:2,shapedVoxels:1,dropVoxels:3}];
+  evidence.presented(190,[{},{}],'saved',clusters);
   evidence.presented(200,[{},{}],'saved');
   assert.equal(evidence.snapshot.tracking,false);
   const [sample]=evidence.snapshot.recent;
   assert.deepEqual(sample,{sequence:3,activationCpuMs:4.5,ownerCount:2,fallVisibleMs:20,
     physicsSteps:2,actorBlockedSteps:1,frames:2,hitchesOver33Ms:1,peakChunks:15,
     peakVoxelPayloadBytes:10000,interrupted:false,maxFrameMs:41.2,maxPhysicsStepCpuMs:3.2,
-    settlementVisibleMs:90,landedVoxels:2,saveStatus:'saved',supportScan});
+    settlementVisibleMs:90,landedVoxels:2,saveStatus:'saved',supportScan,clusters});
   assert.deepEqual(new HuntCollapseEvidence(storage,'build-1').snapshot,
     {...evidence.snapshot,restoredSamples:1});
   assert.deepEqual(new HuntCollapseEvidence(storage,'build-2').snapshot.recent,[]);
