@@ -19,6 +19,7 @@ export class TerrainClusterHandoff {
   }
 
   get bodies(){return this.#bodies.slice();}
+  isBoundTo(world){return this.#world===world;}
 
   detach(candidate){
     const world=this.#world;

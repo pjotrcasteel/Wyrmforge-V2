@@ -57,7 +57,7 @@ The read-only Voxel support scan accepts up to 256 precisely identified removed 
 
 ### Static-to-dynamic handoff
 
-The opt-in handoff preflights a candidate against its original VoxelWorld and revision, including protected bedrock and partial surface checks. It reserves room for up to eight bodies and 512 cells per registry. After preflight, it removes the static voxels synchronously and publishes one immutable cluster payload and its dirty mesh chunks. Failed or duplicated transfers leave the world unchanged. This is an in-process contract. Play Hunt activation still requires a fixed-step body consumer, actor collision, and streaming and replay integration.
+The opt-in handoff preflights a candidate against its original VoxelWorld and revision, including protected bedrock and partial surface checks. It reserves room for up to eight bodies and 512 cells per registry. After preflight, it removes the static voxels synchronously and publishes one immutable cluster payload and its dirty mesh chunks. Failed or duplicated transfers leave the world unchanged. This is an in-process contract. The handoff stays opt-in until the simulation and terrain publication paths are ready.
 
 ## 5. Gravity simulation and settlement
 
@@ -70,6 +70,10 @@ The opt-in handoff preflights a candidate against its original VoxelWorld and re
 - Sleep inactive bodies. Offscreen work must stay bounded and must not accumulate infinite simulations.
 
 **Replay contract:** accepted cell edits, detach/settle decisions, seeds and canonical integer voxel snapshots are replayable. Cross-device bitwise identical floating-point trajectories are not promised; persist authoritative outcomes in integer voxel coordinates.
+
+### Initial fixed-step Physics consumer
+
+The in-process solver advances cohesive bodies vertically at 60 Hz with up to four ticks per call. It sweeps full voxel volumes against static terrain and other bodies, processing lower bodies first so supported stacks move in a deterministic order. It pauses on unknown coverage or existing overlap and caps unsupported travel at 64 m. A resting body remains Physics-owned and can resume falling if its support disappears. Partial static surfaces are conservatively treated as full cells. Play Hunt activation still requires actor collision, residency and replay integration. The solver does not settle bodies into static terrain yet.
 
 ## 6. iOS and Android constraints
 
