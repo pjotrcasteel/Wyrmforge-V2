@@ -1,12 +1,14 @@
 // H08-02B: bounded residency of one authored terrain band.
 // The caller owns admission, movement safety, mesh publication and exclusive
 // access while a transition runs. The world/port/edit ledger never change.
-// Full-voxel additions have an explicit owner and share the write budget.
+// Committed voxel additions have an explicit owner and share the write budget.
 import {validateExternalTerrainDefinition,MAX_INITIAL_TERRAIN_STEP_CELLS} from './external-terrain-loader.mjs';
+import {validateMicroSurfaceTile} from './microvoxel-surface.mjs';
 import {markDirtyForEditedVoxel} from './chunk-dirty.mjs';
 import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
 
 const key=(x,y,z)=>x+','+y+','+z;
+const sameLevels=(actual,expected)=>expected?Boolean(actual?.every((level,index)=>level===expected[index])):!actual;
 
 // Cheap deterministic integrity guard over canonical runs and microlevels;
 // not a cryptographic signature or a second terrain representation.
@@ -86,13 +88,14 @@ export class V2TerrainBandResidency {
   #rememberAdditions(cells,resident,limit){
     if(!Array.isArray(cells)||cells.length>limit)throw new RangeError('Invalid added voxel batch');
     const next=new Map(this.#additions);
-    for(const {x,y,z,material} of cells){
+    for(const {x,y,z,material,levels} of cells){
       if(![x,y,z].every(Number.isSafeInteger)||!Number.isInteger(material)||material<1||material>255||
           material===V2_BEDROCK_MATERIAL||resident&&(this.#world.get(x,y,z)!==material||
-          this.#world.microSurfaceTile(x,y,z))){
-        throw new RangeError('Expected a committed full voxel addition');
+          !sameLevels(this.#world.microSurfaceTile(x,y,z),levels))){
+        throw new RangeError('Expected a committed voxel addition');
       }
-      next.set(key(x,y,z),{x,y,z,material});
+      const shape=levels===undefined?undefined:validateMicroSurfaceTile({x,y,z,levels}).levels;
+      next.set(key(x,y,z),{x,y,z,material,...(shape?{levels:shape}:{})});
     }
     if(next.size>512)throw new RangeError('Terrain band addition capacity exceeded');
     this.#additions=next;
@@ -111,7 +114,8 @@ export class V2TerrainBandResidency {
     if(definitionSignature(definition)!==this.#signature)throw new Error('Regenerated terrain definition changed');
     const tiles=definition.surfaceTiles??[];
     // Conservative admission before the first world mutation.
-    if(this.#world.microSurfaceCount+tiles.length>this.#world.microSurfaceCapacity)
+    const addedTiles=[...this.#additions.values()].filter(cell=>cell.levels).length;
+    if(this.#world.microSurfaceCount+tiles.length+addedTiles>this.#world.microSurfaceCapacity)
       throw new RangeError('Reload exceeds resident micro surface budget');
     this.#definition=definition;
     this.#begin('reloading');
@@ -168,20 +172,24 @@ export class V2TerrainBandResidency {
     }
   }
 
-  #visitAddition({x,y,z,material}){
+  #visitAddition({x,y,z,material,levels}){
     const actual=this.#world.get(x,y,z);
     if(this.#phase==='evicting'){
       if(!actual){
         this.#additions.delete(key(x,y,z));
         return;
       }
-      if(actual!==material||this.#world.microSurfaceTile(x,y,z)){
+      if(actual!==material||!sameLevels(this.#world.microSurfaceTile(x,y,z),levels)){
         throw new Error('Unsupported mutation of a tracked terrain addition');
       }
       this.#world.set(x,y,z,0);
     }else{
       if(actual!==0)throw new Error('Added voxel would overwrite authoritative occupancy');
+      if(levels&&(this.#world.get(x,y+1,z)||this.#additions.has(key(x,y+1,z)))){
+        throw new Error('Saved microvoxels require an exposed top voxel');
+      }
       this.#world.set(x,y,z,material);
+      if(levels)this.#world.setMicroSurfaceTile(x,y,z,levels);
     }
     this.#mark(x,y,z);
   }

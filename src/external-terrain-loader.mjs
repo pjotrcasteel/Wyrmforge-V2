@@ -4,7 +4,7 @@
 import { VoxelWorld, CHUNK_EDGE_CANDIDATES, MAX_SCENE_SEED } from './voxel-world.mjs';
 import { TerrainEditLedger,V2_BEDROCK_MATERIAL } from './terrain-edit-ledger.mjs';
 import { V2TerrainPort } from './terrain-integration-port.mjs';
-import { validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
+import { validateMicroSurfaceTile,validateMicroSurfaceTiles } from './microvoxel-surface.mjs';
 import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 
 export const TERRAIN_INITIALIZATION_SCHEMA = 'voxel-v2.terrain-initialization.v1';
@@ -122,10 +122,10 @@ export class V2ExternalTerrainLoader {
     this.#epoch=epoch;
     this.#removedCells=removedCells;
     if(!Array.isArray(addedCells)||addedCells.length>4096)throw new RangeError('Too many loaded voxel additions');
-    this.#addedCells=addedCells.map(({x,y,z,material})=>{
+    this.#addedCells=addedCells.map(({x,y,z,material,levels})=>{
       if(![x,y,z].every(Number.isSafeInteger)||!Number.isInteger(material)||material<1||material>255||
           material===V2_BEDROCK_MATERIAL)throw new TypeError('Invalid loaded voxel addition');
-      return {x,y,z,material};
+      return {x,y,z,material,...(levels===undefined?{}:{levels:validateMicroSurfaceTile({x,y,z,levels}).levels})};
     });
     this.#addedKeys=new Set(this.#addedCells.map(({x,y,z})=>x+','+y+','+z));
     this.#world=new VoxelWorld({chunkEdge:this.#definition.chunkEdge,microSurfaceCapacity});
@@ -171,9 +171,13 @@ export class V2ExternalTerrainLoader {
       }
     }
     while(remaining>0&&this.#runIndex===this.#definition.runs.length&&this.#addedIndex<this.#addedCells.length){
-      const {x,y,z,material}=this.#addedCells[this.#addedIndex++];
+      const {x,y,z,material,levels}=this.#addedCells[this.#addedIndex++];
       if(this.#world.get(x,y,z))throw new Error('Saved terrain addition overlaps authored occupancy');
+      if(levels&&(this.#world.get(x,y+1,z)||this.#addedKeys.has(x+','+(y+1)+','+z))){
+        throw new Error('Saved microvoxels require an exposed top voxel');
+      }
       this.#world.set(x,y,z,material);
+      if(levels)this.#world.setMicroSurfaceTile(x,y,z,levels);
       remaining--;
     }
     if(this.#runIndex===this.#definition.runs.length&&this.#addedIndex===this.#addedCells.length&&

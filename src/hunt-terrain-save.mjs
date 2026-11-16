@@ -1,4 +1,5 @@
 // Exact committed writes. The v1 storage key also accepts old removal arrays.
+import {validateMicroSurfaceTile} from './microvoxel-surface.mjs';
 const MAX_CELLS=32768;
 const MAX_ADDITIONS=4096;
 const MAX_SAVED_CHARS=1250000;
@@ -8,6 +9,12 @@ const keyOf=({x,y,z})=>x+','+y+','+z;
 const validAddition=cell=>cell&&typeof cell.owner==='string'&&OWNER.test(cell.owner)&&
   [cell.x,cell.y,cell.z].every(n=>Number.isSafeInteger(n)&&Math.abs(n)<=9999999)&&
   Number.isInteger(cell.material)&&cell.material>0&&cell.material<=255&&cell.material!==4;
+
+function copyAddition(cell){
+  const {owner,x,y,z,material}=cell;
+  const levels=cell.levels===undefined?undefined:validateMicroSurfaceTile(cell).levels;
+  return Object.freeze({owner,x,y,z,material,...(levels?{levels}:{})});
+}
 
 function exceedsOwnerCapacity(additions){
   const counts=new Map();
@@ -38,7 +45,7 @@ export class HuntTerrainSave {
       if(!raw)return;
       if(raw.length>MAX_SAVED_CHARS)throw new Error('Save exceeds size limit');
       const entry=JSON.parse(raw);
-      const cells=Array.isArray(entry)?entry:entry?.version===2?entry.removed:null;
+      const cells=Array.isArray(entry)?entry:[2,3].includes(entry?.version)?entry.removed:null;
       const additions=Array.isArray(entry)?[]:entry?.added;
       if(!Array.isArray(cells)||cells.length>MAX_CELLS||
           cells.some(cell=>typeof cell!=='string'||!COORDINATES.test(cell))||
@@ -46,7 +53,7 @@ export class HuntTerrainSave {
         throw new Error('Invalid terrain save');
       }
       const removals=new Set(cells);
-      const placed=new Map(additions.map(cell=>[keyOf(cell),Object.freeze(cell)]));
+      const placed=new Map(additions.map(cell=>[keyOf(cell),copyAddition(cell)]));
       if(placed.size!==additions.length||exceedsOwnerCapacity(placed.values())||[...placed.keys()].some(key=>!removals.has(key))){
         throw new Error('Conflicting terrain additions');
       }
@@ -79,7 +86,7 @@ export class HuntTerrainSave {
     for(const cell of additions){
       const id=keyOf(cell);
       changed.add(id);
-      next.set(id,Object.freeze({...cell}));
+      next.set(id,copyAddition(cell));
     }
     const newlyRemoved=[...changed].filter(id=>!this.#removedCells.has(id));
     if(this.#removedCells.size+newlyRemoved.length>MAX_CELLS||next.size>MAX_ADDITIONS||exceedsOwnerCapacity(next.values())){
@@ -91,8 +98,11 @@ export class HuntTerrainSave {
     this.#additions=next;
     if(!['ready','saved'].includes(this.#status))return false;
     try{
-      const payload=next.size?{version:2,removed:[...this.#removedCells],added:[...next.values()]}:[...this.#removedCells];
-      this.#storage.setItem(this.#key,JSON.stringify(payload));
+      const version=[...next.values()].some(cell=>cell.levels)?3:2;
+      const payload=next.size?{version,removed:[...this.#removedCells],added:[...next.values()]}:[...this.#removedCells];
+      const serialized=JSON.stringify(payload);
+      if(serialized.length>MAX_SAVED_CHARS)throw new RangeError('Save exceeds size limit');
+      this.#storage.setItem(this.#key,serialized);
       this.#status='saved';
       return true;
     }catch{this.#status='unavailable';return false;}
