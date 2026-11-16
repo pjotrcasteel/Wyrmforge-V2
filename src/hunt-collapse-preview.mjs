@@ -105,7 +105,7 @@ export class HuntCollapsePreview {
     if(!this.canAcceptImpact||!edit.removedCells?.length||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     this.#reportSupport({editRevision:edit.editRevision,removedCells:edit.removedCells.length,
-      status:'checking',scannedPositions:0,oversizedComponents:0,candidates:0,slices:0});
+      status:'checking',scanStatus:null,scannedPositions:0,oversizedComponents:0,candidates:0,slices:0});
     if(edit.removedCells.length>256){
       this.#reportSupport({status:'impact-too-large'});
       return [];
@@ -146,8 +146,11 @@ export class HuntCollapsePreview {
 
   #applyScan(edit,scan,deferred=false){
     this.#reportSupport({scannedPositions:scan.reads,oversizedComponents:scan.oversized,
-      candidates:scan.status==='complete'?scan.candidates.length:0,status:scan.status});
-    if(scan.status!=='complete')return this.#decline();
+      candidates:scan.candidates.length,scanStatus:scan.status,status:scan.status});
+    // Each candidate was proved independently. Components touching unknown
+    // cells are excluded by the scanner, even when another component is safe.
+    const provenCandidateAtEdge=!this.#fixture&&scan.status==='partial-coverage'&&scan.candidates.length>0;
+    if(scan.status!=='complete'&&!provenCandidateAtEdge)return this.#decline();
     const candidates=this.#fixture?scan.candidates.filter(candidate=>
       candidate.cells.some(isShelf)&&candidate.cells.every(isScaffold)):scan.candidates;
     this.#reportSupport({status:scan.oversized?'component-too-large':'no-unsupported-component'});

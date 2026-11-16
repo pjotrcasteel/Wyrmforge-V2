@@ -210,3 +210,26 @@ test('collapse capacity counts live rubble rather than every prior landing',()=>
   impact(2,[[0,1,0],[1,1,0],[8,3,0]]);
   assert.deepEqual(save.additions.filter(cell=>cell.owner==='terrain').map(cell=>cell.x),[8,9]);
 });
+
+test('a proven cluster can settle while a separate component touches unloaded terrain',()=>{
+  const world=new VoxelWorld();
+  for(const x of [0,5]){
+    world.set(x,0,0,4);
+    world.set(x,3,0,3);
+  }
+  const save=new HuntTerrainSave(null,'partial-coverage');
+  const preview=new HuntCollapsePreview(world,null,{
+    publishedAt:x=>x<6,ownerAt:()=>'terrain',trackAddedCells:()=>{}
+  },save,{fixture:false,mixedTerrain:true});
+
+  preview.acceptImpact({editRevision:1,removedCells:['0,2,0','5,2,0']},{defer:true});
+  for(let frame=0;frame<20&&preview.checkingSupport;frame++)preview.stepSupportScan(8);
+  assert.equal(preview.supportReport.scanStatus,'partial-coverage');
+  assert.equal(preview.supportReport.candidates,1);
+  assert.equal(preview.supportReport.status,'detached');
+  assert.equal(world.get(0,3,0),0);
+  assert.equal(world.get(5,3,0),3);
+  for(let tick=0;tick<120&&preview.holdsFixture;tick++)preview.tick([]);
+  assert.equal(world.get(0,1,0),3);
+  assert.equal(world.get(5,3,0),3);
+});
