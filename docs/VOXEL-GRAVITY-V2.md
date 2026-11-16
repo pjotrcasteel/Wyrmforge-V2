@@ -79,6 +79,10 @@ The in-process solver advances cohesive bodies vertically at 60 Hz with up to fo
 
 The immutable `terrain-collapse-lab.html` route runs one V2 stone shelf through terrain edit, support scan, dynamic transfer, fixed-step falling, actor collision, settlement, and local restore. Its saved integer landing is scoped to the fixture schema. The Voxel stream can now carry full-voxel additions under explicit owners, including landings on formerly authored coordinates. Tests exercise a real detach and settlement across two streaming cells. Play Hunt still needs to register that ownership from actual collapse, protect active bodies against terrain eviction, and commit those writes from the runtime. The Hunt save now accepts exact removals and owner-keyed positive writes as one versioned record. Older removal arrays still load, and destroying a saved addition removes it from the overlay.
 
+### Play Hunt opt-in preview
+
+Open `play-hunt.html?stream=cells&gravity=preview` on seed 7. A small stone shelf near the entry uses the original Hunt world, Voxel edit ledger and actor solver. Break its support with the dedicated control. The fixture's one active streaming cell is protected until settlement; static mesh changes use the existing worker and upload queue. The fixed fixture's exact removal/addition transaction is saved after settlement in a dedicated preview slot. Refresh restores the landed stone; refresh before settlement restarts the controlled fixture. Ordinary Hunt routing keeps general collapse disabled. Device appearance and frame cost still need measurement.
+
 ## 6. iOS and Android constraints
 
 No global support scan per frame, no per-voxel rigid-body simulation, no unbounded BFS or worker backlog, no mandatory WebGPU, no dependency on shared memory/cross-origin isolation. Use bounded worker tasks where supported, chunk revisions, stale-result rejection and explicit GPU buffer disposal.
