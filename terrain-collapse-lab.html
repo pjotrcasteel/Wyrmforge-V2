@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wyrmforge V2 · Terrain collapse</title>
+  <style>
+    :root{color-scheme:dark;font:16px system-ui;background:#151c20;color:#ecf0e8}
+    body{max-width:680px;margin:0 auto;padding:16px}
+    header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+    h1{font-size:1.35rem;margin:0}
+    #build{font:12px monospace;color:#b3c9c5}
+    canvas{display:block;width:100%;aspect-ratio:8/5;background:#202c32;border:1px solid #43565a;
+      border-radius:8px;margin:12px 0;image-rendering:pixelated}
+    #status{min-height:1.5em;color:#d1dfce}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+    button{background:#30484c;color:inherit;border:1px solid #779591;border-radius:6px;
+      min-width:48px;min-height:46px;padding:0 12px;font:600 .95rem system-ui;touch-action:none}
+    button:disabled{opacity:.55}
+    #collapse{background:#59452b;border-color:#b59765}
+    a{color:#b5dacc}
+  </style>
+</head>
+<body>
+  <header><h1>Terrain collapse</h1><span id="build"></span></header>
+  <canvas id="scene" width="640" height="400" aria-label="Voxel collapse fixture"></canvas>
+  <p id="status" role="status"></p>
+  <div class="controls">
+    <button id="collapse" type="button">Break support</button>
+    <button id="reset" type="button">Reset fixture</button>
+  </div>
+  <div class="controls" aria-label="Movement">
+    <button type="button" data-move="left" aria-label="Move left">←</button>
+    <button type="button" data-move="up" aria-label="Move north">↑</button>
+    <button type="button" data-move="down" aria-label="Move south">↓</button>
+    <button type="button" data-move="right" aria-label="Move right">→</button>
+  </div>
+  <p><a href="./play-hunt.html?stream=cells">Play Hunt</a></p>
+  <script type="module" src="./terrain-collapse-lab.mjs"></script>
+</body>
+</html>
