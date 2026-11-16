@@ -108,3 +108,50 @@ test('browser restore keeps exact removed cells on initial and later-streamed te
     assert.equal(new HuntTerrainSave(storage,'seed8').removedCells.size,0);
   }finally{second.unload();}
 });
+
+test('durable collapse delta restores initial and later-loaded settled cells without reviving the shelf',async()=>{
+  const {HuntTerrainSave}=await import('../src/hunt-terrain-save.mjs');
+  const {TerrainStreamCellBuilder}=await import('../src/terrain-stream-cells.mjs');
+  const {TerrainCellStreamSession}=await import('../src/terrain-cell-stream-session.mjs');
+  const storage=new Map();
+  const browser={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
+  storage.set('wyrmforge.hunt-terrain.v1:collapse-test',JSON.stringify(['-1,3,0']));
+  const definition={schema:'voxel-v2.terrain-initialization.v1',siteId:'collapse-test',
+    generatorVersion:'test',seed:7,chunkEdge:16,runs:[
+      {x:-1,y:0,z:0,length:2,material:4},
+      {x:-1,y:1,z:0,length:2,material:2},
+      {x:-1,y:4,z:0,length:2,material:3}
+    ]};
+  const builder=new TerrainStreamCellBuilder(definition);
+  while(!builder.done)builder.step();
+  const [left,right]=builder.cells;
+  const save=new HuntTerrainSave(browser,'collapse-test');
+  assert.ok(save.removedCells.has('-1,3,0'));
+  assert.equal(save.commitCollapse(['-1,4,0','0,4,0'],[
+    {owner:left.id,x:-1,y:1,z:0,material:3},
+    {owner:right.id,x:0,y:1,z:0,material:3}
+  ]),true);
+  const restored=new HuntTerrainSave(browser,'collapse-test');
+  const loader=new V2ExternalTerrainLoader(left.definition,{removedCells:restored.removedCells,
+    addedCells:restored.additions.filter(cell=>cell.owner===left.id)});
+  try{
+    while(!loader.progress.done)loader.loadStep(1);
+    const {world}=loader.terrain;
+    assert.equal(world.get(-1,1,0),3);
+    assert.equal(world.get(-1,4,0),0);
+    const stream=new TerrainCellStreamSession(world,[left,right],{limit:2,preload:0,retain:0,
+      removedCells:restored.removedCells,initialResidentIds:[left.id],addedCells:restored.additions});
+    const {ticket}=stream.begin({view:{minX:-1,maxX:1,minZ:0,maxZ:1}});
+    assert.equal(ticket.id,right.id);
+    let result;
+    do{result=stream.write(ticket,1);}while(!result.dirtyChunks);
+    assert.equal(stream.acknowledgeMeshes(ticket,result.dirtyChunks),true);
+    assert.equal(stream.acknowledgeUpload(ticket),true);
+    assert.equal(world.get(0,1,0),3);
+    assert.equal(world.get(0,4,0),0);
+    restored.commit(['0,1,0']);
+    const next=new HuntTerrainSave(browser,'collapse-test');
+    assert.equal(next.additions.length,1);
+    assert.ok(next.removedCells.has('0,1,0'));
+  }finally{loader.unload();}
+});

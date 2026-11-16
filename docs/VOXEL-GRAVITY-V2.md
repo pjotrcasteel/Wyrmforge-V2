@@ -77,7 +77,7 @@ The in-process solver advances cohesive bodies vertically at 60 Hz with up to fo
 
 ### Playable collapse fixture
 
-The immutable `terrain-collapse-lab.html` route runs one V2 stone shelf through terrain edit, support scan, dynamic transfer, fixed-step falling, actor collision, settlement, and local restore. Its saved integer landing is scoped to the fixture schema. The Voxel stream can now carry full-voxel additions under explicit owners, including landings on formerly authored coordinates. Tests exercise a real detach and settlement across two streaming cells. Play Hunt still needs to register that ownership from actual collapse, protect active bodies against terrain eviction, and persist collapse across sessions.
+The immutable `terrain-collapse-lab.html` route runs one V2 stone shelf through terrain edit, support scan, dynamic transfer, fixed-step falling, actor collision, settlement, and local restore. Its saved integer landing is scoped to the fixture schema. The Voxel stream can now carry full-voxel additions under explicit owners, including landings on formerly authored coordinates. Tests exercise a real detach and settlement across two streaming cells. Play Hunt still needs to register that ownership from actual collapse, protect active bodies against terrain eviction, and commit those writes from the runtime. The Hunt save now accepts exact removals and owner-keyed positive writes as one versioned record. Older removal arrays still load, and destroying a saved addition removes it from the overlay.
 
 ## 6. iOS and Android constraints
 

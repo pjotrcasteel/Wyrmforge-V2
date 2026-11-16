@@ -10,14 +10,23 @@ export class TerrainCellStreamSession {
   #cells;
   #registered=new Set();
   #bounds;
+  #savedAdditions=new Map();
   #flight=null;
 
-  constructor(world,cells,{limit=48,preload=8,retain=16,removedCells=null,initialResidentIds=[]}={}){
+  constructor(world,cells,{limit=48,preload=8,retain=16,removedCells=null,initialResidentIds=[],addedCells=[]}={}){
     this.#policy=new TerrainViewResidencyPolicy(cells,{limit,preload,retain});
     this.#residency=new V2TerrainResidencySet(world,{residentLimit:limit,
       maxBands:Math.max(cells.length,limit),removedCells});
     this.#cells=new Map(cells.map(cell=>[cell.id,cell.definition]));
     this.#bounds=new Map(cells.map(cell=>[cell.id,cell.bounds]));
+    if(!Array.isArray(addedCells)||addedCells.length>4096)throw new RangeError('Invalid saved voxel additions');
+    for(const cell of addedCells){
+      this.#checkBounds(cell.owner,[cell]);
+      if(!this.#savedAdditions.has(cell.owner))this.#savedAdditions.set(cell.owner,[]);
+      const group=this.#savedAdditions.get(cell.owner);
+      if(group.length>=512)throw new RangeError('Too many additions in streaming cell');
+      group.push(cell);
+    }
     for(const id of initialResidentIds)this.#register(id,true);
   }
 
@@ -40,17 +49,22 @@ export class TerrainCellStreamSession {
   #register(id,resident){
     if(this.#registered.has(id))return;
     const regenerate=()=>this.#cells.get(id);
-    this.#residency.register(id,regenerate(),{resident,regenerate});
+    this.#residency.register(id,regenerate(),{resident,regenerate,addedCells:this.#savedAdditions.get(id)});
+    this.#savedAdditions.delete(id);
     this.#registered.add(id);
   }
 
   trackAddedCells(id,cells){
+    this.#checkBounds(id,cells);
+    this.#residency.trackAddedCells(id,cells);
+  }
+
+  #checkBounds(id,cells){
     const bounds=this.#bounds.get(id);
     if(!bounds||!Array.isArray(cells)||cells.length>256||cells.some(({x,z})=>
       x<bounds.minX||x>bounds.maxX||z<bounds.minZ||z>bounds.maxZ)){
       throw new RangeError('Added voxels are outside their streaming cell');
     }
-    this.#residency.trackAddedCells(id,cells);
   }
 
   get storageMetrics(){return this.#residency.storageMetrics;}

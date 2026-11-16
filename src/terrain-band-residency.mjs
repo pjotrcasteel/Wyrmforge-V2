@@ -38,7 +38,7 @@ export class V2TerrainBandResidency {
   #operations=0;
   #savedRemovals;
 
-  constructor(world,definition,{resident=true,regenerate=null,removedCells=null}={}) {
+  constructor(world,definition,{resident=true,regenerate=null,removedCells=null,addedCells=[]}={}) {
     if(typeof resident!=='boolean')throw new TypeError('Expected initial band residency');
     this.#definition=validateExternalTerrainDefinition(definition);
     if(!world || world.chunkEdge!==this.#definition.chunkEdge) {
@@ -50,6 +50,7 @@ export class V2TerrainBandResidency {
     this.#regenerate=regenerate;
     this.#signature=definitionSignature(this.#definition);
     this.#phase=resident?'resident':'evicted';
+    this.#rememberAdditions(addedCells,resident,512);
   }
 
   get retainedDefinition() {
@@ -72,12 +73,16 @@ export class V2TerrainBandResidency {
 
   trackAddedCells(cells){
     if(this.#phase!=='resident')throw new Error('Added voxels require a resident owner');
-    if(!Array.isArray(cells)||cells.length>256)throw new RangeError('Invalid added voxel batch');
+    this.#rememberAdditions(cells,true,256);
+  }
+
+  #rememberAdditions(cells,resident,limit){
+    if(!Array.isArray(cells)||cells.length>limit)throw new RangeError('Invalid added voxel batch');
     const next=new Map(this.#additions);
     for(const {x,y,z,material} of cells){
       if(![x,y,z].every(Number.isSafeInteger)||!Number.isInteger(material)||material<1||material>255||
-          material===V2_BEDROCK_MATERIAL||this.#world.get(x,y,z)!==material||
-          this.#world.microSurfaceTile(x,y,z)){
+          material===V2_BEDROCK_MATERIAL||resident&&(this.#world.get(x,y,z)!==material||
+          this.#world.microSurfaceTile(x,y,z))){
         throw new RangeError('Expected a committed full voxel addition');
       }
       next.set(key(x,y,z),{x,y,z,material});
@@ -136,7 +141,8 @@ export class V2TerrainBandResidency {
       }
     } else {
       if(actual!==0)throw new Error('Reload would overwrite authoritative occupancy');
-      if(!this.#removed.has(id)&&(material===V2_BEDROCK_MATERIAL||!this.#savedRemovals?.has(id))) {
+      if(!this.#removed.has(id)&&!this.#additions.has(id)&&
+          (material===V2_BEDROCK_MATERIAL||!this.#savedRemovals?.has(id))) {
         this.#world.set(x,y,z,material);
         this.#mark(x,y,z);
       }

@@ -9,6 +9,15 @@ const LOOKAHEAD_SECONDS=1.5;
 const at=(b,x,z)=>x>=b.minX&&x<b.maxX+1&&z>=b.minZ&&z<b.maxZ+1;
 const visible=(b,v)=>b.minX<=v.maxX&&b.maxX+1>=v.minX&&b.minZ<=v.maxZ&&b.maxZ+1>=v.minZ;
 
+export function huntSavedAdditions(layout,additions){
+  const bands=new Map([...layout.regions,...layout.links].map(band=>[band.id,band]));
+  return additions.filter(({owner,x,y,z})=>{
+    const suffix=':cell:8:'+Math.floor(x/8)+':'+Math.floor(z/8);
+    const band=owner.endsWith(suffix)?bands.get(owner.slice(0,-suffix.length)):null;
+    return y>=-64&&y<=64&&band&&containsHuntLandform(band,x+.5,z+.5);
+  });
+}
+
 export class HuntCellCatalog {
   #pending;
   #graph;
@@ -55,7 +64,7 @@ export class HuntCellResidency {
   #encounterCells=new Map();
   #planningReason=null;
 
-  constructor(world,graph,catalog,initialIds,{removedCells,entry}){
+  constructor(world,graph,catalog,initialIds,{removedCells,entry,addedCells=[]}){
     this.#catalog=catalog;
     this.#graph=graph;
     this.#entry=entry;
@@ -75,7 +84,7 @@ export class HuntCellResidency {
     }
     const initialResidentIds=catalog.cells.filter(cell=>initialIds.includes(cell.band.id)).map(cell=>cell.id);
     this.#session=new TerrainCellStreamSession(world,catalog.cells,
-      {limit:96,preload:8,retain:16,removedCells,initialResidentIds});
+      {limit:96,preload:8,retain:16,removedCells,initialResidentIds,addedCells:addedCells.filter(cell=>this.#byId.has(cell.owner))});
     this.#sync();
   }
 
