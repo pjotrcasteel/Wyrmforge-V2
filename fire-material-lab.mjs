@@ -1,7 +1,10 @@
 import {COMMIT} from './src/build-info.mjs';
 import {projectVoxel} from './src/camera-presets.mjs';
 import {buildExposedFaceMeshes} from './src/exposed-face-mesher.mjs';
-import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
+import {buildPixelMicroSurfaceMeshes} from './src/microvoxel-mesher.mjs';
+import {LIVE_TREES} from './src/wet-forest-tree-sprites.mjs';
+import {projectTreeSprite} from './src/hunt-scenic-forest.mjs';
+import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,LAB_FOREST_STAGES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
 import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
 import {spawnTerrainActor,ACTOR_HEIGHT} from './src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_PIXELS_PER_VOXEL,HUNT_FIXED_STEP} from './src/hunt-play-runtime.mjs';
@@ -15,6 +18,9 @@ const context=overlay.getContext('2d');
 const huntControls=document.querySelector('#hunt-controls');
 const cast=document.querySelector('#cast');
 const blend=document.querySelector('#blend');
+const forestControls=document.querySelector('#forest-controls');
+const forestStage=document.querySelector('#forest-stage');
+const microStep=document.querySelector('#micro-step');
 const surfaceBlend=document.querySelector('#surface-blend');
 const lavaMotion=document.querySelector('#lava-motion');
 let flowing=true,lavaTime=0,lastLavaFrame=null;
@@ -37,6 +43,13 @@ let actor,enemy,projectile,lastFrame,accumulator=0;
 const pressed=new Set();
 const directions=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
 const art=new Map();
+const forestArt=new Map();
+const forestPlantings=[
+  [-8.5,7.5,4,1.12],[-6.5,2.5,12,.92],[-9.5,-2.5,2,1.03],
+  [-4.5,-5.5,6,.96],[6.5,7.5,5,1.02],[7.5,2.5,3,1.06],
+  [9.5,-2.5,7,1.11],[4.5,-5.5,13,.9],[-8.5,-8.5,10,.92],[8.5,-9.5,8,1.04]
+];
+let forestTrees=[];
 const tileCanvas=document.querySelector('#tile');
 const repeatCanvas=document.querySelector('#tile-repeat');
 
@@ -103,12 +116,17 @@ function updateSelection(){
 const canWalk=()=>scene==='hunt'||scene==='lava';
 
 function uploadTerrain(){
-  renderer.setMeshes(buildExposedFaceMeshes(fixture.world));
+  renderer.setMeshes(buildPixelMicroSurfaceMeshes(fixture.world,buildExposedFaceMeshes(fixture.world)));
   renderer.setLabMaterialVolume(materialLabVolume(fixture));
 }
 
 function setScene(){
-  fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value);
+  fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value,microStep.checked);
+  forestControls.hidden=scene!=='hunt';
+  forestTrees=scene==='hunt'?forestPlantings.flatMap(([x,z,index,scale])=>{
+    const position=spawnTerrainActor(fixture.world,{x,z,searchTopY:10});
+    return position?[{...position,sprite:LIVE_TREES[index],scale}]:[];
+  }):[];
   actor=canWalk()?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
   enemy=canWalk()?spawnTerrainActor(fixture.world,{x:scene==='lava'?5.5:3.5,z:scene==='lava'?-4:-2,searchTopY:10}):null;
   projectile=null;
@@ -157,6 +175,39 @@ function stepScene(now){
   }
 }
 
+function paintCharredTrunk(tree,view){
+  const foot=projectVoxel(tree.x,tree.y,tree.z,view);
+  const pixel=Math.max(1,Math.round(view.scale/12));
+  const x=Math.round(foot.x),y=Math.round(foot.y);
+  context.fillStyle='#281c25';
+  context.fillRect(x-2*pixel,y-28*pixel,4*pixel,28*pixel);
+  context.fillStyle='#49303a';
+  context.fillRect(x-pixel,y-25*pixel,pixel,24*pixel);
+  for(let i=0;i<8;i++){
+    context.fillRect(x+(-i-2)*pixel,y-(20+i)*pixel,3*pixel,2*pixel);
+    if(i<6)context.fillRect(x+(i+1)*pixel,y-(13+i)*pixel,2*pixel,2*pixel);
+  }
+}
+
+function prepareForestArt(image){
+  forestArt.set('forest',image);
+  for(const [stage,target,amount] of [['fading',[62,74,86],.32],['approach',[61,39,43],.62]]){
+    const atlas=document.createElement('canvas');
+    atlas.width=image.width;
+    atlas.height=image.height;
+    const brush=atlas.getContext('2d');
+    brush.drawImage(image,0,0);
+    const pixels=brush.getImageData(0,0,atlas.width,atlas.height);
+    for(let i=0;i<pixels.data.length;i+=4){
+      if(!pixels.data[i+3])continue;
+      const value=(pixels.data[i]*.21+pixels.data[i+1]*.72+pixels.data[i+2]*.07)/255;
+      for(let k=0;k<3;k++)pixels.data[i+k]=pixels.data[i+k]*(1-amount)*(stage==='fading'?.79:.53)+target[k]*value*amount;
+    }
+    brush.putImageData(pixels,0,0);
+    forestArt.set(stage,atlas);
+  }
+}
+
 function paintMarkers(view,now,density){
   if(overlay.width!==view.width)overlay.width=view.width;
   if(overlay.height!==view.height)overlay.height=view.height;
@@ -175,8 +226,26 @@ function paintMarkers(view,now,density){
     context.fillRect(foot.x-3*density,top.y,6*density,5*density);
     context.restore();
   };
-  if(enemy)paint(enemy,'#8e483a','#b86a4f');
-  paint(actor,'#465986','#e7c68a');
+  const figures=[];
+  const layer=(unit,draw)=>figures.push({depth:projectVoxel(unit.x,unit.y,unit.z,view).depth,draw});
+  if(enemy)layer(enemy,()=>paint(enemy,'#8e483a','#b86a4f'));
+  layer(actor,()=>paint(actor,'#465986','#e7c68a'));
+  for(const [index,tree] of forestTrees.entries()){
+    if(forestStage.value==='approach'&&index%3===0)continue;
+    if(forestStage.value==='approach'&&index%3===1){
+      layer(tree,()=>paintCharredTrunk(tree,view));
+      continue;
+    }
+    const projected=projectTreeSprite(tree,view);
+    if(!projected)continue;
+    const {sprite,x,y,w,h}=projected;
+    figures.push({depth:projected.depth,draw:()=>{
+      context.drawImage(forestArt.get(forestStage.value),sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+    }});
+  }
+  context.imageSmoothingEnabled=false;
+  figures.sort((a,b)=>b.depth-a.depth);
+  figures.forEach(figure=>figure.draw());
   if(projectile){
     const t=Math.min(1,(now-projectile.started)/340);
     const target=MATERIAL_LAB_TARGET;
@@ -218,7 +287,8 @@ function render(now){
     const view={width,height,scale,camera,depthOrigin:follow?.depth??0,
       panX:follow?Math.round(width/2-follow.x):-(minX+maxX)*scale/2,
       panY:follow?Math.round(height*.51-follow.y):-(minY+maxY)*scale/2};
-    renderer.render({...view,labBlend:surfaceBlend.checked,labTime:lavaTime,labGrassStyle:LAB_GRASS_PROFILES[current().id]??0});
+    renderer.render({...view,labBlend:surfaceBlend.checked,labTime:lavaTime,labGrassStyle:LAB_GRASS_PROFILES[current().id]??0,
+      labForestStage:scene==='hunt'?LAB_FOREST_STAGES[forestStage.value]:0});
     paintMarkers(view,now,density);
     const moving=actor&&(pressed.size||projectile||!actor.grounded);
     lastFrame=moving?now:null;
@@ -233,6 +303,10 @@ try{
     await image.decode();
     art.set(material.asset,image);
   }));
+  const trees=new Image();
+  trees.src=new URL('./art/wet-forest/live-trees.png',import.meta.url);
+  await trees.decode();
+  prepareForestArt(trees);
   renderer=new WebGLVoxelView(canvas,{onAvailabilityChange:(ready,error)=>{
     if(ready)setScene();
     else status.textContent=error?.message??'Waiting for WebGL to recover…';
@@ -265,6 +339,8 @@ try{
   });
   blend.addEventListener('change',()=>{scene='hunt';setScene();applyTextures();});
   surfaceBlend.addEventListener('change',requestRender);
+  forestStage.addEventListener('change',requestRender);
+  microStep.addEventListener('change',setScene);
   lavaMotion.addEventListener('click',()=>{
     flowing=!flowing;
     lastLavaFrame=null;

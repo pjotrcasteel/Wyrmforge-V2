@@ -7,6 +7,8 @@ This shortlist of 50 distinct sources includes developer references, technique d
 - **Volcanic structure.** A cooled skin forms around active lava. Translate that into subdued banks, a darker margin and a bright mobile center. The color placement borrows from this distinction, with no physical cooling or light simulation.
 - **Boundaries.** Maintain runtime material IDs. Compare hard and blended exposed faces in the lab. Use world-space sampling so excavated edges do not shift the paint.
 
+- **Forest progression.** Use the [exact Wet Forest prop artwork](../art/wet-forest/README.md) as the reviewed visual reference for the living canopy. Wyrm influence lowers the forest’s value, then breaks the canopy with charred silhouettes. The geometry stays stable for these comparisons. A one-microvoxel inset beside the grass casts a readable edge silhouette at the existing Hunt scale.
+
 ## Pixel-art craft and animation
 
 - [GitHub - saint11/Saint11Tutorials · GitHub](https://github.com/saint11/Saint11Tutorials)

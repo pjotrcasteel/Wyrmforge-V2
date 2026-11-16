@@ -28,9 +28,12 @@ export const TERRAIN_BASE_TILES=Object.freeze({
 export const LAB_LAVA=5;
 export const LAB_CRUST=6;
 export const LAB_LAVA_BRIDGE_X=3;
+export const LAB_FOREST_STAGES=Object.freeze({forest:1,fading:2,approach:3});
+const SHALLOW_TRAIL=Object.freeze(Array(100).fill(9));
+
 export const MATERIAL_LAB_TARGET=Object.freeze({x:1,y:2,z:-1});
 export const MATERIAL_LAB_SPAWN=Object.freeze({x:.5,z:5});
-export function createMaterialLabTerrain(materialId,scene,excavated=false,boundary='broken'){
+export function createMaterialLabTerrain(materialId,scene,excavated=false,boundary='broken',microStep=true){
   const material=FIRE_HUNT_MATERIALS.find(item=>item.id===materialId);
   if(!material||!['hunt','sample','repeats','layers','cliff','lava'].includes(scene))throw new RangeError('Unknown material or scene');
   const world=new VoxelWorld();
@@ -63,6 +66,7 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
           const hasSoil=!shelf||Math.sin(x*.48)+Math.cos(z*.62)>-.15;
           world.set(x,y,z,surface?(path&&!shelf?2:1):y===height-1&&hasSoil?2:3);
         }
+        if(microStep&&path&&!shelf)world.setMicroSurfaceTile(x,height,z,SHALLOW_TRAIL);
       }else if(scene==='cliff'){
         const height=z<-1+Math.round(Math.sin(x*.72))?5:0;
         const soil=Math.sin(x*.7)+Math.cos(z*.7)>0;
