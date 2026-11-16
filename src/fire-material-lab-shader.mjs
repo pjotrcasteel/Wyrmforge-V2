@@ -53,14 +53,55 @@ vec3 labForestGrade(vec3 color,int material,vec2 uv) {
   return mix(cooled,soot,material==1?.82:.51);
 }
 
+vec3 labForestDetail(vec3 color,int material,vec2 uv) {
+  if(uLabForestStage==0||material>2)return color;
+  // Small authored silhouettes on the art grid, grouped in clearings and ruts.
+  // Jitter their anchors in world space so the shapes cross voxel tile lines.
+  vec2 pixel=floor(uv*12.0);
+  vec2 grid=floor((pixel+vec2(5,3))/vec2(19,17));
+  vec2 anchor=grid*vec2(19,17)-vec2(5,3)+vec2(4,4)
+    +floor(vec2(soilHash(grid+2.0),soilHash(grid+15.0))*vec2(10,8));
+  vec2 p=pixel-anchor;
+  float field=labNoise(pixel/53.0);
+  float chance=soilHash(grid+31.0);
+  if(material==1){
+    float patch=step(.44,labNoise(pixel/23.0)+.22*labNoise(pixel/8.0));
+    color=mix(color*.83,color*1.13,patch);
+    if(uLabForestStage<3&&chance<.52&&field>.32){
+      bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=1.0)
+        ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=0.0)
+        ||(abs(p.x)==2.0&&p.y==-1.0);
+      if(tuft){
+        vec3 tip=srgbToLinearColor(vec3(.54,.65,.24));
+        float amount=uLabForestStage==1?.54:.22;
+        return p.y<0.0?mix(color,tip,amount):color*.77;
+      }
+    }
+  }else{
+    float rut=step(.53,labNoise(uv*vec2(1.8,.43))+.17*labNoise(pixel/8.0));
+    color*=mix(.88,1.12,rut);
+    bool chip=(p.y==0.0&&p.x>=-1.0&&p.x<=2.0)
+      ||(p.y==-1.0&&p.x>=0.0&&p.x<=1.0);
+    if(chip&&chance<.64){
+      vec3 stone=uLabForestStage==3?vec3(.40,.32,.31):vec3(.60,.52,.40);
+      return p.y<0.0?mix(color,srgbToLinearColor(stone),.48):color*.71;
+    }
+  }
+  return color;
+}
+
 vec3 labLinearSurface(int material, vec2 uv, bool topFace) {
   int index=material==1?(topFace?0:1):material==2?2:3;
   float layer=uTerrainLayers[index];
-  if(layer<0.0)return labForestGrade(srgbToLinearColor(terrainAlbedo(float(material==6?3:material))),material,vWorld.xz);
+  if(layer<0.0){
+    vec3 color=labForestGrade(srgbToLinearColor(terrainAlbedo(float(material==6?3:material))),material,vWorld.xz);
+    return topFace?labForestDetail(color,material,uv):color;
+  }
   vec2 mapped=index==0&&uLabGrassStyle>0?uv*.62:uv;
   vec3 albedo=texture(uTerrainAlbedo,vec3(mapped*uTerrainTilesPerVoxel,layer)).rgb;
   if(index==0)albedo*=labGrassTint(uv);
-  return labForestGrade(albedo,material,vWorld.xz);
+  albedo=labForestGrade(albedo,material,vWorld.xz);
+  return topFace?labForestDetail(albedo,material,uv):albedo;
 }
 
 ${fireLavaMotifGlsl()}
@@ -94,16 +135,24 @@ vec3 labLava(vec2 uv) {
   return srgbToLinearColor(color);
 }
 
-float labGrassEdgeWeight(int material,float edge,vec2 boundaryUv) {
+float labGrassCoverage(float distanceToGrass,vec2 boundaryUv) {
   // Both faces sample the same world-space boundary. Broad tufts alternate
   // with exposed soil; the final contour advances in whole art texels.
   vec2 texel=floor(boundaryUv*12.0)/12.0;
   float offset=.28*(labNoise(texel*3.7+11.0)-.47);
   offset+=.12*(labNoise(texel*9.0+7.0)-.5);
-  float stepped=(floor(edge*12.0)+.5)/12.0;
-  float distanceToGrass=material==1?stepped:-stepped;
-  float grass=smoothstep(-.085,.085,distanceToGrass+offset);
-  return material==1?1.0-grass:grass;
+  float stepped=sign(distanceToGrass)*floor(abs(distanceToGrass)*12.0)/12.0;
+  return smoothstep(-.085,.085,stepped+offset);
+}
+
+bool labShallowGrassBank(int material) {
+  // The trail floor is 0.1 m below the grass tops. Apply the shoulder
+  // palette only to its riser, leaving deep crater and cliff walls intact.
+  if(uLabForestStage==0||!uLabBlend||material!=1||abs(vNormal.y)>.5)return false;
+  if(vWorld.y<2.899||vWorld.y>3.001)return false;
+  ivec3 cell=ivec3(floor(vec3(vWorld.x,2.95,vWorld.z)-vNormal*.002));
+  ivec3 neighbor=cell+ivec3(round(vNormal));
+  return labMaterial(neighbor)==2&&labMaterial(neighbor+ivec3(0,1,0))==0;
 }
 
 vec3 labGrassLip(vec3 soil,ivec3 cell) {
@@ -128,8 +177,16 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
   float structure=labNoise(uv*.42)+.33*labNoise(uv*1.75);
   if(material==1&&vNormal.y>.5)base*=labGrassTint(uv);
   base=labForestGrade(base,material,vWorld.xz);
+  if(vNormal.y>.5)base=labForestDetail(base,material,uv);
   float tone=mix(.82,1.16,smoothstep(.15,1.24,structure));
   if(!uLabBlend||vNormal.y<-.5)return base*tone;
+  if(labShallowGrassBank(material)){
+    vec2 ground=vWorld.xz;
+    float grass=labGrassCoverage(0.0,ground);
+    vec3 shoulder=mix(labLinearSurface(2,ground,true),labLinearSurface(1,ground,true),grass);
+    float relief=mix(.91,.98,clamp((vWorld.y-2.9)*10.0,0.0,1.0));
+    return shoulder*tone*relief;
+  }
 
   // Sample real face neighbors. A hidden face cannot blend into an exposed
   // one, even when their voxels share the same plane in the material volume.
@@ -159,7 +216,11 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
     if(topFace&&((material==1&&next==2)||(material==2&&next==1))){
       vec3 boundary=vWorld;
       boundary[axis]=float(cell[axis])+(local<.5?0.0:1.0);
-      weight=labGrassEdgeWeight(material,edge,boundary.xz);
+      float grass=labGrassCoverage(material==1?edge:-edge,boundary.xz);
+      weight=material==1?1.0-grass:grass;
+      // Use the same samples as the short bank at the seam, easing back
+      // to the normal top-face shading toward the center of the tile.
+      base=mix(base,labLinearSurface(material,uv,true),1.0-smoothstep(.08,.30,edge));
     }else{
       float width=mix(.17,.43,labNoise(uv*3.1));
       weight=.50*(1.0-smoothstep(0.0,width,edge));
