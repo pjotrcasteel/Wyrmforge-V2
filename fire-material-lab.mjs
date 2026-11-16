@@ -45,8 +45,8 @@ const directions=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
 const art=new Map();
 const forestArt=new Map();
 const forestPlantings=[
-  [-8.5,7.5,4,1.12],[-6.5,2.5,12,.92],[-9.5,-2.5,2,1.03],
-  [-4.5,-5.5,6,.96],[6.5,7.5,5,1.02],[7.5,2.5,3,1.06],
+  [-4.5,7.5,4,1.12],[-6.5,2.5,12,.92],[-9.5,-2.5,2,1.03],
+  [-4.5,-5.5,6,.96],[5.5,7.5,5,1.02],[4.5,2.5,3,1.06],
   [9.5,-2.5,7,1.11],[4.5,-5.5,13,.9],[-8.5,-8.5,10,.92],[8.5,-9.5,8,1.04]
 ];
 let forestTrees=[];
@@ -208,6 +208,28 @@ function prepareForestArt(image){
   }
 }
 
+const labMagePixels=[
+  '....HH.....',
+  '....HK.....',
+  '...HHK.....',
+  '...KKKH....',
+  '..HHHHHHH..',
+  '....BFS..W.',
+  '...RBSR..G.',
+  '...RRSRK.W.',
+  '..LRRRKFFW.',
+  '..LRRRKK.W.',
+  '..LRMRK..W.',
+  '..LRMRK..W.',
+  '.LRRMRK..W.',
+  '.KKKKKK..W.',
+  '..K..K.....'
+];
+const labMagePalette={
+  H:'#a79eaf',K:'#242332',B:'#dbd4c7',F:'#dcac7e',S:'#f5ead1',
+  R:'#555679',L:'#8589aa',M:'#706d91',W:'#79513b',G:'#ffca71'
+};
+
 function paintMarkers(view,now,density){
   if(overlay.width!==view.width)overlay.width=view.width;
   if(overlay.height!==view.height)overlay.height=view.height;
@@ -220,6 +242,20 @@ function paintMarkers(view,now,density){
     context.save();
     clipHuntActor(context,fixture.world,view,figure,
       {left:foot.x-width,right:foot.x+width,top:top.y-density,bottom:foot.y+density},fixture.highest,[]);
+    if(scene==='hunt'&&figure===actor){
+      const unit=Math.max(1,Math.round((foot.y-top.y)/labMagePixels.length));
+      const left=Math.round(foot.x-5*unit);
+      const start=Math.round(foot.y-labMagePixels.length*unit);
+      for(const [row,strip] of labMagePixels.entries()){
+        for(const [column,pixel] of Array.from(strip).entries()){
+          if(pixel==='.')continue;
+          context.fillStyle=labMagePalette[pixel];
+          context.fillRect(left+column*unit,start+row*unit,unit,unit);
+        }
+      }
+      context.restore();
+      return;
+    }
     context.fillStyle=shade;
     context.fillRect(foot.x-width/2,top.y+4*density,width,foot.y-top.y-4*density);
     context.fillStyle=head;
