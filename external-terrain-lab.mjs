@@ -52,7 +52,7 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const seamCollapse=['seam','measure'].includes(gravityMode);
+const seamCollapse=['seam','measure','mixed'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
 const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
@@ -630,7 +630,10 @@ function updatePlayStreaming(now) {
         {removedCells:stream.terrainSave.removedCells,entry:stream.entry,
           addedCells:stream.savedAdditions});
       if(stream.structuralGravity)stream.collapse=new HuntCollapsePreview(active.world,active.port,
-        stream.residency,stream.terrainSave,{fixture:stream.gravityFixture,guidedSupport:stream.regionCollapse?REGION_COLLAPSE_SUPPORT:undefined});
+        stream.residency,stream.terrainSave,{
+          fixture:stream.gravityFixture,guidedSupport:stream.regionCollapse?REGION_COLLAPSE_SUPPORT:undefined,
+          mixedTerrain:gravityMode==='mixed',foundationY:stream.cellCatalog.height.minY
+        });
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
@@ -836,6 +839,11 @@ function updateCollapseButton(){
   collapseButton.hidden=!playStream?.gravityPreview;
   const labels={ready:'Break stone support',falling:'Stone falling…','actor-blocked':'Move clear of the shelf',
     settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
+  if(gravityMode==='mixed'){
+    labels.falling='Terrain falling…';
+    labels.settled='Terrain settled · Saved';
+    labels['settled-unsaved']='Terrain settled · Save unavailable';
+  }
   const guided=guidedCollapse;
   const aim=guided?collapse?.supportTarget(playView):null;
   if(guided)labels.ready=playFireball?'Fireball incoming…':aim?'Fireball the marked support':
@@ -1150,7 +1158,7 @@ function resetSite() {
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
           'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
-        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave):
+        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:gravityMode==='mixed'}):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,

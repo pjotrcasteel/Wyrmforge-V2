@@ -59,3 +59,24 @@ test('a scan invalidated by a terrain revision publishes no candidates',()=>{
   assert.ok(world.revision>result.worldRevision);
   assert.deepEqual(result.candidates,[]);
 });
+
+test('the terrain floor proves support without scanning the entire mixed ground mass',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  for(let x=-30;x<=30;x++){
+    for(let z=-8;z<=8;z++){
+      world.set(x,-3,z,3);
+      world.set(x,-2,z,2);
+      world.set(x,-1,z,1);
+    }
+  }
+  world.set(-1,2,0,1);
+  world.set(0,2,0,2);
+  world.set(1,2,0,42);
+  const mixed={...options,cohesive:new Set([1,2,3,42]),foundationY:-3,maxReads:120};
+  const result=scanTerrainSupport(world,[{x:0,y:0,z:0},{x:0,y:1,z:0}],mixed);
+  assert.equal(result.status,'complete');
+  assert.deepEqual(result.candidates.map(candidate=>candidate.cells),[[
+    {x:-1,y:2,z:0,material:1},{x:0,y:2,z:0,material:2},{x:1,y:2,z:0,material:42}
+  ]]);
+  assert.equal(world.get(0,-3,0),3);
+});
