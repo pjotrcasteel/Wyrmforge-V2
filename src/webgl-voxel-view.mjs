@@ -153,8 +153,8 @@ void main() {
   float normalLayer = uTerrainNormalLayers[surfaceIndex];
   float ormLayer = uTerrainOrmLayers[surfaceIndex];
   float variantMix = 0.0;
+  vec2 uv = uLabEnabled&&uLabGrassStyle>0&&surfaceIndex==0?materialUv*.62:materialUv;
   if (layer >= 0.0) {
-    vec2 uv = materialUv;
     vec3 primary = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
     float secondaryLayer = uTerrainSecondaryLayers[surfaceIndex];
     if (secondaryLayer >= 0.0) {
@@ -193,11 +193,11 @@ void main() {
   // This is not Lighting Engine V2 and introduces no dynamic lights or shadows.
   if (layer >= 0.0 && normalLayer >= 0.0) {
     vec3 tangentNormal = texture(uTerrainNormal,
-      vec3(materialUv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
+      vec3(uv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
     float secondaryNormal = uTerrainSecondaryNormalLayers[surfaceIndex];
     if (variantMix > 0.0 && secondaryNormal >= 0.0) {
       vec3 nextNormal = texture(uTerrainNormal,
-        vec3(materialUv * uTerrainTilesPerVoxel, secondaryNormal)).xyz * 2.0 - 1.0;
+        vec3(uv * uTerrainTilesPerVoxel, secondaryNormal)).xyz * 2.0 - 1.0;
       tangentNormal = normalize(mix(tangentNormal, nextNormal, variantMix));
     }
     // Explicit face bases prevent top/wall normal maps from rotating incorrectly.
@@ -214,11 +214,11 @@ void main() {
   }
   if (layer >= 0.0 && ormLayer >= 0.0) {
     vec3 orm = texture(uTerrainOrm,
-      vec3(materialUv * uTerrainTilesPerVoxel, ormLayer)).rgb;
+      vec3(uv * uTerrainTilesPerVoxel, ormLayer)).rgb;
     float secondaryOrm = uTerrainSecondaryOrmLayers[surfaceIndex];
     if (variantMix > 0.0 && secondaryOrm >= 0.0) {
       vec3 nextOrm = texture(uTerrainOrm,
-        vec3(materialUv * uTerrainTilesPerVoxel, secondaryOrm)).rgb;
+        vec3(uv * uTerrainTilesPerVoxel, secondaryOrm)).rgb;
       orm = mix(orm, nextOrm, variantMix);
     }
     // AO is local material micro-occlusion; roughness reduces broad highlights.
@@ -651,6 +651,7 @@ export class WebGLVoxelView {
       labMaterials: gl.getUniformLocation(this.#program,'uLabMaterials'),
       labEnabled: gl.getUniformLocation(this.#program,'uLabEnabled'),
       labBlend: gl.getUniformLocation(this.#program,'uLabBlend'),
+      labGrassStyle: gl.getUniformLocation(this.#program,'uLabGrassStyle'),
       labTime: gl.getUniformLocation(this.#program,'uLabTime'),
       labOrigin: gl.getUniformLocation(this.#program,'uLabOrigin'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
@@ -843,7 +844,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0 }) {
+    labBlend=true,labTime=0,labGrassStyle=0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -903,6 +904,7 @@ export class WebGLVoxelView {
       gl.bindTexture(gl.TEXTURE_3D,this.#labVolume);
       gl.uniform3fv(this.#uniforms.labOrigin,this.#labOrigin);
       gl.uniform1i(this.#uniforms.labBlend,labBlend?1:0);
+      gl.uniform1i(this.#uniforms.labGrassStyle,labGrassStyle);
       gl.uniform1f(this.#uniforms.labTime,labTime);
     }
     gl.uniform2f(this.#uniforms.viewport, width, height);

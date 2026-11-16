@@ -29,6 +29,11 @@ canvas#terrain{display:block;width:100%;height:clamp(290px,56vw,540px);backgroun
 <button type="button" id="camera" aria-pressed="false">Inspect angle</button>
 <button type="button" id="excavate" aria-pressed="false" hidden>Excavate</button>
 </div>
+<div class="toolbar" role="group" aria-label="Compare grass">
+<button type="button" data-grass="grass" aria-pressed="true">Forest moss</button>
+<button type="button" data-grass="grass-clearing" aria-pressed="false">Clearing grass</button>
+<button type="button" data-grass="grass-shade" aria-pressed="false">Shaded moss</button>
+</div>
 <div class="viewport"><canvas id="terrain" aria-label="Selected voxel material under the V2 renderer"></canvas><canvas id="actors" aria-hidden="true"></canvas></div>
 <div class="toolbar" id="hunt-controls">
 <div role="group" aria-label="Move the wizard">

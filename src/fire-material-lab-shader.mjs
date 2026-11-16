@@ -4,6 +4,7 @@ export const FIRE_MATERIAL_LAB_UNIFORMS_GLSL=`
 uniform highp sampler3D uLabMaterials;
 uniform bool uLabEnabled;
 uniform bool uLabBlend;
+uniform int uLabGrassStyle;
 uniform float uLabTime;
 uniform vec3 uLabOrigin;
 `;
@@ -22,11 +23,22 @@ int labMaterial(ivec3 p) {
   return int(round(texelFetch(uLabMaterials,cell,0).r*255.0));
 }
 
+vec3 labGrassTint(vec2 uv) {
+  if(uLabGrassStyle==0)return vec3(1.0);
+  float coverage=smoothstep(.29,.73,labNoise(uv*.21)+.16*(labNoise(uv*.67)-.5));
+  vec3 low=vec3(.63,.68,.82),high=vec3(1.14,1.15,.91);
+  if(uLabGrassStyle==2){low=vec3(.82,.84,.78);high=vec3(1.12,1.19,.97);}
+  if(uLabGrassStyle==3){low=vec3(.71,.75,.90);high=vec3(1.08,1.10,1.13);}
+  return mix(low,high,coverage);
+}
+
 vec3 labLinearSurface(int material, vec2 uv) {
   int index=material==1?(vNormal.y>0.5?0:1):material==2?2:3;
   float layer=uTerrainLayers[index];
   if(layer<0.0)return srgbToLinearColor(terrainAlbedo(float(material==6?3:material)));
-  return texture(uTerrainAlbedo,vec3(uv*uTerrainTilesPerVoxel,layer)).rgb;
+  vec2 mapped=index==0&&uLabGrassStyle>0?uv*.62:uv;
+  vec3 albedo=texture(uTerrainAlbedo,vec3(mapped*uTerrainTilesPerVoxel,layer)).rgb;
+  return index==0?albedo*labGrassTint(uv):albedo;
 }
 
 ${fireLavaMotifGlsl()}
@@ -68,6 +80,7 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
     base=labLinearSurface(3,uv)*crustTint;
   }
   float structure=labNoise(uv*.42)+.33*labNoise(uv*1.75);
+  if(material==1&&vNormal.y>.5)base*=labGrassTint(uv);
   float tone=mix(.82,1.16,smoothstep(.15,1.24,structure));
   if(!uLabBlend||vNormal.y<-.5)return base*tone;
 
