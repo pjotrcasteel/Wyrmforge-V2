@@ -1,6 +1,6 @@
 import {TerrainClusterHandoff} from './terrain-cluster-handoff.mjs';
 import {terrainActorBounds} from './terrain-actor.mjs';
-import {clusterCellBounds,physicalBoxesOverlap,sweptBoxContact} from './terrain-cluster-collision.mjs';
+import {clusterCellBounds,clusterCellBoxes,clusterCellHeight,physicalBoxesOverlap,sweptBoxContact} from './terrain-cluster-collision.mjs';
 
 export const TERRAIN_CLUSTER_FIXED_STEP=1/60;
 const GRAVITY=22;
@@ -21,7 +21,7 @@ function indexColumns(states){
   for(const state of states)for(const cell of state.body.cells){
     const key=columnKey(cell.x,cell.z);
     if(!columns.has(key))columns.set(key,[]);
-    columns.get(key).push({state,y:cell.y});
+    columns.get(key).push({state,y:cell.y,height:clusterCellHeight(cell)});
   }
   return columns;
 }
@@ -58,7 +58,11 @@ export class TerrainClusterPhysics {
     for(const state of this.#states.values()){
       if(!physicalBoxesOverlap(bounds,bodyBounds(state)))continue;
       for(const cell of state.body.cells){
-        if(physicalBoxesOverlap(bounds,clusterCellBounds(cell,state.offsetY)))return true;
+        if(!physicalBoxesOverlap(bounds,clusterCellBounds(cell,state.offsetY)))continue;
+        if(!cell.levels)return true;
+        for(const box of clusterCellBoxes(cell,state.offsetY)){
+          if(physicalBoxesOverlap(bounds,box))return true;
+        }
       }
     }
     return false;
@@ -73,8 +77,11 @@ export class TerrainClusterPhysics {
     for(const state of this.#states.values()){
       if(!physicalBoxesOverlap(swept,bodyBounds(state)))continue;
       for(const cell of state.body.cells){
-        const travel=sweptBoxContact(bounds,clusterCellBounds(cell,state.offsetY),axis,distance);
-        if(travel!==null&&(nearest===null||Math.abs(travel)<Math.abs(nearest)))nearest=travel;
+        if(!physicalBoxesOverlap(swept,clusterCellBounds(cell,state.offsetY)))continue;
+        for(const box of clusterCellBoxes(cell,state.offsetY)){
+          const travel=sweptBoxContact(bounds,box,axis,distance);
+          if(travel!==null&&(nearest===null||Math.abs(travel)<Math.abs(nearest)))nearest=travel;
+        }
       }
     }
     return nearest;
@@ -126,9 +133,10 @@ export class TerrainClusterPhysics {
     for(const cell of state.body.cells){
       const bottom=cell.y+state.offsetY;
       const target=cell.y+next;
+      const cellTop=bottom+clusterCellHeight(cell);
       // Check every touched voxel. Partial surfaces are conservatively
       // treated as occupying their parent cell in this first solver.
-      for(let y=Math.floor(bottom+1-EPSILON);y>=Math.floor(target+EPSILON);y--){
+      for(let y=Math.floor(cellTop-EPSILON);y>=Math.floor(target+EPSILON);y--){
         if(!this.#isKnown(cell.x,y,cell.z)){
           this.#stop(state,'waiting-coverage');
           return;
@@ -144,23 +152,27 @@ export class TerrainClusterPhysics {
         }
         break;
       }
-      const box=actorBoxes.length?clusterCellBounds(cell,state.offsetY):null;
       for(const actor of actorBoxes){
-        if(physicalBoxesOverlap(box,actor)){
-          this.#stop(state,'occupied','actor');
-          return;
-        }
-        const travel=sweptBoxContact(box,actor,'y',next-state.offsetY);
-        if(travel!==null){
-          next=state.offsetY+travel;
-          contact='actor';
+        const bounds=clusterCellBounds(cell,state.offsetY);
+        const proposed={...bounds,y:[cell.y+next-EPSILON*2,cellTop+EPSILON*2]};
+        if(!physicalBoxesOverlap(proposed,actor))continue;
+        for(const box of clusterCellBoxes(cell,state.offsetY)){
+          if(physicalBoxesOverlap(box,actor)){
+            this.#stop(state,'occupied','actor');
+            return;
+          }
+          const travel=sweptBoxContact(box,actor,'y',next-state.offsetY);
+          if(travel!==null){
+            next=state.offsetY+travel;
+            contact='actor';
+          }
         }
       }
       for(const other of columns.get(columnKey(cell.x,cell.z))){
         if(other.state===state)continue;
         const floor=other.y+other.state.offsetY;
-        const top=floor+1;
-        if(top>bottom+EPSILON&&floor<bottom+1-EPSILON){
+        const top=floor+other.height;
+        if(top>bottom+EPSILON&&floor<cellTop-EPSILON){
           this.#stop(state,'occupied');
           return;
         }

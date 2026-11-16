@@ -4,6 +4,7 @@ import {beginTerrainSupportScan,scanTerrainSupport} from './terrain-support-scan
 import {projectVoxel} from './camera-presets.mjs';
 import {targetHuntFireball} from './hunt-play-runtime.mjs';
 import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
+import {MICRO_VOXEL_EDGE} from './microvoxel-surface.mjs';
 
 const STONE=new Set([3]);
 const ANCHORS=new Set([V2_BEDROCK_MATERIAL]);
@@ -293,13 +294,49 @@ export class HuntCollapsePreview {
       ctx.fill();
     };
     const cells=this.renderCells;
-    const occupied=new Set(cells.map(cell=>cellKey({...cell,y:Math.round(cell.y)})));
-    for(const {x,y,z,material} of cells){
+    const occupied=new Map(cells.map(cell=>[cellKey({...cell,y:Math.round(cell.y)}),cell]));
+    for(const cell of cells){
+      const {x,y,z,material,levels}=cell;
       const [top,front]=FALL_COLORS[material]??FALL_COLORS[3];
-      if(!occupied.has(cellKey({x,y:Math.round(y),z:z+1})))face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],front);
+      const neighbor=occupied.get(cellKey({x,y:Math.round(y),z:z+1}));
+      if(levels){
+        paintMicroSurface(cell,neighbor,top,front,face);
+        continue;
+      }
+      if(neighbor?.levels){
+        paintFrontAboveMicroSurface(cell,neighbor.levels,front,face);
+      }else if(!neighbor){
+        face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],front);
+      }
       if(!occupied.has(cellKey({x,y:Math.round(y)+1,z}))){
         face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],top);
       }
+    }
+  }
+}
+
+function paintFrontAboveMicroSurface({x,y,z},neighbor,front,face){
+  const edge=MICRO_VOXEL_EDGE;
+  for(let column=0;column<edge;column++){
+    const low=y+neighbor[column]/edge;
+    if(low>=y+1)continue;
+    const x0=x+column/edge,x1=x+(column+1)/edge;
+    face([[x0,low,z+1],[x1,low,z+1],[x1,y+1,z+1],[x0,y+1,z+1]],front);
+  }
+}
+
+function paintMicroSurface({x,y,z,levels},neighbor,top,front,face){
+  const edge=MICRO_VOXEL_EDGE;
+  for(let row=0;row<edge;row++){
+    const z0=z+row/edge,z1=z+(row+1)/edge;
+    for(let column=0;column<edge;column++){
+      const x0=x+column/edge,x1=x+(column+1)/edge;
+      const high=y+levels[row*edge+column]/edge;
+      face([[x0,high,z0],[x1,high,z0],[x1,high,z1],[x0,high,z1]],top);
+      const next=row+1<edge?levels[(row+1)*edge+column]:
+        neighbor?.levels?.[column]??(neighbor?edge:0);
+      const low=y+next/edge;
+      if(low<high)face([[x0,low,z1],[x1,low,z1],[x1,high,z1],[x0,high,z1]],front);
     }
   }
 }

@@ -116,6 +116,14 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
     assert.throws(()=>replayHuntTerrainEdit(port,residentIds,pending,{collapse:preview}),/settled collapse/);
     preview.tick([]);
     assert.equal(preview.renderCells.length,longSpan?209:twoLayer?145:large?73:seam?7:trigger==='control'?8:9);
+    if(shaped){
+      const cell=preview.renderCells.find(item=>item.levels);
+      const view={width:402,height:604,scale:16,camera:'hunt'};
+      const top=projectVoxel(cell.x+.1,cell.y+.1,cell.z,view);
+      const painted=[];
+      preview.paint({beginPath(){},moveTo(){},lineTo:(x,y)=>painted.push({x,y}),closePath(){},fill(){}},view);
+      assert.ok(painted.some(({x,y})=>Math.abs(x-top.x)<1e-7&&Math.abs(y-top.y)<1e-7));
+    }
     assert.equal(world.get(sampleX,shelfY,sampleZ),0);
     assert.equal(preview.protectedIds.length,longSpan?8:large?6:seam?2:1);
     if(seam)assert.deepEqual([...new Set(preview.protectedIds.map(id=>id.split(':cell:')[0]))].sort(),
@@ -319,4 +327,17 @@ test('a live support scan yields to both its elapsed work target and its operati
 
   for(let frame=0;frame<30&&fast.checkingSupport;frame++)fast.stepSupportScan(64,{workBudgetMs:2});
   assert.equal(fast.supportReport.status,'detached');
+});
+
+test('airborne microvoxels occlude the actor only where the ray hits occupied height',()=>{
+  const world=new VoxelWorld();
+  const view={width:400,height:600,scale:16,camera:'hunt'};
+  const moving=[{x:2,y:5,z:10,material:3,levels:Array.from({length:100},(_,index)=>index%10<5?3:8)}];
+  const occluded=x=>{
+    const actor={x,y:4,z:9.5};
+    const screen=projectVoxel(x,5.55,10,view);
+    return huntActorPixelOccluded(world,view,actor,screen.x,screen.y,10,moving);
+  };
+  assert.equal(occluded(2.25),false);
+  assert.equal(occluded(2.75),true);
 });

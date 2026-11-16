@@ -165,3 +165,42 @@ test('stale support, actors and unknown coverage block settlement without changi
   assert.equal(world.get(0,1,0),0);
   assert.equal(handoff.bodies[0].id,id);
 });
+
+test('airborne microvoxels expose exact low and high surfaces to actor sweeps',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  const handoff=new TerrainClusterHandoff(world,{preserveMicroSurfaces:true});
+  const levels=Array.from({length:100},(_,index)=>index%10<5?3:8);
+  world.set(0,5,0,3);
+  world.setMicroSurfaceTile(0,5,0,levels);
+  const {candidates}=scanTerrainSupport(world,[{x:0,y:4,z:0}],{
+    cohesive:new Set([3]),anchors:new Set([4]),isKnown:known
+  });
+  assert.equal(handoff.detach(candidates[0]).status,'detached');
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
+  const low={x:[.1,.4],y:[5.4,5.6],z:[.2,.8]};
+  const high={...low,x:[.6,.9]};
+  assert.equal(physics.intersects(low),false);
+  assert.equal(physics.intersects(high),true);
+
+  const drop=bounds=>physics.sweep({...bounds,y:[6,7]},'y',-2);
+  assert.ok(Math.abs(drop(low)+.7)<1e-7);
+  assert.ok(Math.abs(drop(high)+.2)<1e-7);
+});
+
+test('one falling body can rest on the fractional top of another body',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  const handoff=new TerrainClusterHandoff(world,{preserveMicroSurfaces:true});
+  world.set(0,0,0,4);
+  world.set(0,4,0,3);
+  world.setMicroSurfaceTile(0,4,0,Array(100).fill(5));
+  const {candidates}=scanTerrainSupport(world,[{x:0,y:3,z:0}],{
+    cohesive:new Set([3]),anchors:new Set([4]),isKnown:known
+  });
+  assert.equal(handoff.detach(candidates[0]).status,'detached');
+  detach(world,handoff,0,8);
+  const physics=new TerrainClusterPhysics(world,handoff,{isKnown:known});
+  const [lower,upper]=tick(physics,120);
+  assert.equal(lower.offsetY,-3);
+  assert.equal(upper.offsetY,-6.5);
+  assert.equal(upper.contact,'cluster');
+});
