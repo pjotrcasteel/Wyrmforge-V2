@@ -1,9 +1,11 @@
 // Resident, grounded woodland instances shared by rendering and movement.
+import {HuntTreeDamage} from './hunt-tree-damage.mjs';
 import {LIVE_TREES} from './wet-forest-tree-sprites.mjs';
 import {ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 
 export class HuntWoodlandObjects {
   #regions=new Map();
+  #damage;
   #graph;
   #regionKeys=new Map();
   #placementCache=new Map();
@@ -20,7 +22,7 @@ export class HuntWoodlandObjects {
       candidates:this.#candidates,maxCandidatesPerSweep:this.#maxCandidates,treesFelled:this.#treesFelled,
       treesWithoutLanding:this.#treesWithoutLanding,recentTreeFalls:this.#recentTreeFalls.slice()};
   }
-  constructor(graph){this.#graph=graph;}
+  constructor(graph,damage=new HuntTreeDamage()){this.#graph=graph;this.#damage=damage;}
   get regions(){return this.#regions.values();}
   update(regionIds,terrain,coverage=null){
     for(const id of this.#regions.keys()){
@@ -76,7 +78,8 @@ export class HuntWoodlandObjects {
     if(!hit||hit.point.y>y+.5)return null;
     const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
     const reserved=item.footprint?.radius??.46*item.scale;
-    if(hit.point.y<y-.5){
+    const hits=this.#damage.hits(item.id);
+    if(hit.point.y<y-.5||hits===2){
       const halfLength=reserved*.75;
       const supported=[x-halfLength,x+halfLength].every(end=>{
         if(isPublished&&!isPublished(end,z))return false;
@@ -89,7 +92,7 @@ export class HuntWoodlandObjects {
     const sprite=LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length];
     // Large oak roots use the reserved footprint without blocking the canopy.
     const radius=sprite.name.startsWith('tree.oak_l.')?reserved:.23*item.scale;
-    return {...base,radius,height:2*item.scale,sprite};
+    return {...base,radius,height:2*item.scale,sprite,damaged:hits===1};
   }
   terrainChanged(bounds,terrain,isPublished){
     const falls=[];
@@ -121,6 +124,45 @@ export class HuntWoodlandObjects {
     }
     return falls;
   }
+  raycastTree({origin,direction,maxDistance}){
+    let closest=maxDistance,hit=null;
+    for(const instances of this.regions)for(const tree of instances){
+      if(!tree.sprite)continue;
+      const min=[tree.x-tree.radius,tree.y,tree.z-tree.radius];
+      const max=[tree.x+tree.radius,tree.y+tree.height,tree.z+tree.radius];
+      let near=0,far=closest;
+      for(let axis=0;axis<3&&near<=far;axis++){
+        const start=origin[axis],delta=direction[axis];
+        if(Math.abs(delta)<1e-9){
+          if(start<min[axis]||start>max[axis])far=-1;
+          continue;
+        }
+        const a=(min[axis]-start)/delta,b=(max[axis]-start)/delta;
+        near=Math.max(near,Math.min(a,b));
+        far=Math.min(far,Math.max(a,b));
+      }
+      if(near>far||near>=closest)continue;
+      closest=near;
+      const [x,y,z]=origin.map((value,axis)=>value+near*direction[axis]);
+      hit={id:tree.id,point:{x,y,z}};
+    }
+    return hit;
+  }
+
+  hitTree(id,terrain,isPublished){
+    for(const instances of this.regions){
+      const index=instances.findIndex(tree=>tree.id===id&&tree.sprite);
+      if(index<0)continue;
+      const hits=this.#damage.hit(id);
+      if(!hits)return null;
+      const tree=instances[index];
+      const {x,z}=tree;
+      const falls=this.terrainChanged({min:{x,z},max:{x,z}},terrain,isPublished);
+      return {hits,falls};
+    }
+    return null;
+  }
+
   overlapsActor({x,y,z}){
     for(const instances of this.regions)for(const prop of instances){
       if(y>=prop.y+prop.height||y+ACTOR_HEIGHT<=prop.y)continue;

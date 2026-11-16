@@ -26,8 +26,8 @@ export class HuntTreePreview {
   #image;
   #scenery;
   #falls=new Map();
-  constructor(graph,image){
-    this.objects=new HuntWoodlandObjects(graph);
+  constructor(graph,image,damage){
+    this.objects=new HuntWoodlandObjects(graph,damage);
     this.#image=image;
     this.#scenery=new ScenicForest(graph.layout);
   }
@@ -35,7 +35,14 @@ export class HuntTreePreview {
     if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain,coverage);
   }
   terrainChanged(bounds,terrain,isPublished,now,animate=true){
-    const falls=this.objects.terrainChanged(bounds,terrain,isPublished);
+    this.#animate(this.objects.terrainChanged(bounds,terrain,isPublished),now,animate);
+  }
+  hitTree(id,terrain,isPublished,now,animate){
+    const hit=this.objects.hitTree(id,terrain,isPublished);
+    if(hit)this.#animate(hit.falls,now,animate);
+    return hit;
+  }
+  #animate(falls,now,animate){
     if(!animate)return;
     for(const {tree,landingY} of falls){
       if(this.#falls.size>=MAX_VISIBLE_FALLS)this.#falls.delete(this.#falls.keys().next().value);
@@ -87,6 +94,7 @@ export class HuntTreePreview {
           layer.y<feature.y+feature.h&&layer.y+layer.h>feature.y){
           layer.depth=Math.max(layer.depth,feature.depth+.000001);
         }
+        if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layers.push(layer);
       }
     }
@@ -98,7 +106,13 @@ export class HuntTreePreview {
     ctx.imageSmoothingEnabled=false;
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
-      if(sprite)ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+      if(sprite){
+        ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+        if(layer.damageFoot){
+          ctx.fillStyle='#c89962';
+          ctx.fillRect(Math.round(layer.damageFoot.x)-2,Math.round(layer.damageFoot.y),5,2);
+        }
+      }
       else if(layer.paint)layer.paint(ctx);
       else if(layer.prop){
         ctx.globalAlpha=layer.alpha;

@@ -4,6 +4,9 @@ import {VoxelWorld} from '../src/voxel-world.mjs';
 import {V2TerrainPort} from '../src/terrain-integration-port.mjs';
 import {TerrainEditLedger} from '../src/terrain-edit-ledger.mjs';
 import {HuntTreePreview} from '../src/hunt-tree-preview.mjs';
+import {HuntTreeDamage} from '../src/hunt-tree-damage.mjs';
+import {targetHuntFireball} from '../src/hunt-play-runtime.mjs';
+import {projectVoxel} from '../src/camera-presets.mjs';
 import {HuntWoodlandObjects} from '../src/hunt-woodland-objects.mjs';
 
 test('grounded trunks stop both approaches, preserve canopy clearance and evict with the region',()=>{
@@ -63,6 +66,11 @@ test('removing root support replaces the trunk and reconstructs the fallen log a
   const objects=preview.objects;
   preview.update(['entry'],terrain);
   assert.ok(objects.limitTravel({x:-1,y:4,z:.5},'x',3)<3);
+  const huntView={camera:'hunt',width:402,height:604,scale:16};
+  const target=projectVoxel(.5,5,.5,huntView);
+  assert.equal(targetHuntFireball(terrain,huntView,target.x,target.y,objects)?.treeId,tree.id);
+  const soil=projectVoxel(2.5,4,.5,huntView);
+  assert.equal(targetHuntFireball(terrain,huntView,soil.x,soil.y,objects)?.target.x,2);
   const result=terrain.apply({id:'root-crater',type:'carve-crater',x:0,y:3,z:0,radius:2.3,depth:2});
   assert.ok(result.removedVoxels>0);
   preview.terrainChanged(result.changedBounds,terrain,null,1000);
@@ -87,4 +95,30 @@ test('removing root support replaces the trunk and reconstructs the fallen log a
   objects.update(['entry'],terrain);
   assert.deepEqual([...objects.regions][0],[fallen]);
   assert.equal(objects.diagnostics.treesFelled,1);
+});
+
+test('direct tree hits preserve partial and settled damage across new object instances',()=>{
+  const tree={kind:'tree',id:'tree:direct',position:{x:0,y:5,z:0},scale:1,seed:7};
+  const graph={placement:()=>({placements:[tree]})};
+  const terrain={raycast:()=>({point:{y:5}})};
+  const saved=new Map();
+  const storage={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)};
+  const load=()=>{
+    const objects=new HuntWoodlandObjects(graph,new HuntTreeDamage(storage,'seed-7'));
+    objects.update(['entry'],terrain);
+    return objects;
+  };
+  const ray={origin:[0,6,3],direction:[0,0,-1],maxDistance:10};
+  const first=load();
+  assert.equal(first.raycastTree({...ray,maxDistance:2}),null);
+  assert.equal(first.raycastTree(ray)?.id,tree.id);
+  assert.equal(first.hitTree(tree.id,terrain).hits,1);
+  const reloaded=load();
+  assert.ok([...reloaded.regions][0][0].damaged);
+  const felled=reloaded.hitTree(tree.id,terrain);
+  assert.equal(felled.hits,2);
+  assert.equal(felled.falls.length,1);
+  assert.equal(reloaded.raycastTree(ray),null);
+  assert.equal(reloaded.hitTree(tree.id,terrain),null);
+  assert.equal([...load().regions][0][0].kind,'log');
 });
