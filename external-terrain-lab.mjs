@@ -52,7 +52,10 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const seamCollapse=['seam','measure','mixed'].includes(gravityMode);
+const deferredSupport=gravityMode==='deferred';
+const SUPPORT_OPERATIONS_PER_FRAME=96;
+const mixedGravity=gravityMode==='mixed'||deferredSupport;
+const seamCollapse=['seam','measure','mixed','deferred'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
 const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
@@ -632,7 +635,7 @@ function updatePlayStreaming(now) {
       if(stream.structuralGravity)stream.collapse=new HuntCollapsePreview(active.world,active.port,
         stream.residency,stream.terrainSave,{
           fixture:stream.gravityFixture,guidedSupport:stream.regionCollapse?REGION_COLLAPSE_SUPPORT:undefined,
-          mixedTerrain:gravityMode==='mixed',foundationY:stream.cellCatalog.height.minY
+          mixedTerrain:mixedGravity,foundationY:stream.cellCatalog.height.minY
         });
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
@@ -640,7 +643,7 @@ function updatePlayStreaming(now) {
   }
   const residency=stream.residency;
   if(!residency.metrics.transition) {
-    if(playFireball || pendingEdit || pendingTerrainPresentation || renderer.pendingUploads)return;
+    if(playFireball || stream.collapse?.checkingSupport || pendingEdit || pendingTerrainPresentation || renderer.pendingUploads)return;
     const beginAt=performance.now();
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
@@ -685,6 +688,7 @@ function updatePlayStreaming(now) {
 
 function canCastPlayFireball(){
   return playMode&&!awaitingPlayContext&&!playStream?.collapse?.holdsFixture&&
+    !playStream?.collapse?.checkingSupport&&
     playActor&&active&&playView&&!playFireball&&!pendingMesh&&!pendingEdit&&
     !restoring&&!errorMessage&&!streamingBusy()&&renderer?.ready&&!renderer.pendingUploads;
 }
@@ -825,6 +829,17 @@ function measureCollapseActivation(at){
     ownerCount:collapse.protectedIds.length,world:active.world});
 }
 
+function advanceCollapseSupport(){
+  const collapse=playStream?.collapse;
+  if(!collapse?.checkingSupport||document.hidden||awaitingPlayContext||
+      pendingEdit||renderer.pendingUploads||streamingBusy())return;
+  const started=performance.now();
+  const dirty=collapse.stepSupportScan(SUPPORT_OPERATIONS_PER_FRAME);
+  if(!dirty.length)return;
+  measureCollapseActivation(started);
+  queueCollapseMeshes(dirty);
+}
+
 function queueCollapseMeshes(dirtyChunks){
   if(!dirtyChunks.length)return;
   const dirty=new Set(dirtyChunks);
@@ -838,8 +853,8 @@ function updateCollapseButton(){
   const collapse=playStream?.collapse;
   collapseButton.hidden=!playStream?.gravityPreview;
   const labels={ready:'Break stone support',falling:'Stone falling…','actor-blocked':'Move clear of the shelf',
-    settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
-  if(gravityMode==='mixed'){
+    'checking-support':'Checking terrain support…',settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
+  if(mixedGravity){
     labels.falling='Terrain falling…';
     labels.settled='Terrain settled · Saved';
     labels['settled-unsaved']='Terrain settled · Save unavailable';
@@ -1158,7 +1173,7 @@ function resetSite() {
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
           'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
-        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:gravityMode==='mixed'}):
+        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:mixedGravity}):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
@@ -1191,7 +1206,7 @@ function resetSite() {
 }
 
 function impactSpan(targetOverride=null) {
-  if(streamingBusy() || !active || restoring || pendingMesh || pendingEdit || errorMessage ||
+  if(streamingBusy() || playStream?.collapse?.checkingSupport || !active || restoring || pendingMesh || pendingEdit || errorMessage ||
       !renderer.ready || renderer.pendingUploads) return;
   if(typeof Worker!=='function' && active.world.chunkCount>8) {
     errorMessage='Web Worker is required to edit larger external terrain';
@@ -1224,9 +1239,9 @@ function impactSpan(targetOverride=null) {
     if(playMode)recordPlayTerrainEdit(command,result);
     const collapse=playMode?playStream?.collapse:null;
     const activationStart=performance.now();
-    const collapseDirty=collapse?.acceptImpact(result)??[];
+    const collapseDirty=collapse?.acceptImpact(result,{defer:deferredSupport})??[];
     if(collapseDirty.length)measureCollapseActivation(activationStart);
-    if(playMode&&!collapse?.holdsFixture)playStream?.terrainSave.commit(result.removedCells);
+    if(playMode&&!collapse?.holdsFixture&&!collapse?.checkingSupport)playStream?.terrainSave.commit(result.removedCells);
     if(playMode&&result.removedVoxels>0&&playStream?.residency){
       const residency=playStream.residency;
       const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
@@ -1365,6 +1380,7 @@ function frame(now) {
       }
     }
     updatePlayFrame(now);
+    advanceCollapseSupport();
     if(playMode)advancePlayFireball(now);
     updateCollapseButton();
     if(playMode){

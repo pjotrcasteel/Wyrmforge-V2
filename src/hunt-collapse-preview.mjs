@@ -1,6 +1,6 @@
 import {TerrainClusterHandoff} from './terrain-cluster-handoff.mjs';
 import {TerrainClusterPhysics} from './terrain-cluster-physics.mjs';
-import {scanTerrainSupport} from './terrain-support-scan.mjs';
+import {beginTerrainSupportScan,scanTerrainSupport} from './terrain-support-scan.mjs';
 import {projectVoxel} from './camera-presets.mjs';
 import {targetHuntFireball} from './hunt-play-runtime.mjs';
 import {V2_BEDROCK_MATERIAL} from './terrain-edit-ledger.mjs';
@@ -47,6 +47,7 @@ export class HuntCollapsePreview {
   #removed=[];
   #outcomes=new Map();
   #replay=null;
+  #pendingScan=null;
   #fixture;
   #guidedSupport;
   #cohesive;
@@ -74,7 +75,8 @@ export class HuntCollapsePreview {
 
   get replay(){return this.#replay;}
   get outcomes(){return [...this.#outcomes.values()];}
-  get canAcceptImpact(){return this.#fixture?this.#phase==='ready':!this.holdsFixture;}
+  get checkingSupport(){return this.#pendingScan!==null;}
+  get canAcceptImpact(){return this.#fixture?this.#phase==='ready':!this.holdsFixture&&!this.checkingSupport;}
   get phase(){return this.#phase;}
   get holdsFixture(){return this.#phase==='falling'||this.#phase==='actor-blocked';}
   get collision(){return this.#physics;}
@@ -98,16 +100,36 @@ export class HuntCollapsePreview {
     return {command:SUPPORT,edit,dirtyChunks:[...new Set([...edit.dirtyChunks,...dirty])]};
   }
 
-  acceptImpact(edit){
+  acceptImpact(edit,{defer=false}={}){
     if(!this.canAcceptImpact||!edit.removedCells?.length||edit.removedCells.length>256||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     const removed=edit.removedCells.map(key=>{
       const [x,y,z]=key.split(',').map(Number);
       return {x,y,z};
     });
-    const scan=scanTerrainSupport(this.#world,removed,{
-      isKnown:this.#isKnown,cohesive:this.#cohesive,anchors:ANCHORS,foundationY:this.#foundationY
-    });
+    const options={isKnown:this.#isKnown,cohesive:this.#cohesive,anchors:ANCHORS,foundationY:this.#foundationY};
+    if(!defer)return this.#applyScan(edit,scanTerrainSupport(this.#world,removed,options));
+    const job=beginTerrainSupportScan(this.#world,removed,options);
+    this.#pendingScan={edit,job,previousPhase:this.#phase};
+    this.#phase='checking-support';
+    this.#outcomes.set(edit.editRevision,Object.freeze({sequence:edit.editRevision,landed:null}));
+    return [];
+  }
+
+  stepSupportScan(maxOperations){
+    const pending=this.#pendingScan;
+    if(!pending)return [];
+    const scan=pending.job.step(maxOperations);
+    if(scan.status==='scanning')return [];
+    this.#pendingScan=null;
+    this.#phase=pending.previousPhase;
+    this.#outcomes.delete(pending.edit.editRevision);
+    const dirty=this.#applyScan(pending.edit,scan);
+    if(!this.holdsFixture)this.#save.commit(pending.edit.removedCells);
+    return dirty;
+  }
+
+  #applyScan(edit,scan){
     if(scan.status!=='complete')return this.#decline();
     const candidates=this.#fixture?scan.candidates.filter(candidate=>
       candidate.cells.some(isShelf)&&candidate.cells.every(isScaffold)):scan.candidates;

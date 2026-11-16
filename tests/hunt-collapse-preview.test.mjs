@@ -14,12 +14,13 @@ import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT
 import {spawnHuntExplorer} from '../src/hunt-play-runtime.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from '../src/hunt-collapse-preview.mjs';
 
-for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball'])test(
+for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball','deferred mixed terrain Fireball'])test(
   'actual seed 7 Hunt settles, streams and reloads the shelf after '+trigger,()=>{
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
     siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
   const graph=generateAuthoredHuntTerrainGraph(site);
-  const mixed=trigger==='mixed terrain Fireball';
+  const deferred=trigger==='deferred mixed terrain Fireball';
+  const mixed=deferred||trigger==='mixed terrain Fireball';
   const seam=mixed||trigger==='region seam Fireball';
   const entry=seam?REGION_COLLAPSE_ENTRY:site.layout.topology.entry;
   const support=seam?REGION_COLLAPSE_SUPPORT:{x:5,y:6,z:10};
@@ -61,9 +62,13 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
       const nearby={id:'nearby-crater',type:'carve-crater',x:0,y:4,z:10,radius:2.3,depth:2};
       const unrelated=port.apply(nearby,{captureRemovedCells:true});
       record(nearby,unrelated);
-      save.commit(unrelated.removedCells);
       assert.ok(unrelated.removedVoxels>0);
-      assert.deepEqual(preview.acceptImpact(unrelated),[]);
+      assert.deepEqual(preview.acceptImpact(unrelated,{defer:deferred}),[]);
+      if(deferred){
+        for(let frame=0;frame<100&&preview.checkingSupport;frame++)preview.stepSupportScan(96);
+        assert.equal(preview.outcomes.length,0);
+        assert.equal(save.removedCells.has(unrelated.removedCells[0]),true);
+      }else save.commit(unrelated.removedCells);
       assert.equal(preview.phase,'ready');
       const view={width:402,height:604,scale:16,camera:'hunt',panY:-100};
       if(seam){
@@ -82,7 +87,18 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
         expectedRevision:cast.worldRevision};
       const impact=port.apply(command,{captureRemovedCells:true});
       record(command,impact);
-      assert.ok(preview.acceptImpact(impact).length);
+      if(deferred){
+        const revision=world.revision;
+        assert.deepEqual(preview.acceptImpact(impact,{defer:true}),[]);
+        assert.equal(preview.phase,'checking-support');
+        assert.equal(preview.canAcceptImpact,false);
+        const unfinished=exportHuntTerrainEdits(entries,preview.outcomes).at(-1);
+        assert.equal(unfinished.collapse.landed,null);
+        assert.deepEqual(preview.stepSupportScan(1),[]);
+        assert.equal(world.revision,revision);
+        for(let frame=0;frame<100&&preview.checkingSupport;frame++)preview.stepSupportScan(96);
+        assert.equal(preview.checkingSupport,false);
+      }else assert.ok(preview.acceptImpact(impact).length);
       assert.equal(save.removedCells.has(supportKey),false);
     }
     assert.equal(preview.phase,'falling');
