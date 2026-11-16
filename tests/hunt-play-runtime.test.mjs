@@ -8,7 +8,7 @@ import {
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import {
   HUNT_FIXED_STEP,HuntPlayPerformance,HuntFollowCamera,spawnHuntExplorer,
-  stepHuntExplorer,recoverHuntExplorer,findHuntRegionCrossing
+  stepHuntExplorer,recoverHuntExplorer,findHuntRegionCrossing,HuntContextRecoveryEvidence
 } from '../src/hunt-play-runtime.mjs';
 import { actorOverlapsTerrain } from '../src/terrain-actor.mjs';
 
@@ -256,4 +256,24 @@ test('F07-03 recovers from edited ground without undoing the crater',()=>{
     assert.equal(world.revision,revision);
     assert.equal(world.get(target.cell.x,target.cell.y,target.cell.z),0);
   }finally{loader.unload();}
+});
+
+test('context recovery evidence separates upload drain, terrain identity and resumed input',()=>{
+  const evidence=new HuntContextRecoveryEvidence();
+  const before={terrainEpoch:3,savedRemovedCells:12,committedEdits:1,actor:{x:0,y:5,z:0}};
+  const after={...before};
+  const step={x:.08,y:5,z:0};
+  evidence.lose(before);
+  evidence.movement(200,before.actor,step,{moveX:1,moveZ:0},3);
+  evidence.restore(3000);
+  evidence.resume(3040,after);
+  evidence.movement(3050,before.actor,step,{moveX:1,moveZ:0},4);
+  evidence.movement(3055,before.actor,step,{moveX:0,moveZ:0},3);
+  assert.equal(evidence.snapshot.firstMovement,null);
+  evidence.movement(3060,before.actor,step,{moveX:1,moveZ:0},3);
+  assert.deepEqual(evidence.snapshot,{phase:'ready',before,after,sameTerrain:true,
+    uploadDrainMs:40,firstMovement:{msSinceRestore:60,metres:.08}});
+  evidence.lose(before);
+  evidence.fail();
+  assert.deepEqual(evidence.snapshot,{phase:'failed',before});
 });

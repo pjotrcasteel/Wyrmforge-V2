@@ -37,7 +37,7 @@ import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
   spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,
-  targetHuntFireball,isHuntCastTap
+  targetHuntFireball,isHuntCastTap,HuntContextRecoveryEvidence
 } from './src/hunt-play-runtime.mjs';
 import {
   fitWorldgenSiteView, clampWorldgenViewZoom
@@ -138,6 +138,7 @@ let playFrameAt=null;
 let playFrameStats=new HuntPlayPerformance();
 let webglRestores=0,webglRestoreFailures=0;
 let awaitingPlayContext=false;
+let contextEvidence=new HuntContextRecoveryEvidence();
 let playCpuStats=new HuntPlayPerformance();
 let playWoodlandPaintStats=new HuntPlayPerformance();
 let playEvidence=new HuntStreamingEvidence();
@@ -771,6 +772,7 @@ function updatePlayFrame(now) {
         const before=playActor;
         playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects});
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
+        contextEvidence.movement(performance.now(),before,playActor,input,active.port.epoch);
         if(residency&&!streamingBusy()){
           const horde=playStream.horde;
           const section=residency.location(playActor.x,playActor.z);
@@ -931,6 +933,7 @@ function resetSite() {
     playRemovedVoxels=0;
     playFrameAt=null;
     playFrameStats=new HuntPlayPerformance();
+    contextEvidence=new HuntContextRecoveryEvidence();
     playCpuStats=new HuntPlayPerformance();
     playWoodlandPaintStats=new HuntPlayPerformance();
     playEvidence=new HuntStreamingEvidence();
@@ -1198,11 +1201,19 @@ function stageTerrainMeshes(terrain,kind) {
   lastStatusAt=-Infinity;
 }
 
+function playContextState(){
+  return {terrainEpoch:active?.port.epoch??null,
+    savedRemovedCells:playStream?.terrainSave.removedCells.size??null,
+    committedEdits:playStream?.terrainReplay.length??null,
+    actor:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null};
+}
+
 function frame(now) {
   const playCpuBegin=playMode?performance.now():0;
   try {
     if(awaitingPlayContext&&renderer?.ready&&!renderer.pendingUploads&&!pendingEdit&&!pendingMesh){
       awaitingPlayContext=false;
+      contextEvidence.resume(performance.now(),playContextState());
       resetPlayInput();
       if(contextTestButton){
         contextTestButton.textContent='Test WebGL loss';
@@ -1583,7 +1594,7 @@ if(playMode) {
         webglContext:renderer?{losses:renderer.statistics.contextLosses,
           restores:webglRestores,restoreFailures:webglRestoreFailures,
           ready:renderer.ready,recovering:renderer.recovering,
-          movementPaused:awaitingPlayContext}:null,
+          movementPaused:awaitingPlayContext,lastRecovery:contextEvidence.snapshot}:null,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
@@ -1668,6 +1679,11 @@ try {
     // projections. The 2.5D game camera does not require 2D fake terrain.
     transparentBackground:Boolean(forestContext),fastHuntMode:false,
     onAvailabilityChange(ready,error) {
+      if(playMode){
+        if(ready)contextEvidence.restore(performance.now());
+        else if(error)contextEvidence.fail();
+        else contextEvidence.lose(playContextState());
+      }
       if(playMode&&!ready){
         awaitingPlayContext=true;
         resetPlayInput();
