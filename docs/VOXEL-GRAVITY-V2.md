@@ -1,6 +1,6 @@
 # Voxel V2 — required hybrid gravity and structural collapse (V2.9)
 
-**Status:** required post-foundation V2.9 delivery milestone, **NOT IMPLEMENTED**. Gravity remains configurable/disableable per material and scene; implementation and Wyrmforge acceptance are required.  
+**Status:** required post-foundation V2.9 delivery milestone. A read-only support scan is in development. Gravity remains configurable/disableable per material and scene; implementation and Wyrmforge acceptance are required.
 **Owner decision:** 2026-11-10; Wyrmforge must remain a fixed-camera **2.5D pixel-art** game with real 3D destructible terrain and mobile-first performance. The completed engine must include bounded support-based rock collapse, loose-material gravity and settlement. Original Work V2.0–V2.7 foundation milestones and gates remain unchanged.  
 **Scope:** entirely new V2 design. No V1 modules, physics, scene assets, or contracts may be reused.
 
@@ -50,6 +50,10 @@ The voxel store is the **only authoritative static terrain store**. A detached c
 5. Mark affected chunk revisions and their face-neighbors before publishing derived work. Validate world epoch and revisions before accepting a delayed result.
 
 The first implementation will use **connectivity**, not simulated mass, stress, or fracture mechanics. Structural load, arch compression and progressive weakening are later research decisions.
+
+### Initial G09-01 implementation
+
+The read-only Voxel support scan accepts up to 256 precisely identified removed cells, an explicit residency query and explicit cohesive and anchor material sets. It uses six-face connectivity and reports the source world revision. Default limits are 2,048 sampled positions, 128 cells per candidate and 12 cells on any axis. An unresolved component or oversized component stays static. Budget exhaustion and stale revisions return no candidates. These are conservative development limits. Terrain mutation, transferring ownership to Physics, falling and settling are subsequent slices.
 
 ## 5. Gravity simulation and settlement
 
