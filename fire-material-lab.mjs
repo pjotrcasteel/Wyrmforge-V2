@@ -30,7 +30,8 @@ const uploadStatus=document.querySelector('#upload-status');
 const modes=[...document.querySelectorAll('[data-scene]')];
 const drafts=new Map();
 let renderer,fixture,scheduled,loading=false;
-let scene='hunt',camera='hunt',excavated=false;
+let scene=new URLSearchParams(location.search).get('scene')==='lava'?'lava':'hunt';
+let camera='hunt',excavated=false;
 let actor,enemy,projectile,lastFrame,accumulator=0;
 const pressed=new Set();
 const directions=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
@@ -107,7 +108,7 @@ function uploadTerrain(){
 function setScene(){
   fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value);
   actor=canWalk()?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
-  enemy=scene==='hunt'?spawnTerrainActor(fixture.world,{x:3.5,z:-2,searchTopY:10}):null;
+  enemy=canWalk()?spawnTerrainActor(fixture.world,{x:scene==='lava'?5.5:3.5,z:scene==='lava'?-4:-2,searchTopY:10}):null;
   projectile=null;
   cast.disabled=false;
   huntControls.hidden=!canWalk();
@@ -122,7 +123,7 @@ function setScene(){
   excavate.hidden=scene!=='layers';
   excavate.textContent=excavated?'Restore surface':'Excavate';
   excavate.setAttribute('aria-pressed',String(excavated));
-  status.textContent=scene==='lava'?'Molten flow and cooled banks at Hunt scale.':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
+  status.textContent=scene==='lava'?'Walk to the basalt crossing. Watch the molten bands move beneath it.':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
     scene==='layers'?'Excavate to inspect the material cut.':
       scene==='repeats'?'Repeated material at world scale.':'Top and exposed faces.';
   requestRender();

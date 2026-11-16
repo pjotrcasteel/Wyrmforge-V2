@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {FIRE_LAVA_MOTIF,fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from '../src/fire-lava-art.mjs';
 import {spawnTerrainActor} from '../src/terrain-actor.mjs';
-import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,LAB_LAVA,LAB_CRUST,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,LAB_LAVA,LAB_CRUST,LAB_LAVA_BRIDGE_X,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
 import {terrainArtKey,TERRAIN_ART_CHANNELS,TERRAIN_ART_SLOTS} from '../src/terrain-material-handoff.mjs';
 import {terrainMaterial} from '../src/terrain-materials.mjs';
 import {buildExposedFaceMeshes} from '../src/exposed-face-mesher.mjs';
@@ -71,4 +72,27 @@ test('the uploaded material volume keeps lava, crust and post-crater air distinc
   const {x,y,z}=MATERIAL_LAB_TARGET;
   const index=((z-changed.origin[2])*changed.size[1]+y)*changed.size[0]+x-changed.origin[0];
   assert.equal(changed.data[index],0);
+});
+
+test('the lava art packs five fixed palette bands on an eight-texel grid',()=>{
+  assert.equal(FIRE_LAVA_TEXELS_PER_VOXEL,8);
+  assert.equal(FIRE_LAVA_FRAMES_PER_SECOND,8);
+  assert.equal(FIRE_LAVA_MOTIF.length,12);
+  const packed=[...fireLavaMotifGlsl().matchAll(/(\d+)u/g)].map(match=>Number(match[1]));
+  const unpacked=FIRE_LAVA_MOTIF.map((row,index)=>{
+    assert.match(row,/^[0-4]{24}$/);
+    return Array.from({length:24},(_,x)=>(packed[index*3+Math.floor(x/8)]>>((x%8)*3))&7).join('');
+  });
+  assert.deepEqual(unpacked,FIRE_LAVA_MOTIF);
+  assert.ok(FIRE_LAVA_MOTIF.join('').split('4').length-1<16);
+});
+
+test('the basalt crossing keeps a solid walkable deck above the molten channel',()=>{
+  const {world}=createMaterialLabTerrain('stone','lava');
+  for(const x of [LAB_LAVA_BRIDGE_X,LAB_LAVA_BRIDGE_X+1]){
+    for(let z=-4;z<=6;z++)assert.equal(world.get(x,2,z),3);
+    assert.equal(world.get(x,0,1),LAB_LAVA);
+    assert.equal(world.get(x,1,1),0);
+  }
+  assert.ok(world.get(-7,6,-5));
 });
