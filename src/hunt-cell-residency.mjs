@@ -66,6 +66,10 @@ export class HuntCellResidency {
 
   constructor(world,graph,catalog,initialIds,{removedCells,entry,addedCells=[]}){
     this.#catalog=catalog;
+    for(const {y} of addedCells){
+      catalog.height.minY=Math.min(catalog.height.minY,y);
+      catalog.height.maxY=Math.max(catalog.height.maxY,y+1);
+    }
     this.#graph=graph;
     this.#entry=entry;
     this.#byId=new Map(catalog.cells.map(cell=>[cell.id,cell]));
@@ -115,6 +119,7 @@ export class HuntCellResidency {
     return (this.#grid.get(key)??[]).find(cell=>containsHuntLandform(cell.band,x,z));
   }
   publishedAt(x,z){return this.#published.has(this.#at(x,z)?.id);}
+  trackAddedCells(owner,cells){this.#session.trackAddedCells(owner,cells);}
 
   constrainInput(actor,input){
     const {moveX=0,moveZ=0}=input;
@@ -148,7 +153,7 @@ export class HuntCellResidency {
       planningReason:this.#planningReason,transition:this.#session.metrics.transition};
   }
 
-  next(actor,{view,displayedView,respawn,prepareEncounter,holdEncounterResidency,movement}){
+  next(actor,{view,displayedView,respawn,prepareEncounter,holdEncounterResidency,movement,protectedCellIds=[]}){
     if(!view)return null;
     let target=view;
     if(respawn){
@@ -158,7 +163,7 @@ export class HuntCellResidency {
     }
     const bounds=terrainViewFootprint(target,this.#catalog.height);
     const old=terrainViewFootprint(displayedView??view,this.#catalog.height);
-    const protectedIds=new Set();
+    const protectedIds=new Set(protectedCellIds);
     const section=this.location(actor.x,actor.z);
     for(const cell of this.#catalog.cells){
       const activeArena=holdEncounterResidency&&cell.band.role==='horde'&&cell.band.id===section;

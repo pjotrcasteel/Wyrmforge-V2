@@ -91,6 +91,10 @@ body[data-play-hunt] #play-hud{
   padding:8px 10px;border:1px solid #678c7a;border-radius:8px;
   font:11px/1.5 ui-monospace,monospace;
 }
+body[data-play-hunt] #play-collapse-preview:not([hidden]){
+  position:absolute;top:112px;right:16px;z-index:6;min-height:44px;
+  background:#51412a;color:#fff6de;font-weight:700
+}
 body[data-play-hunt] #play-hud summary{
   cursor:pointer;font-weight:700;user-select:none;
   touch-action:manipulation;
@@ -169,6 +173,7 @@ body.focus-mode #site-summary{max-width:46%}
     <button id="play-context-test" type="button" hidden>Test WebGL loss</button>
     <div id="play-hud-details" role="status" aria-live="off">Loading real Voxel V2 terrain...</div>
   </details>
+  <button id="play-collapse-preview" type="button" hidden>Preparing stone shelf…</button>
   <div id="play-joystick" aria-label="Move the Wizard with touch joystick">
     <div id="play-stick"></div>
   </div>

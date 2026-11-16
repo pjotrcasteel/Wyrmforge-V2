@@ -1,3 +1,4 @@
+import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
 import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
@@ -47,6 +48,8 @@ import {
 const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
+const collapseButton=cellPreview&&playQuery.get('gravity')==='preview'
+  ?document.querySelector('#play-collapse-preview'):null;
 const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
   ?document.querySelector('#play-context-test'):null;
 const canvas=document.querySelector('#site-view');
@@ -262,6 +265,7 @@ function paintEncounterGuide(view) {
         extractionPortalLayer(view,playStream.extraction),started);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
+    if(!pendingEdit&&!renderer.pendingUploads)playStream?.collapse?.paint(ctx,view);
     paintPlayFireball(ctx,view);
     return;
   }
@@ -598,6 +602,7 @@ function updatePlayStreaming(now) {
       stream.residency=new HuntCellResidency(active.world,stream.graph,stream.cellCatalog,stream.initialIds,
         {removedCells:stream.terrainSave.removedCells,entry:generatedSite.layout.topology.entry,
           addedCells:stream.savedAdditions});
+      if(stream.gravityPreview)stream.collapse=new HuntCollapsePreview(active.world,active.port,stream.residency,stream.terrainSave);
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
@@ -608,7 +613,8 @@ function updatePlayStreaming(now) {
     const beginAt=performance.now();
     const job=residency.next(playActor,{
       respawn:stream.respawnPending,movement:playMovementInput(),
-      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting,view:playDesiredView??playView,displayedView:playView
+      holdEncounterResidency:stream.horde.active,prepareEncounter:stream.horde.waiting,
+      protectedCellIds:stream.collapse?.protectedIds,view:playDesiredView??playView,displayedView:playView
     });
     if(!job)return;
     if(job.action==='respawn') {
@@ -647,7 +653,8 @@ function updatePlayStreaming(now) {
 }
 
 function castPlayFireball(clientX,clientY) {
-  if(!playMode || awaitingPlayContext || !playActor || !active || !playView || playFireball ||
+  if(!playMode || awaitingPlayContext || playStream?.collapse?.holdsFixture ||
+      playStream?.collapse?.phase==='ready' || !playActor || !active || !playView || playFireball ||
       pendingMesh || pendingEdit || restoring || errorMessage || streamingBusy() ||
       !renderer?.ready || renderer.pendingUploads)return;
   const rect=canvas.getBoundingClientRect();
@@ -770,6 +777,26 @@ function recoverPlayActor(){
   resetPlayInput();
 }
 
+function queueCollapseMeshes(dirtyChunks){
+  if(!dirtyChunks.length)return;
+  const dirty=new Set(dirtyChunks);
+  const epoch=meshBridge.replace(active.world,dirty);
+  if(!meshBridge.status.busy)throw new Error('Collapse mesh worker did not start');
+  pendingEdit={world:active.world,epoch,dirty:[...dirty],rendererSceneEpoch:renderer.sceneEpoch};
+}
+
+function updateCollapseButton(){
+  if(!collapseButton)return;
+  const collapse=playStream?.collapse;
+  collapseButton.hidden=!playStream?.gravityPreview;
+  const labels={ready:'Break stone support',falling:'Stone falling…','actor-blocked':'Move clear of the shelf',
+    settled:'Stone settled · Saved','settled-unsaved':'Stone settled · Save unavailable',blocked:'Collapse unavailable'};
+  const label=labels[collapse?.phase]??'Preparing stone shelf…';
+  if(collapseButton.textContent!==label)collapseButton.textContent=label;
+  collapseButton.disabled=collapse?.phase!=='ready'||!renderer?.ready||Boolean(pendingEdit)||
+    Boolean(renderer?.pendingUploads)||streamingBusy()||!playStream?.residency?.publishedAt(5.5,10.5);
+}
+
 function updatePlayFrame(now) {
   if(!playMode)return;
   if(playFrameAt!==null && !document.hidden) {
@@ -791,7 +818,11 @@ function updatePlayFrame(now) {
           playStream?.initialFootprint??playConnected?.footprint??generatedSite.layout.footprint;
         const allowed=residency?residency.constrainInput(playActor,input):input;
         const before=playActor;
-        playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects});
+        playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects,
+          dynamicCollision:playStream?.collapse?.collision});
+        if(playStream?.collapse?.holdsFixture&&!pendingEdit&&!renderer.pendingUploads&&!streamingBusy()){
+          queueCollapseMeshes(playStream.collapse.tick([playActor,...playStream.horde.enemies]));
+        }
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
         contextEvidence.movement(performance.now(),before,playActor,input,active.port.epoch);
         if(residency&&!streamingBusy()){
@@ -1046,9 +1077,11 @@ function resetSite() {
           investigation,recipe.seed,recipe.worldRevision,findingStorage);
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
-        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity);
-        const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,terrainSave.additions):[];
-        playStream={phase:'waiting',terrainSave,savedAdditions,graph,initialIds,initialFootprint,footprint,
+        const gravityPreview=Boolean(collapseButton)&&recipe.seed===7;
+        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(gravityPreview?':gravity-preview':''));
+        const scaffold=gravityPreview?huntCollapseScaffold(terrainSave):[];
+        const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
+        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
           cameraHeldMs:0,longestCameraHoldMs:0,cameraHoldStart:null,cameraHoldContext:null,longestCameraHold:null,
@@ -1251,6 +1284,7 @@ function frame(now) {
     }
     updatePlayFrame(now);
     if(playMode)advancePlayFireball(now);
+    updateCollapseButton();
     if(playMode){
       if(playStream?.cellCatalog&&!playStream.cellCatalog.done)playStream.cellCatalog.step();
       updatePlayStreaming(now);
@@ -1643,6 +1677,7 @@ if(playMode) {
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
         streamingMode:cellPreview?'camera-cells':'graph-bands',
+        collapsePreview:playStream?.collapse?.phase??null,
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
@@ -1675,6 +1710,11 @@ if(playMode) {
     playCameraToggle.textContent=viewCamera.value===PLAY_HUNT_CAMERA
       ?'2.5D Hunt':'Voxel 3D inspect';
     resetPlayInput();
+  });
+  collapseButton?.addEventListener('click',()=>{
+    if(collapseButton.disabled)return;
+    try{queueCollapseMeshes(playStream.collapse.release());}
+    catch(error){errorMessage=error.message;updateStatus();}
   });
   playRespawn.addEventListener('click',resetPlayActor);
   playRecover?.addEventListener('click',recoverPlayActor);
