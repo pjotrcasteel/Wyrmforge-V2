@@ -182,3 +182,31 @@ test('foreground stone hides only the overlap with the upright Hunt actor',()=>{
   assert.equal(occluded(behind,.2,falling),true);
   assert.equal(occluded(front,.2,falling),false);
 });
+
+test('collapse capacity counts live rubble rather than every prior landing',()=>{
+  const world=new VoxelWorld();
+  for(const x of [0,1,8,9]){
+    world.set(x,0,0,4);
+    world.set(x,4,0,3);
+  }
+  world.set(0,3,0,3);
+  world.set(8,3,0,3);
+  const save=new HuntTerrainSave(null,'live-rubble-capacity');
+  const ballast=Array.from({length:254},(_,x)=>({owner:'ballast',x:x+64,y:1,z:0,material:3}));
+  assert.equal(save.commitCollapse([],[...ballast,{owner:'terrain',x:0,y:4,z:0,material:3}]),false);
+  const preview=new HuntCollapsePreview(world,null,{
+    publishedAt:()=>true,ownerAt:()=>'terrain',trackAddedCells:()=>{}
+  },save,{fixture:false});
+  const impact=(sequence,removed)=>{
+    for(const [x,y,z] of removed)world.set(x,y,z,0);
+    assert.ok(preview.acceptImpact({
+      editRevision:sequence,removedCells:removed.map(cell=>cell.join(','))
+    }).length);
+    for(let tick=0;tick<120&&preview.holdsFixture;tick++)preview.tick([]);
+    assert.equal(preview.phase,'settled-unsaved');
+    assert.equal(save.additions.length,256);
+  };
+  impact(1,[[0,3,0]]);
+  impact(2,[[0,1,0],[1,1,0],[8,3,0]]);
+  assert.deepEqual(save.additions.filter(cell=>cell.owner==='terrain').map(cell=>cell.x),[8,9]);
+});

@@ -64,6 +64,7 @@ export class V2TerrainResidencySet {
     if(!Array.isArray(cells)||cells.length>256)throw new RangeError('Invalid added voxel batch');
     const owners=new Map();
     for(const [owner,entry] of this.#bands){
+      entry.pruneMissingAddedCells();
       for(const key of entry.addedCellKeys)owners.set(key,owner);
     }
     for(const {x,y,z} of cells){

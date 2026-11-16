@@ -55,7 +55,6 @@ export class HuntCollapsePreview {
   #cohesive;
   #foundationY;
   #owners=new Map();
-  #admitted=0;
   #isKnown;
   #phase;
 
@@ -68,7 +67,6 @@ export class HuntCollapsePreview {
     this.#cohesive=mixedTerrain?TERRAIN:STONE;
     this.#foundationY=mixedTerrain?foundationY:null;
     this.#guidedSupport=guidedSupport;
-    this.#admitted=fixture?0:save.additions.length;
     this.#phase=guidedSupport&&save.removedCells.has(cellKey(guidedSupport))?'settled':'ready';
     this.#handoff=new TerrainClusterHandoff(world);
     this.#isKnown=(x,y,z)=>residency.publishedAt(x+.5,z+.5);
@@ -159,7 +157,7 @@ export class HuntCollapsePreview {
     }
     for(const candidate of candidates){
       const admission=this.#fixture?{owners:new Map(candidate.cells.map(cell=>[columnKey(cell),OWNER]))}:
-        this.#qualifyTerrain(candidate.cells);
+        this.#qualifyTerrain(candidate.cells,edit.removedCells);
       if(!admission.owners){
         this.#reportSupport({status:admission.status});
         continue;
@@ -168,7 +166,6 @@ export class HuntCollapsePreview {
       this.#reportSupport({status:detached.status});
       if(detached.status!=='detached')continue;
       this.#owners=admission.owners;
-      this.#admitted+=candidate.cells.length;
       return this.#startFall(edit,detached,deferred);
     }
     return this.#decline();
@@ -183,9 +180,11 @@ export class HuntCollapsePreview {
     return [];
   }
 
-  #qualifyTerrain(cells){
-    if(this.#admitted+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
+  #qualifyTerrain(cells,impactRemovals){
     const moving=new Set(cells.map(cellKey)),owners=new Map();
+    const removals=new Set([...moving,...impactRemovals]);
+    const remaining=this.#save.countAdditionsAfterRemoving(removals);
+    if(remaining+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
     let drop=MAX_TERRAIN_DROP+1;
     for(const {x,y,z} of cells){
       if(y < -64+MAX_TERRAIN_DROP||y>64)return {status:'outside-height-range'};
