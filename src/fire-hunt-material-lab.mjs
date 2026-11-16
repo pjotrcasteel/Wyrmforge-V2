@@ -24,6 +24,7 @@ export const TERRAIN_BASE_TILES=Object.freeze({
 
 export const LAB_LAVA=5;
 export const LAB_CRUST=6;
+export const LAB_LAVA_BRIDGE_X=3;
 export const MATERIAL_LAB_TARGET=Object.freeze({x:1,y:2,z:-1});
 export const MATERIAL_LAB_SPAWN=Object.freeze({x:.5,z:5});
 export function createMaterialLabTerrain(materialId,scene,excavated=false,boundary='broken'){
@@ -38,9 +39,16 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
         const distance=Math.abs(z+.5-center);
         const edge=2.1+.42*Math.cos(x*.49);
         const highland=z < -6+Math.round(Math.sin(x*.39));
-        const height=distance<edge?0:distance<edge+1.1?1:highland?4:2;
+        const westPillar=x>=-8&&x<=-6&&z>=-5&&z<=-4;
+        const eastPillar=x>=7&&x<=8&&z>=-5&&z<=-3;
+        const height=distance<edge?0:distance<edge+1.1?1:
+          westPillar?6:eastPillar?5:highland?4:2;
         const surface=distance<edge?LAB_LAVA:distance<edge+2?LAB_CRUST:3;
         for(let y=0;y<=height;y++)world.set(x,y,z,y===height?surface:3);
+        if(x>=LAB_LAVA_BRIDGE_X&&x<LAB_LAVA_BRIDGE_X+2&&z>=-4&&z<=6&&height<=2){
+          world.set(x,2,z,3);
+          if(surface!==LAB_LAVA)world.set(x,1,z,3);
+        }
       }else if(scene==='hunt'){
         const wallZ=-3+Math.round(1.6*Math.sin(x*.29));
         const shelf=z<wallZ;
@@ -74,7 +82,7 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
   const edit=(scene==='layers'||scene==='hunt')&&excavated?new TerrainEditLedger(world).apply({
     id:'material-lab-crater',type:'carve-crater',...(scene==='hunt'?MATERIAL_LAB_TARGET:{x:0,y:3,z:0}),radius:scene==='hunt'?2.3:3.5,depth:scene==='hunt'?2:3
   }):null;
-  return {world,radius,highest:scene==='hunt'?7:scene==='cliff'?6:scene==='layers'||scene==='lava'?5:2,removedVoxels:edit?.removedVoxels??0};
+  return {world,radius,highest:scene==='hunt'||scene==='lava'?7:scene==='cliff'?6:scene==='layers'?5:2,removedVoxels:edit?.removedVoxels??0};
 }
 
 export function materialLabVolume({world,radius,highest}){

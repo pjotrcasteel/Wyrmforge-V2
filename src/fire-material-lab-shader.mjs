@@ -1,3 +1,4 @@
+import {fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from './fire-lava-art.mjs';
 // These paths are enabled only for lab fixtures that publish a material volume.
 export const FIRE_MATERIAL_LAB_UNIFORMS_GLSL=`
 uniform highp sampler3D uLabMaterials;
@@ -28,22 +29,44 @@ vec3 labLinearSurface(int material, vec2 uv) {
   return texture(uTerrainAlbedo,vec3(uv*uTerrainTilesPerVoxel,layer)).rgb;
 }
 
+${fireLavaMotifGlsl()}
+
 vec3 labLava(vec2 uv) {
-  // Broad, downstream-moving ribbons with faster motion in the hot core.
-  float phase=uLabTime*0.56;
-  float bend=labNoise(vec2(uv.x*.48-phase*.38,uv.y*.63));
-  vec2 flow=vec2(uv.x*.72-phase,uv.y*.94+bend*1.29);
-  float ridges=1.0-abs(2.0*labNoise(flow)-1.0);
-  float hot=smoothstep(.64,.9,ridges)*(.66+.34*labNoise(flow*1.6));
-  float veins=smoothstep(.89,1.0,ridges);
-  vec3 base=mix(vec3(.11,.012,.004),vec3(.66,.069,.009),hot);
-  vec3 emission=vec3(.34,.225,.035)*veins;
-  return base+emission;
+  // Quantize first. The palette, river banks, and movement all share this grid.
+  const float density=${FIRE_LAVA_TEXELS_PER_VOXEL}.0;
+  ivec2 pixel=ivec2(floor(uv*density));
+  vec2 world=(vec2(pixel)+.5)/density;
+  float center=1.6*sin(world.x*.26)+.55*sin(world.x*.63);
+  float halfWidth=2.1+.42*cos(world.x*.49);
+  int lateral=int(floor((world.y-center)*density));
+  int lane=int(floor(float(lateral)/12.0));
+  int frame=int(floor(uLabTime*${FIRE_LAVA_FRAMES_PER_SECOND}.0));
+  int travel=abs(lane)<=1?frame:frame*3/4;
+  int column=int(mod(float(pixel.x-travel+lane*7),24.0));
+  int row=int(mod(float(lateral),12.0));
+  if(mod(float(lane),2.0)>0.5)row=11-row;
+  int band=int((LAB_LAVA_MOTIF[row][column/8]>>uint(3*(column%8)))&7u);
+
+  float margin=halfWidth-abs(world.y-center);
+  if(margin<.18)band=0;
+  else if(margin<.48)band=min(band,1);
+  if(labMaterial(ivec3(floor(vWorld.x),2,floor(vWorld.z)))==3)band=min(band,1);
+
+  vec3 color=vec3(.30,.071,.11);
+  if(band==1)color=vec3(.58,.127,.14);
+  else if(band==2)color=vec3(.80,.235,.12);
+  else if(band==3)color=vec3(.98,.441,.16);
+  else if(band==4)color=vec3(1.0,.74,.31);
+  return srgbToLinearColor(color);
 }
 
 vec3 labTerrainColor(vec3 base,vec2 uv) {
   int material=int(round(vMaterial));
-  if(material==6)base=labLinearSurface(3,uv)*vec3(.47,.36,.34);
+  if(material==6){
+    float mineral=labNoise(floor(uv*8.0)/3.0);
+    vec3 crustTint=mineral<.47?vec3(.42,.37,.44):vec3(.54,.40,.38);
+    base=labLinearSurface(3,uv)*crustTint;
+  }
   float structure=labNoise(uv*.42)+.33*labNoise(uv*1.75);
   float tone=mix(.82,1.16,smoothstep(.15,1.24,structure));
   if(!uLabBlend||vNormal.y<-.5)return base*tone;
