@@ -10,7 +10,7 @@ export function isCurrentTerrainSupportCandidate(world,candidate){
   return origin?.world===world&&origin.revision===world.revision;
 }
 
-export function scanTerrainSupport(world,removed,{
+export function beginTerrainSupportScan(world,removed,{
   cohesive,anchors,isKnown,foundationY=null,maxReads=2048,maxCells=128,maxExtent=12
 }){
   if(!Array.isArray(removed)||removed.length>256||!bounded(maxReads,8192)||
@@ -21,11 +21,15 @@ export function scanTerrainSupport(world,removed,{
     throw new TypeError('Support scan requires explicit residency and distinct material classes');
   }
   const worldRevision=world.revision;
+  // The caller may retain or change its policy while a scan is suspended.
+  cohesive=new Set(cohesive);
+  anchors=new Set(anchors);
   const reads=new Map(),visited=new Set(),anchored=new Set(),candidates=[];
   let unknown=false,oversized=0;
   const limit=Symbol('support read budget');
 
-  function sample(x,y,z){
+  function* sample(x,y,z){
+    yield;
     const id=key(x,y,z);
     if(!reads.has(id)){
       if(reads.size===maxReads)throw limit;
@@ -36,21 +40,21 @@ export function scanTerrainSupport(world,removed,{
 
   const isAnchor=(material,y)=>anchors.has(material)||(y===foundationY&&cohesive.has(material));
 
-  function groundedColumn(x,y,z){
+  function* groundedColumn(x,y,z){
     // Most authored ground has a direct path to bedrock. Probe that path
     // before exploring laterally through a wide, connected terrain mass.
     for(let depth=1;depth<=16;depth++){
       const belowY=y-depth;
-      const material=sample(x,belowY,z);
+      const material=yield* sample(x,belowY,z);
       if(isAnchor(material,belowY)||anchored.has(key(x,belowY,z)))return true;
       if(!cohesive.has(material))break;
     }
     return false;
   }
 
-  function scan(x,y,z){
+  function* scan(x,y,z){
     const id=key(x,y,z);
-    const material=sample(x,y,z);
+    const material=yield* sample(x,y,z);
     if(material===null)unknown=true;
     if(!cohesive.has(material)||visited.has(id))return;
     const queue=[{x,y,z,material}];
@@ -59,13 +63,13 @@ export function scanTerrainSupport(world,removed,{
     let incomplete=false;
     for(let i=0;i<queue.length;i++){
       const cell=queue[i];
-      if(isAnchor(cell.material,cell.y)||groundedColumn(cell.x,cell.y,cell.z)){
+      if(isAnchor(cell.material,cell.y)||(yield* groundedColumn(cell.x,cell.y,cell.z))){
         for(const item of queue)anchored.add(key(item.x,item.y,item.z));
         return;
       }
       for(const [dx,dy,dz] of FACES){
         const nx=cell.x+dx,ny=cell.y+dy,nz=cell.z+dz;
-        const neighbor=sample(nx,ny,nz);
+        const neighbor=yield* sample(nx,ny,nz);
         const neighborId=key(nx,ny,nz);
         if(neighbor===null)incomplete=true;
         if(isAnchor(neighbor,ny)||anchored.has(neighborId)){
@@ -95,29 +99,55 @@ export function scanTerrainSupport(world,removed,{
     }
     return cell;
   }).sort(order);
-  try{
-    for(const {x,y,z} of seeds){
-      const material=sample(x,y,z);
-      if(material===null)unknown=true;
-      if(material!==0)continue;
-      for(const [dx,dy,dz] of FACES)scan(x+dx,y+dy,z+dz);
+  function* traverse(){
+    try{
+      for(const {x,y,z} of seeds){
+        const material=yield* sample(x,y,z);
+        if(material===null)unknown=true;
+        if(material!==0)continue;
+        for(const [dx,dy,dz] of FACES)yield* scan(x+dx,y+dy,z+dz);
+      }
+    }catch(error){
+      if(error!==limit)throw error;
+      return {worldRevision,status:'budget-exhausted',reads:reads.size,oversized,candidates:[]};
     }
-  }catch(error){
-    if(error!==limit)throw error;
-    return {worldRevision,status:'budget-exhausted',reads:reads.size,oversized,candidates:[]};
+    if(world.revision!==worldRevision){
+      return {worldRevision,status:'stale',reads:reads.size,oversized,candidates:[]};
+    }
+    candidates.sort((a,b)=>order(a.cells[0],b.cells[0]));
+    for(const candidate of candidates){
+      for(const cell of candidate.cells)Object.freeze(cell);
+      Object.freeze(candidate.cells);
+      Object.freeze(candidate.bounds.min);
+      Object.freeze(candidate.bounds.max);
+      Object.freeze(candidate.bounds);
+      Object.freeze(candidate);
+      candidateOrigins.set(candidate,{world,revision:worldRevision});
+    }
+    return {worldRevision,status:unknown?'partial-coverage':'complete',reads:reads.size,oversized,candidates};
   }
-  if(world.revision!==worldRevision){
-    return {worldRevision,status:'stale',reads:reads.size,oversized,candidates:[]};
-  }
-  candidates.sort((a,b)=>order(a.cells[0],b.cells[0]));
-  for(const candidate of candidates){
-    for(const cell of candidate.cells)Object.freeze(cell);
-    Object.freeze(candidate.cells);
-    Object.freeze(candidate.bounds.min);
-    Object.freeze(candidate.bounds.max);
-    Object.freeze(candidate.bounds);
-    Object.freeze(candidate);
-    candidateOrigins.set(candidate,{world,revision:worldRevision});
-  }
-  return {worldRevision,status:unknown?'partial-coverage':'complete',reads:reads.size,oversized,candidates};
+
+  const iterator=traverse();
+  let result=null,next=iterator.next();
+  return {
+    step(maxOperations){
+      if(!bounded(maxOperations,8192))throw new RangeError('Invalid support scan step budget');
+      for(let i=0;i<maxOperations&&!result;i++){
+        if(world.revision!==worldRevision){
+          result={worldRevision,status:'stale',reads:reads.size,oversized,candidates:[]};
+          iterator.return();
+        }else if(next.done)result=next.value;
+        else next=iterator.next();
+      }
+      if(!result&&next.done)result=next.value;
+      return result??{worldRevision,status:'scanning',reads:reads.size,oversized,candidates:[]};
+    }
+  };
+}
+
+export function scanTerrainSupport(world,removed,options){
+  const job=beginTerrainSupportScan(world,removed,options);
+  let result;
+  do{result=job.step(8192);}while(result.status==='scanning');
+  return result;
 }
