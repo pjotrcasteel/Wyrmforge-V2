@@ -1,4 +1,5 @@
 import {raycastTerrain,terrainRayFromScreen} from '../terrain-raycast.mjs';
+import {clusterCellBounds,clusterCellBoxes} from '../terrain-cluster-collision.mjs';
 
 const residentCeilings=new WeakMap();
 
@@ -14,22 +15,33 @@ function residentCeiling(world){
   return height;
 }
 
-function intersectsCell(origin,direction,distance,{x,y,z}){
-  const minimum=[x,y,z];
+function intersectsBox(origin,direction,distance,{x,y,z}){
+  const axes=[x,y,z];
   let enter=0,exit=distance;
   for(let axis=0;axis<3;axis++){
-    const offset=origin[axis]-minimum[axis];
+    const [minimum,maximum]=axes[axis];
+    const offset=origin[axis]-minimum;
+    const size=maximum-minimum;
     const speed=direction[axis];
     if(Math.abs(speed)<1e-9){
-      if(offset<0||offset>=1)return false;
+      if(offset<0||offset>=size)return false;
       continue;
     }
-    const a=-offset/speed,b=(1-offset)/speed;
+    const a=-offset/speed,b=(size-offset)/speed;
     enter=Math.max(enter,Math.min(a,b));
     exit=Math.min(exit,Math.max(a,b));
     if(enter>=exit)return false;
   }
   return true;
+}
+
+function intersectsCell(origin,direction,distance,cell){
+  if(!intersectsBox(origin,direction,distance,clusterCellBounds(cell,0)))return false;
+  if(!cell.levels)return true;
+  for(const box of clusterCellBoxes(cell)){
+    if(intersectsBox(origin,direction,distance,box))return true;
+  }
+  return false;
 }
 
 // End each ray at the upright sprite plane through the actor's feet.
