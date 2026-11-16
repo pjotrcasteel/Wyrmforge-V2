@@ -82,6 +82,11 @@ export class HuntCollapsePreview {
     return result.dirtyChunks;
   }
 
+  get renderCells(){
+    return this.#physics.bodies.flatMap(({body,offsetY})=>
+      body.cells.map(cell=>({...cell,y:cell.y+offsetY})));
+  }
+
   paint(ctx,view){
     const face=(points,color)=>{
       ctx.fillStyle=color;
@@ -94,12 +99,9 @@ export class HuntCollapsePreview {
       ctx.closePath();
       ctx.fill();
     };
-    for(const {body,offsetY} of this.#physics.bodies){
-      for(const cell of body.cells){
-        const {x,z}=cell,y=cell.y+offsetY;
-        if(z===11)face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],'#787468');
-        face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],'#b7ae99');
-      }
+    for(const {x,y,z} of this.renderCells){
+      if(z===11)face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],'#787468');
+      face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],'#b7ae99');
     }
   }
 }
