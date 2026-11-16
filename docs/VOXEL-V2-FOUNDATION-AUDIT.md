@@ -4,6 +4,20 @@
 
 **Sources reviewed:** current main branch: docs/ROADMAP.md, docs/PROGRESS.md, docs/VOXEL-V2-DELIVERY-GATES.md, .github/workflows/pages.yml, src/terrain-worker-session.mjs, src/webgl-voxel-view.mjs, src/replay-file.mjs, tests/ directory; iPhone Safari 0.0.047 report supplied by owner.
 
+## Play Hunt foundation review — 2026-11-16
+
+The matrix below records the original audit. The active F07-01 gate is tracked in [Delivery Tasks](DELIVERY-TASKS.md) and [#165](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/165).
+
+| Area | Current evidence | Open gate |
+| --- | --- | --- |
+| Clean-room dependencies | CI runs the transitive V2 dependency and static asset audit. | Re-run on new entry points and assets. |
+| Terrain edits, collision and streaming | The published Hunt has an owner-confirmed crater reload on `9c1f346`. The cell-policy tests now cover seeds 7, 19 and 42, including explicit entry-cell eviction, return and persisted crater checks within 96 resident cells. | Sustained device behavior under representative edit bursts remains open. |
+| Worker and renderer handoff | Localized replacements, stale epoch rejection and queue draining have automated coverage. | Gather peak memory and edit-to-visible latency under sustained device load. |
+| WebGL recovery | iPhone Safari build `60500c3` observed one loss, one restore, zero failures and drained uploads. Two Fireball edits stayed in the saved journal. Build `6c9104c` adds before/after and first-input evidence with automated coverage. | Capture the new fields on the next device pass. |
+| Mobile frame time | iPhone Safari seed 7, `395d495`: 266.6 m through all three ambush waves and extraction, 17 ms rolling p95, zero camera holds, zero terrain-blocked steps, and zero >33 ms streaming intervals across 778 streaming frames. | Full cross-device and sustained mobile acceptance remains open. |
+
+The three-seed test settles each viewport through the normal residency policy and verifies the crater after actual eviction. Its deterministic simulation does not measure phone frame time. Further Unstuck work remains deferred under #169. Directional tree fall motion remains a Physics follow-up under #171.
+
 ## Evidence matrix
 
 | Area | Repository evidence | What remains unproven / next action |
