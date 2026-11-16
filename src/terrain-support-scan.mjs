@@ -1,8 +1,14 @@
 // Read-only V2 structural support scan. Unknown residency is distinct from air.
+const candidateOrigins=new WeakMap();
 const FACES=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 const key=(x,y,z)=>x+','+y+','+z;
 const order=(a,b)=>a.x-b.x||a.y-b.y||a.z-b.z;
 const bounded=(value,limit)=>Number.isSafeInteger(value)&&value>0&&value<=limit;
+
+export function isCurrentTerrainSupportCandidate(world,candidate){
+  const origin=candidateOrigins.get(candidate);
+  return origin?.world===world&&origin.revision===world.revision;
+}
 
 export function scanTerrainSupport(world,removed,{
   cohesive,anchors,isKnown,maxReads=2048,maxCells=128,maxExtent=12
@@ -81,5 +87,14 @@ export function scanTerrainSupport(world,removed,{
     return {worldRevision,status:'stale',reads:reads.size,oversized,candidates:[]};
   }
   candidates.sort((a,b)=>order(a.cells[0],b.cells[0]));
+  for(const candidate of candidates){
+    for(const cell of candidate.cells)Object.freeze(cell);
+    Object.freeze(candidate.cells);
+    Object.freeze(candidate.bounds.min);
+    Object.freeze(candidate.bounds.max);
+    Object.freeze(candidate.bounds);
+    Object.freeze(candidate);
+    candidateOrigins.set(candidate,{world,revision:worldRevision});
+  }
   return {worldRevision,status:unknown?'partial-coverage':'complete',reads:reads.size,oversized,candidates};
 }

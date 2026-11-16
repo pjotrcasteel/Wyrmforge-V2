@@ -55,6 +55,10 @@ The first implementation will use **connectivity**, not simulated mass, stress, 
 
 The read-only Voxel support scan accepts up to 256 precisely identified removed cells, an explicit residency query and explicit cohesive and anchor material sets. It uses six-face connectivity and reports the source world revision. Default limits are 2,048 sampled positions, 128 cells per candidate and 12 cells on any axis. An unresolved component or oversized component stays static. Budget exhaustion and stale revisions return no candidates. These are conservative development limits. Terrain mutation, transferring ownership to Physics, falling and settling are subsequent slices.
 
+### Static-to-dynamic handoff
+
+The opt-in handoff preflights a candidate against its original VoxelWorld and revision, including protected bedrock and partial surface checks. It reserves room for up to eight bodies and 512 cells per registry. After preflight, it removes the static voxels synchronously and publishes one immutable cluster payload and its dirty mesh chunks. Failed or duplicated transfers leave the world unchanged. This is an in-process contract. Play Hunt activation still requires a fixed-step body consumer, actor collision, and streaming and replay integration.
+
 ## 5. Gravity simulation and settlement
 
 - Cohesive components move as **one body** with a local voxel payload and transform. Do not create a physics body for each rock voxel.
