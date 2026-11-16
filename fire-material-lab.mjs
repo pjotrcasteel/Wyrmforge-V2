@@ -4,7 +4,7 @@ import {buildExposedFaceMeshes} from './src/exposed-face-mesher.mjs';
 import {buildPixelMicroSurfaceMeshes} from './src/microvoxel-mesher.mjs';
 import {LIVE_TREES} from './src/wet-forest-tree-sprites.mjs';
 import {projectTreeSprite} from './src/hunt-scenic-forest.mjs';
-import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,LAB_FOREST_STAGES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from './src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,LAB_FOREST_STAGES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET,FIRE_ROAD_LAVA_Z,fireRoadScenery} from './src/fire-hunt-material-lab.mjs';
 import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
 import {spawnTerrainActor,ACTOR_HEIGHT} from './src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_PIXELS_PER_VOXEL,HUNT_FIXED_STEP} from './src/hunt-play-runtime.mjs';
@@ -50,7 +50,9 @@ const forestPlantings=[
   [9.5,-2.5,7,1.11],[4.5,-5.5,13,.9],[-8.5,-8.5,10,.92],[8.5,-9.5,8,1.04]
 ];
 let forestTrees=[];
-let waysideStone=null;
+let waysideStones=[];
+let fireRoad=false;
+const sceneryStage=z=>fireRoad?fireRoadScenery(z):forestStage.value;
 const tileCanvas=document.querySelector('#tile');
 const repeatCanvas=document.querySelector('#tile-repeat');
 
@@ -122,13 +124,19 @@ function uploadTerrain(){
 }
 
 function setScene(){
-  fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value,microStep.checked);
+  fireRoad=scene==='hunt'&&forestStage.value==='route';
+  fixture=createMaterialLabTerrain(picker.value,scene,excavated,blend.value,microStep.checked,fireRoad);
   forestControls.hidden=scene!=='hunt';
-  forestTrees=scene==='hunt'?forestPlantings.flatMap(([x,z,index,scale])=>{
+  const plantings=fireRoad?[...forestPlantings,
+    [-3.5,-3.5,2,1.03],[3.5,-5.5,6,.96],[-3.5,-9.5,10,1.1],
+    [2.5,-10.5,8,.96],[-4.5,-14.5,13,.9],[7.5,-13.5,4,.84]
+  ]:forestPlantings;
+  forestTrees=scene==='hunt'?plantings.flatMap(([x,z,index,scale])=>{
     const position=spawnTerrainActor(fixture.world,{x,z,searchTopY:10});
     return position?[{...position,sprite:LIVE_TREES[index],scale}]:[];
   }):[];
-  waysideStone=scene==='hunt'?spawnTerrainActor(fixture.world,{x:-2.5,z:2.5,searchTopY:10}):null;
+  waysideStones=scene==='hunt'?(fireRoad?[[-2.5,2.5],[2.5,-6.5],[-2.5,-14.5]]:[[-2.5,2.5]])
+    .map(([x,z])=>spawnTerrainActor(fixture.world,{x,z,searchTopY:10})).filter(Boolean):[];
   actor=canWalk()?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
   enemy=canWalk()?spawnTerrainActor(fixture.world,{x:scene==='lava'?5.5:3.5,z:scene==='lava'?-4:-2,searchTopY:10}):null;
   projectile=null;
@@ -145,7 +153,7 @@ function setScene(){
   excavate.hidden=scene!=='layers';
   excavate.textContent=excavated?'Restore surface':'Excavate';
   excavate.setAttribute('aria-pressed',String(excavated));
-  status.textContent=scene==='lava'?'Walk to the basalt crossing. Watch the molten bands move beneath it.':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
+  status.textContent=scene==='lava'?'Walk to the basalt crossing. Watch the molten bands move beneath it.':fireRoad?'Follow the trail north from the clearing to the lava. Hold ↑ to walk.':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
     scene==='layers'?'Excavate to inspect the material cut.':
       scene==='repeats'?'Repeated material at world scale.':'Top and exposed faces.';
   requestRender();
@@ -289,17 +297,18 @@ function paintMarkers(view,now,density){
   };
   const figures=[];
   const layer=(unit,draw)=>figures.push({depth:projectVoxel(unit.x,unit.y,unit.z,view).depth,draw});
-  if(waysideStone)layer(waysideStone,()=>{
+  for(const waysideStone of waysideStones)layer(waysideStone,()=>{
     const foot=projectVoxel(waysideStone.x,waysideStone.y,waysideStone.z,view);
     const top=projectVoxel(waysideStone.x,waysideStone.y+1,waysideStone.z,view);
     const unit=Math.max(1,Math.round((foot.y-top.y)/7));
-    paintPixelSprite(waysidePixels,waysidePalette[forestStage.value],foot,unit);
+    paintPixelSprite(waysidePixels,waysidePalette[sceneryStage(waysideStone.z)],foot,unit);
   });
   if(enemy)layer(enemy,()=>paint(enemy,'#8e483a','#b86a4f'));
   layer(actor,()=>paint(actor,'#465986','#e7c68a'));
   for(const [index,tree] of forestTrees.entries()){
-    if(forestStage.value==='approach'&&index%3===0)continue;
-    if(forestStage.value==='approach'&&index%3===1){
+    const stage=sceneryStage(tree.z);
+    if(stage==='approach'&&index%3===0)continue;
+    if(stage==='approach'&&(fireRoad||index%3===1)){
       layer(tree,()=>paintCharredTrunk(tree,view));
       continue;
     }
@@ -307,7 +316,7 @@ function paintMarkers(view,now,density){
     if(!projected)continue;
     const {sprite,x,y,w,h}=projected;
     figures.push({depth:projected.depth,draw:()=>{
-      context.drawImage(forestArt.get(forestStage.value),sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+      context.drawImage(forestArt.get(stage),sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
     }});
   }
   context.imageSmoothingEnabled=false;
@@ -332,7 +341,7 @@ function render(now){
     if(!width||!height)return;
     if(canvas.width!==width)canvas.width=width;
     if(canvas.height!==height)canvas.height=height;
-    const animating=scene==='lava'&&flowing;
+    const animating=(scene==='lava'&&flowing)||(fireRoad&&actor?.z<FIRE_ROAD_LAVA_Z+6);
     if(animating&&lastLavaFrame!==null&&now-lastLavaFrame<32&&!pressed.size&&!renderer.pendingUploads){
       requestRender();
       return;
@@ -406,7 +415,10 @@ try{
   });
   blend.addEventListener('change',()=>{scene='hunt';setScene();applyTextures();});
   surfaceBlend.addEventListener('change',requestRender);
-  forestStage.addEventListener('change',requestRender);
+  forestStage.addEventListener('change',()=>{
+    if(fireRoad!==(forestStage.value==='route'))setScene();
+    else requestRender();
+  });
   microStep.addEventListener('change',setScene);
   lavaMotion.addEventListener('click',()=>{
     flowing=!flowing;

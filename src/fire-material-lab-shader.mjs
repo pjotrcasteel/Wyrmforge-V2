@@ -1,4 +1,5 @@
 import {fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from './fire-lava-art.mjs';
+import {FIRE_ROAD_FADING_Z,FIRE_ROAD_APPROACH_Z,FIRE_ROAD_LAVA_Z} from './fire-hunt-material-lab.mjs';
 // These paths are enabled only for lab fixtures that publish a material volume.
 export const FIRE_MATERIAL_LAB_UNIFORMS_GLSL=`
 uniform highp sampler3D uLabMaterials;
@@ -36,21 +37,25 @@ vec3 labGrassTint(vec2 uv) {
 vec3 labForestGrade(vec3 color,int material,vec2 uv) {
   if(uLabForestStage==0)return color;
   float pockets=labNoise(uv*.16)+.18*(labNoise(uv*.41)-.5);
-  if(uLabForestStage==1){
-    if(material!=1)return color;
-    float clearing=smoothstep(.24,.79,pockets);
-    vec3 canopy=color*vec3(1.03,1.26,.91);
-    vec3 daylight=color*vec3(1.37,1.77,1.04)+vec3(.011,.026,.003);
-    return mix(canopy,daylight,clearing);
-  }
+  float clearing=smoothstep(.24,.79,pockets);
+  vec3 canopy=color*vec3(1.03,1.26,.91);
+  vec3 daylight=color*vec3(1.37,1.77,1.04)+vec3(.011,.026,.003);
+  vec3 living=material==1?mix(canopy,daylight,clearing):color;
+  if(uLabForestStage==1)return living;
   float value=dot(color,vec3(.2126,.7152,.0722));
-  if(uLabForestStage==2){
-    vec3 dusk=color*vec3(.72,.82,.95);
-    return mix(dusk,vec3(value)*vec3(.67,.78,.87),.24);
-  }
+  vec3 dusk=mix(color*vec3(.72,.82,.95),vec3(value)*vec3(.67,.78,.87),.24);
+  if(uLabForestStage==2)return dusk;
   vec3 cooled=color*vec3(.58,.56,.64);
   vec3 soot=vec3(value)*mix(vec3(.57,.49,.55),vec3(.84,.53,.37),smoothstep(.40,.75,pockets));
-  return mix(cooled,soot,material==1?.82:.51);
+  vec3 burned=mix(cooled,soot,material==1?.82:.51);
+  if(uLabForestStage==3)return burned;
+
+  // World position drives the transition, so approaching or retreating never
+  // changes the color of a stationary piece of ground.
+  float depth=-uv.y+(pockets-.5)*3.0;
+  float fading=smoothstep(${-FIRE_ROAD_FADING_Z-2}.0,${-FIRE_ROAD_FADING_Z+2}.0,depth);
+  float fire=smoothstep(${-FIRE_ROAD_APPROACH_Z-3}.0,${-FIRE_ROAD_APPROACH_Z+3}.0,depth);
+  return mix(mix(living,dusk,fading),burned,fire);
 }
 
 vec3 labForestDetail(vec3 color,int material,vec2 uv) {
@@ -62,6 +67,11 @@ vec3 labForestDetail(vec3 color,int material,vec2 uv) {
   vec2 anchor=grid*vec2(19,17)-vec2(5,3)+vec2(4,4)
     +floor(vec2(soilHash(grid+2.0),soilHash(grid+15.0))*vec2(10,8));
   vec2 p=pixel-anchor;
+  int stage=uLabForestStage;
+  if(stage==4){
+    float anchorZ=anchor.y/12.0+(soilHash(grid+8.0)-.5)*3.0;
+    stage=anchorZ>${FIRE_ROAD_FADING_Z}.0?1:anchorZ>${FIRE_ROAD_APPROACH_Z}.0?2:3;
+  }
   float field=labNoise(pixel/53.0);
   float chance=soilHash(grid+31.0);
   if(material==1){
@@ -73,20 +83,20 @@ vec3 labForestDetail(vec3 color,int material,vec2 uv) {
     bool colony=verge<1.1&&field>.36&&chance<.67;
     bool petals=(abs(p.x)==1.0&&p.y==-1.0)||(p.x==0.0&&p.y>=-2.0&&p.y<=0.0);
     if(colony&&petals){
-      if(uLabForestStage==1){
+      if(stage==1){
         vec3 gold=p.x==0.0&&p.y==-1.0?vec3(.89,.76,.35):vec3(.68,.55,.21);
         return srgbToLinearColor(gold);
       }
-      if(uLabForestStage==2)return mix(color,srgbToLinearColor(vec3(.60,.36,.18)),.59);
+      if(stage==2)return mix(color,srgbToLinearColor(vec3(.60,.36,.18)),.59);
       if(p.x==0.0&&p.y==-1.0&&chance<.20)return srgbToLinearColor(vec3(.79,.33,.15));
     }
-    if(uLabForestStage<3&&chance<.52&&field>.32){
+    if(stage<3&&chance<.52&&field>.32){
       bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=1.0)
         ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=0.0)
         ||(abs(p.x)==2.0&&p.y==-1.0);
       if(tuft){
         vec3 tip=srgbToLinearColor(vec3(.54,.65,.24));
-        float amount=uLabForestStage==1?.54:.22;
+        float amount=stage==1?.54:.22;
         return p.y<0.0?mix(color,tip,amount):color*.77;
       }
     }
@@ -96,7 +106,7 @@ vec3 labForestDetail(vec3 color,int material,vec2 uv) {
     bool chip=(p.y==0.0&&p.x>=-1.0&&p.x<=2.0)
       ||(p.y==-1.0&&p.x>=0.0&&p.x<=1.0);
     if(chip&&chance<.64){
-      vec3 stone=uLabForestStage==3?vec3(.40,.32,.31):vec3(.60,.52,.40);
+      vec3 stone=stage==3?vec3(.40,.32,.31):vec3(.60,.52,.40);
       return p.y<0.0?mix(color,srgbToLinearColor(stone),.48):color*.71;
     }
   }
@@ -122,10 +132,12 @@ ${fireLavaMotifGlsl()}
 vec3 labLava(vec2 uv) {
   // Quantize first. The palette, river banks, and movement all share this grid.
   const float density=${FIRE_LAVA_TEXELS_PER_VOXEL}.0;
+  bool road=uLabForestStage==4;
+  if(road)uv=vec2(-uv.y,uv.x);
   ivec2 pixel=ivec2(floor(uv*density));
   vec2 world=(vec2(pixel)+.5)/density;
-  float center=1.6*sin(world.x*.26)+.55*sin(world.x*.63);
-  float halfWidth=2.1+.42*cos(world.x*.49);
+  float center=road?4.8-.6*sin(world.x*.53):1.6*sin(world.x*.26)+.55*sin(world.x*.63);
+  float halfWidth=road?1.05:2.1+.42*cos(world.x*.49);
   int lateral=int(floor((world.y-center)*density));
   int lane=int(floor(float(lateral)/12.0));
   int frame=int(floor(uLabTime*${FIRE_LAVA_FRAMES_PER_SECOND}.0));
@@ -136,6 +148,7 @@ vec3 labLava(vec2 uv) {
   int band=int((LAB_LAVA_MOTIF[row][column/8]>>uint(3*(column%8)))&7u);
 
   float margin=halfWidth-abs(world.y-center);
+  if(road)margin=min(margin,world.x+${FIRE_ROAD_LAVA_Z}.0);
   if(margin<.18)band=0;
   else if(margin<.48)band=min(band,1);
   if(labMaterial(ivec3(floor(vWorld.x),2,floor(vWorld.z)))==3)band=min(band,1);

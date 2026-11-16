@@ -109,3 +109,14 @@ test('the optional trail lip is one physical microvoxel and shares the terrain m
   const meshes=buildPixelMicroSurfaceMeshes(stepped.world,buildExposedFaceMeshes(stepped.world));
   assert.ok(meshes.some(mesh=>mesh.positions.some((value,index)=>index%3===1&&Math.abs(value+mesh.origin[1]-2.9)<.001)));
 });
+
+test('Fire Road has a continuous shallow trail alongside the lava at Hunt scale',()=>{
+  const {world}=createMaterialLabTerrain('grass','hunt',false,'broken',true,true);
+  for(let z=5;z>=-16;z--){
+    const walker=spawnTerrainActor(world,{x:.5,z:z+.5,searchTopY:10});
+    assert.ok(Math.abs(walker.y-2.9)<.001,`Trail is interrupted at z=${z}`);
+  }
+  assert.equal(world.get(4,2,4),1);
+  assert.ok([4,5].some(x=>world.get(x,1,-14)===LAB_LAVA));
+  assert.equal(world.get(5,2,-14),LAB_CRUST);
+});
