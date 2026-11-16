@@ -67,6 +67,19 @@ vec3 labForestDetail(vec3 color,int material,vec2 uv) {
   if(material==1){
     float mossPatch=step(.44,labNoise(pixel/23.0)+.22*labNoise(pixel/8.0));
     color=mix(color*.83,color*1.13,mossPatch);
+    // A few flower colonies occupy the sunlit verge. Their ochre remnants
+    // turn into blackened ground with isolated hot flecks nearer the Wyrm.
+    float verge=length((uv-vec2(-2.7,4.2))*vec2(.70,.29));
+    bool colony=verge<1.1&&field>.36&&chance<.67;
+    bool petals=(abs(p.x)==1.0&&p.y==-1.0)||(p.x==0.0&&p.y>=-2.0&&p.y<=0.0);
+    if(colony&&petals){
+      if(uLabForestStage==1){
+        vec3 gold=p.x==0.0&&p.y==-1.0?vec3(.89,.76,.35):vec3(.68,.55,.21);
+        return srgbToLinearColor(gold);
+      }
+      if(uLabForestStage==2)return mix(color,srgbToLinearColor(vec3(.60,.36,.18)),.59);
+      if(p.x==0.0&&p.y==-1.0&&chance<.20)return srgbToLinearColor(vec3(.79,.33,.15));
+    }
     if(uLabForestStage<3&&chance<.52&&field>.32){
       bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=1.0)
         ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=0.0)
