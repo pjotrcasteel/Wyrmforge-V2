@@ -1,3 +1,4 @@
+import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
 import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
 import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
@@ -51,8 +52,9 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const guidedCollapse=['guided','seam'].includes(gravityMode);
-const collapseButton=cellPreview&&['preview','impact','guided','seam'].includes(gravityMode)
+const seamCollapse=['seam','measure'].includes(gravityMode);
+const guidedCollapse=gravityMode==='guided'||seamCollapse;
+const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
 const contextTestButton=playMode&&playQuery.get('contextTest')==='1'
   ?document.querySelector('#play-context-test'):null;
@@ -813,6 +815,13 @@ function recordPlayTerrainEdit(command,result){
   playStream.terrainReplay.push(recordHuntTerrainEdit(residentCellIds??residentIds,command,result));
 }
 
+function measureCollapseActivation(at){
+  const {collapse,collapseEvidence}=playStream;
+  if(!collapse.holdsFixture)return;
+  collapseEvidence?.begin({sequence:collapse.replay.sequence,at,activationCpuMs:performance.now()-at,
+    ownerCount:collapse.protectedIds.length,world:active.world});
+}
+
 function queueCollapseMeshes(dirtyChunks){
   if(!dirtyChunks.length)return;
   const dirty=new Set(dirtyChunks);
@@ -849,6 +858,7 @@ function updatePlayFrame(now) {
     if(delta>0){
       playFrameStats.recordFrame(delta);
       playEvidence.frame(delta);
+      playStream?.collapseEvidence?.frame(delta);
     }
     if(!awaitingPlayContext && playActor && generatedSite && active?.world &&
         !pendingMesh && !restoring && (!cellPreview||playStream?.residency)) {
@@ -866,7 +876,10 @@ function updatePlayFrame(now) {
         playActor=stepHuntExplorer(active.world,playActor,bounds,{...allowed,objects:playStream?.trees.objects,
           dynamicCollision:playStream?.collapse?.collision});
         if(playStream?.collapse?.holdsFixture&&!pendingEdit&&!renderer.pendingUploads&&!streamingBusy()){
-          queueCollapseMeshes(playStream.collapse.tick([playActor,...playStream.horde.enemies]));
+          const started=performance.now();
+          const dirty=playStream.collapse.tick([playActor,...playStream.horde.enemies]);
+          playStream.collapseEvidence?.step(performance.now()-started,playStream.collapse.phase==='actor-blocked');
+          queueCollapseMeshes(dirty);
         }
         playEvidence.movement(before,playActor,input,allowed,HUNT_WALK_SPEED*HUNT_FIXED_STEP);
         contextEvidence.movement(performance.now(),before,playActor,input,active.port.epoch);
@@ -908,6 +921,11 @@ function updatePlayFrame(now) {
       (playActor?.error?'Collision issue':playActor?
         (viewCamera.value===PLAY_HUNT_CAMERA?'2.5D Hunt':'3D inspection'):'Loading')+
       ' · p95 '+ms(metrics.p95Ms)+' · details';
+    const collapseSample=playStream?.collapseEvidence?.snapshot.recent.at(-1);
+    const collapseLine=collapseSample
+      ?'\nCollapse: '+collapseSample.landedVoxels+' voxels · '+ms(collapseSample.settlementVisibleMs)+
+        ' to render · '+collapseSample.hitchesOver33Ms+' hitches'+(collapseSample.interrupted?' · interrupted':'')
+      :'';
     playHudDetails.textContent='WIZARD · '+(playActor?'walkable':'loading')+
       '\nWorldGen: '+(generatedSite?.generatorVersion??'loading')+
       '\nVoxel source: '+(generatedSite?.hash??'—')+
@@ -928,7 +946,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      '\nJoystick / WASD · tap ground to cast';
+      collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
 
@@ -1123,15 +1141,19 @@ function resetSite() {
         const saveIdentity=[graph.layout.planHash,generatedSite.generatorVersion,recipe.seed,recipe.worldRevision,
           recipe.chunkEdge,recipe.corruption].join(':');
         const gravityPreview=Boolean(collapseButton)&&recipe.seed===7;
-        const regionCollapse=gravityPreview&&gravityMode==='seam';
+        const regionCollapse=gravityPreview&&seamCollapse;
         const gravityFixture=gravityPreview&&!regionCollapse;
         const entry=regionCollapse?REGION_COLLAPSE_ENTRY:generatedSite.layout.topology.entry;
         const structuralGravity=gravityPreview||(cellPreview&&gravityMode==='terrain');
         const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(structuralGravity?':gravity-'+gravityMode:''));
+        let evidenceStorage;
+        try{evidenceStorage=window.sessionStorage;}catch{}
+        const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
+          'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
         const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
-        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,entry,
+        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
           graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
@@ -1193,7 +1215,9 @@ function impactSpan(targetOverride=null) {
     }
     if(playMode)recordPlayTerrainEdit(command,result);
     const collapse=playMode?playStream?.collapse:null;
+    const activationStart=performance.now();
     const collapseDirty=collapse?.acceptImpact(result)??[];
+    if(collapseDirty.length)measureCollapseActivation(activationStart);
     if(playMode&&!collapse?.holdsFixture)playStream?.terrainSave.commit(result.removedCells);
     if(playMode&&result.removedVoxels>0&&playStream?.residency){
       const residency=playStream.residency;
@@ -1342,6 +1366,7 @@ function frame(now) {
         section:playActor?playStream?.residency?.location(playActor.x,playActor.z):null,
         storage:playStream?.residency?.storageMetrics});
     }
+    if(active?.world)playStream?.collapseEvidence?.observe(active.world);
     if (!document.hidden) meshBridge?.pollTimeout();
     if(restoring && !pendingMesh) {
       if(!restoring.progress.done) restoring.step({maxCells:192,maxEdits:1});
@@ -1449,6 +1474,11 @@ function frame(now) {
           }
         }
         paintEncounterGuide({...view});
+        const collapseEvidence=playStream?.collapseEvidence;
+        if(collapseEvidence?.tracking&&!pendingEdit&&!renderer.pendingUploads&&!awaitingPlayContext&&!errorMessage){
+          collapseEvidence.presented(performance.now(),playStream.collapse.replay.landed,
+            playStream.terrainSave.status);
+        }
       }
     }
     const blocked=!active || !renderer?.ready || renderer.pendingUploads || streamingBusy() ||
@@ -1716,6 +1746,7 @@ if(playMode) {
           maxMs:terrainTiming.maxFrameMs,source:'committed-edit-to-render-submission',
           awaitingRender:Boolean(pendingTerrainPresentation)},
         streamingEvidence:playEvidence.snapshot,
+        collapseEvidence:playStream?.collapseEvidence?.snapshot??null,
         webglContext:renderer?{losses:renderer.statistics.contextLosses,
           restores:webglRestores,restoreFailures:webglRestoreFailures,
           ready:renderer.ready,recovering:renderer.recovering,
@@ -1769,9 +1800,11 @@ if(playMode) {
     if(collapseButton.disabled||playFireball)return;
     if(guidedCollapse){castPlayFireball(null,null,{guided:true});return;}
     try{
+      const started=performance.now();
       const release=playStream.collapse.release();
       if(!release)return;
       recordPlayTerrainEdit(release.command,release.edit);
+      measureCollapseActivation(started);
       queueCollapseMeshes(release.dirtyChunks);
     }
     catch(error){errorMessage=error.message;updateStatus();}
@@ -1803,6 +1836,7 @@ document.addEventListener('visibilitychange',()=>{
   meshBridge?.setPaused(document.hidden);
   if(document.hidden){
     if(playStream)playStream.cameraHoldStart=null;
+    playStream?.collapseEvidence?.interrupt();
     resetPlayInput();
     playFrameAt=null;
   }
@@ -1826,6 +1860,7 @@ try {
         else contextEvidence.lose(playContextState());
       }
       if(playMode&&!ready){
+        playStream?.collapseEvidence?.interrupt();
         awaitingPlayContext=true;
         resetPlayInput();
         playFireball=null;
