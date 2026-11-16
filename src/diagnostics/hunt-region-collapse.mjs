@@ -3,7 +3,7 @@
 export const REGION_COLLAPSE_ENTRY=Object.freeze({x:0,z:-10});
 export const REGION_COLLAPSE_SUPPORT=Object.freeze({x:6,y:7,z:-20});
 
-export function huntRegionCollapseScaffold(layout,save,{mixed=false}={}){
+export function huntRegionCollapseScaffold(layout,save,{mixed=false,large=false}={}){
   const link=layout.links.find(item=>[item.fromId,item.toId].includes(layout.entryRegionId)&&
     [item.fromId,item.toId].includes('region-woodland-trail'));
   const entry=layout.regions.find(region=>region.id===layout.entryRegionId);
@@ -16,7 +16,11 @@ export function huntRegionCollapseScaffold(layout,save,{mixed=false}={}){
       cells.push({owner:band.id+':cell:8:'+Math.floor(x/8)+':'+Math.floor(z/8),x,y,z,material});
     }
   };
-  for(let x=4;x<=6;x++)for(let z=seamZ-1;z<=seamZ;z++)add(x,9,z,mixed?x-3:3);
+  const maxX=large?11:6;
+  const minZ=seamZ-(large?8:1);
+  for(let x=4;x<=maxX;x++){
+    for(let z=minZ;z<=seamZ;z++)add(x,9,z,mixed?1+(x-4)%3:3);
+  }
   for(let y=6;y<=8;y++)add(REGION_COLLAPSE_SUPPORT.x,y,seamZ);
   return cells;
 }

@@ -52,10 +52,11 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const deferredSupport=gravityMode==='deferred';
+const largeCollapse=gravityMode==='large';
+const deferredSupport=gravityMode==='deferred'||largeCollapse;
 const SUPPORT_OPERATIONS_PER_FRAME=96;
 const mixedGravity=gravityMode==='mixed'||deferredSupport;
-const seamCollapse=['seam','measure','mixed','deferred'].includes(gravityMode);
+const seamCollapse=['seam','measure','mixed','deferred','large'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
 const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
@@ -1173,7 +1174,7 @@ function resetSite() {
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
           'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
-        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:mixedGravity}):
+        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:mixedGravity,large:largeCollapse}):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,

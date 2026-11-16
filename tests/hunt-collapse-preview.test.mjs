@@ -14,12 +14,13 @@ import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT
 import {spawnHuntExplorer} from '../src/hunt-play-runtime.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from '../src/hunt-collapse-preview.mjs';
 
-for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball','deferred mixed terrain Fireball'])test(
+for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball','deferred mixed terrain Fireball','large mixed terrain Fireball'])test(
   'actual seed 7 Hunt settles, streams and reloads the shelf after '+trigger,()=>{
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
     siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
   const graph=generateAuthoredHuntTerrainGraph(site);
-  const deferred=trigger==='deferred mixed terrain Fireball';
+  const large=trigger==='large mixed terrain Fireball';
+  const deferred=large||trigger==='deferred mixed terrain Fireball';
   const mixed=deferred||trigger==='mixed terrain Fireball';
   const seam=mixed||trigger==='region seam Fireball';
   const entry=seam?REGION_COLLAPSE_ENTRY:site.layout.topology.entry;
@@ -31,7 +32,7 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
   const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
   function load(identity='gravity-preview'){
     const save=new HuntTerrainSave(storage,identity);
-    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save,{mixed}):huntCollapseScaffold(save);
+    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save,{mixed,large}):huntCollapseScaffold(save);
     const addedCells=huntSavedAdditions(graph.layout,[...save.additions,...scaffold]);
     const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),{
       microSurfaceCapacity:2048,removedCells:save.removedCells,addedCells});
@@ -106,10 +107,10 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
     assert.equal(pending.collapse.landed,null);
     assert.throws(()=>replayHuntTerrainEdit(port,residentIds,pending,{collapse:preview}),/settled collapse/);
     preview.tick([]);
-    assert.equal(preview.renderCells.length,seam?7:trigger==='control'?8:9);
+    assert.equal(preview.renderCells.length,large?73:seam?7:trigger==='control'?8:9);
     assert.equal(world.get(sampleX,shelfY,sampleZ),0);
-    assert.equal(preview.protectedIds.length,seam?2:1);
-    if(seam)assert.deepEqual(preview.protectedIds.map(id=>id.split(':cell:')[0]).sort(),
+    assert.equal(preview.protectedIds.length,large?6:seam?2:1);
+    if(seam)assert.deepEqual([...new Set(preview.protectedIds.map(id=>id.split(':cell:')[0]))].sort(),
       [initialIds[2],initialIds[0]].sort());
     const blocker={x:sampleX+.5,y:seam?6:5,z:sampleZ+.5};
     for(let i=0;i<120&&preview.phase==='falling';i++)preview.tick([blocker]);
