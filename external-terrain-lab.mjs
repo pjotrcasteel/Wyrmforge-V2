@@ -53,7 +53,8 @@ const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
 const largeCollapse=gravityMode==='large';
-const deferredSupport=gravityMode==='deferred'||largeCollapse;
+const terrainGravity=cellPreview&&gravityMode==='terrain';
+const deferredSupport=gravityMode==='deferred'||largeCollapse||terrainGravity;
 const SUPPORT_OPERATIONS_PER_FRAME=96;
 const mixedGravity=gravityMode==='mixed'||deferredSupport;
 const seamCollapse=['seam','measure','mixed','deferred','large'].includes(gravityMode);
@@ -1168,7 +1169,7 @@ function resetSite() {
         const regionCollapse=gravityPreview&&seamCollapse;
         const gravityFixture=gravityPreview&&!regionCollapse;
         const entry=regionCollapse?REGION_COLLAPSE_ENTRY:generatedSite.layout.topology.entry;
-        const structuralGravity=gravityPreview||(cellPreview&&gravityMode==='terrain');
+        const structuralGravity=gravityPreview||terrainGravity;
         const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(structuralGravity?':gravity-'+gravityMode:''));
         let evidenceStorage;
         try{evidenceStorage=window.sessionStorage;}catch{}

@@ -156,7 +156,9 @@ test('durable collapse delta restores initial and later-loaded settled cells wit
   }finally{loader.unload();}
 });
 
-test('one falling cluster survives eviction and restart across a stream and chunk seam',async()=>{
+for(const mixedTerrain of [false,true])test(
+  `a ${mixedTerrain?'deferred mixed-material':'stone'} cluster survives eviction and restart across a stream and chunk seam`,async()=>{
+
   const {HuntTerrainSave}=await import('../src/hunt-terrain-save.mjs');
   const {TerrainStreamCellBuilder}=await import('../src/terrain-stream-cells.mjs');
   const {TerrainCellStreamSession}=await import('../src/terrain-cell-stream-session.mjs');
@@ -166,8 +168,10 @@ test('one falling cluster survives eviction and restart across a stream and chun
     generatorVersion:'test',seed:7,chunkEdge:16,runs:[
       {x:-1,y:0,z:0,length:2,material:4},
       {x:-1,y:3,z:0,length:1,material:2},
-      {x:-1,y:4,z:0,length:2,material:3},
+      {x:-1,y:4,z:0,length:1,material:mixedTerrain?1:3},
+      {x:0,y:4,z:0,length:1,material:3},
       {x:-1,y:0,z:4,length:2,material:4},
+      {x:-1,y:1,z:4,length:2,material:4},
       {x:-1,y:2,z:4,length:2,material:2},
       {x:-1,y:3,z:4,length:2,material:3}
     ]};
@@ -201,7 +205,7 @@ test('one falling cluster survives eviction and restart across a stream and chun
     const collapse=new HuntCollapsePreview(world,port,{
       ownerAt,publishedAt:(x,z)=>z<0||Boolean(ownerAt(x,z)),
       trackAddedCells:(id,cells)=>stream.trackAddedCells(id,cells)
-    },save,{fixture:false});
+    },save,{fixture:false,mixedTerrain,foundationY:0});
     return {world,port,stream,save,move,collapse,close:()=>loader.unload()};
   }
 
@@ -217,14 +221,25 @@ test('one falling cluster survives eviction and restart across a stream and chun
       return result;
     };
 
+    const impact=edit=>{
+      const dirty=collapse.acceptImpact(edit,{defer:mixedTerrain});
+      if(!mixedTerrain)return dirty;
+      assert.equal(collapse.checkingSupport,true);
+      let scanned=[];
+      for(let frame=0;frame<100&&collapse.checkingSupport;frame++){
+        scanned=collapse.stepSupportScan(96);
+      }
+      assert.equal(collapse.checkingSupport,false);
+      return scanned;
+    };
     const supported=cut('supported-stone',-1,2,4);
     // The other half still sits on dirt, so the structure should stay put.
-    assert.deepEqual(collapse.acceptImpact(supported),[]);
-    save.commit(supported.removedCells);
+    assert.deepEqual(impact(supported),[]);
+    if(!mixedTerrain)save.commit(supported.removedCells);
     assert.equal(world.get(-1,3,4),3);
     assert.equal(world.get(0,3,4),3);
 
-    const dirty=collapse.acceptImpact(cut('seam-support',-1,3,0));
+    const dirty=impact(cut('seam-support',-1,3,0));
     assert.ok(dirty.includes('-1,0,0'));
     assert.ok(dirty.includes('0,0,0'));
     assert.equal(world.get(-1,4,0),0);
@@ -242,7 +257,8 @@ test('one falling cluster survives eviction and restart across a stream and chun
     assert.deepEqual(collapse.protectedIds,[]);
     assert.equal(collapse.collision.bodies.length,0);
     assert.deepEqual(save.additions.map(({owner})=>owner),ids);
-    assert.ok(collapse.acceptImpact(cut('remaining-support',0,2,4)).length);
+    assert.equal(world.get(-1,1,0),mixedTerrain?1:3);
+    assert.ok(impact(cut('remaining-support',0,2,4)).length);
     for(let step=0;step<120&&collapse.holdsFixture;step++)collapse.tick([]);
     assert.equal(collapse.phase,'settled');
     assert.deepEqual(collapse.outcomes.map(outcome=>outcome.sequence),[2,3]);
