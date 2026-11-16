@@ -28,11 +28,12 @@ export class HuntCollapseEvidence {
 
   get tracking(){return this.#active!==null;}
 
-  begin({sequence,at,activationCpuMs,ownerCount,world}){
+  begin({sequence,at,activationCpuMs,ownerCount,world,supportScan}){
     this.#active={sequence,at,activationCpuMs:round(activationCpuMs),ownerCount,
       fallVisibleMs:null,physicsSteps:0,actorBlockedSteps:0,maxPhysicsStepCpuMs:0,
       frames:0,hitchesOver33Ms:0,maxFrameMs:0,peakChunks:0,peakVoxelPayloadBytes:0,
       interrupted:false};
+    if(supportScan)this.#active.supportScan={...supportScan};
     this.observe(world);
   }
 
@@ -83,6 +84,7 @@ export class HuntCollapseEvidence {
 
   get snapshot(){
     return {schema:SCHEMA,restoredSamples:this.#restored,tracking:this.tracking,
-      recent:this.#recent.map(sample=>({...sample}))};
+      recent:this.#recent.map(({supportScan,...sample})=>
+        supportScan?{...sample,supportScan:{...supportScan}}:sample)};
   }
 }

@@ -218,12 +218,24 @@ test('a proven cluster can settle while a separate component touches unloaded te
     world.set(x,3,0,3);
   }
   const save=new HuntTerrainSave(null,'partial-coverage');
+  let clock=0;
   const preview=new HuntCollapsePreview(world,null,{
     publishedAt:x=>x<6,ownerAt:()=>'terrain',trackAddedCells:()=>{}
-  },save,{fixture:false,mixedTerrain:true});
+  },save,{fixture:false,mixedTerrain:true,now:()=>{
+    clock+=.5;
+    return clock;
+  }});
 
   preview.acceptImpact({editRevision:1,removedCells:['0,2,0','5,2,0']},{defer:true});
-  for(let frame=0;frame<20&&preview.checkingSupport;frame++)preview.stepSupportScan(8);
+  for(let frame=0;frame<20&&preview.checkingSupport;frame++){
+    clock+=16;
+    preview.stepSupportScan(8);
+  }
+  const {slices,scanWorkMs,scanElapsedMs,maxSliceMs}=preview.supportReport;
+  assert.ok(slices>1);
+  assert.equal(scanWorkMs,(slices+1)*.5);
+  assert.equal(scanElapsedMs,16*slices+(2*slices+1)*.5);
+  assert.equal(maxSliceMs,.5);
   assert.equal(preview.supportReport.scanStatus,'partial-coverage');
   assert.equal(preview.supportReport.candidates,1);
   assert.equal(preview.supportReport.status,'detached');

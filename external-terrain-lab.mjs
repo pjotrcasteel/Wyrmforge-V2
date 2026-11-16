@@ -829,7 +829,7 @@ function measureCollapseActivation(at){
   const {collapse,collapseEvidence}=playStream;
   if(!collapse.holdsFixture)return;
   collapseEvidence?.begin({sequence:collapse.replay.sequence,at,activationCpuMs:performance.now()-at,
-    ownerCount:collapse.protectedIds.length,world:active.world});
+    ownerCount:collapse.protectedIds.length,world:active.world,supportScan:collapse.supportReport});
 }
 
 function advanceCollapseSupport(){

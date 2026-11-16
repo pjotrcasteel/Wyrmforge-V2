@@ -50,6 +50,7 @@ export class HuntCollapsePreview {
   #replay=null;
   #pendingScan=null;
   #supportReport=null;
+  #now;
   #fixture;
   #guidedSupport;
   #cohesive;
@@ -58,8 +59,9 @@ export class HuntCollapsePreview {
   #isKnown;
   #phase;
 
-  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null,mixedTerrain=false,foundationY=null}={}){
+  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null,mixedTerrain=false,foundationY=null,now=()=>performance.now()}={}){
     this.#world=world;
+    this.#now=now;
     this.#port=port;
     this.#residency=residency;
     this.#save=save;
@@ -105,11 +107,13 @@ export class HuntCollapsePreview {
     if(!this.canAcceptImpact||!edit.removedCells?.length||
         (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     this.#reportSupport({editRevision:edit.editRevision,removedCells:edit.removedCells.length,
-      status:'checking',scanStatus:null,scannedPositions:0,oversizedComponents:0,candidates:0,slices:0});
+      status:'checking',scanStatus:null,scannedPositions:0,oversizedComponents:0,candidates:0,slices:0,
+      scanWorkMs:0,scanElapsedMs:0,maxSliceMs:0});
     if(edit.removedCells.length>256){
       this.#reportSupport({status:'impact-too-large'});
       return [];
     }
+    const started=this.#now();
     const removed=edit.removedCells.map(key=>{
       const [x,y,z]=key.split(',').map(Number);
       return {x,y,z};
@@ -120,11 +124,14 @@ export class HuntCollapsePreview {
       options.maxReads=MAX_DEFERRED_SCAN_READS;
     }
     if(!defer){
-      this.#reportSupport({slices:1});
-      return this.#applyScan(edit,scanTerrainSupport(this.#world,removed,options));
+      const scan=scanTerrainSupport(this.#world,removed,options);
+      this.#recordScanSlice(scan,started,started);
+      return this.#applyScan(edit,scan);
     }
     const job=beginTerrainSupportScan(this.#world,removed,options);
-    this.#pendingScan={edit,job,previousPhase:this.#phase};
+    this.#pendingScan={edit,job,started,previousPhase:this.#phase};
+    const setupMs=this.#now()-started;
+    this.#reportSupport({scanWorkMs:setupMs,scanElapsedMs:setupMs});
     this.#phase='checking-support';
     this.#outcomes.set(edit.editRevision,Object.freeze({sequence:edit.editRevision,landed:null}));
     return [];
@@ -133,8 +140,9 @@ export class HuntCollapsePreview {
   stepSupportScan(maxOperations){
     const pending=this.#pendingScan;
     if(!pending)return [];
+    const started=this.#now();
     const scan=pending.job.step(maxOperations);
-    this.#reportSupport({scannedPositions:scan.reads,slices:this.#supportReport.slices+1});
+    this.#recordScanSlice(scan,started,pending.started);
     if(scan.status==='scanning')return [];
     this.#pendingScan=null;
     this.#phase=pending.previousPhase;
@@ -172,6 +180,15 @@ export class HuntCollapsePreview {
       return this.#startFall(edit,detached,deferred);
     }
     return this.#decline();
+  }
+
+  #recordScanSlice(scan,sliceStarted,scanStarted){
+    const ended=this.#now();
+    const sliceMs=ended-sliceStarted;
+    const {slices,scanWorkMs,maxSliceMs}=this.#supportReport;
+    this.#reportSupport({scannedPositions:scan.reads,slices:slices+1,
+      scanWorkMs:scanWorkMs+sliceMs,scanElapsedMs:ended-scanStarted,
+      maxSliceMs:Math.max(maxSliceMs,sliceMs)});
   }
 
   #reportSupport(update){

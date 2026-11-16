@@ -8,7 +8,8 @@ test('collapse timing ends at static render and survives reload in the same tab'
   const records=new Map();
   const storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
   const evidence=new HuntCollapseEvidence(storage,'build-1');
-  evidence.begin({sequence:3,at:100,activationCpuMs:4.531,ownerCount:2,world});
+  const supportScan={slices:3,scanWorkMs:1.75,scanElapsedMs:34,maxSliceMs:.75};
+  evidence.begin({sequence:3,at:100,activationCpuMs:4.531,ownerCount:2,world,supportScan});
   evidence.frame(16.7);
   evidence.presented(120,null,'ready');
   evidence.presented(150,null,'ready');
@@ -26,7 +27,7 @@ test('collapse timing ends at static render and survives reload in the same tab'
   assert.deepEqual(sample,{sequence:3,activationCpuMs:4.5,ownerCount:2,fallVisibleMs:20,
     physicsSteps:2,actorBlockedSteps:1,frames:2,hitchesOver33Ms:1,peakChunks:15,
     peakVoxelPayloadBytes:10000,interrupted:false,maxFrameMs:41.2,maxPhysicsStepCpuMs:3.2,
-    settlementVisibleMs:90,landedVoxels:2,saveStatus:'saved'});
+    settlementVisibleMs:90,landedVoxels:2,saveStatus:'saved',supportScan});
   assert.deepEqual(new HuntCollapseEvidence(storage,'build-1').snapshot,
     {...evidence.snapshot,restoredSamples:1});
   assert.deepEqual(new HuntCollapseEvidence(storage,'build-2').snapshot.recent,[]);
