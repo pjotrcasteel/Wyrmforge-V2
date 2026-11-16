@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **G09-01 — read-only structural support scan ([#175](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/175))**. Keep dynamic activation gated; gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **G09-01 — bounded structural cluster handoff ([#175](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/175))**. Keep dynamic activation gated; gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -352,10 +352,11 @@ H08-05 physical-object completion remain open.
 
 ### G09-01 — Authoritative bounded falling clusters
 - **GitHub Issue:** [#175](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/175)
-- **Status:** `IN PROGRESS` — read-only support detection, prior to dynamic activation.
+- **Status:** `IN PROGRESS` — support detection and static-to-dynamic cluster handoff, prior to dynamic activation.
 - **Player experience:** supported arches, cliffs and stone shelves collapse plausibly after destruction.
 - **Gate:** bounded connectivity work; never one rigid body per voxel; no duplicate terrain/object collision; verified in the playable Hunt.
 - **Dependencies:** H08-08.
+- **Engine handoff:** trusted support candidates are revision- and world-bound. Preflight rejects protected, partial or over-budget terrain. Transfer removes static voxels before one immutable body becomes visible and reports mesh invalidation across chunk seams. Body motion and Play Hunt activation are pending.
 - **Done for now:** A controlled collapse follows a removed support in the running Hunt, preserves a single collision authority and respects bounded search/body limits. Stop before advanced rubble visuals.
 
 ### G09-02 — Falling-material physics and persistence
