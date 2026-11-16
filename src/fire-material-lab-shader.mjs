@@ -32,8 +32,8 @@ vec3 labGrassTint(vec2 uv) {
   return mix(low,high,coverage);
 }
 
-vec3 labLinearSurface(int material, vec2 uv) {
-  int index=material==1?(vNormal.y>0.5?0:1):material==2?2:3;
+vec3 labLinearSurface(int material, vec2 uv, bool topFace) {
+  int index=material==1?(topFace?0:1):material==2?2:3;
   float layer=uTerrainLayers[index];
   if(layer<0.0)return srgbToLinearColor(terrainAlbedo(float(material==6?3:material)));
   vec2 mapped=index==0&&uLabGrassStyle>0?uv*.62:uv;
@@ -72,12 +72,36 @@ vec3 labLava(vec2 uv) {
   return srgbToLinearColor(color);
 }
 
+float labGrassEdgeWeight(int material,float edge,vec2 boundaryUv) {
+  // Both faces sample the same world-space boundary. Broad tufts alternate
+  // with exposed soil; the final contour advances in whole art texels.
+  vec2 texel=floor(boundaryUv*12.0)/12.0;
+  float offset=.28*(labNoise(texel*3.7+11.0)-.47);
+  offset+=.12*(labNoise(texel*9.0+7.0)-.5);
+  float stepped=(floor(edge*12.0)+.5)/12.0;
+  float distanceToGrass=material==1?stepped:-stepped;
+  float grass=smoothstep(-.085,.085,distanceToGrass+offset);
+  return material==1?1.0-grass:grass;
+}
+
+vec3 labGrassLip(vec3 soil,ivec3 cell) {
+  if(labMaterial(cell+ivec3(0,1,0))!=0)return soil;
+  vec2 texel=floor(vWorld.xz*12.0)/12.0;
+  float tufts=labNoise(texel*4.1)+.22*labNoise(texel*10.7+3.0);
+  float depth=mix(1.0,3.0,smoothstep(.39,.84,tufts))/12.0;
+  float belowTop=float(cell.y+1)-vWorld.y;
+  float rim=1.0-smoothstep(depth-.045,depth+.025,belowTop);
+  if(rim<=0.0)return soil;
+  vec3 moss=labLinearSurface(1,vWorld.xz,true);
+  return mix(soil,moss,rim*.88);
+}
+
 vec3 labTerrainColor(vec3 base,vec2 uv) {
   int material=int(round(vMaterial));
   if(material==6){
     float mineral=labNoise(floor(uv*8.0)/3.0);
     vec3 crustTint=mineral<.47?vec3(.42,.37,.44):vec3(.54,.40,.38);
-    base=labLinearSurface(3,uv)*crustTint;
+    base=labLinearSurface(3,uv,vNormal.y>.5)*crustTint;
   }
   float structure=labNoise(uv*.42)+.33*labNoise(uv*1.75);
   if(material==1&&vNormal.y>.5)base*=labGrassTint(uv);
@@ -88,6 +112,8 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
   // one, even when their voxels share the same plane in the material volume.
   ivec3 normal=ivec3(round(vNormal));
   ivec3 cell=ivec3(floor(vWorld-vNormal*.002));
+  bool topFace=vNormal.y>.5;
+  if(material==1&&!topFace)base=labGrassLip(base,cell);
   vec3 along=fract(vWorld);
   vec3 mixedColor=vec3(0.0);
   float weights=0.0;
@@ -106,11 +132,18 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
       continue;
     }
     if(next>3||labMaterial(neighbor+normal)!=0)continue;
-    float width=mix(.17,.43,labNoise(uv*3.1));
-    float weight=.50*(1.0-smoothstep(0.0,width,edge));
-    mixedColor+=labLinearSurface(next,uv)*weight;
+    float weight;
+    if(topFace&&((material==1&&next==2)||(material==2&&next==1))){
+      vec3 boundary=vWorld;
+      boundary[axis]=float(cell[axis])+(local<.5?0.0:1.0);
+      weight=labGrassEdgeWeight(material,edge,boundary.xz);
+    }else{
+      float width=mix(.17,.43,labNoise(uv*3.1));
+      weight=.50*(1.0-smoothstep(0.0,width,edge));
+    }
+    mixedColor+=labLinearSurface(next,uv,topFace)*weight;
     weights+=weight;
   }
-  return (base*(1.0-weights)+mixedColor)*tone+shore*vec3(.11,.028,.005);
+  return (base*max(0.0,1.0-weights)+mixedColor/max(1.0,weights))*tone+shore*vec3(.11,.028,.005);
 }
 `;
