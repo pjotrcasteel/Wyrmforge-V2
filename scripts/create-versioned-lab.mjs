@@ -18,7 +18,8 @@ export function createVersionedLab(root, sha) {
     'external-terrain-lab.html', 'external-terrain-lab.mjs',
     'play-hunt.html', 'prop-benchmark.html', 'prop-benchmark.mjs',
     'cell-stream-lab.html', 'cell-stream-lab.mjs',
-    'terrain-collapse-lab.html', 'terrain-collapse-lab.mjs'];
+    'terrain-collapse-lab.html', 'terrain-collapse-lab.mjs',
+    'fire-material-lab.html', 'fire-material-lab.mjs'];
   const sourcePath = join(directory, 'src');
   for (const file of files) {
     if (!existsSync(join(directory, file))) {

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fire Hunt Material Lab · Wyrmforge V2</title>
+<style>
+:root{color-scheme:dark;background:#141516;color:#ece6dc;font:15px/1.5 "Instrument Sans",system-ui,sans-serif;--muted:#b9afa3;--line:#37332f;--accent:#f1aa69}
+*{box-sizing:border-box}body{margin:0}main{width:min(1120px,100%);margin:auto;padding:clamp(16px,4vw,48px)}header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px 22px;margin-bottom:20px}
+h1{font:600 clamp(27px,5vw,44px)/1.1 Georgia,serif;margin:0;letter-spacing:-.025em}a{color:var(--accent)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px}section,aside{min-width:0;border:1px solid var(--line);border-radius:12px;background:#1d1b19;overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:12px;border-bottom:1px solid var(--line)}button,select,input{font:inherit;min-height:42px;max-width:100%}button,select{padding:7px 12px;color:inherit;background:#292521;border:1px solid #51463c;border-radius:7px}button{cursor:pointer}button[aria-pressed=true]{background:#4b3020;border-color:#ac7249;color:#ffdbb5}button:disabled{opacity:.55;cursor:default}:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+canvas#terrain{display:block;width:100%;height:clamp(290px,56vw,540px);background:#101820}aside{padding:15px}label{display:block;margin:0 0 4px;font-weight:600}aside select{width:100%}aside label:not(:first-child){margin-top:14px}.description,small,#status{color:var(--muted)}.description{min-height:3em;margin:8px 0}#status{margin:0;padding:10px 13px;border-top:1px solid var(--line);min-height:44px}#upload-status{display:block;min-height:2em}input::file-selector-button{font:inherit;padding:6px;margin:4px 5px 4px 0;background:#292521;border:1px solid #51463c;color:inherit;border-radius:6px}#build{color:var(--muted);margin-top:10px}
+@media(max-width:650px){.layout{grid-template-columns:1fr}.stage{display:contents}aside{grid-row:1;padding:12px}.workspace{grid-row:2}.description{min-height:unset}aside label:not(:first-child){margin-top:8px}}
+</style>
+</head>
+<body><main>
+<header><h1>Fire Hunt Material Lab</h1><a href="./index.html">V2 labs</a></header>
+<div class="layout">
+<section class="workspace" aria-label="Terrain preview">
+<div class="toolbar" role="group" aria-label="Preview controls">
+<button type="button" data-scene="sample" aria-pressed="true">Sample</button>
+<button type="button" data-scene="repeats" aria-pressed="false">Repeats</button>
+<button type="button" data-scene="layers" aria-pressed="false">Crater</button>
+<button type="button" id="camera" aria-pressed="false">Inspect angle</button>
+<button type="button" id="excavate" aria-pressed="false" hidden>Excavate</button>
+</div>
+<canvas id="terrain" aria-label="Selected voxel material under the V2 renderer"></canvas>
+<p id="status" role="status">Preparing terrain preview…</p>
+</section>
+<aside aria-label="Material controls">
+<label for="material">Material</label><select id="material"></select>
+<p class="description" id="description"></p>
+<label for="channel">Texture channel</label>
+<select id="channel"><option value="albedo">Albedo</option><option value="normal">Normal</option><option value="orm">Occlusion / roughness / metalness</option></select>
+<label for="texture">Preview a 64 × 64 PNG tile</label>
+<input id="texture" type="file" accept="image/png">
+<small id="upload-status" role="status">Tiles stay in this tab.</small>
+<button type="button" id="clear" disabled>Clear tile</button>
+</aside>
+</div>
+<small id="build"></small>
+</main><script type="module" src="./fire-material-lab.mjs"></script></body>
+</html>

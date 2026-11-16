@@ -379,7 +379,8 @@ H08-05 physical-object completion remain open.
 
 ### R10-01 — Replace placeholder art and add atmosphere by actual Hunt scene
 - **GitHub Issue:** [#177](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/177)
-- **Status:** `PLANNED`
+- **Status:** `IN PROGRESS`
+- **Fire Hunt Material Lab:** Compare the existing Wet Forest surfaces and candidate scorched and volcanic appearances on real V2 voxel fixtures. The crater uses the terrain edit ledger. Candidate swatches use existing preview surface slots. Authored tiles, lava presentation and player visual acceptance are pending.
 - **Player experience:** recognizable magical forest → fading wilds → volcanic approach → Wyrm, consistent authored art, lighting and VFX.
 - **Gate:** visual owner approval, proper pixel scale, no terrain/material drift, performance in the playable Hunt. No requirement to block initial walking prototype.
 - **Dependencies:** H08-11.
