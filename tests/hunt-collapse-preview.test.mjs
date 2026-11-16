@@ -14,12 +14,13 @@ import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT
 import {spawnHuntExplorer} from '../src/hunt-play-runtime.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from '../src/hunt-collapse-preview.mjs';
 
-for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball','deferred mixed terrain Fireball','large mixed terrain Fireball','two-layer mixed terrain Fireball'])test(
+for(const trigger of ['control','fireball','region seam Fireball','mixed terrain Fireball','deferred mixed terrain Fireball','large mixed terrain Fireball','two-layer mixed terrain Fireball','long-span mixed terrain Fireball'])test(
   'actual seed 7 Hunt settles, streams and reloads the shelf after '+trigger,()=>{
   const site=generateWorldSite(createWorldSiteRecipe({kind:'wet-forest',regionId:'starter-region',
     siteId:'preview-wet-forest',encounterId:'preview-001',chunkEdge:16,seed:7}));
   const graph=generateAuthoredHuntTerrainGraph(site);
-  const twoLayer=trigger==='two-layer mixed terrain Fireball';
+  const longSpan=trigger==='long-span mixed terrain Fireball';
+  const twoLayer=longSpan||trigger==='two-layer mixed terrain Fireball';
   const large=twoLayer||trigger==='large mixed terrain Fireball';
   const deferred=large||trigger==='deferred mixed terrain Fireball';
   const mixed=deferred||trigger==='mixed terrain Fireball';
@@ -33,7 +34,7 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
   const records=new Map(),storage={getItem:key=>records.get(key),setItem:(key,value)=>records.set(key,value)};
   function load(identity='gravity-preview'){
     const save=new HuntTerrainSave(storage,identity);
-    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save,{mixed,large,layers:twoLayer?2:1}):huntCollapseScaffold(save);
+    const scaffold=seam?huntRegionCollapseScaffold(graph.layout,save,{mixed,large,layers:twoLayer?2:1,longSpan}):huntCollapseScaffold(save);
     const addedCells=huntSavedAdditions(graph.layout,[...save.additions,...scaffold]);
     const loader=new V2ExternalTerrainLoader(graph.initialTerrain(initialIds),{
       microSurfaceCapacity:2048,removedCells:save.removedCells,addedCells});
@@ -108,18 +109,18 @@ for(const trigger of ['control','fireball','region seam Fireball','mixed terrain
     assert.equal(pending.collapse.landed,null);
     assert.throws(()=>replayHuntTerrainEdit(port,residentIds,pending,{collapse:preview}),/settled collapse/);
     preview.tick([]);
-    assert.equal(preview.renderCells.length,twoLayer?145:large?73:seam?7:trigger==='control'?8:9);
+    assert.equal(preview.renderCells.length,longSpan?209:twoLayer?145:large?73:seam?7:trigger==='control'?8:9);
     assert.equal(world.get(sampleX,shelfY,sampleZ),0);
-    assert.equal(preview.protectedIds.length,large?6:seam?2:1);
+    assert.equal(preview.protectedIds.length,longSpan?8:large?6:seam?2:1);
     if(seam)assert.deepEqual([...new Set(preview.protectedIds.map(id=>id.split(':cell:')[0]))].sort(),
-      [initialIds[2],initialIds[0]].sort());
+      longSpan?[initialIds[2],initialIds[0],initialIds[1]]:[initialIds[2],initialIds[0]].sort());
     const blocker={x:sampleX+.5,y:seam?6:5,z:sampleZ+.5};
     for(let i=0;i<120&&preview.phase==='falling';i++)preview.tick([blocker]);
     assert.equal(preview.phase,'actor-blocked');
     assert.equal(preview.replay.landed,null);
     for(let i=0;i<120;i++)preview.tick([]);
     assert.equal(preview.phase,'settled');
-    if(twoLayer)assert.equal(save.additions.length,145);
+    if(twoLayer)assert.equal(save.additions.length,longSpan?209:145);
     if(mixed)assert.deepEqual([...new Set(save.additions.map(cell=>cell.material))].sort(),[1,2,3]);
     assert.deepEqual(preview.renderCells,[]);
     assert.equal(preview.supportTarget({camera:'hunt'}),null);

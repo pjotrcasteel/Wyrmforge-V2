@@ -52,13 +52,14 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const twoLayerCollapse=gravityMode==='two-layer';
+const longSpanCollapse=gravityMode==='long-span';
+const twoLayerCollapse=gravityMode==='two-layer'||longSpanCollapse;
 const largeCollapse=gravityMode==='large'||twoLayerCollapse;
 const terrainGravity=cellPreview&&gravityMode==='terrain';
 const deferredSupport=gravityMode==='deferred'||largeCollapse||terrainGravity;
 const SUPPORT_OPERATIONS_PER_FRAME=96;
 const mixedGravity=gravityMode==='mixed'||deferredSupport;
-const seamCollapse=['seam','measure','mixed','deferred','large','two-layer'].includes(gravityMode);
+const seamCollapse=['seam','measure','mixed','deferred','large','two-layer','long-span'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
 const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
@@ -1176,7 +1177,7 @@ function resetSite() {
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
           'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
-        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:mixedGravity,large:largeCollapse,layers:twoLayerCollapse?2:1}):
+        const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{mixed:mixedGravity,large:largeCollapse,layers:twoLayerCollapse?2:1,longSpan:longSpanCollapse}):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
