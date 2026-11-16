@@ -57,7 +57,7 @@ The read-only Voxel support scan accepts up to 256 precisely identified removed 
 
 ### Static-to-dynamic handoff
 
-The opt-in handoff preflights a candidate against its original VoxelWorld and revision, including protected bedrock and partial surface checks. It reserves room for up to eight bodies and 512 cells per registry. After preflight, it removes the static voxels synchronously and publishes one immutable cluster payload and its dirty mesh chunks. Failed or duplicated transfers leave the world unchanged. This is an in-process contract. The handoff stays opt-in until the simulation and terrain publication paths are ready.
+The opt-in handoff preflights a candidate against its original VoxelWorld and revision, including protected bedrock and partial surface checks. It reserves room for up to eight bodies and 512 cells per registry. After preflight, it removes the static voxels synchronously and publishes one immutable cluster payload and its dirty mesh chunks. Failed or duplicated transfers leave the world unchanged. This is an in-process contract. The shape-preserving handoff can opt in to carrying exact microvoxel height masks and restoring them at exposed, grid-aligned landings. It preflights mask capacity and headroom before writing. The moving collision volume is still conservative, and Hunt save/replay and streamed residency still require a compatible payload.
 
 ## 5. Gravity simulation and settlement
 
