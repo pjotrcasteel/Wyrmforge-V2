@@ -71,6 +71,13 @@ export class V2TerrainBandResidency {
 
   get addedCellKeys(){return this.#additions.keys();}
 
+  pruneMissingAddedCells(){
+    if(this.#phase!=='resident')return;
+    for(const [id,{x,y,z}] of this.#additions){
+      if(!this.#world.get(x,y,z))this.#additions.delete(id);
+    }
+  }
+
   trackAddedCells(cells){
     if(this.#phase!=='resident')throw new Error('Added voxels require a resident owner');
     this.#rememberAdditions(cells,true,256);

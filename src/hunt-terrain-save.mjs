@@ -55,12 +55,20 @@ export class HuntTerrainSave {
     }catch{this.#status='unreadable';}
   }
 
+  countAdditionsAfterRemoving(removals){
+    let remaining=this.#additions.size;
+    for(const key of removals){
+      if(this.#additions.has(key))remaining--;
+    }
+    return remaining;
+  }
+
   commit(removedCells){
     if(removedCells?.length)this.commitCollapse(removedCells,[]);
   }
 
   commitCollapse(removedCells,additions){
-    if(!['ready','saved'].includes(this.#status))return false;
+    if(this.#status==='full')return false;
     if(!Array.isArray(removedCells)||!Array.isArray(additions)||!additions.every(validAddition)||
         removedCells.some(cell=>typeof cell!=='string'||!COORDINATES.test(cell))){
       throw new TypeError('Invalid committed terrain delta');
@@ -81,6 +89,7 @@ export class HuntTerrainSave {
     // Keep the original Set live for all residency consumers.
     for(const id of newlyRemoved)this.#removedCells.add(id);
     this.#additions=next;
+    if(!['ready','saved'].includes(this.#status))return false;
     try{
       const payload=next.size?{version:2,removed:[...this.#removedCells],added:[...next.values()]}:[...this.#removedCells];
       this.#storage.setItem(this.#key,JSON.stringify(payload));
