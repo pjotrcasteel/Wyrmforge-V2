@@ -61,7 +61,7 @@ export class HuntCollapsePreview {
   #isKnown;
   #phase;
 
-  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null,mixedTerrain=false,foundationY=null,now=()=>performance.now()}={}){
+  constructor(world,port,residency,save,{fixture=true,guidedSupport=fixture?SUPPORT:null,mixedTerrain=false,foundationY=null,preserveMicroSurfaces=false,now=()=>performance.now()}={}){
     this.#world=world;
     this.#now=now;
     this.#port=port;
@@ -72,7 +72,7 @@ export class HuntCollapsePreview {
     this.#foundationY=mixedTerrain?foundationY:null;
     this.#guidedSupport=guidedSupport;
     this.#phase=guidedSupport&&save.removedCells.has(cellKey(guidedSupport))?'settled':'ready';
-    this.#handoff=new TerrainClusterHandoff(world);
+    this.#handoff=new TerrainClusterHandoff(world,{preserveMicroSurfaces});
     this.#isKnown=(x,y,z)=>residency.publishedAt(x+.5,z+.5);
     this.#physics=new TerrainClusterPhysics(world,this.#handoff,{isKnown:this.#isKnown});
   }
