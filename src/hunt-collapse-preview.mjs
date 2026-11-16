@@ -14,7 +14,8 @@ const TERRAIN=new Set(Array.from({length:255},(_,index)=>index+1)
 const OWNER='region-entry:cell:8:0:1';
 const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:10,radius:1.1};
 const SUPPORT_KEY='5,6,10';
-const MAX_TERRAIN_CLUSTER_CELLS=128;
+const MAX_DEFERRED_CLUSTER_CELLS=256;
+const MAX_DEFERRED_SCAN_READS=4096;
 const MAX_TERRAIN_ADDITIONS=256;
 const MAX_TERRAIN_DROP=12;
 const FALL_COLORS={
@@ -116,6 +117,10 @@ export class HuntCollapsePreview {
       return {x,y,z};
     });
     const options={isKnown:this.#isKnown,cohesive:this.#cohesive,anchors:ANCHORS,foundationY:this.#foundationY};
+    if(defer&&this.#cohesive===TERRAIN){
+      options.maxCells=MAX_DEFERRED_CLUSTER_CELLS;
+      options.maxReads=MAX_DEFERRED_SCAN_READS;
+    }
     if(!defer){
       this.#reportSupport({slices:1});
       return this.#applyScan(edit,scanTerrainSupport(this.#world,removed,options));
@@ -136,12 +141,12 @@ export class HuntCollapsePreview {
     this.#pendingScan=null;
     this.#phase=pending.previousPhase;
     this.#outcomes.delete(pending.edit.editRevision);
-    const dirty=this.#applyScan(pending.edit,scan);
+    const dirty=this.#applyScan(pending.edit,scan,true);
     if(!this.holdsFixture)this.#save.commit(pending.edit.removedCells);
     return dirty;
   }
 
-  #applyScan(edit,scan){
+  #applyScan(edit,scan,deferred=false){
     this.#reportSupport({scannedPositions:scan.reads,oversizedComponents:scan.oversized,
       candidates:scan.status==='complete'?scan.candidates.length:0,status:scan.status});
     if(scan.status!=='complete')return this.#decline();
@@ -164,7 +169,7 @@ export class HuntCollapsePreview {
       if(detached.status!=='detached')continue;
       this.#owners=admission.owners;
       this.#admitted+=candidate.cells.length;
-      return this.#startFall(edit,detached);
+      return this.#startFall(edit,detached,deferred);
     }
     return this.#decline();
   }
@@ -179,7 +184,6 @@ export class HuntCollapsePreview {
   }
 
   #qualifyTerrain(cells){
-    if(cells.length>MAX_TERRAIN_CLUSTER_CELLS)return {status:'component-too-large'};
     if(this.#admitted+cells.length>MAX_TERRAIN_ADDITIONS)return {status:'save-capacity'};
     const moving=new Set(cells.map(cellKey)),owners=new Map();
     let drop=MAX_TERRAIN_DROP+1;
@@ -206,10 +210,10 @@ export class HuntCollapsePreview {
     return {owners};
   }
 
-  #startFall(edit,detached){
+  #startFall(edit,detached,deferred){
     this.#removed=[...edit.removedCells,...detached.body.cells.map(cellKey)];
     this.#replay=Object.freeze({sequence:edit.editRevision,
-      removed:Object.freeze(this.#removed.slice().sort()),landed:null});
+      removed:Object.freeze(this.#removed.slice().sort()),landed:null,...(deferred?{deferred:true}:{})});
     this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase='falling';
     return detached.dirtyChunks;
