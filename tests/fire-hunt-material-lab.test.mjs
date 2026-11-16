@@ -6,6 +6,7 @@ import {spawnTerrainActor} from '../src/terrain-actor.mjs';
 import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,LAB_LAVA,LAB_CRUST,LAB_LAVA_BRIDGE_X,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
 import {terrainArtKey,TERRAIN_ART_CHANNELS,TERRAIN_ART_SLOTS} from '../src/terrain-material-handoff.mjs';
 import {terrainMaterial} from '../src/terrain-materials.mjs';
+import {buildPixelMicroSurfaceMeshes} from '../src/microvoxel-mesher.mjs';
 import {buildExposedFaceMeshes} from '../src/exposed-face-mesher.mjs';
 
 test('Fire Hunt lab includes every current authoring slot and valid preview carriers',()=>{
@@ -48,7 +49,7 @@ test('Hunt-scale comparison preserves the same cliff and damage geometry across 
   assert.equal(layered.world.get(8,5,-12),3);
   assert.equal(layered.world.get(0,5,-12),2);
   assert.equal(layered.world.get(8,6,-12),1);
-  assert.ok(Math.abs(spawnTerrainActor(layered.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}).y-3)<.001);
+  assert.ok(Math.abs(spawnTerrainActor(layered.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}).y-2.9)<.001);
 });
 
 test('rock cuts contain continuous rock instead of a buried dirt stripe',()=>{
@@ -95,4 +96,16 @@ test('the basalt crossing keeps a solid walkable deck above the molten channel',
     assert.equal(world.get(x,1,1),0);
   }
   assert.ok(world.get(-7,6,-5));
+});
+
+test('the optional trail lip is one physical microvoxel and shares the terrain mesh',()=>{
+  const stepped=createMaterialLabTerrain('grass','hunt',false,'hard');
+  const flat=createMaterialLabTerrain('grass','hunt',false,'hard',false);
+  const foot=({world})=>spawnTerrainActor(world,{...MATERIAL_LAB_SPAWN,searchTopY:10}).y;
+  assert.ok(Math.abs(foot(flat)-foot(stepped)-.1)<.001);
+  assert.equal(flat.world.get(0,2,5),stepped.world.get(0,2,5));
+  assert.equal(stepped.world.get(2,2,5),1);
+  assert.equal(stepped.world.microSurfaceTile(2,2,5),null);
+  const meshes=buildPixelMicroSurfaceMeshes(stepped.world,buildExposedFaceMeshes(stepped.world));
+  assert.ok(meshes.some(mesh=>mesh.positions.some((value,index)=>index%3===1&&Math.abs(value+mesh.origin[1]-2.9)<.001)));
 });

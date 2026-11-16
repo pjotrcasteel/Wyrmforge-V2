@@ -5,6 +5,7 @@ uniform highp sampler3D uLabMaterials;
 uniform bool uLabEnabled;
 uniform bool uLabBlend;
 uniform int uLabGrassStyle;
+uniform int uLabForestStage;
 uniform float uLabTime;
 uniform vec3 uLabOrigin;
 `;
@@ -32,13 +33,34 @@ vec3 labGrassTint(vec2 uv) {
   return mix(low,high,coverage);
 }
 
+vec3 labForestGrade(vec3 color,int material,vec2 uv) {
+  if(uLabForestStage==0)return color;
+  float pockets=labNoise(uv*.16)+.18*(labNoise(uv*.41)-.5);
+  if(uLabForestStage==1){
+    if(material!=1)return color;
+    float clearing=smoothstep(.24,.79,pockets);
+    vec3 canopy=color*vec3(1.03,1.26,.91);
+    vec3 daylight=color*vec3(1.37,1.77,1.04)+vec3(.011,.026,.003);
+    return mix(canopy,daylight,clearing);
+  }
+  float value=dot(color,vec3(.2126,.7152,.0722));
+  if(uLabForestStage==2){
+    vec3 dusk=color*vec3(.72,.82,.95);
+    return mix(dusk,vec3(value)*vec3(.67,.78,.87),.24);
+  }
+  vec3 cooled=color*vec3(.58,.56,.64);
+  vec3 soot=vec3(value)*mix(vec3(.57,.49,.55),vec3(.84,.53,.37),smoothstep(.40,.75,pockets));
+  return mix(cooled,soot,material==1?.82:.51);
+}
+
 vec3 labLinearSurface(int material, vec2 uv, bool topFace) {
   int index=material==1?(topFace?0:1):material==2?2:3;
   float layer=uTerrainLayers[index];
-  if(layer<0.0)return srgbToLinearColor(terrainAlbedo(float(material==6?3:material)));
+  if(layer<0.0)return labForestGrade(srgbToLinearColor(terrainAlbedo(float(material==6?3:material))),material,vWorld.xz);
   vec2 mapped=index==0&&uLabGrassStyle>0?uv*.62:uv;
   vec3 albedo=texture(uTerrainAlbedo,vec3(mapped*uTerrainTilesPerVoxel,layer)).rgb;
-  return index==0?albedo*labGrassTint(uv):albedo;
+  if(index==0)albedo*=labGrassTint(uv);
+  return labForestGrade(albedo,material,vWorld.xz);
 }
 
 ${fireLavaMotifGlsl()}
@@ -105,6 +127,7 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
   }
   float structure=labNoise(uv*.42)+.33*labNoise(uv*1.75);
   if(material==1&&vNormal.y>.5)base*=labGrassTint(uv);
+  base=labForestGrade(base,material,vWorld.xz);
   float tone=mix(.82,1.16,smoothstep(.15,1.24,structure));
   if(!uLabBlend||vNormal.y<-.5)return base*tone;
 

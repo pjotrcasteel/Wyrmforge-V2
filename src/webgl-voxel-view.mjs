@@ -652,6 +652,7 @@ export class WebGLVoxelView {
       labEnabled: gl.getUniformLocation(this.#program,'uLabEnabled'),
       labBlend: gl.getUniformLocation(this.#program,'uLabBlend'),
       labGrassStyle: gl.getUniformLocation(this.#program,'uLabGrassStyle'),
+      labForestStage: gl.getUniformLocation(this.#program,'uLabForestStage'),
       labTime: gl.getUniformLocation(this.#program,'uLabTime'),
       labOrigin: gl.getUniformLocation(this.#program,'uLabOrigin'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
@@ -844,7 +845,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0 }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -905,6 +906,7 @@ export class WebGLVoxelView {
       gl.uniform3fv(this.#uniforms.labOrigin,this.#labOrigin);
       gl.uniform1i(this.#uniforms.labBlend,labBlend?1:0);
       gl.uniform1i(this.#uniforms.labGrassStyle,labGrassStyle);
+      gl.uniform1i(this.#uniforms.labForestStage,labForestStage);
       gl.uniform1f(this.#uniforms.labTime,labTime);
     }
     gl.uniform2f(this.#uniforms.viewport, width, height);
