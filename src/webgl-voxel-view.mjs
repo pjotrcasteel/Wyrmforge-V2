@@ -230,7 +230,10 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
-  if(uLabEnabled)linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
+  if(uLabEnabled){
+    linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
+    if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;
+  }
   // The WebGL default canvas does not perform the sRGB output transfer.
   // Encoding before writing fixes near-black textured terrain on iPhone Safari
   // without changing the artist's PNG pixels or the underlying voxel world.
