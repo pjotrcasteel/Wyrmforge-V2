@@ -101,3 +101,21 @@ test('shape-preserving handoff keeps exact microvoxels through settlement and re
   assert.deepEqual(Array.from(world.microSurfaceTile(0,1,0)),levels);
   assert.deepEqual(handoff.bodies,[]);
 });
+
+test('a single support revision can detach disjoint clusters atomically',()=>{
+  const world=new VoxelWorld();
+  const handoff=new TerrainClusterHandoff(world);
+  world.set(-2,2,0,3);
+  world.set(2,2,0,3);
+  const result=scanTerrainSupport(world,[{x:-2,y:1,z:0},{x:2,y:1,z:0}],options);
+  const [left,right]=result.candidates;
+  assert.equal(handoff.detachBatch([left,left]).status,'overlapping-candidates');
+  assert.equal(world.revision,result.worldRevision);
+  assert.deepEqual(handoff.bodies,[]);
+
+  const batch=handoff.detachBatch([left,right]);
+  assert.equal(batch.status,'detached');
+  assert.deepEqual(batch.bodies.map(body=>body.cells[0].x),[-2,2]);
+  assert.equal(world.get(-2,2,0),0);
+  assert.equal(world.get(2,2,0),0);
+});

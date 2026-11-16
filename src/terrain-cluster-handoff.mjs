@@ -24,15 +24,11 @@ export class TerrainClusterHandoff {
   get bodies(){return this.#bodies.slice();}
   isBoundTo(world){return this.#world===world;}
 
-  detach(candidate){
+  #prepare(candidate){
     const world=this.#world;
     if(!isCurrentTerrainSupportCandidate(world,candidate))return {status:'stale-candidate'};
-    const {cells,bounds}=candidate;
-    if(this.#bodies.length>=MAX_CLUSTERS||this.#cellCount+cells.length>MAX_DYNAMIC_CELLS){
-      return {status:'capacity'};
-    }
     const dirty=new Set(),payload=[];
-    for(const cell of cells){
+    for(const cell of candidate.cells){
       const {x,y,z,material}=cell;
       if(material===V2_BEDROCK_MATERIAL||world.get(x,y,z)!==material||world.microSurfaceTile(x,y-1,z)){
         return {status:'ineligible-terrain'};
@@ -42,12 +38,42 @@ export class TerrainClusterHandoff {
       payload.push(levels?Object.freeze({...cell,levels:Object.freeze(Array.from(levels))}):cell);
       markDirtyForEditedVoxel(dirty,world.chunkEdge,x,y,z);
     }
-    const body=Object.freeze({id:this.#nextId++,cells:Object.freeze(payload),bounds});
-    const dirtyChunks=Object.freeze([...dirty].sort());
-    for(const {x,y,z} of cells)world.set(x,y,z,0);
-    this.#bodies.push(body);
-    this.#cellCount+=cells.length;
-    return {status:'detached',body,dirtyChunks,worldRevision:world.revision};
+    return {status:'ready',cells:Object.freeze(payload),bounds:candidate.bounds,dirty};
+  }
+
+  isEligibleCandidate(candidate){return this.#prepare(candidate).status==='ready';}
+
+  detach(candidate){
+    const result=this.detachBatch([candidate]);
+    if(result.status!=='detached')return result;
+    const {bodies,dirtyChunks,worldRevision}=result;
+    return {status:'detached',body:bodies[0],dirtyChunks,worldRevision};
+  }
+
+  detachBatch(candidates){
+    if(!Array.isArray(candidates)||!candidates.length)throw new TypeError('Expected terrain support candidates');
+    if(this.#bodies.length+candidates.length>MAX_CLUSTERS)return {status:'capacity'};
+    const prepared=[],dirty=new Set(),coordinates=new Set();
+    for(const candidate of candidates){
+      const plan=this.#prepare(candidate);
+      if(plan.status!=='ready')return plan;
+      for(const {x,y,z} of plan.cells){
+        const key=x+','+y+','+z;
+        if(coordinates.has(key))return {status:'overlapping-candidates'};
+        coordinates.add(key);
+        if(this.#cellCount+coordinates.size>MAX_DYNAMIC_CELLS)return {status:'capacity'};
+      }
+      for(const chunk of plan.dirty)dirty.add(chunk);
+      prepared.push(plan);
+    }
+    const bodies=prepared.map(({cells,bounds})=>Object.freeze({id:this.#nextId++,cells,bounds}));
+    // All proofs refer to the same revision. Transfer every cell only after
+    // every candidate and the combined registry capacity have been checked.
+    for(const {cells} of bodies)for(const {x,y,z} of cells)this.#world.set(x,y,z,0);
+    this.#bodies.push(...bodies);
+    this.#cellCount+=coordinates.size;
+    return {status:'detached',bodies:Object.freeze(bodies),dirtyChunks:Object.freeze([...dirty].sort()),
+      worldRevision:this.#world.revision};
   }
 
   // Physics supplies a revalidated, grid-aligned rest transform. The

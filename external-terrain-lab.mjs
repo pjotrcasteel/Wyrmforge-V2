@@ -1247,7 +1247,7 @@ function impactSpan(targetOverride=null) {
     if(playMode)recordPlayTerrainEdit(command,result);
     const collapse=playMode?playStream?.collapse:null;
     const activationStart=performance.now();
-    const collapseDirty=collapse?.acceptImpact(result,{defer:deferredSupport})??[];
+    const collapseDirty=collapse?.acceptImpact(result,{defer:deferredSupport,multiple:terrainGravity||shapedCollapse})??[];
     if(collapseDirty.length)measureCollapseActivation(activationStart);
     if(playMode&&!collapse?.holdsFixture&&!collapse?.checkingSupport)playStream?.terrainSave.commit(result.removedCells);
     if(playMode&&result.removedVoxels>0&&playStream?.residency){

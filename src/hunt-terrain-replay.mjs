@@ -25,11 +25,13 @@ export function replayHuntTerrainEdit(port,residentIds,entry,{collapse,save}={})
     return result;
   }
 
-  collapse.acceptImpact(result,{defer:expected.deferred===true,wide:expected.wide===true});
+  collapse.acceptImpact(result,{
+    defer:expected.deferred===true,wide:expected.wide===true,multiple:expected.multiple===true
+  });
   while(collapse.checkingSupport)collapse.stepSupportScan(4096);
   for(let tick=0;tick<MAX_FALL_TICKS&&collapse.holdsFixture;tick++)collapse.tick([]);
   const actual=collapse.replay;
-  if(!actual?.landed||actual.sequence!==entry.sequence||
+  if(!actual?.landed||actual.sequence!==entry.sequence||actual.clusterCount!==expected.clusterCount||
       replayDataDigest(actual.removed)!==replayDataDigest(expected.removed)||
       replayDataDigest(actual.landed)!==replayDataDigest(expected.landed)){
     throw new Error('Replayed collapse differs from recorded settlement');
