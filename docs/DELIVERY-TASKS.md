@@ -131,6 +131,7 @@ The original foundation milestones are in ROADMAP.md. Existing V2 core, 10cm mic
 - **Dependencies:** H08-01.
 - **Gate:** iPhone Safari and Android Chrome report build, route, seed, p50/p95/p99 frame intervals, >33/50/100 ms hitches, terrain memory/queue peaks, responsive controls, context-loss recovery and observed defects. No phone evidence = not accepted.
 - **Evidence:** iPhone Safari seed 7 in build `395d495` completed the full Hunt with 17 ms rolling p95, no terrain-blocked steps or camera holds, and a peak of 96 retained terrain definitions. Report now includes session >50/100 ms hitch counts, maximum foreground interval, and WebGL loss/restore counters. Broader device acceptance remains open.
+- **iPhone Safari context-loss evidence:** Build `60500c3` reported one loss, one successful restore, zero restore failures, drained uploads and cleared movement pause. Both Fireball edits remained in the saved journal. This run covered 16.7 m at 17 ms rolling p95 with a 48 ms maximum interval.
 - **Context-loss test:** Add `contextTest=1` to the immutable Play Hunt URL. Open frame details, trigger a real browser context loss and restore, then verify movement resumes on the same terrain after queued uploads drain. Save the report. Unsupported browser extensions leave this check pending.
 - **Done for now:** Measured Play Hunt baselines exist for the required named devices with no uninvestigated critical input, frame or memory fault; retain future full-load optimization for R10-02.
 
@@ -312,6 +313,7 @@ H08-05 physical-object completion remain open.
 - **Technical boundary:** gameplay commands via Voxel V2 edit ledger and World Object V2 damage; one collision truth, worker meshing and effects as derived consumers.
 - **Gate:** repeated hits and burst edits stay replayable, collision updates immediately, no ghost geometry, consistent frame and edit-to-visible latency.
 - **Dependencies:** F07-02, H08-05, H08-07.
+- **World Objects prerequisite:** When a committed terrain edit removes a live tree's root support, the resident trunk and its collider are replaced by a fallen log if the lower floor supports it. Otherwise the unsupported tree collider is removed. Regeneration uses current terrain and stable placement IDs. Direct-hit damage and dynamic fall animation remain separate.
 - **Done for now:** At least one Wizard spell visibly damages terrain and a physical object, changes authoritative collision/pathing, and survives repeated hits and replay without unacceptable frame or edit latency. Stop; extra spell VFX/upgrades can follow.
 
 ### H08-09 — Extraction, upgrades and cross-Hunt journey continuity

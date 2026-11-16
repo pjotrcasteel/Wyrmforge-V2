@@ -1080,6 +1080,11 @@ function impactSpan(targetOverride=null) {
         playStream.residency.metrics.residentCellIds??playStream.residency.metrics.residentIds,command,result));
     }
     if(playMode)playStream?.terrainSave.commit(result.removedCells);
+    if(playMode&&result.removedVoxels>0&&playStream?.residency){
+      const residency=playStream.residency;
+      const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
+      playStream.trees.objects.terrainChanged(result.changedBounds,active.port,isPublished);
+    }
     lastImpactRemoved=result.removedVoxels;
     const dirty=new Set(result.dirtyChunks);
     if(dirty.size) {

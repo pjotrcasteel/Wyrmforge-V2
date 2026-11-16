@@ -38,17 +38,13 @@ export class HuntWoodlandObjects {
     for(const item of placements){
       const {x,y,z}=item.position;
       if(coverage&&!coverage.has(x,z))continue;
-      const hit=terrain.raycast({origin:[x,32,z],direction:[0,-1,0],maxDistance:42});
-      if(!hit||Math.abs(hit.point.y-y)>.5)continue;
-      const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
       if(item.kind==='tree'){
-        const sprite=LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length];
-        // Large oaks have a flared root base. Use the wider footprint
-        // that placement already reserves without colliding with the canopy.
-        const largeOak=sprite.name.startsWith('tree.oak_l.');
-        const radius=largeOak?(item.footprint?.radius??.46*item.scale):.23*item.scale;
-        instances.push({...base,radius,height:2*item.scale,sprite});
+        const tree=this.#treeInstance(item,terrain,coverage?.has);
+        if(tree)instances.push(tree);
       }else if(item.kind==='boulder'){
+        const hit=this.#floor(terrain,x,z);
+        if(!hit||Math.abs(hit.point.y-y)>.5)continue;
+        const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
         // Use the existing reserved footprint so neither prop moves into a route.
         const radius=item.footprint.radius;
         const halfLength=radius*.66;
@@ -65,6 +61,50 @@ export class HuntWoodlandObjects {
     }
     this.#regions.set(next,instances);
     this.#peakResident=Math.max(this.#peakResident,this.diagnostics.resident);
+  }
+  #floor(terrain,x,z){
+    return terrain.raycast({origin:[x,32,z],direction:[0,-1,0],maxDistance:42});
+  }
+  #treeInstance(item,terrain,isPublished){
+    const {x,y,z}=item.position;
+    if(isPublished&&!isPublished(x,z))return null;
+    const hit=this.#floor(terrain,x,z);
+    if(!hit||hit.point.y>y+.5)return null;
+    const base={id:item.id,x,y:hit.point.y,z,scale:item.scale};
+    const reserved=item.footprint?.radius??.46*item.scale;
+    if(hit.point.y<y-.5){
+      const halfLength=reserved*.75;
+      const supported=[x-halfLength,x+halfLength].every(end=>{
+        if(isPublished&&!isPublished(end,z))return false;
+        const floor=this.#floor(terrain,end,z);
+        return floor&&Math.abs(floor.point.y-base.y)<=.25;
+      });
+      return supported?{...base,kind:'log',radius:reserved-halfLength,
+        halfLength,height:.45*item.scale}:null;
+    }
+    const sprite=LIVE_TREES[(item.seed>>>8)%LIVE_TREES.length];
+    // Large oak roots use the reserved footprint without blocking the canopy.
+    const radius=sprite.name.startsWith('tree.oak_l.')?reserved:.23*item.scale;
+    return {...base,radius,height:2*item.scale,sprite};
+  }
+  terrainChanged(bounds,terrain,isPublished){
+    if(!bounds)return;
+    const {min,max}=bounds;
+    for(const [region,instances] of this.#regions){
+      const affected=this.#placementCache.get(region).filter(item=>{
+        const {x,z}=item.position;
+        const radius=item.footprint?.radius??.46*item.scale;
+        return item.kind==='tree'&&x+radius>=min.x&&x-radius<max.x+1&&z>=min.z&&z<max.z+1;
+      });
+      if(!affected.length)continue;
+      const byId=new Map(instances.map(instance=>[instance.id,instance]));
+      for(const item of affected){
+        const instance=this.#treeInstance(item,terrain,isPublished);
+        if(instance)byId.set(item.id,instance);
+        else byId.delete(item.id);
+      }
+      this.#regions.set(region,[...byId.values()]);
+    }
   }
   overlapsActor({x,y,z}){
     for(const instances of this.regions)for(const prop of instances){
