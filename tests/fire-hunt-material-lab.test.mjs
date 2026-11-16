@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnTerrainActor} from '../src/terrain-actor.mjs';
-import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,LAB_LAVA,LAB_CRUST,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
 import {terrainArtKey,TERRAIN_ART_CHANNELS,TERRAIN_ART_SLOTS} from '../src/terrain-material-handoff.mjs';
 import {terrainMaterial} from '../src/terrain-materials.mjs';
 import {buildExposedFaceMeshes} from '../src/exposed-face-mesher.mjs';
@@ -44,7 +44,31 @@ test('Hunt-scale comparison preserves the same cliff and damage geometry across 
   const {x,y,z}=MATERIAL_LAB_TARGET;
   assert.equal(layered.world.get(x,y,z),0);
   assert.equal(layered.world.get(8,4,-12),3);
-  assert.equal(layered.world.get(8,5,-12),2);
+  assert.equal(layered.world.get(8,5,-12),3);
+  assert.equal(layered.world.get(0,5,-12),2);
   assert.equal(layered.world.get(8,6,-12),1);
   assert.ok(Math.abs(spawnTerrainActor(layered.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}).y-3)<.001);
+});
+
+test('rock cuts contain continuous rock instead of a buried dirt stripe',()=>{
+  const fixture=createMaterialLabTerrain('dark-rock','layers',true);
+  assert.ok(fixture.removedVoxels>0);
+  const {data}=materialLabVolume(fixture);
+  assert.ok(data.includes(3));
+  assert.ok(!data.includes(2));
+});
+
+test('the uploaded material volume keeps lava, crust and post-crater air distinct',()=>{
+  const lava=createMaterialLabTerrain('stone','lava');
+  const {size,origin,data}=materialLabVolume(lava);
+  const at=(x,y,z)=>data[((z-origin[2])*size[1]+y)*size[0]+x-origin[0]];
+  assert.equal(at(0,0,0),LAB_LAVA);
+  assert.equal(at(0,1,0),0);
+  assert.equal(at(0,1,3),LAB_CRUST);
+  assert.equal(at(0,2,6),3);
+  const crater=createMaterialLabTerrain('grass','hunt',true);
+  const changed=materialLabVolume(crater);
+  const {x,y,z}=MATERIAL_LAB_TARGET;
+  const index=((z-changed.origin[2])*changed.size[1]+y)*changed.size[0]+x-changed.origin[0];
+  assert.equal(changed.data[index],0);
 });

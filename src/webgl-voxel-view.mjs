@@ -1,3 +1,4 @@
+import {FIRE_MATERIAL_LAB_UNIFORMS_GLSL,FIRE_MATERIAL_LAB_GLSL} from './fire-material-lab-shader.mjs';
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
 import { getCameraPreset } from './camera-presets.mjs';
 import { terrainMaterialGlsl } from './terrain-materials.mjs';
@@ -61,6 +62,7 @@ uniform bool uHuntHeightContrast;
 uniform float uHuntElevationReference;
 uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
+${FIRE_MATERIAL_LAB_UNIFORMS_GLSL}
 out vec4 outColor;
 
 ${terrainMaterialGlsl()}
@@ -95,7 +97,13 @@ vec3 grassAlbedo(vec3 world) {
   return clamp(base * (1.0 + coarse * 0.10 + fine * 0.045), 0.0, 1.0);
 }
 
+${FIRE_MATERIAL_LAB_GLSL}
+
 void main() {
+  if(uLabEnabled&&abs(vMaterial-5.0)<.5){
+    outColor=vec4(linearToSrgbColor(labLava(vWorld.xz)),1.0);
+    return;
+  }
   // The scenic woodland extends up to the playable shelf in the Hunt view.
   // Hide its exposed stone skirt on both sides, including the underside.
   if (uWoodlandBackdrop && vNormal.y < 0.5 && abs(vMaterial - 3.0) < 0.5) discard;
@@ -222,6 +230,7 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
+  if(uLabEnabled)linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
   // The WebGL default canvas does not perform the sRGB output transfer.
   // Encoding before writing fixes near-black textured terrain on iPhone Safari
   // without changing the artist's PNG pixels or the underlying voxel world.
@@ -275,6 +284,8 @@ function createProgram(gl) {
 export class WebGLVoxelView {
   #gl;
   #grassImage = null;
+  #labVolume = null;
+  #labOrigin = null;
   // Authored texture slots are native 64px art, not downscaled preview assets.
   // Seven mip levels (64 -> 1) prevent 64 texels of artwork from aliasing
   // into a few screen pixels at normal Hunt camera zoom.
@@ -336,6 +347,7 @@ export class WebGLVoxelView {
       this.#losses++;
       this.#program = null;
       this.#grassTexture = null;
+      this.#labVolume = null;
       this.#terrainCache?.contextLost();
       this.#pendingTerrainTiles.clear();
       this.#gpuMeshes.clear();
@@ -636,6 +648,11 @@ export class WebGLVoxelView {
       terrainSecondaryLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryLayers'),
       terrainSecondaryNormalLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryNormalLayers'),
       terrainSecondaryOrmLayers: gl.getUniformLocation(this.#program, 'uTerrainSecondaryOrmLayers'),
+      labMaterials: gl.getUniformLocation(this.#program,'uLabMaterials'),
+      labEnabled: gl.getUniformLocation(this.#program,'uLabEnabled'),
+      labBlend: gl.getUniformLocation(this.#program,'uLabBlend'),
+      labTime: gl.getUniformLocation(this.#program,'uLabTime'),
+      labOrigin: gl.getUniformLocation(this.#program,'uLabOrigin'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
     };
     this.#uploadGrassTexture();
@@ -807,7 +824,26 @@ export class WebGLVoxelView {
     return true;
   }
 
-  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0 }) {
+  setLabMaterialVolume({origin,size,data}){
+    if(!this.ready)return;
+    const gl=this.#gl;
+    const volume=this.#labVolume??gl.createTexture();
+    if(!volume)throw new Error('Could not allocate material lab volume');
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_3D,volume);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    const previousAlignment=gl.getParameter(gl.UNPACK_ALIGNMENT);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    try{
+      gl.texImage3D(gl.TEXTURE_3D,0,gl.R8,...size,0,gl.RED,gl.UNSIGNED_BYTE,data);
+    }finally{gl.pixelStorei(gl.UNPACK_ALIGNMENT,previousAlignment);}
+    this.#labVolume=volume;
+    this.#labOrigin=origin;
+  }
+
+  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0,
+    labBlend=true,labTime=0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -860,6 +896,15 @@ export class WebGLVoxelView {
     });
     gl.uniform4fv?.(this.#uniforms.terrainSecondaryLayers, secondaryLayers);
     gl.uniform1f(this.#uniforms.terrainScale, this.#terrainTilesPerVoxel);
+    gl.uniform1i(this.#uniforms.labMaterials,4);
+    gl.uniform1i(this.#uniforms.labEnabled,this.#labVolume?1:0);
+    if(this.#labVolume){
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_3D,this.#labVolume);
+      gl.uniform3fv(this.#uniforms.labOrigin,this.#labOrigin);
+      gl.uniform1i(this.#uniforms.labBlend,labBlend?1:0);
+      gl.uniform1f(this.#uniforms.labTime,labTime);
+    }
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
@@ -891,6 +936,8 @@ export class WebGLVoxelView {
     this.#retiredGpuBytes = 0;
     if (this.#grassTexture && !this.#lost) this.#gl.deleteTexture(this.#grassTexture);
     this.#grassTexture = null;
+    if(this.#labVolume&&!this.#lost)this.#gl.deleteTexture(this.#labVolume);
+    this.#labVolume=null;
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
     this.#terrainTileImages.clear();

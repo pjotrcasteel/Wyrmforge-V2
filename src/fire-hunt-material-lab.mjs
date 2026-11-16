@@ -22,16 +22,26 @@ export const TERRAIN_BASE_TILES=Object.freeze({
   'dirt/earth':'earth','dirt/earth-dark':'mud','stone/bedrock':'stone'
 });
 
+export const LAB_LAVA=5;
+export const LAB_CRUST=6;
 export const MATERIAL_LAB_TARGET=Object.freeze({x:1,y:2,z:-1});
 export const MATERIAL_LAB_SPAWN=Object.freeze({x:.5,z:5});
 export function createMaterialLabTerrain(materialId,scene,excavated=false,boundary='broken'){
   const material=FIRE_HUNT_MATERIALS.find(item=>item.id===materialId);
-  if(!material||!['hunt','sample','repeats','layers','cliff'].includes(scene))throw new RangeError('Unknown material or scene');
+  if(!material||!['hunt','sample','repeats','layers','cliff','lava'].includes(scene))throw new RangeError('Unknown material or scene');
   const world=new VoxelWorld();
-  const radius={sample:3,repeats:7,layers:6,cliff:6,hunt:19}[scene];
+  const radius={sample:3,repeats:7,layers:6,cliff:6,hunt:19,lava:19}[scene];
   for(let x=-radius;x<radius;x++){
     for(let z=-radius;z<radius;z++){
-      if(scene==='hunt'){
+      if(scene==='lava'){
+        const center=1.6*Math.sin(x*.26)+.55*Math.sin(x*.63);
+        const distance=Math.abs(z+.5-center);
+        const edge=2.1+.42*Math.cos(x*.49);
+        const highland=z < -6+Math.round(Math.sin(x*.39));
+        const height=distance<edge?0:distance<edge+1.1?1:highland?4:2;
+        const surface=distance<edge?LAB_LAVA:distance<edge+2?LAB_CRUST:3;
+        for(let y=0;y<=height;y++)world.set(x,y,z,y===height?surface:3);
+      }else if(scene==='hunt'){
         const wallZ=-3+Math.round(1.6*Math.sin(x*.29));
         const shelf=z<wallZ;
         const height=shelf?6:2;
@@ -39,16 +49,22 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
         const path=Math.abs(x-edgeOffset)<=1;
         for(let y=0;y<=height;y++){
           const surface=y===height;
-          world.set(x,y,z,surface?(path&&!shelf?2:1):y===height-1?2:3);
+          const hasSoil=!shelf||Math.sin(x*.48)+Math.cos(z*.62)>-.15;
+          world.set(x,y,z,surface?(path&&!shelf?2:1):y===height-1&&hasSoil?2:3);
         }
       }else if(scene==='cliff'){
-        const height=z<0?5:0;
-        for(let y=0;y<=height;y++)world.set(x,y,z,y===5?1:y===4?2:3);
+        const height=z<-1+Math.round(Math.sin(x*.72))?5:0;
+        const soil=Math.sin(x*.7)+Math.cos(z*.7)>0;
+        for(let y=0;y<=height;y++)world.set(x,y,z,y===5?1:y===4&&soil?2:3);
+
       }else if(scene==='layers'){
-        world.set(x,0,z,3);
-        world.set(x,1,z,3);
-        world.set(x,2,z,2);
-        world.set(x,3,z,material.voxel);
+        const rock=material.voxel===3;
+        const height=rock?3+Math.round(Math.sin(x*.72)*Math.cos(z*.54)):3;
+        const soilDepth=Math.sin(x*.54)+Math.cos(z*.47)>.5?2:1;
+        for(let y=0;y<=height;y++){
+          const id=rock?3:y===height?material.voxel:y>=height-soilDepth?2:3;
+          world.set(x,y,z,id);
+        }
       }else{
         const height=scene==='sample'&&z>=0?0:1;
         for(let y=0;y<=height;y++)world.set(x,y,z,material.voxel);
@@ -58,5 +74,14 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
   const edit=(scene==='layers'||scene==='hunt')&&excavated?new TerrainEditLedger(world).apply({
     id:'material-lab-crater',type:'carve-crater',...(scene==='hunt'?MATERIAL_LAB_TARGET:{x:0,y:3,z:0}),radius:scene==='hunt'?2.3:3.5,depth:scene==='hunt'?2:3
   }):null;
-  return {world,radius,highest:scene==='hunt'?7:scene==='cliff'?6:scene==='layers'?4:2,removedVoxels:edit?.removedVoxels??0};
+  return {world,radius,highest:scene==='hunt'?7:scene==='cliff'?6:scene==='layers'||scene==='lava'?5:2,removedVoxels:edit?.removedVoxels??0};
+}
+
+export function materialLabVolume({world,radius,highest}){
+  const edge=radius*2;
+  const data=new Uint8Array(edge*edge*highest);
+  for(let z=0;z<edge;z++)for(let y=0;y<highest;y++)for(let x=0;x<edge;x++){
+    data[(z*highest+y)*edge+x]=world.get(x-radius,y,z-radius);
+  }
+  return {origin:[-radius,0,-radius],size:[edge,highest,edge],data};
 }
