@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **G09-01 — bounded structural cluster simulation ([#175](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/175))**. Keep dynamic activation gated; gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** **G09-02 — falling-material physics and persistence ([#176](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/176))**. Keep dynamic activation gated; gameplay-loop expansion waits until the generic engine work is ready. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -352,21 +352,22 @@ H08-05 physical-object completion remain open.
 
 ### G09-01 — Authoritative bounded falling clusters
 - **GitHub Issue:** [#175](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/175)
-- **Status:** `IN PROGRESS` — support detection, static-to-dynamic handoff and fixed-step body simulation.
+- **Status:** `DONE FOR NOW` — controlled shelf, bounded support and fixed-step simulation verified in Play Hunt.
 - **Player experience:** supported arches, cliffs and stone shelves collapse plausibly after destruction.
 - **Gate:** bounded connectivity work; never one rigid body per voxel; no duplicate terrain/object collision; verified in the playable Hunt.
 - **Dependencies:** H08-08.
 - **Engine handoff:** trusted support candidates are revision- and world-bound. Preflight rejects protected, partial or over-budget terrain. Transfer removes static voxels before one immutable body becomes visible and reports mesh invalidation across chunk seams. Fixed-step vertical motion checks terrain and other bodies. The optional actor collision queries cover side, floor and ceiling contacts. Static settlement now rechecks live support and destination clearance, restores exact voxels and releases dynamic capacity. Durable replay, residency and Play Hunt activation are pending.
 - **Playable fixture:** The terrain collapse lab exercises a real support cut, visible fall, actor collision, static settlement and local replay. The Voxel stream now preserves settled additions and detach removals across a controlled two-cell round trip. Play Hunt can load exact saved additions into the initial world and later streaming cells. Live creation of collapse saves and active-body residency remain pending.
-- **Opt-in Play Hunt preview:** A seed 7 entry shelf now falls inside the actual Hunt when its support is cut via the diagnostic control. Physics owns the body and protects its cell during motion. Settlement uses the usual local worker/upload path, then survives eviction and a fresh load. The player accepted the controlled shelf and actor occlusion in build `0ce771d`. The same preview now also reacts to a Fireball crater that removes the marked support voxel. The guided phone route marks the support and offers an aimed Fireball using the normal projectile and terrain edit path. The crater and landed cluster save together on settlement. General terrain activation and the Fireball path device check remain open.
+- **Opt-in Play Hunt preview:** A seed 7 entry shelf now falls inside the actual Hunt when its support is cut via the diagnostic control. Physics owns the body and protects its cell during motion. Settlement uses the usual local worker/upload path, then survives eviction and a fresh load. The player accepted the controlled shelf and actor occlusion in build `0ce771d`. The same preview now also reacts to a Fireball crater that removes the marked support voxel. The guided phone route marks the support and offers an aimed Fireball using the normal projectile and terrain edit path. The crater and landed cluster save together on settlement. Build `703934b` confirmed the Fireball hit, settlement and browser save on iPhone Safari. General terrain activation and device reload evidence remain open under G09-02.
 - **Done for now:** A controlled collapse follows a removed support in the running Hunt, preserves a single collision authority and respects bounded search/body limits. Stop before advanced rubble visuals.
 
 ### G09-02 — Falling-material physics and persistence
 - **GitHub Issue:** [#176](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/176)
-- **Status:** `PLANNED`
+- **Status:** `IN PROGRESS`
 - **Player experience:** debris falls/settles or fractures without breaking actor collision or replay.
 - **Gate:** cross-region, reset, save/replay, mobile frame and memory evidence.
 - **Dependencies:** G09-01, H08-02.
+- **Replay slice:** Hunt captures the exact removed and landed voxels with the triggering edit. The replay adapter reconstructs the settled terrain in an isolated, matching resident world, including prior craters. An in-flight collapse requires a new report after settlement. Automated checks cover actor blocking, exact occupancy, eviction and reload. General terrain activation, cross-region cluster evidence and mobile memory/frame review remain open.
 - **Done for now:** Falling material settles or fractures deterministically across relevant seams; actor collision, save/replay and mobile measurements pass. Stop; optional sophisticated debris is future polish.
 
 ## V2.10 — Integrated quality and reversible release

@@ -2,7 +2,7 @@ import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
-import {recordHuntTerrainEdit} from './src/hunt-terrain-replay.mjs';
+import {recordHuntTerrainEdit,exportHuntTerrainEdits} from './src/hunt-terrain-replay.mjs';
 import {HuntWoodlandDamage} from './src/hunt-woodland-damage.mjs';
 import {HuntHorde} from './src/hunt-horde.mjs';
 import {HuntExtraction,extractionPortalLayer} from './src/hunt-extraction.mjs';
@@ -804,6 +804,13 @@ function recoverPlayActor(){
   resetPlayInput();
 }
 
+function recordPlayTerrainEdit(command,result){
+  const residency=playStream?.residency;
+  if(!residency||result.status!=='accepted')return;
+  const {residentCellIds,residentIds}=residency.metrics;
+  playStream.terrainReplay.push(recordHuntTerrainEdit(residentCellIds??residentIds,command,result));
+}
+
 function queueCollapseMeshes(dirtyChunks){
   if(!dirtyChunks.length)return;
   const dirty=new Set(dirtyChunks);
@@ -1176,10 +1183,7 @@ function impactSpan(targetOverride=null) {
     if(playMode&&result.removedVoxels>0&&result.dirtyChunks.length){
       pendingTerrainPresentation={terrainEpoch:active.port.epoch,committedAt:performance.now()};
     }
-    if(playMode&&playStream?.residency&&result.status==='accepted'){
-      playStream.terrainReplay.push(recordHuntTerrainEdit(
-        playStream.residency.metrics.residentCellIds??playStream.residency.metrics.residentIds,command,result));
-    }
+    if(playMode)recordPlayTerrainEdit(command,result);
     const collapse=playMode?playStream?.collapse:null;
     const collapseDirty=collapse?.acceptImpact(result)??[];
     if(playMode&&!collapse?.holdsFixture)playStream?.terrainSave.commit(result.removedCells);
@@ -1721,9 +1725,10 @@ if(playMode) {
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,
         longestCameraHold:cellPreview?(openCameraHoldMs>(playStream?.longestCameraHoldMs??0)
           ?playStream.cameraHoldContext:playStream?.longestCameraHold??null):null,
-        replayEdits:playStream?.terrainReplay??[],
+        replayEdits:exportHuntTerrainEdits(playStream?.terrainReplay??[],playStream?.collapse?.replay),
         browserSave:playStream?{status:playStream.terrainSave.status,
-          removedCells:playStream.terrainSave.removedCells.size}:null,
+          removedCells:playStream.terrainSave.removedCells.size,
+          addedCells:playStream.terrainSave.additions.length}:null,
         chunks:active?.world.chunkCount??null,
         voxelPayloadBytes:active?.world.allocatedVoxelBytes??null,
         gpuQueue:renderer?.uploadQueueStatistics??null,
@@ -1752,7 +1757,12 @@ if(playMode) {
   collapseButton?.addEventListener('click',()=>{
     if(collapseButton.disabled||playFireball)return;
     if(gravityMode==='guided'){castPlayFireball(null,null,{guided:true});return;}
-    try{queueCollapseMeshes(playStream.collapse.release());}
+    try{
+      const release=playStream.collapse.release();
+      if(!release)return;
+      recordPlayTerrainEdit(release.command,release.edit);
+      queueCollapseMeshes(release.dirtyChunks);
+    }
     catch(error){errorMessage=error.message;updateStatus();}
   });
   playRespawn.addEventListener('click',resetPlayActor);

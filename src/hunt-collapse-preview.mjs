@@ -29,6 +29,7 @@ export class HuntCollapsePreview {
   #handoff;
   #physics;
   #removed=[];
+  #replay=null;
   #isKnown;
   #phase;
 
@@ -43,6 +44,7 @@ export class HuntCollapsePreview {
     this.#physics=new TerrainClusterPhysics(world,this.#handoff,{isKnown:this.#isKnown});
   }
 
+  get replay(){return this.#replay;}
   get phase(){return this.#phase;}
   get holdsFixture(){return this.#phase==='falling'||this.#phase==='actor-blocked';}
   get collision(){return this.#physics;}
@@ -56,11 +58,11 @@ export class HuntCollapsePreview {
   }
 
   release(){
-    if(this.#phase!=='ready'||!this.#residency.publishedAt(5.5,10.5))return [];
+    if(this.#phase!=='ready'||!this.#residency.publishedAt(5.5,10.5))return null;
     const edit=this.#port.apply(SUPPORT,{captureRemovedCells:true});
     const dirty=this.acceptImpact(edit);
     if(!this.holdsFixture)this.#save.commit(edit.removedCells);
-    return [...new Set([...edit.dirtyChunks,...dirty])];
+    return {command:SUPPORT,edit,dirtyChunks:[...new Set([...edit.dirtyChunks,...dirty])]};
   }
 
   acceptImpact(edit){
@@ -84,6 +86,8 @@ export class HuntCollapsePreview {
       return [];
     }
     this.#removed=[...edit.removedCells,...detached.body.cells.map(cellKey)];
+    this.#replay=Object.freeze({sequence:edit.editRevision,
+      removed:Object.freeze(this.#removed.slice().sort()),landed:null});
     this.#phase='falling';
     return detached.dirtyChunks;
   }
@@ -97,6 +101,7 @@ export class HuntCollapsePreview {
     if(result.status!=='settled')return [];
     const additions=result.cells.map(cell=>({...cell,owner:OWNER}));
     this.#residency.trackAddedCells(OWNER,additions);
+    this.#replay=Object.freeze({...this.#replay,landed:result.cells});
     this.#phase=this.#save.commitCollapse(this.#removed,additions)?'settled':'settled-unsaved';
     return result.dirtyChunks;
   }
