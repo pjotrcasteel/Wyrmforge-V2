@@ -32,6 +32,7 @@ export function replayHuntTerrainEdit(port,residentIds,entry,{collapse,save}={})
   for(let tick=0;tick<MAX_FALL_TICKS&&collapse.holdsFixture;tick++)collapse.tick([]);
   const actual=collapse.replay;
   if(!actual?.landed||actual.sequence!==entry.sequence||actual.clusterCount!==expected.clusterCount||
+      (expected.clusters!==undefined&&replayDataDigest(actual.clusters)!==replayDataDigest(expected.clusters))||
       replayDataDigest(actual.removed)!==replayDataDigest(expected.removed)||
       replayDataDigest(actual.landed)!==replayDataDigest(expected.landed)){
     throw new Error('Replayed collapse differs from recorded settlement');

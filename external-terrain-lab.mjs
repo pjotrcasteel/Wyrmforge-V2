@@ -52,8 +52,9 @@ const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
 const cellPreview=playMode&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
-const shapedCollapse=gravityMode==='shaped';
-const longSpanCollapse=gravityMode==='long-span';
+const splitSpanCollapse=gravityMode==='split-span';
+const shapedCollapse=gravityMode==='shaped'||splitSpanCollapse;
+const longSpanCollapse=gravityMode==='long-span'||splitSpanCollapse;
 const twoLayerCollapse=gravityMode==='two-layer'||longSpanCollapse;
 const largeCollapse=gravityMode==='large'||twoLayerCollapse;
 const terrainGravity=cellPreview&&gravityMode==='terrain';
@@ -61,7 +62,7 @@ const deferredSupport=gravityMode==='deferred'||largeCollapse||terrainGravity||s
 const SUPPORT_OPERATIONS_PER_FRAME=192;
 const SUPPORT_WORK_BUDGET_MS=2;
 const mixedGravity=gravityMode==='mixed'||deferredSupport;
-const seamCollapse=['seam','measure','mixed','deferred','large','two-layer','long-span','shaped'].includes(gravityMode);
+const seamCollapse=['seam','measure','mixed','deferred','large','two-layer','long-span','shaped','split-span'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
 const collapseButton=cellPreview&&(['preview','impact'].includes(gravityMode)||guidedCollapse)
   ?document.querySelector('#play-collapse-preview'):null;
@@ -1180,7 +1181,7 @@ function resetSite() {
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
           'wyrmforge.hunt-collapse:'+saveIdentity+':'+gravityMode+':'+COMMIT):null;
         const scaffold=regionCollapse?huntRegionCollapseScaffold(graph.layout,terrainSave,{
-          mixed:mixedGravity,large:largeCollapse,layers:twoLayerCollapse?2:1,longSpan:longSpanCollapse,shaped:shapedCollapse
+          mixed:mixedGravity,large:largeCollapse,layers:twoLayerCollapse?2:1,longSpan:longSpanCollapse,shaped:shapedCollapse,split:splitSpanCollapse
         }):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
@@ -1508,8 +1509,8 @@ function frame(now) {
         paintEncounterGuide({...view});
         const collapseEvidence=playStream?.collapseEvidence;
         if(collapseEvidence?.tracking&&!pendingEdit&&!renderer.pendingUploads&&!awaitingPlayContext&&!errorMessage){
-          collapseEvidence.presented(performance.now(),playStream.collapse.replay.landed,
-            playStream.terrainSave.status);
+          const {landed,clusters}=playStream.collapse.replay;
+          collapseEvidence.presented(performance.now(),landed,playStream.terrainSave.status,clusters);
         }
       }
     }

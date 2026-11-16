@@ -50,7 +50,7 @@ export class HuntCollapsePreview {
   #handoff;
   #physics;
   #removed=[];
-  #landed=[];
+  #landings=new Map();
   #outcomes=new Map();
   #replay=null;
   #pendingScan=null;
@@ -275,7 +275,7 @@ export class HuntCollapsePreview {
 
   #startFall(edit,{bodies,dirtyChunks},{deferred,wide,multiple}){
     this.#removed=[...edit.removedCells,...bodies.flatMap(body=>body.cells.map(cellKey))];
-    this.#landed=[];
+    this.#landings.clear();
     this.#replay=Object.freeze({sequence:edit.editRevision,
       removed:Object.freeze(this.#removed.slice().sort()),landed:null,
       ...(deferred?{deferred:true}:{}),...(wide?{wide:true}:{}),
@@ -294,7 +294,7 @@ export class HuntCollapsePreview {
       if(phase!=='resting'||contact!=='terrain')continue;
       const result=this.#physics.settle(body.id,{actors});
       if(result.status!=='settled')continue;
-      this.#landed.push(...result.cells);
+      this.#landings.set(body.id,{body,cells:result.cells});
       for(const chunk of result.dirtyChunks)dirty.add(chunk);
     }
     if(!this.#physics.bodies.length)this.#publishLanding();
@@ -303,7 +303,8 @@ export class HuntCollapsePreview {
 
   #publishLanding(){
     const grouped=new Map();
-    const landed=Object.freeze(this.#landed.slice().sort((a,b)=>a.x-b.x||a.y-b.y||a.z-b.z));
+    const landings=[...this.#landings.values()].sort((a,b)=>a.body.id-b.body.id);
+    const landed=Object.freeze(landings.flatMap(({cells})=>cells).sort((a,b)=>a.x-b.x||a.y-b.y||a.z-b.z));
     const additions=landed.map(cell=>{
       const owner=this.#owners.get(columnKey(cell));
       const addition={...cell,owner};
@@ -312,7 +313,12 @@ export class HuntCollapsePreview {
       return addition;
     });
     for(const [owner,cells] of grouped)this.#residency.trackAddedCells(owner,cells);
-    this.#replay=Object.freeze({...this.#replay,landed});
+    const clusters=this.#replay.multiple?Object.freeze(landings.map(({body,cells})=>Object.freeze({
+      voxelCount:cells.length,
+      shapedVoxels:cells.filter(cell=>cell.levels).length,
+      dropVoxels:body.cells[0].y-cells[0].y
+    }))):undefined;
+    this.#replay=Object.freeze({...this.#replay,landed,...(clusters?{clusters}:{})});
     this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase=this.#save.commitCollapse(this.#removed,additions)?'settled':'settled-unsaved';
   }
