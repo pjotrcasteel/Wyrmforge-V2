@@ -11,10 +11,14 @@ export class HuntWoodlandObjects {
   #sweeps=0;
   #candidates=0;
   #maxCandidates=0;
+  #treesFelled=0;
+  #treesWithoutLanding=0;
+  #recentTreeFalls=[];
   get diagnostics(){
     const resident=[...this.regions].reduce((count,props)=>count+props.length,0);
     return {resident,peakResident:this.#peakResident,sweeps:this.#sweeps,
-      candidates:this.#candidates,maxCandidatesPerSweep:this.#maxCandidates};
+      candidates:this.#candidates,maxCandidatesPerSweep:this.#maxCandidates,treesFelled:this.#treesFelled,
+      treesWithoutLanding:this.#treesWithoutLanding,recentTreeFalls:this.#recentTreeFalls.slice()};
   }
   constructor(graph){this.#graph=graph;}
   get regions(){return this.#regions.values();}
@@ -88,7 +92,8 @@ export class HuntWoodlandObjects {
     return {...base,radius,height:2*item.scale,sprite};
   }
   terrainChanged(bounds,terrain,isPublished){
-    if(!bounds)return;
+    const falls=[];
+    if(!bounds)return falls;
     const {min,max}=bounds;
     for(const [region,instances] of this.#regions){
       const affected=this.#placementCache.get(region).filter(item=>{
@@ -99,12 +104,22 @@ export class HuntWoodlandObjects {
       if(!affected.length)continue;
       const byId=new Map(instances.map(instance=>[instance.id,instance]));
       for(const item of affected){
+        const previous=byId.get(item.id);
         const instance=this.#treeInstance(item,terrain,isPublished);
+        if(previous?.sprite&&!instance?.sprite){
+          falls.push({tree:previous,landingY:instance?.y??null});
+          this.#treesFelled++;
+          if(!instance)this.#treesWithoutLanding++;
+          this.#recentTreeFalls.push({id:item.id,x:previous.x,z:previous.z,
+            fromY:previous.y,landingY:instance?.y??null});
+          if(this.#recentTreeFalls.length>8)this.#recentTreeFalls.shift();
+        }
         if(instance)byId.set(item.id,instance);
         else byId.delete(item.id);
       }
       this.#regions.set(region,[...byId.values()]);
     }
+    return falls;
   }
   overlapsActor({x,y,z}){
     for(const instances of this.regions)for(const prop of instances){
