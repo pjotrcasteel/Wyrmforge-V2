@@ -6,7 +6,7 @@ const MAX_FALL_TICKS=240;
 
 export function replayHuntTerrainEdit(port,residentIds,entry,{collapse,save}={}){
   const expected=entry.collapse;
-  if(expected&&(!collapse||collapse.phase!=='ready'||!Array.isArray(expected.landed)||
+  if(expected&&(!collapse||!collapse.canAcceptImpact||!Array.isArray(expected.landed)||
       expected.landed.length===0||expected.landed.length>256||
       !Array.isArray(expected.removed)||expected.removed.length>512)){
     throw new Error('Replay requires a settled collapse and a ready Physics preview');
@@ -41,8 +41,9 @@ export function recordHuntTerrainEdit(residentIds,command,result){
 }
 
 // Tie the Physics result to its triggering edit and preserve older crater-only records.
-export function exportHuntTerrainEdits(entries,collapse){
-  if(!collapse)return entries;
-  const {sequence,...outcome}=collapse;
-  return entries.map(entry=>entry.sequence===sequence?{...entry,collapse:outcome}:entry);
+export function exportHuntTerrainEdits(entries,collapses=[]){
+  if(!collapses.length)return entries;
+  const outcomes=new Map(collapses.map(({sequence,...outcome})=>[sequence,outcome]));
+  return entries.map(entry=>outcomes.has(entry.sequence)?
+    {...entry,collapse:outcomes.get(entry.sequence)}:entry);
 }

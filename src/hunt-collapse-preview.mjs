@@ -7,6 +7,10 @@ import {targetHuntFireball} from './hunt-play-runtime.mjs';
 const OWNER='region-entry:cell:8:0:1';
 const SUPPORT={id:'hunt-collapse-preview-support',type:'carve-sphere',x:5,y:6,z:10,radius:1.1};
 const SUPPORT_KEY='5,6,10';
+const MAX_TERRAIN_CLUSTER_CELLS=64;
+const MAX_TERRAIN_ADDITIONS=256;
+const MAX_TERRAIN_DROP=12;
+const columnKey=({x,z})=>x+','+z;
 const cellKey=({x,y,z})=>x+','+y+','+z;
 const isShelf=({x,y,z})=>y===8&&x>=2&&x<=5&&z>=10&&z<=11;
 const isScaffold=cell=>isShelf(cell)||
@@ -29,36 +33,44 @@ export class HuntCollapsePreview {
   #handoff;
   #physics;
   #removed=[];
+  #outcomes=new Map();
   #replay=null;
+  #fixture;
+  #owners=new Map();
+  #admitted=0;
   #isKnown;
   #phase;
 
-  constructor(world,port,residency,save){
+  constructor(world,port,residency,save,{fixture=true}={}){
     this.#world=world;
     this.#port=port;
     this.#residency=residency;
     this.#save=save;
-    this.#phase=save.removedCells.has(SUPPORT_KEY)?'settled':'ready';
+    this.#fixture=fixture;
+    this.#admitted=fixture?0:save.additions.length;
+    this.#phase=fixture&&save.removedCells.has(SUPPORT_KEY)?'settled':'ready';
     this.#handoff=new TerrainClusterHandoff(world);
     this.#isKnown=(x,y,z)=>residency.publishedAt(x+.5,z+.5);
     this.#physics=new TerrainClusterPhysics(world,this.#handoff,{isKnown:this.#isKnown});
   }
 
   get replay(){return this.#replay;}
+  get outcomes(){return [...this.#outcomes.values()];}
+  get canAcceptImpact(){return this.#fixture?this.#phase==='ready':!this.holdsFixture;}
   get phase(){return this.#phase;}
   get holdsFixture(){return this.#phase==='falling'||this.#phase==='actor-blocked';}
   get collision(){return this.#physics;}
-  get protectedIds(){return this.holdsFixture?[OWNER]:[];}
+  get protectedIds(){return this.holdsFixture?[...new Set(this.#owners.values())]:[];}
 
   supportTarget(view){
-    if(this.#phase!=='ready'||view?.camera!=='hunt'||!this.#residency.publishedAt(5.5,10.5))return null;
+    if(!this.#fixture||this.#phase!=='ready'||view?.camera!=='hunt'||!this.#residency.publishedAt(5.5,10.5))return null;
     const screen=projectVoxel(5.5,6.2,11,view);
     const cast=targetHuntFireball(this.#port,view,screen.x,screen.y);
     return cast&&cellKey(cast.target)===SUPPORT_KEY?{screen,cast}:null;
   }
 
   release(){
-    if(this.#phase!=='ready'||!this.#residency.publishedAt(5.5,10.5))return null;
+    if(!this.#fixture||this.#phase!=='ready'||!this.#residency.publishedAt(5.5,10.5))return null;
     const edit=this.#port.apply(SUPPORT,{captureRemovedCells:true});
     const dirty=this.acceptImpact(edit);
     if(!this.holdsFixture)this.#save.commit(edit.removedCells);
@@ -66,7 +78,8 @@ export class HuntCollapsePreview {
   }
 
   acceptImpact(edit){
-    if(this.#phase!=='ready'||!edit.removedCells?.includes(SUPPORT_KEY))return [];
+    if(!this.canAcceptImpact||!edit.removedCells?.length||edit.removedCells.length>256||
+        (this.#fixture&&!edit.removedCells.includes(SUPPORT_KEY)))return [];
     const removed=edit.removedCells.map(key=>{
       const [x,y,z]=key.split(',').map(Number);
       return {x,y,z};
@@ -74,20 +87,59 @@ export class HuntCollapsePreview {
     const scan=scanTerrainSupport(this.#world,removed,{
       isKnown:this.#isKnown,cohesive:new Set([3]),anchors:new Set([4])
     });
-    const candidates=scan.candidates.filter(candidate=>
-      candidate.cells.some(isShelf)&&candidate.cells.every(isScaffold));
-    if(scan.status!=='complete'||candidates.length!==1){
-      this.#phase='blocked';
-      return [];
+    if(scan.status!=='complete')return this.#decline();
+    const candidates=this.#fixture?scan.candidates.filter(candidate=>
+      candidate.cells.some(isShelf)&&candidate.cells.every(isScaffold)):scan.candidates;
+    if(this.#fixture&&candidates.length!==1)return this.#decline();
+    for(const candidate of candidates){
+      const owners=this.#fixture?new Map(candidate.cells.map(cell=>[columnKey(cell),OWNER])):
+        this.#qualifyTerrain(candidate.cells);
+      if(!owners)continue;
+      const detached=this.#handoff.detach(candidate);
+      if(detached.status!=='detached')continue;
+      this.#owners=owners;
+      this.#admitted+=candidate.cells.length;
+      return this.#startFall(edit,detached);
     }
-    const detached=this.#handoff.detach(candidates[0]);
-    if(detached.status!=='detached'){
-      this.#phase='blocked';
-      return [];
+    return this.#decline();
+  }
+
+  #decline(){
+    if(this.#fixture)this.#phase='blocked';
+    return [];
+  }
+
+  #qualifyTerrain(cells){
+    if(cells.length>MAX_TERRAIN_CLUSTER_CELLS||this.#admitted+cells.length>MAX_TERRAIN_ADDITIONS)return null;
+    const moving=new Set(cells.map(cellKey)),owners=new Map();
+    let drop=MAX_TERRAIN_DROP+1;
+    for(const {x,y,z} of cells){
+      if(y < -64+MAX_TERRAIN_DROP||y>64)return null;
+      const key=columnKey({x,z});
+      if(!owners.has(key)){
+        const owner=this.#residency.ownerAt(x+.5,z+.5);
+        if(!owner)return null;
+        owners.set(key,owner);
+      }
+      for(let d=0;d<=MAX_TERRAIN_DROP;d++){
+        const floor=y-d-1;
+        if(moving.has(cellKey({x,y:floor,z}))||!this.#world.get(x,floor,z))continue;
+        drop=Math.min(drop,d);
+        break;
+      }
     }
+    if(drop===0||drop>MAX_TERRAIN_DROP)return null;
+    for(const {x,y,z} of cells){
+      if(this.#world.microSurfaceTile(x,y-drop-1,z))return null;
+    }
+    return owners;
+  }
+
+  #startFall(edit,detached){
     this.#removed=[...edit.removedCells,...detached.body.cells.map(cellKey)];
     this.#replay=Object.freeze({sequence:edit.editRevision,
       removed:Object.freeze(this.#removed.slice().sort()),landed:null});
+    this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase='falling';
     return detached.dirtyChunks;
   }
@@ -99,9 +151,17 @@ export class HuntCollapsePreview {
     if(body.phase!=='resting'||body.contact!=='terrain')return [];
     const result=this.#physics.settle(body.body.id,{actors});
     if(result.status!=='settled')return [];
-    const additions=result.cells.map(cell=>({...cell,owner:OWNER}));
-    this.#residency.trackAddedCells(OWNER,additions);
+    const grouped=new Map();
+    const additions=result.cells.map(cell=>{
+      const owner=this.#owners.get(columnKey(cell));
+      const addition={...cell,owner};
+      if(!grouped.has(owner))grouped.set(owner,[]);
+      grouped.get(owner).push(addition);
+      return addition;
+    });
+    for(const [owner,cells] of grouped)this.#residency.trackAddedCells(owner,cells);
     this.#replay=Object.freeze({...this.#replay,landed:result.cells});
+    this.#outcomes.set(this.#replay.sequence,this.#replay);
     this.#phase=this.#save.commitCollapse(this.#removed,additions)?'settled':'settled-unsaved';
     return result.dirtyChunks;
   }
@@ -123,9 +183,13 @@ export class HuntCollapsePreview {
       ctx.closePath();
       ctx.fill();
     };
-    for(const {x,y,z} of this.renderCells){
-      if(z===11)face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],'#787468');
-      face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],'#b7ae99');
+    const cells=this.renderCells;
+    const occupied=new Set(cells.map(cell=>cellKey({...cell,y:Math.round(cell.y)})));
+    for(const {x,y,z} of cells){
+      if(!occupied.has(cellKey({x,y:Math.round(y),z:z+1})))face([[x,y,z+1],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z+1]],'#787468');
+      if(!occupied.has(cellKey({x,y:Math.round(y)+1,z}))){
+        face([[x,y+1,z],[x+1,y+1,z],[x+1,y+1,z+1],[x,y+1,z+1]],'#b7ae99');
+      }
     }
   }
 }

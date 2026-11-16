@@ -65,7 +65,7 @@ for(const trigger of ['control','fireball'])test(
       assert.equal(save.removedCells.has('5,6,10'),false);
     }
     assert.equal(preview.phase,'falling');
-    const pending=exportHuntTerrainEdits(entries,preview.replay).at(-1);
+    const pending=exportHuntTerrainEdits(entries,preview.outcomes).at(-1);
     assert.equal(pending.collapse.landed,null);
     assert.throws(()=>replayHuntTerrainEdit(port,residentIds,pending,{collapse:preview}),/settled collapse/);
     preview.tick([]);
@@ -84,7 +84,7 @@ for(const trigger of ['control','fireball'])test(
     assert.equal(save.removedCells.has('5,6,10'),true);
     const landingY=trigger==='control'?5:6;
     assert.equal(world.get(2,landingY,10),3);
-    const recorded=JSON.parse(JSON.stringify(exportHuntTerrainEdits(entries,preview.replay)));
+    const recorded=JSON.parse(JSON.stringify(exportHuntTerrainEdits(entries,preview.outcomes)));
     const replayed=load('isolated-replay');
     try{
       const replayIds=replayed.residency.metrics.residentCellIds;
