@@ -1786,6 +1786,7 @@ if(playMode) {
         streamingMode:cellPreview?'camera-cells':'graph-bands',
         collapsePreview:playStream?.collapse?.phase??null,
         collapseMode:playStream?.structuralGravity?gravityMode:null,
+        latestSupportScan:playStream?.collapse?.supportReport??null,
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
         longestCameraHoldMs:cellPreview?Math.round(Math.max(playStream?.longestCameraHoldMs??0,openCameraHoldMs)):null,

@@ -225,6 +225,7 @@ for(const mixedTerrain of [false,true])test(
       const dirty=collapse.acceptImpact(edit,{defer:mixedTerrain});
       if(!mixedTerrain)return dirty;
       assert.equal(collapse.checkingSupport,true);
+      assert.equal(collapse.supportReport.status,'checking');
       let scanned=[];
       for(let frame=0;frame<100&&collapse.checkingSupport;frame++){
         scanned=collapse.stepSupportScan(96);
@@ -235,11 +236,15 @@ for(const mixedTerrain of [false,true])test(
     const supported=cut('supported-stone',-1,2,4);
     // The other half still sits on dirt, so the structure should stay put.
     assert.deepEqual(impact(supported),[]);
+    assert.equal(collapse.supportReport.status,mixedTerrain?'no-unsupported-component':'blocked-drop');
     if(!mixedTerrain)save.commit(supported.removedCells);
     assert.equal(world.get(-1,3,4),3);
     assert.equal(world.get(0,3,4),3);
 
     const dirty=impact(cut('seam-support',-1,3,0));
+    assert.equal(collapse.supportReport.status,'detached');
+    assert.equal(collapse.supportReport.editRevision,2);
+    assert.ok(collapse.supportReport.scannedPositions>0);
     assert.ok(dirty.includes('-1,0,0'));
     assert.ok(dirty.includes('0,0,0'));
     assert.equal(world.get(-1,4,0),0);
