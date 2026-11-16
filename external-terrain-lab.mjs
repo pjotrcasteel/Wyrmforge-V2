@@ -57,7 +57,8 @@ const twoLayerCollapse=gravityMode==='two-layer'||longSpanCollapse;
 const largeCollapse=gravityMode==='large'||twoLayerCollapse;
 const terrainGravity=cellPreview&&gravityMode==='terrain';
 const deferredSupport=gravityMode==='deferred'||largeCollapse||terrainGravity;
-const SUPPORT_OPERATIONS_PER_FRAME=96;
+const SUPPORT_OPERATIONS_PER_FRAME=192;
+const SUPPORT_WORK_BUDGET_MS=2;
 const mixedGravity=gravityMode==='mixed'||deferredSupport;
 const seamCollapse=['seam','measure','mixed','deferred','large','two-layer','long-span'].includes(gravityMode);
 const guidedCollapse=gravityMode==='guided'||seamCollapse;
@@ -838,7 +839,7 @@ function advanceCollapseSupport(){
   if(!collapse?.checkingSupport||document.hidden||awaitingPlayContext||
       pendingEdit||renderer.pendingUploads||streamingBusy())return;
   const started=performance.now();
-  const dirty=collapse.stepSupportScan(SUPPORT_OPERATIONS_PER_FRAME);
+  const dirty=collapse.stepSupportScan(SUPPORT_OPERATIONS_PER_FRAME,{workBudgetMs:SUPPORT_WORK_BUDGET_MS});
   if(!dirty.length)return;
   measureCollapseActivation(started);
   queueCollapseMeshes(dirty);
