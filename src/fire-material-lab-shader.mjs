@@ -65,8 +65,8 @@ vec3 labForestDetail(vec3 color,int material,vec2 uv) {
   float field=labNoise(pixel/53.0);
   float chance=soilHash(grid+31.0);
   if(material==1){
-    float patch=step(.44,labNoise(pixel/23.0)+.22*labNoise(pixel/8.0));
-    color=mix(color*.83,color*1.13,patch);
+    float mossPatch=step(.44,labNoise(pixel/23.0)+.22*labNoise(pixel/8.0));
+    color=mix(color*.83,color*1.13,mossPatch);
     if(uLabForestStage<3&&chance<.52&&field>.32){
       bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=1.0)
         ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=0.0)
