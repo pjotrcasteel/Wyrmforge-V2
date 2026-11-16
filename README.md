@@ -34,7 +34,7 @@ roadmap milestones.
 
 ## Play Hunt — playable exploration candidate (H08-01)
 
-**[Open Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html)** to walk one real Voxel V2 Wet Forest region with a touch joystick (or WASD/arrows), fixed-step physical collision, north-up follow camera and a live frame-time HUD. This is a deliberately minimal **playable exploration preview**: no enemies, trees, investigation or seamless region transitions yet. The route is **NEEDS PLAYER REVIEW**, not accepted as a full Hunt; see [H08-01 in the Delivery Tasks](docs/DELIVERY-TASKS.md).
+**[Open Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells)** to explore the streamed Wet Forest. Fireballs can trigger bounded, shape-preserving terrain collapses. To compare with craters alone, use [Play Hunt with gravity disabled](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells&gravity=off) in the same browser. Both routes use the same normal Hunt terrain save.
 
 ## Playable standalone V2 lab
 

@@ -1,6 +1,7 @@
 import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
 import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
 import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
+import {resolveHuntTerrainGravity,huntTerrainSaveIdentity} from './src/hunt-gravity-mode.mjs';
 import {HuntCollapsePreview,huntCollapseScaffold} from './src/hunt-collapse-preview.mjs';
 import {HuntCellCatalog,HuntCellResidency,huntSavedAdditions} from './src/hunt-cell-residency.mjs';
 import {HuntTerrainSave} from './src/hunt-terrain-save.mjs';
@@ -57,7 +58,7 @@ const shapedCollapse=gravityMode==='shaped'||splitSpanCollapse;
 const longSpanCollapse=gravityMode==='long-span'||splitSpanCollapse;
 const twoLayerCollapse=gravityMode==='two-layer'||longSpanCollapse;
 const largeCollapse=gravityMode==='large'||twoLayerCollapse;
-const terrainGravity=cellPreview&&gravityMode==='terrain';
+const {terrain:terrainGravity,defaultEnabled:defaultGravity}=resolveHuntTerrainGravity(cellPreview,gravityMode);
 const deferredSupport=gravityMode==='deferred'||largeCollapse||terrainGravity||shapedCollapse;
 const SUPPORT_OPERATIONS_PER_FRAME=192;
 const SUPPORT_WORK_BUDGET_MS=2;
@@ -642,7 +643,7 @@ function updatePlayStreaming(now) {
       if(stream.structuralGravity)stream.collapse=new HuntCollapsePreview(active.world,active.port,
         stream.residency,stream.terrainSave,{
           fixture:stream.gravityFixture,guidedSupport:stream.regionCollapse?REGION_COLLAPSE_SUPPORT:undefined,
-          mixedTerrain:mixedGravity,foundationY:stream.cellCatalog.height.minY,preserveMicroSurfaces:shapedCollapse
+          mixedTerrain:mixedGravity,foundationY:stream.cellCatalog.height.minY,preserveMicroSurfaces:terrainGravity||shapedCollapse
         });
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
@@ -1175,7 +1176,9 @@ function resetSite() {
         const gravityFixture=gravityPreview&&!regionCollapse;
         const entry=regionCollapse?REGION_COLLAPSE_ENTRY:generatedSite.layout.topology.entry;
         const structuralGravity=gravityPreview||terrainGravity;
-        const terrainSave=new HuntTerrainSave(findingStorage,saveIdentity+(structuralGravity?':gravity-'+gravityMode:''));
+        const terrainSave=new HuntTerrainSave(findingStorage,huntTerrainSaveIdentity(saveIdentity,gravityMode,{
+          structuralGravity,defaultEnabled:defaultGravity
+        }));
         let evidenceStorage;
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
@@ -1792,7 +1795,7 @@ if(playMode) {
         chunkEdge:active?.world.chunkEdge??null,
         streamingMode:cellPreview?'camera-cells':'graph-bands',
         collapsePreview:playStream?.collapse?.phase??null,
-        collapseMode:playStream?.structuralGravity?gravityMode:null,
+        collapseMode:playStream?.structuralGravity?gravityMode??'terrain-default':null,
         latestSupportScan:playStream?.collapse?.supportReport??null,
         cameraHeldFrames:cellPreview?playStream?.cameraHeldFrames??0:null,
         cameraHeldMs:cellPreview?Math.round((playStream?.cameraHeldMs??0)+openCameraHoldMs):null,
