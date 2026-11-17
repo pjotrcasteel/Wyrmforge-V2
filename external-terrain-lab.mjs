@@ -55,6 +55,7 @@ import {
 import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
+import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.mjs';
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
@@ -157,6 +158,7 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
+let playFluidVisual=null;
 let meshBridge=null;
 let pendingMesh=null;
 let pendingEdit=null;
@@ -1008,7 +1010,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.sideFaces??0)+' liquid walls':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1099,6 +1101,7 @@ function resetSite() {
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    playFluidVisual?.clear();
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
     playRiverRevision=-1;
@@ -1376,7 +1379,9 @@ function updateHuntRiverSurface() {
   if(playFluid){
     if(playRiverWorld===world&&playRiverRevision===world.revision&&
         playFluid.steps-playFluidSurfaceStep<8)return;
-    playLava=huntFluidSurface(generatedSite.layout,world,playFluid.snapshotSurface());
+    const state=playFluid.snapshotSurface();
+    playLava=huntFluidSurface(generatedSite.layout,world,state);
+    playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
     playFluidSurfaceStep=playFluid.steps;
   }else{
     if(playRiverWorld===world&&playRiverRevision===world.revision)return;
@@ -1434,6 +1439,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
     detachPlayFluid?.();
     const seeded=createWorldGenFluidEngine(generatedSite.layout,terrain.port);
     playFluid=seeded.fluid;
+    playFluidVisual??=new HuntFluidSurfaceRenderer(canvas);
     detachPlayFluid=attachWorldGenFluid(terrain.port,playFluid);
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
@@ -1453,7 +1459,9 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             wetBeyondChannel:wet.filter(c=>!authored.has(c.x+','+c.z)).length,
             worldRevision:active.world.revision,
             liveFluidTexture:Boolean(playLava?.count),
-            presentedCells:playLava?.count??0
+            presentedCells:playLava?.count??0,
+            raisedSurfaceFaces:playFluidVisual?.stats.topFaces??0,
+            verticalFluidFaces:playFluidVisual?.stats.sideFaces??0
           };
         },
         breach(){
@@ -1633,6 +1641,8 @@ function frame(now) {
             pendingTerrainPresentation=null;
           }
           playView=view;
+          if(playFluidVisual)playFluidVisual.render(view,{time:now/1000,
+            reducedMotion:reducedLavaMotion?.matches});
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
@@ -1949,6 +1959,7 @@ if(playMode) {
         step:playFluid.steps,wetColumns:playFluid.wetCount,
         totalDepthUnits:playFluid.totalDepth,residentColumns:playFluid.columnCount,
         renderedCells:playLava?.count??0,
+        raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
         presentation:'existing water/lava art on exposed terrain; raised-volume geometry pending'
       }:null,
@@ -2045,6 +2056,7 @@ window.addEventListener('pagehide',()=>{
   restoring?.unload();
   restoredSession?.unload();
   detachPlayFluid?.();
+  playFluidVisual?.dispose();
   loader?.unload();
   renderer?.dispose();
 });
