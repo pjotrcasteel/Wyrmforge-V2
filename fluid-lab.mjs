@@ -1,6 +1,8 @@
 // Diagnostic adapter only. Fluid engine does not import Voxel, WorldGen or the renderer.
 import {VoxelWorld} from './src/voxel-world.mjs';
-import {ColumnFluidEngine} from './src/fluid/column-fluid-engine.mjs';
+import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
+import {V2TerrainPort} from './src/terrain-integration-port.mjs';
+import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 
 const canvas=document.querySelector('#scene');
 const ctx=canvas.getContext('2d');
@@ -8,14 +10,11 @@ const stats=document.querySelector('#stats');
 const pauseButton=document.querySelector('#pause');
 const COLS=17,ROWS=11,TILE=50;
 const bounds={minX:0,maxX:COLS-1,minZ:0,maxZ:ROWS-1};
-let world,fluid,paused=false,breaches=new Set(),lastTick=0;
-
-function floorAt(x,z){
-  for(let y=3;y>=-4;y--)if(world.get(x,y,z))return y+1;
-  return -4;
-}
+let world,port,fluid,detachFluid=null,paused=false,breaches=new Set(),lastTick=0;
 
 function reset(){
+  detachFluid?.();
+  port?.dispose();
   world=new VoxelWorld();
   breaches=new Set();
   const initial=[];
@@ -23,25 +22,35 @@ function reset(){
     const river=(z===3||z===4);
     const basin=(x>=7&&x<=11&&z>=6&&z<=9);
     const floor=river?0:basin?-2:3;
-    for(let y=-4;y<floor;y++)world.set(x,y,z,3);
+    for(let y=-4;y<floor;y++)world.set(x,y,z,y===-4?4:3);
     if(river)initial.push({x,z,depth:10});
   }
-  fluid=new ColumnFluidEngine({
-    bounds,floorAt,initial,
-    sources:[{x:0,z:3,surfaceY:1,rate:3},{x:0,z:4,surfaceY:1,rate:3}]
-  });
+  const floor=initial.map(({x,z})=>({x,z,y:0}));
+  const layout={
+    footprint:{...bounds,minY:-4,maxY:3},
+    riverChannels:[{
+      kind:'water',floor,from:{x:0,z:3},to:{x:COLS-1,z:4},
+      nodes:Array.from({length:COLS},(_,x)=>({x,z:3,y:0}))
+    }]
+  };
+  port=new V2TerrainPort(world,new TerrainEditLedger(world));
+  fluid=createWorldGenFluidEngine(layout,port).fluid;
+  detachFluid=attachWorldGenFluid(port,fluid);
   draw();
 }
 
 function breachAt(x){
   if(x<4||x>12||breaches.has(x))return;
-  breaches.add(x);
-  for(let y=-2;y<3;y++)world.set(x,y,5,0);
-  fluid.onTerrainChange({
-    geometryChanged:true,
-    changedBounds:{min:{x,y:-2,z:5},max:{x,y:2,z:5}}
+  // A real Voxel command publishes the committed edit once. The fluid
+  // consumer reacts through the existing engine port, never a fake event.
+  const result=port.apply({
+    id:'fluid-lab-bank-'+x,type:'carve-tunnel',
+    x,y:2,z:5,toX:x,toY:-2,toZ:5,radius:1.1
   });
-  draw();
+  if(result.removedVoxels){
+    breaches.add(x);
+    draw();
+  }
 }
 
 function draw(){
@@ -84,7 +93,7 @@ function draw(){
     ctx.lineWidth=2;
     ctx.strokeRect(x*TILE+2,5*TILE+2,TILE-4,TILE-4);
   }
-  stats.textContent='Tick '+fluid.steps+' · '+fluid.wetCount+' wet columns';
+  stats.textContent='Tick '+fluid.steps+' · '+fluid.wetCount+' wet columns · '+port.metrics().published+' voxel edits';
 }
 
 function animate(now){
