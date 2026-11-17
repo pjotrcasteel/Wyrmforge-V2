@@ -44,3 +44,14 @@ valid and a forest-to-mountain transition can happen anywhere along the route.
 The regular Hunt still uses the fixed-distance Fading Woods preview. The route
 profile is ready for the World Map to supply the actual arena-to-lair route;
 the preview expedition currently ends at extraction.
+
+### Play Hunt material route preview
+
+Open `play-hunt.html?route=highland` and use the destination picker to walk the
+authored terrain at each step. `route=forest` and `route=mountain` select the
+shorter three- and four-Hunt examples. A destination loads independently by
+WorldGen recipe, with corruption sampled by cumulative journey distance.
+The highland route uses the authored forest-highland terrain between forest
+and mountain. The lair uses the existing volcanic geology, including its
+physical fissures. Campaign unlocks, encounter progression, and lava
+simulation are outside this review.
