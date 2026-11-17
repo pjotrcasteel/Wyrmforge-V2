@@ -1494,7 +1494,8 @@ function frame(now) {
       }
       updateHuntGrassMaterialVolume();
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode})) {
+          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
+          huntFadingStartZ:(playConnected?.seam.minZ??-986)-14})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
               !pendingEdit&&!errorMessage&&!renderer.pendingUploads){
