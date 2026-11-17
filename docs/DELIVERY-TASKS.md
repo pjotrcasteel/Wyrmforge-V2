@@ -386,11 +386,22 @@ H08-05 physical-object completion remain open.
 - **iPhone crater foundation check (2026-11-17):** Play Hunt `6b186dc`, seed 7, reported 36 Fireball casts and 435 saved voxel removals. Reapplying all 36 recorded edits to the generated entry region reproduced 435 removals. All eight cuts aimed at the foundation left material 4 intact and removed zero cells. Reported snapshot p95 was 17 ms for frame intervals and 28 ms for edit-to-render submission. This verifies foundation behavior for the recorded run.
 - **Fading Woods surface pass:** North of the initial Woodland Trail connector, the regular Hunt gradually shifts its grass, earth and stone into a moss-and-ash palette. The world-space blend follows the existing route across streamed regions.
 - **River geometry preview:** Play Hunt route destinations request water rivers for forest/highland/mountain and lava rivers for volcanic biomes. WorldGen reserves up to 8 m of extra terrain around the smaller sites, traces a connected course around protected paths, then carves a descending bed with bends and wider pools. Materials uses the local flow direction, wet banks, cooled lava edges, and cascades. The review uses the destination picker. Streaming across separate Hunts and liquid simulation remain pending.
+- **River surface refinement:** Water uses a separate sparse highlight pattern over broad teal pools. Cascades follow adjacent floor-height differences, with broken foam around drops and landings. The channel surface map follows the remaining stone or foundation after edits within the authored channel footprint. The owner’s three river references guide the palette and highlight density. Phone review of this refinement is pending.
 - **Playable lava channels:** The Scorched Approach, Volcanic Arena, and Wyrm Lair render palette-indexed flowing lava over the generated stone fissures. Open banks cool into dark crust and shared downhill walls carry stepped cascades. The review covers the surface treatment. Liquid simulation and damage remain separate from the materials pass.
 - **Player experience:** recognizable magical forest → fading wilds → volcanic approach → Wyrm, consistent authored art, lighting and VFX.
 - **Gate:** visual owner approval, proper pixel scale, no terrain/material drift, performance in the playable Hunt. No requirement to block initial walking prototype.
 - **Dependencies:** H08-11.
 - **Done for now:** The integrated Hunt's art/materials, lighting and atmosphere are coherent and readable on mobile at approved frame targets; user accepts the visible experience. Stop polishing individual shaders once the scene works.
+
+### WAT-01 — River flow after terrain destruction
+- **GitHub Issue:** [#323](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/323)
+- **Status:** `PLANNED`
+- **Owner:** Water V2 / fluid behavior.
+- **Player experience:** Fireballs open connected craters that receive water. Broken banks open new flow routes and affected pools drain. Lava follows the same connectivity at a slower material-specific rate.
+- **Technical boundary:** Voxel supplies solid occupancy and terrain-edit events. The fluid engine owns level, amount and flow. Materials and rendering consume its resulting surface. WorldGen supplies initial channels and sources.
+- **Gate:** connected craters fill progressively, sealed craters remain dry, bank breaches reroute flow, bounded work and deterministic replay survive reload and streamed revisits.
+- **Dependencies:** F07-02 terrain edits/replay, R10-01 surface handoff.
+- **Current surface preview:** the R10-01 map follows remaining ground within its authored footprint. Crater filling beyond that footprint is pending WAT-01.
 
 ### R10-02 — Full Hunt stress, crash and thermal acceptance
 - **GitHub Issue:** [#178](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/178)

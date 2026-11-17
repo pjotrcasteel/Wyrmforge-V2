@@ -1,0 +1,28 @@
+// Original sparse water highlights. Most texels leave the broad pool color
+// visible; the small broken strokes advance in whole-pixel steps.
+export const WATER_RIPPLE_MOTIF=Object.freeze([
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000122100000000000000000000000',
+  '00001110000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000111000000000',
+  '00000000000000000001221000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00100000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000',
+  '00000000000000000000000000000000'
+]);
+
+export function waterRippleMotifGlsl(){
+  const rows=WATER_RIPPLE_MOTIF.map(row=>{
+    const pack=part=>[...part].reduce((bits,value,index)=>bits|(Number(value)<<(index*3)),0)>>>0;
+    return 'uvec4('+[0,8,16,24].map(offset=>pack(row.slice(offset,offset+8))+'u').join(',')+')';
+  });
+  return `const highp uvec4 HUNT_WATER_RIPPLES[16]=uvec4[16](${rows.join(',')});`;
+}

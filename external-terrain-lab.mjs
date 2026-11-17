@@ -165,6 +165,7 @@ let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
 let playLava=null;
+let playRiverWorld=null,playRiverRevision=-1;
 const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
 let playRecoveryCheckpoint=null;
 let playConnected=null;
@@ -1352,6 +1353,17 @@ function restoreState() {
 let grassVolumeWorld,grassVolumeKey;
 let grassVolumeTrees=[];
 
+
+function updateHuntRiverSurface() {
+  if(!routePreview||!playActor||!active?.world||pendingMesh||pendingEdit||
+    renderer.pendingUploads||restoring)return;
+  const world=active.world;
+  if(playRiverWorld===world&&playRiverRevision===world.revision)return;
+  playLava=huntLavaSurface(generatedSite.layout,world);
+  playRiverWorld=world;
+  playRiverRevision=world.revision;
+}
+
 function updateHuntGrassMaterialVolume() {
   if(!playMode||!playActor||!active?.world||!renderer.ready||
     pendingEdit||renderer.pendingUploads||streamingBusy())return;
@@ -1524,6 +1536,7 @@ function frame(now) {
         }
         playStream.cameraHoldStart=null;
       }
+      updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
