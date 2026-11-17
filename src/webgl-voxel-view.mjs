@@ -252,6 +252,9 @@ void main() {
   float ormLayer = uTerrainOrmLayers[surfaceIndex];
   float variantMix = 0.0;
   vec2 uv = uLabEnabled&&uLabGrassStyle>0&&surfaceIndex==0?materialUv*.62:materialUv;
+  bool huntCliff=uHuntGrassArt&&surfaceIndex==3&&abs(vNormal.y)<.5;
+  // One vertical repeat over a two-voxel face. The grain crosses voxel joins.
+  if(huntCliff)uv*=vec2(.55,.5);
   if (layer >= 0.0) {
     vec3 primary = texture(uTerrainAlbedo, vec3(uv * uTerrainTilesPerVoxel, layer)).rgb;
     float secondaryLayer = uTerrainSecondaryLayers[surfaceIndex];
@@ -328,6 +331,14 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
+  if(huntCliff){
+    vec2 pixel=floor(materialUv*12.0);
+    float strata=mod(pixel.y+floor(pixel.x/11.0),9.0);
+    float fracture=soilHash(floor(pixel/vec2(9.0,5.0))+54.0);
+    float relief=strata<1.0?.68:strata<2.0?1.12:1.0;
+    linearAlbedo*=relief*mix(.86,1.25,fracture);
+    lighting=mix(lighting,.82,.35);
+  }
   if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
     linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
     if(uHuntGrassEdges)linearAlbedo=huntRootMoss(linearAlbedo,vWorld.xz);

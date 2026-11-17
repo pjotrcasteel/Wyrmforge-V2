@@ -1765,7 +1765,7 @@ if(playMode) {
         generatorHash:generatedSite?.hash??null,
         cameraPreset:viewCamera.value,
         fullWorldGenMaterialShading:true,
-        grassAlbedoTiles:renderer?.terrainTileStagingStatistics.retainedTiles??0,
+        terrainAlbedoTiles:renderer?.terrainTileStagingStatistics.retainedTiles??0,
         heightContrast:viewCamera.value===PLAY_HUNT_CAMERA,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
         microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
@@ -2004,17 +2004,18 @@ try {
   });
   if(playMode){
     try {
-      const grassTiles=await Promise.all([
-        ['grass/meadow','grass-clearing'],['grass/meadow-dark','grass-shade']
+      const terrainTiles=await Promise.all([
+        ['grass/meadow','grass-clearing'],['grass/meadow-dark','grass-shade'],
+        ['stone/bedrock','stone']
       ].map(async ([slot,asset])=>{
         const image=new Image();
         image.src=new URL('./art/fire-hunt-materials/'+asset+'.png',import.meta.url);
         await image.decode();
         return [terrainArtKey(slot,'albedo'),image];
       }));
-      for(const [key,image] of grassTiles)renderer.setTerrainMaterialTile('albedo',key,image);
+      for(const [key,image] of terrainTiles)renderer.setTerrainMaterialTile('albedo',key,image);
     } catch(error) {
-      console.warn('Wet Forest grass textures could not be loaded:',error);
+      console.warn('Wet Forest terrain textures could not be loaded:',error);
     }
   }
   resetSite();
