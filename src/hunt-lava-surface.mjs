@@ -6,13 +6,13 @@ const CARDINAL=[[-1,0],[1,0],[0,-1],[0,1]];
 const key=(x,z)=>x+','+z;
 
 export function huntLavaSurface(layout) {
-  const fissures=layout.volcanicTerrain?.physicalFissures;
+  const fissures=layout.riverChannels??layout.volcanicTerrain?.physicalFissures;
   if(!fissures?.length)return null;
   const {minX,maxX,minZ,maxZ}=layout.footprint;
   const width=maxX-minX+1,height=maxZ-minZ+1;
   const data=new Uint8Array(width*height*4);
   const cells=new Map();
-  for(const {floor,from,to} of fissures){
+  for(const {floor,from,to,kind} of fissures){
     const dx=to.x-from.x,dz=to.z-from.z;
     const distance=Math.hypot(dx,dz);
     // Compare the ends of the cut so the motif travels down the channel.
@@ -22,15 +22,19 @@ export function huntLavaSurface(layout) {
     const reverse=heightSum(ordered.slice(0,endSize))<heightSum(ordered.slice(-endSize));
     const angle=Math.atan2(reverse?-dz:dz,reverse?-dx:dx);
     const heading=Math.round((angle+Math.PI)*255/(2*Math.PI));
-    for(const cell of floor)cells.set(key(cell.x,cell.z),{...cell,heading});
+    for(const cell of floor){
+      const localHeading=Number.isFinite(cell.flowX)&&Number.isFinite(cell.flowZ)
+        ?Math.round((Math.atan2(cell.flowZ,cell.flowX)+Math.PI)*255/(2*Math.PI)):heading;
+      cells.set(key(cell.x,cell.z),{...cell,heading:localHeading,kind});
+    }
   }
   let count=0;
-  for(const {x,z,y,heading} of cells.values()){
+  for(const {x,z,y,heading,kind} of cells.values()){
     const neighbors=CARDINAL.map(([dx,dz])=>cells.has(key(x+dx,z+dz)));
     if(!neighbors.some(Boolean))continue;
     const edges=neighbors.reduce((mask,connected,index)=>mask|(!connected<<index),0);
     const offset=((z-minZ)*width+x-minX)*4;
-    data.set([y,heading,edges,255],offset);
+    data.set([y,heading,edges,kind==='water'?128:255],offset);
     count++;
   }
   return count?{origin:[minX,minZ],size:[width,height],data,count}:null;
@@ -41,6 +45,29 @@ ivec4 huntLavaCell(ivec2 cell) {
   ivec2 at=cell-ivec2(uHuntLavaOrigin);
   if(any(lessThan(at,ivec2(0)))||any(greaterThanEqual(at,textureSize(uHuntLava,0))))return ivec4(0);
   return ivec4(round(texelFetch(uHuntLava,at,0)*255.0));
+}
+
+vec3 huntRiverBank(vec3 surface) {
+  if(vNormal.y<.5)return surface;
+  vec2 point=(floor(vWorld.xz*8.0)+.5)/8.0;
+  ivec2 cell=ivec2(floor(point));
+  vec2 local=fract(point);
+  vec3 result=surface;
+  for(int i=0;i<4;i++){
+    ivec2 offset=ivec2(0);
+    float distanceToBank=0.0;
+    if(i==0){offset.x=-1;distanceToBank=local.x;}
+    else if(i==1){offset.x=1;distanceToBank=1.0-local.x;}
+    else if(i==2){offset.y=-1;distanceToBank=local.y;}
+    else{offset.y=1;distanceToBank=1.0-local.y;}
+    ivec4 channel=huntLavaCell(cell+offset);
+    if(channel.a==0||vWorld.y<float(channel.r))continue;
+    float blend=(1.0-smoothstep(.05,.7,distanceToBank))*.55;
+    vec3 bank=surface*vec3(.66,.76,.72);
+    if(channel.a==255)bank=mix(surface*.44,vec3(.045,.029,.023),.5);
+    result=mix(result,bank,blend);
+  }
+  return result;
 }
 
 bool huntLavaSurface(out vec3 color) {
@@ -83,6 +110,19 @@ bool huntLavaSurface(out vec3 color) {
   if(margin<.09)return false;
   if(margin<.21)band=0;
   else if(margin<.38)band=min(band,1);
+  if(channel.a==128){
+    vec3 water=vec3(.085,.20,.25);
+    if(band==1)water=vec3(.11,.28,.32);
+    else if(band==2)water=vec3(.15,.36,.40);
+    else if(band==3)water=vec3(.28,.48,.49);
+    else if(band==4)water=vec3(.55,.69,.65);
+    bool waterfall=vNormal.y<.5;
+    float foam=waterfall?.62:0.0;
+    if(margin<.27&&band>=2)foam=.72;
+    water=mix(water,vec3(.73,.81,.71),foam);
+    color=srgbToLinearColor(water);
+    return true;
+  }
   color=fireLavaColor(band);
   return true;
 }

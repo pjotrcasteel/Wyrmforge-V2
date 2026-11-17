@@ -21,8 +21,9 @@ for(const [route,count,start] of [['forest',3,'wet-forest'],['mountain',4,'mount
       const corruption=stop.profile.corruption.progress;
       assert.ok(corruption>previous);
       previous=corruption;
-      const site=generateWorldSite(createWorldSiteRecipe({kind:stop.kind,corruption}));
+      const site=generateWorldSite(createWorldSiteRecipe({kind:stop.kind,corruption,river:stop.river}));
       assert.ok(site.layout.topology.reachable);
+      assert.equal(site.layout.riverChannels[0].kind,stop.river);
       assert.ok(site.layout.microSurface.tileCount>0);
       const loader=new V2ExternalTerrainLoader(site.definition,{microSurfaceCapacity:2048});
       while(!loader.progress.done)loader.loadStep(192);

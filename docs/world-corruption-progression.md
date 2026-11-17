@@ -55,3 +55,13 @@ The highland route uses the authored forest-highland terrain between forest
 and mountain. The lair uses the existing volcanic geology, including its
 physical fissures. Campaign unlocks, encounter progression, and lava
 simulation are outside this review.
+
+
+The route preview now requests an explicit water or lava river in each site
+recipe. Forest, highland, and mountain destinations receive water. Volcanic
+destinations receive lava. Smaller sites gain an 8 m terrain margin for the
+river course, within the existing 64 m site bound. WorldGen traces around the
+protected travel/combat footprint and cuts the river bed. Materials reads the
+ordered floor cells and local headings for the surface animation and banks.
+The preview loads individual destinations. River joins across different Hunts,
+liquid volume simulation, and hazard gameplay remain pending.

@@ -22,7 +22,8 @@ export function huntRoutePreview(route, destination) {
   const nodes=ROUTES[route].map(([distance,biome])=>({distance,biome}));
   const sample=createHuntRouteMaterialProfile(nodes);
   const stops=Object.freeze(nodes.map(({biome,distance})=>Object.freeze({
-    kind:biome,name:BIOME_NAMES[biome],profile:sample(distance)
+    kind:biome,name:BIOME_NAMES[biome],profile:sample(distance),
+    river:['scorched-approach','mini-boss-arena','wyrm-lair'].includes(biome)?'lava':'water'
   })));
   const index=Number.isInteger(destination)&&destination>=0&&destination<stops.length?destination:0;
   return Object.freeze({route,index,stops,stop:stops[index]});
