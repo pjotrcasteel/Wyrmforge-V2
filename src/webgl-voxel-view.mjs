@@ -242,7 +242,17 @@ void main() {
     }
   }
   // Surface-specific albedo layers; negative layer means procedural fallback.
-  int surfaceIndex = abs(vMaterial - 1.0) < 0.5
+  bool rockUnderTurf=false;
+  if(uHuntGrassEdges&&vMaterial==1.0&&abs(vNormal.y)<.5){
+    ivec3 cell=ivec3(floor(vWorld-vNormal*.002));
+    ivec3 adjacent=cell+ivec3(round(vNormal));
+    int here=labMaterial(ivec3(cell.x,0,cell.z));
+    int there=labMaterial(ivec3(adjacent.x,0,adjacent.z));
+    float fringe=.16+.16*soilHash(floor(vWorld.xz*8.0));
+    rockUnderTurf=here%4==1&&here/4-4==cell.y&&there!=0&&
+      cell.y-(there/4-4)>=2&&fract(vWorld.y)<1.0-fringe;
+  }
+  int surfaceIndex = rockUnderTurf ? 3 : abs(vMaterial - 1.0) < 0.5
     ? (vNormal.y > 0.5 ? 0 : 1)
     : (abs(vMaterial - 2.0) < 0.5 ? 2 : 3);
   vec2 materialUv = abs(vNormal.y) > 0.5 ? vWorld.xz

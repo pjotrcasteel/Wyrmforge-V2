@@ -205,11 +205,12 @@ test('the streamed opening connector has continuous two-voxel stone banks beside
     for(let z=link.bounds.minZ+1;z<link.bounds.maxZ;z++){
       assert.equal(column(0,z)[0].material,2);
       for(const direction of [-1,1]){
-        const rim=[5,6].find(x=>column(x*direction,z)[0].material===3);
+        const rim=[5,6].find(x=>column(x*direction,z)[0].y-column((x-1)*direction,z)[0].y===2);
         assert.ok(rim);
         const rock=column(rim*direction,z);
         const floor=column((rim-1)*direction,z)[0];
         assert.equal(rock[0].y-floor.y,2);
+        assert.equal(rock[0].material,1);
         assert.equal(rock[1].material,3);
       }
     }
@@ -218,7 +219,7 @@ test('the streamed opening connector has continuous two-voxel stone banks beside
     try {
       while(!loader.progress.done)loader.loadStep(4096);
       const z=link.bounds.minZ+3;
-      const rock=[5,6].map(x=>({x,top:column(x,z)[0]})).find(cell=>cell.top.material===3);
+      const rock=[5,6].map(x=>({x,top:column(x,z)[1]})).find(cell=>cell.top.material===3);
       loader.terrain.port.apply({id:'cliff-rock-damage',type:'damage-sphere',
         x:rock.x,y:rock.top.y,z,radius:.5,power:3});
       assert.equal(loader.terrain.world.get(rock.x,rock.top.y,z),0,
@@ -239,7 +240,7 @@ test('the Woodland Trail interior has stone faces on both sides north of the con
       for(let x=6;x<=8;x++){
         const rock=column(x*direction,lip);
         assert.equal(rock[0].y-column(x*direction,lip+1)[0].y,2,`seed ${seed}, x ${x*direction}`);
-        assert.equal(rock[0].material,3);
+        assert.equal(rock[0].material,1);
         assert.equal(rock[1].material,3);
       }
     }
