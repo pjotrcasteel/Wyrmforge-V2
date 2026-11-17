@@ -16,10 +16,17 @@ function field(seed,x,z,pitch) {
 
 export function rockRimCut(seed,x,z,ix,iz,lowerEdges) {
   const px=x+(ix+0.5)/10,pz=z+(iz+0.5)/10;
-  // Metre-scale fields create broad worn shoulders and narrower broken lips.
-  // Unlike per-tile noise, a formation keeps its character across seams.
-  const width=2.5+field(seed^0x6c8e9cf5,px,pz,3.5)*3;
-  const depth=4+Math.floor(field(seed^0x2f539acd,px,pz,4.5)*5);
+  // A warped, mixed-scale exposure field leaves quiet intact stretches.
+  // Weathering strength changes over metres rather than restarting per tile.
+  const warp=(field(seed^0x7a3b91c5,px,pz,8)-0.5)*3;
+  const exposure=field(seed^0x18c9e735,px+warp,pz,5.5)*0.72+
+    field(seed^0x57ad03b1,px,pz-warp,2.3)*0.28;
+  const t=Math.max(0,Math.min(1,(exposure-0.30)/0.65));
+  const wear=t*t*(3-2*t);
+  if(wear===0)return 0;
+  const width=1.5+wear*3+field(seed^0x6c8e9cf5,px,pz,3.5)*1.5;
+  // Deep breaks are sparse. Most exposed faces receive only a light wear.
+  const depth=8*wear**1.6;
   const chip=field(seed^0x47d1a93b,px,pz,0.6);
   let strongest=0,second=0;
   for(const [dx,dz] of lowerEdges) {
