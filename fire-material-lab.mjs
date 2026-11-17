@@ -4,7 +4,7 @@ import {buildExposedFaceMeshes} from './src/exposed-face-mesher.mjs';
 import {buildPixelMicroSurfaceMeshes} from './src/microvoxel-mesher.mjs';
 import {LIVE_TREES} from './src/wet-forest-tree-sprites.mjs';
 import {projectTreeSprite} from './src/hunt-scenic-forest.mjs';
-import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,LAB_FOREST_STAGES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET,FIRE_ROAD_LAVA_Z,fireRoadScenery} from './src/fire-hunt-material-lab.mjs';
+import {FIRE_HUNT_MATERIALS,LAB_GRASS_PROFILES,LAB_FOREST_STAGES,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET,FIRE_ROAD_LAVA_Z,FIRE_ROAD_BRIDGE,fireRoadScenery} from './src/fire-hunt-material-lab.mjs';
 import {TerrainEditLedger} from './src/terrain-edit-ledger.mjs';
 import {spawnTerrainActor,ACTOR_HEIGHT} from './src/terrain-actor.mjs';
 import {stepHuntExplorer,HUNT_PIXELS_PER_VOXEL,HUNT_FIXED_STEP} from './src/hunt-play-runtime.mjs';
@@ -51,6 +51,7 @@ const forestPlantings=[
 ];
 let forestTrees=[];
 let waysideStones=[];
+let bridgeBraziers=[];
 let fireRoad=false;
 const sceneryStage=z=>fireRoad?fireRoadScenery(z):forestStage.value;
 const tileCanvas=document.querySelector('#tile');
@@ -137,6 +138,9 @@ function setScene(){
   }):[];
   waysideStones=scene==='hunt'?(fireRoad?[[-2.5,2.5],[2.5,-6.5],[-2.5,-14.5]]:[[-2.5,2.5]])
     .map(([x,z])=>spawnTerrainActor(fixture.world,{x,z,searchTopY:10})).filter(Boolean):[];
+  const bridge=FIRE_ROAD_BRIDGE;
+  bridgeBraziers=fireRoad?[bridge.minZ-.5,bridge.maxZ+.5]
+    .map(z=>spawnTerrainActor(fixture.world,{x:bridge.maxX-.5,z,searchTopY:10})).filter(Boolean):[];
   actor=canWalk()?spawnTerrainActor(fixture.world,{...MATERIAL_LAB_SPAWN,searchTopY:10}):null;
   enemy=canWalk()?spawnTerrainActor(fixture.world,{x:scene==='lava'?5.5:3.5,z:scene==='lava'?-4:-2,searchTopY:10}):null;
   projectile=null;
@@ -153,7 +157,7 @@ function setScene(){
   excavate.hidden=scene!=='layers';
   excavate.textContent=excavated?'Restore surface':'Excavate';
   excavate.setAttribute('aria-pressed',String(excavated));
-  status.textContent=scene==='lava'?'Walk to the basalt crossing. Watch the molten bands move beneath it.':fireRoad?'Follow the trail north from the clearing to the lava. Hold ↑ to walk.':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
+  status.textContent=scene==='lava'?'Walk to the basalt crossing. Watch the molten bands move beneath it.':fireRoad?'Follow the trail north (↑), then cross the basalt bridge to the east (→).':scene==='hunt'?'Hunt camera · 16 px per voxel at default zoom. Use arrows or touch controls.':excavated?fixture.removedVoxels+' voxels removed · V2 terrain edit':
     scene==='layers'?'Excavate to inspect the material cut.':
       scene==='repeats'?'Repeated material at world scale.':'Top and exposed faces.';
   requestRender();
@@ -259,6 +263,12 @@ const waysidePalette={
   approach:{Q:'#84726a',A:'#514647',S:'#ea8047',T:'#302c32',D:'#332c34',L:'#685054'}
 };
 
+const brazierPixels=[
+  ['...O...','...OF..','..OFY..','..FYYO.','RDDDDDR','.RRRRR.','..DDD..'],
+  ['....O..','..O.F..','..OYF..','.OFYFO.','RDDDDDR','.RRRRR.','..DDD..']
+];
+const brazierPalette={O:'#dd5b31',F:'#fa913e',Y:'#ffe089',R:'#777073',D:'#3d3338'};
+
 function paintPixelSprite(rows,palette,foot,unit){
   const left=Math.round(foot.x-rows[0].length*unit/2);
   const top=Math.round(foot.y-rows.length*unit);
@@ -302,6 +312,13 @@ function paintMarkers(view,now,density){
     const top=projectVoxel(waysideStone.x,waysideStone.y+1,waysideStone.z,view);
     const unit=Math.max(1,Math.round((foot.y-top.y)/7));
     paintPixelSprite(waysidePixels,waysidePalette[sceneryStage(waysideStone.z)],foot,unit);
+  });
+  for(const [index,brazier] of bridgeBraziers.entries())layer(brazier,()=>{
+    const foot=projectVoxel(brazier.x,brazier.y,brazier.z,view);
+    const top=projectVoxel(brazier.x,brazier.y+1,brazier.z,view);
+    const unit=Math.max(1,Math.round((foot.y-top.y)/10));
+    const frame=(Math.floor(lavaTime*6)+index)%brazierPixels.length;
+    paintPixelSprite(brazierPixels[frame],brazierPalette,foot,unit);
   });
   if(enemy)layer(enemy,()=>paint(enemy,'#8e483a','#b86a4f'));
   layer(actor,()=>paint(actor,'#465986','#e7c68a'));

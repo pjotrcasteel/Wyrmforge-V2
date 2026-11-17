@@ -1,5 +1,5 @@
 import {fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from './fire-lava-art.mjs';
-import {FIRE_ROAD_FADING_Z,FIRE_ROAD_APPROACH_Z,FIRE_ROAD_LAVA_Z} from './fire-hunt-material-lab.mjs';
+import {FIRE_ROAD_FADING_Z,FIRE_ROAD_APPROACH_Z,FIRE_ROAD_LAVA_Z,FIRE_ROAD_BRIDGE} from './fire-hunt-material-lab.mjs';
 // These paths are enabled only for lab fixtures that publish a material volume.
 export const FIRE_MATERIAL_LAB_UNIFORMS_GLSL=`
 uniform highp sampler3D uLabMaterials;
@@ -193,6 +193,18 @@ vec3 labGrassLip(vec3 soil,ivec3 cell) {
   return mix(soil,moss,rim*.88);
 }
 
+vec3 labBridgeStone(vec3 base,vec2 world) {
+  vec2 texel=floor(world*12.0);
+  float row=floor(texel.y/8.0);
+  float courseX=texel.x+mod(row,2.0)*8.0;
+  vec2 joint=vec2(mod(courseX,16.0),mod(texel.y,8.0));
+  float slab=soilHash(vec2(floor(courseX/16.0),row));
+  vec3 face=mix(base,srgbToLinearColor(mix(vec3(.28,.28,.32),vec3(.52,.46,.43),slab)),.75);
+  if(joint.x==0.0||joint.y==0.0)return face*.43;
+  if(joint.x==1.0||joint.y==1.0)return face*1.22;
+  return face;
+}
+
 vec3 labTerrainColor(vec3 base,vec2 uv) {
   int material=int(round(vMaterial));
   if(material==6){
@@ -205,6 +217,11 @@ vec3 labTerrainColor(vec3 base,vec2 uv) {
   base=labForestGrade(base,material,vWorld.xz);
   if(vNormal.y>.5)base=labForestDetail(base,material,uv);
   float tone=mix(.82,1.16,smoothstep(.15,1.24,structure));
+  if(uLabForestStage==4&&material==3&&vNormal.y>.5&&abs(vWorld.y-3.0)<.01
+    &&vWorld.x>=${FIRE_ROAD_BRIDGE.minX}.0&&vWorld.x<${FIRE_ROAD_BRIDGE.maxX}.0
+    &&vWorld.z>=${FIRE_ROAD_BRIDGE.minZ}.0&&vWorld.z<${FIRE_ROAD_BRIDGE.maxZ}.0){
+    return labBridgeStone(base,vWorld.xz)*tone;
+  }
   if(!uLabBlend||vNormal.y<-.5)return base*tone;
   if(labShallowGrassBank(material)){
     vec2 ground=vWorld.xz;

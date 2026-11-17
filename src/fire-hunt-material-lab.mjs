@@ -32,6 +32,7 @@ export const LAB_FOREST_STAGES=Object.freeze({forest:1,fading:2,approach:3,route
 export const FIRE_ROAD_FADING_Z=0;
 export const FIRE_ROAD_APPROACH_Z=-8;
 export const FIRE_ROAD_LAVA_Z=-10;
+export const FIRE_ROAD_BRIDGE=Object.freeze({minX:1,maxX:8,minZ:-13,maxZ:-11});
 export function fireRoadScenery(z){
   if(z>FIRE_ROAD_FADING_Z)return 'forest';
   if(z>FIRE_ROAD_APPROACH_Z)return 'fading';
@@ -79,7 +80,13 @@ export function createMaterialLabTerrain(materialId,scene,excavated=false,bounda
           const hasSoil=!volcanic&&(!shelf||Math.sin(x*.48)+Math.cos(z*.62)>-.15);
           world.set(x,y,z,y===level?surfaceMaterial:y===level-1&&hasSoil?2:3);
         }
-        if(microStep&&path&&!shelf)world.setMicroSurfaceTile(x,height,z,SHALLOW_TRAIL);
+        const bridge=FIRE_ROAD_BRIDGE;
+        const deck=fireRoad&&x>=bridge.minX&&x<bridge.maxX&&z>=bridge.minZ&&z<bridge.maxZ;
+        if(deck)world.set(x,height,z,3);
+        else if(microStep&&path&&!shelf)world.setMicroSurfaceTile(x,height,z,SHALLOW_TRAIL);
+        if(fireRoad&&x===7&&(z===bridge.minZ-1||z===bridge.maxZ)){
+          for(let y=2;y<=(z<bridge.minZ?4:3);y++)world.set(x,y,z,3);
+        }
       }else if(scene==='cliff'){
         const height=z<-1+Math.round(Math.sin(x*.72))?5:0;
         const soil=Math.sin(x*.7)+Math.cos(z*.7)>0;
