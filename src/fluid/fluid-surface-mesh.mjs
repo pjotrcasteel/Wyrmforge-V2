@@ -206,7 +206,12 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       else if(i===1){quad=[[x,lower,z],[x,lower,z+1],[x,hb,z+1],[x,ha,z]];}
       else if(i===2){quad=[[x,lower,z+1],[x+1,lower,z+1],[x+1,hb,z+1],[x,ha,z+1]];}
       else{quad=[[x,lower,z],[x,ha,z],[x+1,hb,z],[x+1,lower,z]];}
-      pushFace(quad,side.normal,flow,{
+      // Lift falling sheets just outside the cliff face by 8mm to avoid
+      // depth-fighting with the authoritative Voxel rock, not to add volume.
+      const visibleQuad=waterfall
+        ?quad.map(([px,py,pz])=>[px+side.dx*.008,py,pz+side.dz*.008])
+        :quad;
+      pushFace(visibleQuad,side.normal,flow,{
         mode:waterfall?2:1,
         landingY:waterfall?neighbor.surfaceY:0
       });
