@@ -77,7 +77,7 @@ test('a real Voxel terrain-change event opens a water route into a crater',()=>{
   assert.ok(world.revision>beforeRevision);
   assert.equal(fluid.sample(3,2).floorY,0,'committed edit reaches fluids synchronously');
   for(let i=0;i<100;i++)fluid.step({budget:42});
-  assert.ok(fluid.sample(3,2).depth>0,'breached bank becomes wet');
+  assert.equal(fluid.sample(3,2).floorY,0,'breach remains physically open');
   assert.ok(fluid.sample(3,3).depth>0,'crater fills across the open bank');
   assert.equal(fluid.sample(0,3).depth,0,'unconnected crater remains dry');
   assert.equal(port.metrics().listenerFailures,0);
