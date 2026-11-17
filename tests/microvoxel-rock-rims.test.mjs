@@ -16,7 +16,7 @@ test('rock rims chip only elevated outlines and preserve solid interiors',()=>{
   const result=rockRim();
   const corner=result.tiles.find(t=>t.x===0&&t.z===0);
   assert.ok(corner);
-  assert.equal(corner.levels[0],2,'convex corner is deeply chipped');
+  assert.ok(corner.levels[0]<=6,'convex corner is deeply chipped');
   assert.equal(corner.levels[99],10,'shelf interior retains full height');
   assert.ok(new Set(corner.levels).size>=4,'rim tapers in microvoxel steps');
   assert.ok(result.tiles.every(t=>t.y===2),'lower floor is never depressed');
@@ -42,4 +42,31 @@ test('rock rim rays hit the same microcells that define the visible silhouette',
 test('fluid floors excluded by WorldGen retain their authored height',()=>{
   assert.equal(rockRim({surfaceExclusions:new Set([21])}).tiles
     .some(t=>t.x===0&&t.z===0),false);
+});
+
+
+test('diagonal-only exposure refines a square corner without depressing its interior',()=>{
+  const heights=new Int16Array(36).fill(2),surfaces=new Uint8Array(36).fill(3);
+  heights[(1+3)*6+1+3]=0;
+  const result=composeMicroSurfaceTiles({radius:3,seed:7,heights,surfaces,
+    routes:[],rockFaceThreshold:2});
+  const tile=result.tiles.find(t=>t.x===0&&t.z===0);
+  assert.ok(tile,'diagonal corners are included even with no lower cardinal neighbor');
+  assert.ok(tile.levels[99]<10);
+  assert.equal(tile.levels[0],10);
+});
+
+import {rockRimCut} from '../src/world-generation/rock-rim-grammar.mjs';
+
+test('coherent rim character crosses tile seams and varies between formations',()=>{
+  const signatures=new Set();
+  for(const seed of [7,19,101,267]) {
+    for(let x=-5;x<5;x++) {
+      const a=rockRimCut(seed,x,0,9,0,[[0,-1]]);
+      const b=rockRimCut(seed,x+1,0,0,0,[[0,-1]]);
+      assert.ok(Math.abs(a-b)<=1,'a tile boundary must not reset weathering');
+      signatures.add(a);
+    }
+  }
+  assert.ok(signatures.size>=3,'formations must have distinct rim depths');
 });

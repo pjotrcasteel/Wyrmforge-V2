@@ -444,3 +444,9 @@ Basalt build `e5be2a8` accepted by owner. Physical rim refinement is pending pla
 Automated checks pass 713 tests and the V2 dependency audit. A headless GLES3 check compiled, linked and rendered the actual Hunt terrain shaders with the new physical meshes.
 Seed 7 standalone lair uses 384 microtiles and 50,447 mesh faces versus 43,120 previously (17% increase). Wet Forest uses 269 tiles / 16,647 faces versus 277 / 15,987. Mountain Pass uses 384 tiles / 30,127 faces versus 384 / 27,088. These are local geometry counts, not mobile frame-time evidence.
 Next review checks the rock contours and phone p95. Water V2 simulation remains deferred to WAT-01.
+
+### R10-01 connected rock weathering — 2026-11-17
+
+Owner called build `19dfd11` a good start and requested further variation around broad blocky formations. WorldGen now uses coherent metre-scale fields for varied rim widths and chip depths, including diagonally exposed corners. Optional refinement is allocated in connected 8m patches closest to authored circulation instead of a random tile scatter. The physical upper-metre occupancy contract, protected roads/channel floors and 384-tile cap remain unchanged. WorldGen identity advances to v2.7.12.
+
+Validation passes 715 tests and the dependency audit. Headless GLES3 compiles, links and renders the actual Hunt shader with the changed mesh. Seed 7 standalone geometry is 270 microtiles / 16,873 faces in Wet Forest, 384 / 27,903 in Mountain Pass, and 384 / 46,796 in the lair. Compared with the previous lair's 50,447 faces, this is about 7% fewer faces. Local mesh counts are not phone performance evidence. Contour appearance and mobile performance remain pending owner review. Next action is player review of the connected contours. WAT-01 remains deferred.

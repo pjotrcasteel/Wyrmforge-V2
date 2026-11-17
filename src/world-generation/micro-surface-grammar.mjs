@@ -4,6 +4,7 @@
 // Voxel V2 only understands the resulting public initialization data.
 import { selectRoadCell, roadMicroCut, microCellCenter } from './road-footprint.mjs';
 import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
+import { rockRimCut } from './rock-rim-grammar.mjs';
 export const MICRO_SURFACE_GRAMMAR_SCHEMA='wyrmforge.micro-surface-grammar.v1';
 export const MAX_GENERATED_MICRO_TILES=384;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -79,7 +80,7 @@ export function composeMicroSurfaceTiles({
     // to lower entire floor tiles without breaking the elevated outline.
     const lowerEdges=[];
     if(rockFaceThreshold!==null && surfaces[i]===3) {
-      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
         const nx=x+dx,nz=z+dz;
         if(nx<-radius||nx>=radius||nz<-radius||nz>=radius)continue;
         if(top>heights[index(radius,nx,nz)])lowerEdges.push([dx,dz]);
@@ -124,17 +125,8 @@ export function composeMicroSurfaceTiles({
         // It replaces an impassable whole-block step with two 50cm rises.
         cut=5;
       } else if(rockFace) {
-        // Physical 10cm chips taper into the solid interior. World-space
-        // clusters continue across tile seams; adjoining exposed directions
-        // deepen convex corners rather than leaving square plateau caps.
-        const variation=noise(seed,(x*10+ix)>>1,(z*10+iz)>>1);
-        const width=3+Math.floor(variation*2);
-        let cornerCut=0;
-        for(const [dx,dz] of lowerEdges) {
-          const distance=dx===1?9-ix:dx===-1?ix:dz===1?9-iz:iz;
-          cornerCut+=Math.max(0,width-distance)*2;
-        }
-        cut=Math.min(8,cornerCut);
+        // Coherent weathering, diagonal corner cuts and varied shoulders.
+        cut=rockRimCut(seed,x,z,ix,iz,lowerEdges);
 
       }
       const level=10-clamp(cut,0,9);
@@ -162,12 +154,20 @@ export function composeMicroSurfaceTiles({
     throw new RangeError('Required traversal landings exceed sparse microvoxel budget');
   }
   const remaining=MAX_GENERATED_MICRO_TILES-roads.length-connectors.length;
-  // Select a deterministic scatter of cliff highlights; never depend on
-  // Array or platform iteration randomness for replay reproducibility.
-  cliffs.sort((a,b)=>{
-    const ka=noise(seed,a.x,a.z),kb=noise(seed,b.x,b.z);
-    return ka-kb || a.z-b.z || a.x-b.x;
-  });
+  // Spend optional detail in coherent 8m patches, preserving adjacent rim
+  // runs rather than scattering disconnected refined tiles over every slope.
+  const circulation=[...pathCells].map(key=>key.split(',').map(Number));
+  const patchScores=new Map();
+  const patchScore=tile=>{
+    const x=(tile.x>>3)*8+4,z=(tile.z>>3)*8+4,key=x+','+z;
+    if(!patchScores.has(key)) {
+      const distance=circulation.length?Math.min(...circulation.map(([px,pz])=>
+        (x-px)**2+(z-pz)**2)):x*x+z*z;
+      patchScores.set(key,distance+noise(seed,x,z));
+    }
+    return patchScores.get(key);
+  };
+  cliffs.sort((a,b)=>patchScore(a)-patchScore(b)||a.z-b.z||a.x-b.x);
   const selectedLips=turfLips.slice(0,remaining);
   const selectedRock=cliffs.slice(0,remaining-selectedLips.length);
   const tiles=[...roads,...connectors,...selectedLips,...selectedRock];
