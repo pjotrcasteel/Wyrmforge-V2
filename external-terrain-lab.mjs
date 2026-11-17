@@ -1,3 +1,4 @@
+import {huntGrassMaterialVolume,HUNT_GRASS_VOLUME_STRIDE} from './src/hunt-grass-material-volume.mjs';
 import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
 import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
 import {clipHuntActor} from './src/diagnostics/hunt-actor-occlusion.mjs';
@@ -1324,6 +1325,24 @@ function restoreState() {
   }
 }
 
+let grassVolumeWorld,grassVolumeKey;
+
+function updateHuntGrassMaterialVolume() {
+  if(!playMode||!playActor||!active?.world||!renderer.ready||
+    pendingEdit||renderer.pendingUploads||streamingBusy())return;
+  const world=active.world;
+  const snap=value=>Math.floor(value/HUNT_GRASS_VOLUME_STRIDE)*HUNT_GRASS_VOLUME_STRIDE;
+  const x=snap(playActor.x),z=snap(playActor.z);
+  const key=[x,z,world.revision].join(',');
+  if(world===grassVolumeWorld&&key===grassVolumeKey)return;
+  const height=playStream?.cellCatalog?.height;
+  renderer.setLabMaterialVolume(huntGrassMaterialVolume(world,x,z,
+    Number.isFinite(height?.minY)?height.minY:-3,
+    Number.isFinite(height?.maxY)?height.maxY:30));
+  grassVolumeWorld=world;
+  grassVolumeKey=key;
+}
+
 function presentSiteMeshes(world,meshes) {
   // Authoritative microvoxels live in Voxel V2 and produce discrete
   // 10cm boxes. No per-vertex warping or alternate material authority.
@@ -1477,6 +1496,7 @@ function frame(now) {
         }
         playStream.cameraHoldStart=null;
       }
+      updateHuntGrassMaterialVolume();
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode})) {
         if(playMode){
@@ -1893,6 +1913,7 @@ try {
     // projections. The 2.5D game camera does not require 2D fake terrain.
     transparentBackground:Boolean(forestContext),fastHuntMode:false,
     onAvailabilityChange(ready,error) {
+      grassVolumeWorld=null;
       if(playMode){
         if(ready)contextEvidence.restore(performance.now());
         else if(error)contextEvidence.fail();
