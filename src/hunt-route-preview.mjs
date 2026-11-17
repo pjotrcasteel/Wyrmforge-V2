@@ -45,7 +45,9 @@ export function spawnHuntRoutePreview(world,layout,{nearRiver=false}={}) {
         if(x<bounds.minX+1||x>bounds.maxX-1||
             z<bounds.minZ+1||z>bounds.maxZ-1||wet.has(x+','+z))continue;
         const actor=spawnTerrainActor(world,{x:x+.5,z:z+.5,searchTopY:30,maxSearchDistance:64});
-        if(actor&&Math.abs(actor.y-center.y)<=3)return Object.freeze({...actor});
+        // The actual riverbank can be a high cliff above a deep channel.
+        // A supported dry spawn is valid even when its altitude differs.
+        if(actor)return Object.freeze({...actor});
       }
     }
   }
