@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createWorldSiteRecipe } from '../src/world-generation/site-recipe.mjs';
-import { generateWorldSite } from '../src/world-generation/index.mjs';
+import { generateWorldSite,generateAuthoredHuntTerrainGraph } from '../src/world-generation/index.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import { spawnHuntExplorer,stepHuntExplorer,HUNT_FIXED_STEP,targetHuntFireball,isHuntCastTap } from '../src/hunt-play-runtime.mjs';
 import { projectVoxel } from '../src/camera-presets.mjs';
@@ -24,7 +24,7 @@ test('H08-01 Play Hunt consumes the SAME authored WorldGeneratorV2 output as the
   const hunt=generateWorldSite({...recipe});
 
   assert.equal(hunt.schema,'wyrmforge.generated-site.v2');
-  assert.equal(hunt.generatorVersion,'worldgen-v2.7.2');
+  assert.equal(hunt.generatorVersion,'worldgen-v2.7.3');
   assert.equal(hunt.definition.generatorVersion,hunt.generatorVersion);
   assert.equal(hunt.definition.schema,'voxel-v2.terrain-initialization.v2');
   assert.ok(hunt.layout.topology.reachable);
@@ -198,4 +198,31 @@ test('Hunt tap casting reuses terrain port, localized meshes and full renderer',
   assert.ok(host.includes('huntHeightContrast:playMode &&'));
   assert.ok(shader.includes('vWorld.y-uHuntElevationReference'));
   assert.ok(shader.includes('if (uHuntHeightContrast)'));
+});
+
+test('the streamed Hunt arrival contains a stone escarpment and a fissure off its main trail',()=>{
+  for(const seed of [7,19,42]){
+    const site=generateWorldSite({...canonicalWetForestRecipe(),seed});
+    const graph=generateAuthoredHuntTerrainGraph(site);
+    const {definition}=graph.region(graph.layout.entryRegionId);
+    const top=(x,z)=>definition.runs.reduce((highest,run)=>
+      run.z===z&&run.x<=x&&x<run.x+run.length&&run.y>(highest?.y??-Infinity)
+        ?run:highest,null);
+    assert.ok(site.layout.topology.reachable);
+    assert.equal(top(1,-9).material,2);
+    let stoneFaces=0;
+    for(let z=-13;z<=-7;z++)for(let x=6;x<=11;x++){
+      const cliff=top(x,z);
+      if(cliff?.material!==3)continue;
+      const drops=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dz])=>top(x+dx,z+dz)?.y);
+      if(!drops.some(y=>cliff.y-y>=3))continue;
+      assert.ok(definition.runs.some(run=>run.z===z&&run.x<=x&&x<run.x+run.length&&
+        run.y===cliff.y-2&&run.material===3),'the wall is solid bedrock');
+      stoneFaces++;
+    }
+    assert.ok(stoneFaces>0,'the escarpment exposes a multi-metre stone face');
+    const cut=[-10,-9,-8,-7].map(x=>top(x,-15)).find(run=>run.material===3&&run.y<=1);
+    assert.ok(cut);
+    assert.ok(top(1,-14).y-cut.y>=3,'the fissure is a cut into the physical terrain');
+  }
 });

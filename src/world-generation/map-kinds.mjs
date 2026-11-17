@@ -167,18 +167,35 @@ function addManeuverFlow(builder,kind) {
   }
 }
 
+// Two connected landforms beside the opening trail. The eastern face rises
+// abruptly out of the valley; the western stone cut narrows at both ends.
+// The normal route, encounter and escape grading still runs over this relief.
+function forestArrivalRelief(seed,x,z) {
+  const contour=siteNoise(seed,x,z,6,31)-.5;
+  const shoulderX=7.1+.65*Math.sin((z+9)*.46)+contour;
+  const shelf=Math.max(0,1-((x-9.3)/3.2)**2-((z+9)/4.3)**2);
+  const cliff=x>=shoulderX?8.4*Math.sqrt(shelf):0;
+  const fissureX=-8.2+.85*Math.sin((z+15)*.67)+contour;
+  const fissureWidth=1.35*Math.max(0,1-((z+15)/2.9)**2);
+  const cut=Math.abs(x-fissureX)<fissureWidth?4.6:0;
+  return cliff-cut;
+}
+
 function forest(builder, context) {
   const seed = context.seed;
   const role=context.recipe?.huntRole;
   const profile=role?wetForestRegionProfile(role,seed):null;
+  const arrival=!role||role==='arrival';
   builder.setTerrain({
     elevation(x,z) {
       const broad = 2.2 * siteNoise(seed,x,z,15,1);
       const detail = 1.2 * siteNoise(seed,x,z,7,2);
       const wetHollow = 1.5 * Math.exp(-((x+12)**2+(z-7)**2)/70);
-      return 2 + broad + detail + (profile?profile.relief(x,z):-wetHollow);
+      const relief=arrival?forestArrivalRelief(seed,x,z):0;
+      return 2+broad+detail+relief+(profile?profile.relief(x,z):-wetHollow);
     },
-    exposedStone: profile?.rock??0.94
+    exposedStone: profile?.rock??0.94,
+    rockFaceThreshold:arrival?3:null
   });
   addNarrativePaths(builder,profile?.landmark??'forest-ruin','wet-forest',role==='horde'?8:7);
   addEscapeLayout(builder,'wet-forest');
