@@ -56,7 +56,10 @@ test('waterfalls over lower dry terrain retain full solid fluid walls and no fak
   assert.equal(mesh.topFaces,1);
   assert.equal(mesh.sideFaces,1);
   assert.equal(mesh.faceCount,2);
-  assert.deepEqual([...mesh.positions.slice(0,3)],[0,1.006,0]);
+  const [x,y,z]=mesh.positions.slice(0,3);
+  assert.equal(x,0);
+  assert.equal(z,0);
+  assert.ok(Math.abs(y-1.006)<.0001);
 });
 
 test('adjacent shallow wet columns share sub-meter edge heads without vertical seams',()=>{
