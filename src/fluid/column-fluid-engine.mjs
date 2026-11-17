@@ -2,6 +2,7 @@
 // Voxel/WorldGen supply read-only floor heights and source descriptors.
 // Rendering, materials, DOM and concrete terrain implementations are not imported.
 export const FLUID_STATE_SCHEMA='wyrmforge.fluid-state.v1';
+export const FLUID_SURFACE_SCHEMA='wyrmforge.fluid-surface.v1';
 export const MAX_FLUID_COLUMNS=4096;
 export const FLUID_DEPTH_UNITS=10; // 10 cm of water per column unit
 const MAX_DEPTH=160; // 16 m of resident liquid per 1 m2 column
@@ -19,6 +20,7 @@ export class ColumnFluidEngine {
   #floors;
   #depths;
   #sources=new Map();
+  #sourceManifest=[];
   #floorAt;
   #kind;
   #cursor=0;
@@ -63,6 +65,8 @@ export class ColumnFluidEngine {
       }
       this.#sources.set(index,Object.freeze({surfaceDeci:surfaceY*FLUID_DEPTH_UNITS,rate}));
     }
+    this.#sourceManifest=[...this.#sources.entries()].sort(([a],[b])=>a-b)
+      .map(([index,{surfaceDeci,rate}])=>Object.freeze({index,surfaceDeci,rate}));
   }
 
   get schema(){return FLUID_STATE_SCHEMA;}
@@ -188,10 +192,43 @@ export class ColumnFluidEngine {
     return changed;
   }
 
+  // Immutable, renderer-neutral surface handoff. A horizontal flow vector
+  // points toward the lowest currently reachable neighbor; no shader state
+  // or private terrain arrays are exposed. This scan runs on demand only.
+  snapshotSurface(){
+    const cells=[];
+    for(let i=0;i<this.columnCount;i++){
+      const depth=this.#depths[i];
+      if(!depth)continue;
+      const x=this.#bounds.minX+i%this.#width;
+      const z=this.#bounds.minZ+Math.floor(i/this.#width);
+      const head=this.#floors[i]*FLUID_DEPTH_UNITS+depth;
+      let bestHead=head,flowX=0,flowZ=0;
+      for(const [dx,dz] of DIRECTIONS){
+        const neighbor=this.#index(x+dx,z+dz);
+        if(neighbor<0||head<=this.#floors[neighbor]*FLUID_DEPTH_UNITS)continue;
+        const neighborHead=this.#floors[neighbor]*FLUID_DEPTH_UNITS+this.#depths[neighbor];
+        if(neighborHead>=bestHead)continue;
+        bestHead=neighborHead;
+        flowX=dx;
+        flowZ=dz;
+      }
+      cells.push(Object.freeze({
+        x,z,kind:this.#kind,floorY:this.#floors[i],depth,
+        surfaceY:head/FLUID_DEPTH_UNITS,flowX,flowZ
+      }));
+    }
+    return Object.freeze({
+      schema:FLUID_SURFACE_SCHEMA,kind:this.#kind,step:this.#steps,
+      bounds:this.#bounds,cells:Object.freeze(cells)
+    });
+  }
+
   snapshot(){
     return {
       schema:FLUID_STATE_SCHEMA,kind:this.#kind,bounds:{...this.#bounds},
       floors:Array.from(this.#floors),depths:Array.from(this.#depths),
+      sources:this.#sourceManifest.map(source=>({...source})),
       cursor:this.#cursor,steps:this.#steps
     };
   }
@@ -202,6 +239,7 @@ export class ColumnFluidEngine {
         !bounds||Object.keys(this.#bounds).some(key=>bounds[key]!==this.#bounds[key])||
         !Array.isArray(state.floors)||!Array.isArray(state.depths)||
         state.floors.length!==this.columnCount||state.depths.length!==this.columnCount||
+        JSON.stringify(state.sources)!==JSON.stringify(this.#sourceManifest)||
         !Number.isSafeInteger(state.cursor)||state.cursor<0||state.cursor>=this.columnCount||
         !Number.isSafeInteger(state.steps)||state.steps<0){
       throw new TypeError('Incompatible fluid snapshot');
