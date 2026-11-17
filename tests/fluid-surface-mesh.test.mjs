@@ -29,6 +29,9 @@ test('real fluid geometry uses 10cm surface head instead of painting the solid f
   assert.equal(result.triangleCount,6);
   assert.ok(result.positions instanceof Float32Array);
   assert.ok(result.normals instanceof Int8Array);
+  assert.ok(result.flows instanceof Int8Array);
+  assert.equal(result.flows.length,result.vertexCount*2);
+  assert.deepEqual([...result.flows.slice(0,2)],[1,0]);
   assert.ok(result.indices instanceof Uint32Array);
   assert.ok(result.indices.every(i=>i<result.vertexCount));
   assert.equal(engine.sample(1,0).surfaceY,-.5);
@@ -80,4 +83,6 @@ test('fluid WebGL shader projects on the exact Voxel V2 depth axis and handles b
   assert.match(FLUID_VERTEX_GLSL,/dot\(world,uCameraDepth\)-uDepthOrigin/);
   assert.match(FLUID_FRAGMENT_GLSL,/uLava/);
   assert.match(FLUID_FRAGMENT_GLSL,/vWorld\.xz\*8\.0/);
+  assert.match(FLUID_FRAGMENT_GLSL,/HUNT_WATER_RIPPLES/);
+  assert.match(FLUID_VERTEX_GLSL,/aFlow/);
 });
