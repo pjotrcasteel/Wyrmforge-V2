@@ -26,31 +26,55 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const smooth=(x)=>x*x*(3-2*x);
 const gridIndex=(radius,x,z)=>(z+radius)*radius*2+(x+radius);
 
-// Shape the two rock shoulders inside Woodland Trail, north of the seam.
-// Keep authored grades and combat access authoritative.
-function shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades) {
+// Consolidate the existing low, broken terraces beside Woodland Trail.
+// Read an untouched heightfield so the result is independent of scan order.
+function consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades) {
   if(plan.recipe.kind!=='wet-forest'||plan.recipe.regionId!=='region-woodland-trail')return null;
-  const stoneUnderTurf=new Set();
   const {radius}=plan.recipe;
-  const floor=heights[gridIndex(radius,-2,14)];
-  const front=13;
-  for(const side of [-1,1]){
-    for(let distance=4;distance<=12;distance++){
-      const x=distance*side;
-      const lip=front-(distance>=10?1:0);
-      const toe=gridIndex(radius,x,lip+1);
-      const bankBase=surfaces[toe]===2||roadGrades.gradedTopTenths[toe]>0?heights[toe]:floor;
-      for(let z=8;z<=front+2;z++){
-        const i=gridIndex(radius,x,z);
-        if(surfaces[i]===2||roadGrades.gradedTopTenths[i]>0||
-          plan.combatSpaces.some(space=>Math.hypot(x-space.x,z-space.z)<=space.radius+1)||
-          plan.maneuverPockets.some(space=>Math.hypot(x-space.x,z-space.z)<=space.radius))continue;
-        const rise=z>lip||distance===4?0:z===8||distance===12?1:2;
-        heights[i]=bankBase+rise;
-        surfaces[i]=1;
-        if(rise>0)stoneUnderTurf.add(i);
-      }
+  const at=(x,z)=>gridIndex(radius,x,z);
+  const before=heights.slice();
+  const protectedAreas=[...plan.combatSpaces,...plan.maneuverPockets,...plan.clearings];
+  const canShape=(x,z)=>surfaces[at(x,z)]!==2&&roadGrades.gradedTopTenths[at(x,z)]<=0&&
+    !protectedAreas.some(area=>Math.hypot(x-area.x,z-area.z)<=area.radius);
+  for(let z=3;z<=13;z++)for(let x=-13;x<=13;x++){
+    if(Math.abs(x)<4||!canShape(x,z))continue;
+    const local=[];
+    for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){
+      if(canShape(x+dx,z+dz))local.push(before[at(x+dx,z+dz)]);
     }
+    if(local.length<5)continue;
+    local.sort((a,b)=>a-b);
+    heights[at(x,z)]=local[local.length>>1];
+  }
+
+  const rounded=heights.slice();
+  for(let z=3;z<=13;z++)for(let x=-13;x<=13;x++){
+    if(Math.abs(x)<4||!canShape(x,z))continue;
+    const row=[-2,-1,0,1,2].filter(dx=>canShape(x+dx,z))
+      .map(dx=>rounded[at(x+dx,z)]).sort((a,b)=>a-b);
+    if(row.length>=3)heights[at(x,z)]=row[row.length>>1];
+  }
+
+  // Join a one-voxel intermediate step into the lower terrace only where
+  // both sides of the existing slope already supply two metres of relief.
+  const smoothed=heights.slice();
+  for(let z=4;z<=12;z++)for(let x=-12;x<=12;x++){
+    if(Math.abs(x)<4||!canShape(x,z))continue;
+    const floor=smoothed[at(x,z+1)];
+    const crest=smoothed[at(x,z-1)];
+    if(crest-floor!==2||smoothed[at(x,z)]!==crest-1)continue;
+    const continues=[-1,1].some(dx=>smoothed[at(x+dx,z-1)]===crest&&
+      smoothed[at(x+dx,z+1)]===floor);
+    if(continues)heights[at(x,z)]=floor;
+  }
+
+  const stoneUnderTurf=new Set();
+  for(let z=3;z<=13;z++)for(let x=-13;x<=13;x++){
+    if(Math.abs(x)<4||!canShape(x,z))continue;
+    const i=at(x,z);
+    const exposed=[[0,1],[0,-1],[1,0],[-1,0]].some(([dx,dz])=>
+      heights[i]>heights[at(x+dx,z+dz)]);
+    if(exposed)stoneUnderTurf.add(i);
   }
   return stoneUnderTurf;
 }
@@ -188,7 +212,7 @@ function prepareGeometry(plan,seed) {
     approaches:plan.approaches,combatSpaces:plan.combatSpaces,
     lateralPorts:plan.recipe.lateralPorts??[]
   });
-  const stoneUnderTurf=shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades);
+  const stoneUnderTurf=consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades);
   // Volcanic fissures are real rock cuts, but must never sever the
   // already-graded authored routes, protected combat floor or exits.
   const volcanicTerrain=composeVolcanicTerrain({
