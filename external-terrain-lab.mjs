@@ -55,6 +55,7 @@ import {
 import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
+import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.mjs';
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
@@ -157,6 +158,7 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
+let playFluidVisual=null;
 let meshBridge=null;
 let pendingMesh=null;
 let pendingEdit=null;
@@ -819,7 +821,7 @@ function resetPlayActor() {
     bounds:footprint,origin:{x:0,z:0}
   };
   if(routePreview)playActor=spawnHuntRoutePreview(active.world,generatedSite.layout,
-    {nearRiver:playQuery.get('fluidTest')==='1'});
+    {nearRiver:['1','auto'].includes(playQuery.get('fluidTest'))});
   else playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:startAt
   });
@@ -1008,7 +1010,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.sideFaces??0)+' liquid walls':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1095,9 +1097,11 @@ function resetSite() {
     restoredSession=null;
     // Tear down the previous authority before a new one becomes public.
     // Renderer removes stale scene data and retires GPU records per frame.
+    if(playQuery.get('fluidTest')==='auto')delete window.__WyrmforgeFluidTest;
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    playFluidVisual?.clear();
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
     playRiverRevision=-1;
@@ -1375,7 +1379,9 @@ function updateHuntRiverSurface() {
   if(playFluid){
     if(playRiverWorld===world&&playRiverRevision===world.revision&&
         playFluid.steps-playFluidSurfaceStep<8)return;
-    playLava=huntFluidSurface(generatedSite.layout,world,playFluid.snapshotSurface());
+    const state=playFluid.snapshotSurface();
+    playLava=huntFluidSurface(generatedSite.layout,world,state);
+    playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
     playFluidSurfaceStep=playFluid.steps;
   }else{
     if(playRiverWorld===world&&playRiverRevision===world.revision)return;
@@ -1433,10 +1439,62 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
     detachPlayFluid?.();
     const seeded=createWorldGenFluidEngine(generatedSite.layout,terrain.port);
     playFluid=seeded.fluid;
+    playFluidVisual??=new HuntFluidSurfaceRenderer(canvas);
     detachPlayFluid=attachWorldGenFluid(terrain.port,playFluid);
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
     playRiverRevision=-1;
+    if(playQuery.get('fluidTest')==='auto'){
+      // An opt-in automated witness of the real in-game pipeline, available
+      // only to the headless browser regression test. No fake terrain or
+      // direct mutation of the fluid model is possible through this hook.
+      window.__WyrmforgeFluidTest={
+        status(){
+          const channel=generatedSite.layout.riverChannels[0];
+          const authored=new Set(channel.floor.map(c=>c.x+','+c.z));
+          const wet=playFluid.snapshotSurface().cells;
+          return {
+            kind:playFluid.kind,steps:playFluid.steps,
+            wetColumns:wet.length,
+            wetBeyondChannel:wet.filter(c=>!authored.has(c.x+','+c.z)).length,
+            worldRevision:active.world.revision,
+            liveFluidTexture:Boolean(playLava?.count),
+            presentedCells:playLava?.count??0,
+            raisedSurfaceFaces:playFluidVisual?.stats.topFaces??0,
+            verticalFluidFaces:playFluidVisual?.stats.sideFaces??0
+          };
+        },
+        breach(){
+          const channel=generatedSite.layout.riverChannels[0];
+          const authored=new Set(channel.floor.map(c=>c.x+','+c.z));
+          const candidates=[];
+          const bounds=generatedSite.layout.footprint;
+          for(const cell of channel.floor){
+            if(playFluid.sample(cell.x,cell.z)?.depth<=0)continue;
+            for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+              const x=cell.x+dx,z=cell.z+dz;
+              if(x<bounds.minX+3||x>bounds.maxX-3||
+                  z<bounds.minZ+3||z>bounds.maxZ-3||
+                  authored.has(x+','+z)||playFluid.sample(x,z)?.depth!==0)continue;
+              const floorY=playFluid.sample(x,z)?.floorY;
+              const height=floorY-cell.y;
+              if(height<1||height>4)continue;
+              candidates.push({x,z,y:floorY-1,radius:2.3,depth:4,
+                score:height*10+Math.hypot(x-cell.x,z-cell.z)});
+            }
+          }
+          candidates.sort((a,b)=>a.score-b.score||
+            a.z-b.z||a.x-b.x);
+          const target=candidates[0];
+          if(!target)throw new Error('WorldGen has no reachable breakable riverbank');
+          const result=impactSpan(target);
+          return result?{
+            removedVoxels:result.removedVoxels,
+            changedBounds:result.changedBounds,target
+          }:null;
+        }
+      };
+    }
   }
   if(playMode)resetPlayActor();
   pendingMesh=null;
@@ -1583,6 +1641,8 @@ function frame(now) {
             pendingTerrainPresentation=null;
           }
           playView=view;
+          if(playFluidVisual)playFluidVisual.render(view,{time:now/1000,
+            reducedMotion:reducedLavaMotion?.matches});
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
@@ -1899,6 +1959,7 @@ if(playMode) {
         step:playFluid.steps,wetColumns:playFluid.wetCount,
         totalDepthUnits:playFluid.totalDepth,residentColumns:playFluid.columnCount,
         renderedCells:playLava?.count??0,
+        raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
         presentation:'existing water/lava art on exposed terrain; raised-volume geometry pending'
       }:null,
@@ -1995,6 +2056,7 @@ window.addEventListener('pagehide',()=>{
   restoring?.unload();
   restoredSession?.unload();
   detachPlayFluid?.();
+  playFluidVisual?.dispose();
   loader?.unload();
   renderer?.dispose();
 });

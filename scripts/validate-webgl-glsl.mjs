@@ -8,17 +8,20 @@ import {
   WEBGL_V2_VERTEX_SHADER_SOURCE,
   WEBGL_V2_FRAGMENT_SHADER_SOURCE
 } from '../src/webgl-voxel-view.mjs';
+import {FLUID_VERTEX_GLSL,FLUID_FRAGMENT_GLSL} from '../src/fluid/hunt-fluid-surface-renderer.mjs';
 
 const temp=mkdtempSync(join(tmpdir(),'wyrmforge-glsl-'));
 try {
-  for(const [stage,source] of [
-    ['vert',WEBGL_V2_VERTEX_SHADER_SOURCE],
-    ['frag',WEBGL_V2_FRAGMENT_SHADER_SOURCE]
+  for(const [owner,stage,source] of [
+    ['voxel','vert',WEBGL_V2_VERTEX_SHADER_SOURCE],
+    ['voxel','frag',WEBGL_V2_FRAGMENT_SHADER_SOURCE],
+    ['fluid','vert',FLUID_VERTEX_GLSL],
+    ['fluid','frag',FLUID_FRAGMENT_GLSL]
   ]) {
     if(!source.startsWith('#version 300 es\n')) {
       throw new Error('Expected assembled WebGL2 GLSL ES 3.00 '+stage+' shader');
     }
-    const shaderPath=join(temp,'voxel.'+stage);
+    const shaderPath=join(temp,owner+'.'+stage);
     writeFileSync(shaderPath,source);
     try {
       execFileSync('glslangValidator',['-S',stage,shaderPath],{
@@ -31,7 +34,7 @@ try {
         cause:error
       });
     }
-    process.stdout.write('GLSL ES 3.00 '+stage+' shader compiled\n');
+    process.stdout.write('GLSL ES 3.00 '+owner+' '+stage+' shader compiled\n');
   }
 } finally {
   rmSync(temp,{recursive:true,force:true});
