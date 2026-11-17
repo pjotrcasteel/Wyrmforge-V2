@@ -129,6 +129,15 @@ vec3 labLinearSurface(int material, vec2 uv, bool topFace) {
 
 ${fireLavaMotifGlsl()}
 
+vec3 fireLavaColor(int band) {
+  vec3 color=vec3(.30,.071,.11);
+  if(band==1)color=vec3(.58,.127,.14);
+  else if(band==2)color=vec3(.80,.235,.12);
+  else if(band==3)color=vec3(.98,.441,.16);
+  else if(band==4)color=vec3(1.0,.74,.31);
+  return srgbToLinearColor(color);
+}
+
 vec3 labLava(vec2 uv) {
   // Quantize first. The palette, river banks, and movement all share this grid.
   const float density=${FIRE_LAVA_TEXELS_PER_VOXEL}.0;
@@ -153,12 +162,7 @@ vec3 labLava(vec2 uv) {
   else if(margin<.48)band=min(band,1);
   if(labMaterial(ivec3(floor(vWorld.x),2,floor(vWorld.z)))==3)band=min(band,1);
 
-  vec3 color=vec3(.30,.071,.11);
-  if(band==1)color=vec3(.58,.127,.14);
-  else if(band==2)color=vec3(.80,.235,.12);
-  else if(band==3)color=vec3(.98,.441,.16);
-  else if(band==4)color=vec3(1.0,.74,.31);
-  return srgbToLinearColor(color);
+  return fireLavaColor(band);
 }
 
 float labGrassCoverage(float distanceToGrass,vec2 boundaryUv) {

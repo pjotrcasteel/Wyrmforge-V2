@@ -52,6 +52,7 @@ import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
 
+import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
@@ -163,6 +164,8 @@ let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
 let playActor=null;
+let playLava=null;
+const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
 let playRecoveryCheckpoint=null;
 let playConnected=null;
 let playStream=null;
@@ -1090,6 +1093,7 @@ function resetSite() {
     playConnected=null;
     playStream=null;
     playActor=null;
+    playLava=null;
     playRecoveryCheckpoint=null;
     playView=null;
     playDesiredView=null;
@@ -1163,6 +1167,7 @@ function resetSite() {
         chunkEdge:Number(pitch.value),corruption:routePreview?.stop.profile.corruption.progress??Number(siteInfluence.value)/100
       });
       generatedSite=generateWorldSite(recipe);
+      if(routePreview)playLava=huntLavaSurface(generatedSite.layout);
       // Fail closed if a future refactor accidentally feeds Play Hunt the
       // old simplified region instead of the same site as the WorldGen lab.
       if(playMode && (
@@ -1523,7 +1528,8 @@ function frame(now) {
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
-          huntCorruption:routePreview?.stop.profile.corruption})) {
+          huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
+          labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
               !pendingEdit&&!errorMessage&&!renderer.pendingUploads){
@@ -1780,7 +1786,7 @@ if(playMode) {
       site:{
         ...(routePreview?{materialRoute:{
           id:routePreview.route,node:routePreview.index+1,nodes:routePreview.stops.length,
-          biome:routePreview.stop.kind,profile:routePreview.stop.profile
+          biome:routePreview.stop.kind,profile:routePreview.stop.profile,lavaChannelCells:playLava?.count??0
         }}:{}),
         seed:generatedSite?.recipe.seed??null,
         siteId:generatedSite?.recipe.siteId??null,

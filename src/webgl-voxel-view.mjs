@@ -1,3 +1,4 @@
+import {HUNT_LAVA_SURFACE_GLSL} from './hunt-lava-surface.mjs';
 import {FIRE_MATERIAL_LAB_UNIFORMS_GLSL,FIRE_MATERIAL_LAB_GLSL} from './fire-material-lab-shader.mjs';
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
 import { getCameraPreset } from './camera-presets.mjs';
@@ -63,6 +64,9 @@ uniform bool uHuntGrassArt;
 uniform float uHuntFadingStartZ;
 uniform vec3 uHuntCorruption; // route progress, ash, volcanic
 uniform bool uHuntGrassEdges;
+uniform bool uHuntLavaEnabled;
+uniform highp sampler2D uHuntLava;
+uniform vec2 uHuntLavaOrigin;
 uniform float uHuntElevationReference;
 uniform float uGrassTexelsPerVoxel;
 ${FIRE_MATERIAL_LAB_UNIFORMS_GLSL}
@@ -101,6 +105,7 @@ vec3 grassAlbedo(vec3 world) {
 }
 
 ${FIRE_MATERIAL_LAB_GLSL}
+${HUNT_LAVA_SURFACE_GLSL}
 
 vec3 huntGrassArt(vec3 albedo,vec2 ground) {
   // Large, coherent moss beds with a shared pixel grid for the grass motifs.
@@ -291,6 +296,11 @@ vec3 huntGrassShoulder(vec3 albedo,int material) {
 }
 
 void main() {
+  vec3 lava;
+  if(uHuntLavaEnabled&&huntLavaSurface(lava)){
+    outColor=vec4(linearToSrgbColor(lava),1.0);
+    return;
+  }
   if(uLabEnabled&&abs(vMaterial-5.0)<.5){
     outColor=vec4(linearToSrgbColor(labLava(vWorld.xz)),1.0);
     return;
@@ -498,6 +508,8 @@ export class WebGLVoxelView {
   #gl;
   #grassImage = null;
   #labVolume = null;
+  #huntLavaTexture = null;
+  #huntLavaSource = null;
   #labOrigin = null;
   // Authored texture slots are native 64px art, not downscaled preview assets.
   // Seven mip levels (64 -> 1) prevent 64 texels of artwork from aliasing
@@ -561,6 +573,8 @@ export class WebGLVoxelView {
       this.#program = null;
       this.#grassTexture = null;
       this.#labVolume = null;
+      this.#huntLavaTexture = null;
+      this.#huntLavaSource = null;
       this.#terrainCache?.contextLost();
       this.#pendingTerrainTiles.clear();
       this.#gpuMeshes.clear();
@@ -870,6 +884,9 @@ export class WebGLVoxelView {
       labGrassStyle: gl.getUniformLocation(this.#program,'uLabGrassStyle'),
       labForestStage: gl.getUniformLocation(this.#program,'uLabForestStage'),
       labTime: gl.getUniformLocation(this.#program,'uLabTime'),
+      huntLava: gl.getUniformLocation(this.#program,'uHuntLava'),
+      huntLavaEnabled: gl.getUniformLocation(this.#program,'uHuntLavaEnabled'),
+      huntLavaOrigin: gl.getUniformLocation(this.#program,'uHuntLavaOrigin'),
       labOrigin: gl.getUniformLocation(this.#program,'uLabOrigin'),
       terrainScale: gl.getUniformLocation(this.#program, 'uTerrainTilesPerVoxel')
     };
@@ -1060,8 +1077,26 @@ export class WebGLVoxelView {
     this.#labOrigin=origin;
   }
 
+  #bindHuntLava(surface){
+    const gl=this.#gl;
+    gl.uniform1i(this.#uniforms.huntLava,5);
+    gl.uniform1i(this.#uniforms.huntLavaEnabled,surface?1:0);
+    if(!surface)return;
+    gl.activeTexture(gl.TEXTURE0+5);
+    this.#huntLavaTexture??=gl.createTexture();
+    if(!this.#huntLavaTexture)throw new Error('Could not allocate Hunt lava surface');
+    gl.bindTexture(gl.TEXTURE_2D,this.#huntLavaTexture);
+    if(this.#huntLavaSource!==surface){
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,...surface.size,0,gl.RGBA,gl.UNSIGNED_BYTE,surface.data);
+      this.#huntLavaSource=surface;
+    }
+    gl.uniform2f(this.#uniforms.huntLavaOrigin,...surface.origin);
+  }
+
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0 }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1126,8 +1161,9 @@ export class WebGLVoxelView {
       gl.uniform1i(this.#uniforms.labBlend,labBlend?1:0);
       gl.uniform1i(this.#uniforms.labGrassStyle,labGrassStyle);
       gl.uniform1i(this.#uniforms.labForestStage,labForestStage);
-      gl.uniform1f(this.#uniforms.labTime,labTime);
     }
+    gl.uniform1f(this.#uniforms.labTime,labTime);
+    this.#bindHuntLava(huntLava);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
@@ -1161,6 +1197,9 @@ export class WebGLVoxelView {
     this.#grassTexture = null;
     if(this.#labVolume&&!this.#lost)this.#gl.deleteTexture(this.#labVolume);
     this.#labVolume=null;
+    if(this.#huntLavaTexture&&!this.#lost)this.#gl.deleteTexture(this.#huntLavaTexture);
+    this.#huntLavaTexture=null;
+    this.#huntLavaSource=null;
     this.#terrainCache?.dispose();
     this.#terrainCache = null;
     this.#terrainTileImages.clear();
