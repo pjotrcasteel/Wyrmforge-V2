@@ -55,17 +55,32 @@ function consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades) {
     if(row.length>=3)heights[at(x,z)]=row[row.length>>1];
   }
 
-  // Join a one-voxel intermediate step into the lower terrace only where
-  // both sides of the existing slope already supply two metres of relief.
+  // Follow the existing one-metre scarps. Adjacent columns can bend the
+  // cliff by one row. Lower the foot of a connected face instead of adding
+  // a platform above the original hillside.
   const smoothed=heights.slice();
+  const faceAt=(x,z)=>Math.abs(x)>=4&&surfaces[at(x,z)]!==2&&canShape(x,z+1)&&
+    smoothed[at(x,z)]>smoothed[at(x,z+1)];
+  const supports=(x,z)=>[-1,0,1].some(dz=>faceAt(x,z+dz));
+  const deepen=[];
   for(let z=4;z<=12;z++)for(let x=-12;x<=12;x++){
-    if(Math.abs(x)<4||!canShape(x,z))continue;
-    const floor=smoothed[at(x,z+1)];
-    const crest=smoothed[at(x,z-1)];
-    if(crest-floor!==2||smoothed[at(x,z)]!==crest-1)continue;
-    const continues=[-1,1].some(dx=>smoothed[at(x+dx,z-1)]===crest&&
-      smoothed[at(x+dx,z+1)]===floor);
-    if(continues)heights[at(x,z)]=floor;
+    if(!faceAt(x,z))continue;
+    const linked=supports(x-1,z)||supports(x+1,z);
+    if(!linked)continue;
+    const crest=smoothed[at(x,z)];
+    const toe=smoothed[at(x,z+1)];
+    if(crest-toe===1&&toe>0)deepen.push({x,z,target:toe-1});
+  }
+  // Use the snapshot's connected lip and extend the toe into the slope.
+  // Two cells at wide stretches and one at the ends avoid isolated pits.
+  for(const {x,z,target} of deepen){
+    const width=supports(x-1,z)&&supports(x+1,z)?2:1;
+    for(let step=1;step<=width;step++){
+      if(!canShape(x,z+step)||faceAt(x,z+step))break;
+      const i=at(x,z+step);
+      if(smoothed[i]>target+1)break;
+      heights[i]=Math.min(heights[i],target);
+    }
   }
 
   const stoneUnderTurf=new Set();
