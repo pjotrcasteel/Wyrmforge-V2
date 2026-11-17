@@ -29,14 +29,15 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     throw new RangeError('Invalid fluid resident bounds');
   }
 
-  const positions=[],normals=[],indices=[];
+  const positions=[],normals=[],flows=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0;
   const seen=new Set();
-  const pushFace=(quad,normal)=>{
+  const pushFace=(quad,normal,flow)=>{
     const vertex=positions.length/3;
     for(const point of quad){
       positions.push(...point);
       normals.push(...normal);
+      flows.push(flow[0],flow[1]);
     }
     indices.push(vertex,vertex+1,vertex+2,vertex,vertex+2,vertex+3);
     faceCount++;
@@ -52,10 +53,14 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     const key=c.x+','+c.z;
     if(seen.has(key))throw new Error('Duplicate wet column in fluid mesh');
     seen.add(key);
+    if(![c.flowX,c.flowZ].every(v=>Number.isInteger(v)&&Math.abs(v)<=1)){
+      throw new RangeError('Fluid flow direction must be a signed cardinal vector');
+    }
     const x=c.x,z=c.z,high=c.surfaceY+CELL_EPSILON;
+    const flow=[c.flowX,c.flowZ];
     pushFace([
       [x,high,z],[x,high,z+1],[x+1,high,z+1],[x+1,high,z]
-    ],[0,1,0]);
+    ],[0,1,0],flow);
     topFaces++;
     for(const side of SIDES){
       const nx=x+side.dx,nz=z+side.dz;
@@ -67,7 +72,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       const lower=Math.max(c.floorY,
         neighbor.depth>0?neighbor.surfaceY:neighbor.floorY);
       if(lower>=c.surfaceY-0.01)continue;
-      pushFace(side.quad(x,z,lower,high),side.normal);
+      pushFace(side.quad(x,z,lower,high),side.normal,flow);
       sideFaces++;
     }
   }
@@ -77,6 +82,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),
+    flows:new Int8Array(flows),
     indices:new Uint32Array(indices)
   });
 }
