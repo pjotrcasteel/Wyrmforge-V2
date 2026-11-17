@@ -1,3 +1,4 @@
+import {FIRE_TERRAIN_MATERIAL_GLSL} from './fire-terrain-material.mjs';
 import {HUNT_LAVA_SURFACE_GLSL} from './hunt-lava-surface.mjs';
 import {FIRE_MATERIAL_LAB_UNIFORMS_GLSL,FIRE_MATERIAL_LAB_GLSL} from './fire-material-lab-shader.mjs';
 // Ground-up V2 WebGL2 baseline. Two fixed V2-native 2.5D camera presets.
@@ -106,6 +107,7 @@ vec3 grassAlbedo(vec3 world) {
 
 ${FIRE_MATERIAL_LAB_GLSL}
 ${HUNT_LAVA_SURFACE_GLSL}
+${FIRE_TERRAIN_MATERIAL_GLSL}
 
 vec3 huntGrassArt(vec3 albedo,vec2 ground) {
   // Large, coherent moss beds with a shared pixel grid for the grass motifs.
@@ -451,6 +453,7 @@ void main() {
   if(uHuntLavaEnabled)linearAlbedo=huntRiverBank(linearAlbedo);
   if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
   if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
+  if(uHuntGrassArt)linearAlbedo=fireTerrainSurface(linearAlbedo,int(vMaterial));
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
     if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;
