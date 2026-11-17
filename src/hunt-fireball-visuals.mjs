@@ -45,9 +45,6 @@ export function paintHuntFireballImpact(ctx,view,impact,now){
     const px=Math.round(center.x),py=Math.round(center.y);
     const radius=Math.round(impact.radius*(.7+.3*age/impact.flashMs))*unit;
     ctx.globalAlpha=1-age/impact.flashMs;
-    ctx.fillStyle='#ffad48';
-    ctx.fillRect(px-radius,py-unit,2*radius+unit,3*unit);
-    ctx.fillRect(px-unit,py-radius,3*unit,2*radius+unit);
     const core=Math.max(2*unit,Math.round(radius*.38));
     ctx.fillStyle='#fff0a2';
     ctx.fillRect(px-core,py-core,2*core+unit,2*core+unit);
