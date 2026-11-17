@@ -42,3 +42,37 @@ export function corruptionFromDistance(distanceFromStart, distanceToWyrm) {
   }
   return clamp(distanceFromStart / distanceToWyrm);
 }
+
+/**
+ * The World Map supplies an ordered route with cumulative travel distances,
+ * from the clean arena to the Wyrm lair. Biome identity and corruption are
+ * separate inputs to material blending.
+ */
+export function createHuntRouteMaterialProfile(nodes) {
+  if (!Array.isArray(nodes) || nodes.length < 2 || nodes[0]?.distance !== 0) {
+    throw new RangeError('A Hunt material route needs an arena at distance zero and a lair');
+  }
+  const route = Array.from(nodes, (node, index) => {
+    if (!node || typeof node.biome !== 'string' || !node.biome.trim() ||
+        !Number.isFinite(node.distance) || (index > 0 && node.distance <= nodes[index - 1].distance)) {
+      throw new RangeError('Route nodes need biomes and increasing cumulative distances');
+    }
+    return { biome: node.biome, distance: node.distance };
+  });
+  const totalDistance = route.at(-1).distance;
+  return distance => {
+    const progress = corruptionFromDistance(distance, totalDistance);
+    const position = Math.min(distance, totalDistance);
+    const next = Math.max(1, route.findIndex(node => node.distance >= position));
+    const from = route[next - 1];
+    const to = route[next];
+    const biomeBlend = from.biome === to.biome ? 0 :
+      clamp((position - from.distance) / (to.distance - from.distance));
+    return Object.freeze({
+      corruption: terrainCorruptionProfile(progress),
+      fromBiome: from.biome,
+      toBiome: to.biome,
+      biomeBlend
+    });
+  };
+}
