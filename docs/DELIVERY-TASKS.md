@@ -401,14 +401,15 @@ H08-05 physical-object completion remain open.
 
 ### WAT-01 — River flow after terrain destruction
 - **GitHub Issue:** [#323](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/323)
-- **Status:** `PLANNED`
+- **Status:** `IN PROGRESS — ISOLATED FOUNDATION` (draft PR [#334](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/334)); Play Hunt visual integration pending.
 - **Owner:** Water V2 / fluid behavior.
-- **Scheduling:** Owner requested Water V2 after completion of the texture engine (2026-11-17). The water surface is accepted for now under R10-01.
+- **Scheduling:** Owner initiated a small parallel Water V2 implementation (2026-11-17), while R10-01 Materials/Texture remains the active visual workstream. The approved water appearance is unchanged; the renderer handoff comes after the texture engine is ready.
 - **Player experience:** Fireballs open connected craters that receive water. Broken banks open new flow routes and affected pools drain. Lava follows the same connectivity at a slower material-specific rate.
 - **Technical boundary:** Voxel supplies solid occupancy and terrain-edit events. The fluid engine owns level, amount and flow. Materials and rendering consume its resulting surface. WorldGen supplies initial channels and sources.
 - **Gate:** connected craters fill progressively, sealed craters remain dry, bank breaches reroute flow, bounded work and deterministic replay survive reload and streamed revisits.
 - **Dependencies:** F07-02 terrain edits/replay, R10-01 surface handoff.
-- **Current surface preview:** the R10-01 map follows remaining ground within its authored footprint. Crater filling beyond that footprint is pending WAT-01.
+- **Current surface preview:** the R10-01 map follows remaining ground within its authored footprint. Crater filling beyond that footprint is pending Play Hunt integration.
+- **Water foundation:** PR #334 adds the deterministic 10 cm-column solver, real WorldGen river/lava seeding, read-only Voxel floor queries, subscription to committed terrain edits, immutable fluid surface contract and replayable fluid state. An isolated breach lab and automated regression tests verify the initial contract; mobile stress, live Hunt rendering and streamed region ownership remain to do. No Materials/Texture shader files are touched.
 
 ### R10-02 — Full Hunt stress, crash and thermal acceptance
 - **GitHub Issue:** [#178](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/178)
