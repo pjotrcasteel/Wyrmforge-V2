@@ -125,6 +125,10 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
   let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0,landingSplashFaces=0;
   const seen=new Set();
+  // Translucent cap pixels are composited without depth writes. Queue
+  // downstream foam until AFTER every pool cap so it cannot be painted over
+  // by a later wet column in the deterministic resident scan order.
+  const landingQuads=[];
   const pushFace=(quad,normal,flow,{mode=0,landingY=0}={})=>{
     const vertex=positions.length/3;
     for(const point of quad){
@@ -266,16 +270,21 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
             side.dz*v/FLUID_SHORE_MICRO_STEPS
         ];
         for(const [across,downstream] of FLUID_LANDING_SPLASH_TILES){
-          pushFace([
-            impact(across,downstream),
-            impact(across+1,downstream),
-            impact(across+1,downstream+1),
-            impact(across,downstream+1)
-          ],[0,1,0],flow,{mode:5,landingY:neighbor.surfaceY});
+          landingQuads.push({
+            quad:[
+              impact(across,downstream),
+              impact(across+1,downstream),
+              impact(across+1,downstream+1),
+              impact(across,downstream+1)
+            ],flow,landingY:neighbor.surfaceY
+          });
           landingSplashFaces++;
         }
       }
     }
+  }
+  for(const {quad,flow,landingY} of landingQuads){
+    pushFace(quad,[0,1,0],flow,{mode:5,landingY});
   }
   return Object.freeze({
     schema:'wyrmforge.fluid-surface-mesh.v1',
