@@ -52,7 +52,7 @@ test('all six V2-only consumers observe the same ordered accepted edits', () => 
     const {world,ledger,port}=setup('arch',edge,5);
     const probes=attachTerrainConsumerProbes(port);
     assert.deepEqual(TERRAIN_CONSUMERS,
-      ['gameplay','physics','lighting','vfx','audio','navigation']);
+      ['gameplay','physics','lighting','vfx','audio','navigation','fluids']);
     const messages=[];
     port.subscribe('gameplay',message=>messages.push(message));
 
