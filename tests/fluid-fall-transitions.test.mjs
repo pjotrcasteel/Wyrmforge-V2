@@ -38,9 +38,12 @@ test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',(
   assert.ok(surface.landingHeights instanceof Float32Array);
   assert.equal(surface.faceModes.length,surface.vertexCount);
   assert.equal(surface.landingHeights.length,surface.vertexCount);
-  assert.deepEqual([...new Set(surface.faceModes)],[3,2,4,0],
+  assert.deepEqual([...new Set(surface.faceModes)],[3,2,4,0,5],
     'upper lip, real falling cliff, projected falling ribbons and still lower pool');
   assert.equal(surface.fallRibbonFaces,FLUID_FALL_RIBBON_SECTIONS*4);
+  assert.equal(surface.landingSplashFaces,16);
+  assert.ok([...surface.faceModes.slice(-16*4)].every(mode=>mode===5),
+    'landing splash must draw after all transparent pool caps');
   const curtain=[...surface.faceModes].findIndex(v=>v===2);
   assert.ok(curtain>=0);
   for(let i=curtain;i<curtain+4;i++){
@@ -54,6 +57,7 @@ test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',(
   assert.ok(Math.abs(Math.max(...curtainY)-3.006)<.0001);
   assert.ok([...surface.faceModes].some(mode=>mode===3));
   assert.ok([...surface.faceModes].some(mode=>mode===4));
+  assert.ok([...surface.faceModes].some(mode=>mode===5));
   assert.equal(engine.wetCount,2,'mesh must not modify fluid volume');
 });
 
@@ -65,7 +69,8 @@ test('a dry lower crater is not invented as an active waterfall',()=>{
   assert.equal(surface.sideFaces,1,
     'physical raised-water wall is retained until the receiving crater is wet');
   assert.equal(surface.fallRibbonFaces,0);
-  assert.ok([...surface.faceModes].every(mode=>mode!==2&&mode!==3&&mode!==4));
+  assert.equal(surface.landingSplashFaces,0);
+  assert.ok([...surface.faceModes].every(mode=>mode!==2&&mode!==3&&mode!==4&&mode!==5));
 });
 
 test('flat pool and tiny differences do not create fake falling sheets',()=>{
@@ -74,6 +79,7 @@ test('flat pool and tiny differences do not create fake falling sheets',()=>{
   assert.equal(surface.waterfallFaces,0);
   assert.equal(surface.fallLipFaces,0);
   assert.equal(surface.fallRibbonFaces,0);
+  assert.equal(surface.landingSplashFaces,0);
   assert.equal(surface.sideFaces,0);
   assert.equal(surface.topFaces,2);
 });

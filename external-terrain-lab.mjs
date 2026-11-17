@@ -171,6 +171,7 @@ let playActor=null;
 let playLava=null;
 let playFluid=null,detachPlayFluid=null,playFluidSurfaceStep=-1;
 let playFluidWitnessHold=false,playFluidRibbonsEnabled=true;
+let playFluidLandingEnabled=true;
 let playRiverWorld=null,playRiverRevision=-1;
 const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
 let playRecoveryCheckpoint=null;
@@ -1104,6 +1105,7 @@ function resetSite() {
     playFluid=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
+    playFluidLandingEnabled=true;
     playFluidVisual?.clear();
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
@@ -1455,6 +1457,18 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
       window.__WyrmforgeFluidTest={
         hold(on){playFluidWitnessHold=Boolean(on);},
         ribbons(on){playFluidRibbonsEnabled=Boolean(on);},
+        landing(on){playFluidLandingEnabled=Boolean(on);},
+        landingRects(){
+          const view=playView;
+          if(!view||!playFluidVisual)return [];
+          const rect=canvas.getBoundingClientRect();
+          return playFluidVisual.projectedLandingBounds(view).map(bounds=>({
+            left:rect.left+bounds.left*rect.width/view.width,
+            right:rect.left+bounds.right*rect.width/view.width,
+            top:rect.top+bounds.top*rect.height/view.height,
+            bottom:rect.top+bounds.bottom*rect.height/view.height
+          }));
+        },
         ribbonRects(){
           const view=playView;
           if(!view||!playFluidVisual)return [];
@@ -1483,6 +1497,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
             waterfallFaces:playFluidVisual?.stats.waterfallFaces??0,
             fallRibbonFaces:playFluidVisual?.stats.fallRibbonFaces??0,
+            landingSplashFaces:playFluidVisual?.stats.landingSplashFaces??0,
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0
@@ -1671,7 +1686,8 @@ function frame(now) {
           playView=view;
           if(playFluidVisual)playFluidVisual.render(view,{time:now/1000,
             reducedMotion:reducedLavaMotion?.matches,
-            showRibbons:playFluidRibbonsEnabled});
+            showRibbons:playFluidRibbonsEnabled,
+            showLanding:playFluidLandingEnabled});
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
