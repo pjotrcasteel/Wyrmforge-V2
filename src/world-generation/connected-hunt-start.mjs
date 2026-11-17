@@ -153,7 +153,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   return {runs,surfaceTiles,seam:Object.freeze({
     direction:'north',minZ:start,maxZ:a.minZ-1,routeWidthMetres:7,
-    profile:'bedrock-banks-road-v6',
+    profile:'stone-banks-road-v6',
     maximumRouteGradeTenths,depthMetres:CONNECTOR_DEPTH
   }),maxY};
 }

@@ -114,7 +114,7 @@ test('both authored region seams retain a continuous dirt road at every row',()=
     const materialAt=(x,z)=>topMaterialAt(
       z<start.footprint.minZ?next.definition:start.definition,x,z);
     for(const seam of [start.seam,next.seam]) {
-      assert.equal(seam.profile,'bedrock-banks-road-v6');
+      assert.equal(seam.profile,'stone-banks-road-v6');
       assert.ok(seam.maximumRouteGradeTenths<=5);
       for(let z=seam.minZ;z<=seam.maxZ;z++) {
         assert.equal(materialAt(0,z),2,'Missing dirt road at seed '+seed+', z='+z);
@@ -194,7 +194,7 @@ test('both joins have broad physical landforms without dense fractional shoulder
   }
 });
 
-test('the streamed opening connector has continuous two-voxel bedrock banks beside its road',()=>{
+test('the streamed opening connector has continuous two-voxel stone banks beside its road',()=>{
   for(const seed of [7,19,101,267]){
     const graph=generateAuthoredHuntTerrainGraph(entry(seed));
     const link=graph.layout.links.find(item=>item.fromId==='region-entry'&&
@@ -214,5 +214,15 @@ test('the streamed opening connector has continuous two-voxel bedrock banks besi
       }
     }
     assert.ok(maximumRouteGradeTenths<=5);
+    const loader=new V2ExternalTerrainLoader(definition);
+    try {
+      while(!loader.progress.done)loader.loadStep(4096);
+      const z=link.bounds.minZ+3;
+      const rock=[5,6].map(x=>({x,top:column(x,z)[0]})).find(cell=>cell.top.material===3);
+      loader.terrain.port.apply({id:'cliff-rock-damage',type:'damage-sphere',
+        x:rock.x,y:rock.top.y,z,radius:.5,power:3});
+      assert.equal(loader.terrain.world.get(rock.x,rock.top.y,z),0,
+        'exposed cliff rock can break through the regular terrain edit path');
+    }finally{loader.unload();}
   }
 });
