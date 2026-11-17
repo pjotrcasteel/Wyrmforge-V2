@@ -72,3 +72,22 @@ test('a damaged channel follows the exposed stone and retains signed foundation 
   assert.equal(world.get(1,-3,0),4,'surfacing preserves the physical foundation');
   assert.equal(deep.data[7],128);
 });
+
+test('bank distance preserves shoreline flags and signed floor data in one texture',()=>{
+  const floor=[];
+  for(let z=-2;z<=2;z++)for(let x=-2;x<=2;x++)floor.push({x,z,y:-2,flowX:0,flowZ:1});
+  const layout={
+    footprint:{minX:-2,maxX:2,minZ:-2,maxZ:2,minY:-3},
+    riverChannels:[{kind:'water',floor,from:{x:0,z:-2},to:{x:0,z:2}}]
+  };
+  const surface=huntLavaSurface(layout);
+  const cell=(x,z)=>[...surface.data.slice(((z+2)*5+x+2)*4,((z+2)*5+x+2)*4+4)];
+  assert.equal(surface.count,25);
+  assert.equal(cell(0,0)[2]>>4,2);
+  assert.equal(cell(0,-1)[2]>>4,1);
+  assert.equal(cell(-2,0)[2]&15,1);
+  assert.equal(cell(-2,0)[2]>>4,0);
+  assert.equal(cell(0,0)[0]-HUNT_CHANNEL_HEIGHT_OFFSET,-2);
+  assert.equal(cell(0,0)[3],128);
+  assert.equal(surface.data.byteLength,5*5*4);
+});
