@@ -157,22 +157,44 @@ vec3 huntCutTerrain(vec3 albedo,int material) {
     column[axis]+=across[axis]<.5?-1:1;
     float cut=float(labMaterial(ivec3(column.x,2,column.y)))/255.0;
     if(cut==0.0)return albedo;
-    float grain=soilHash(floor(vWorld.xz*vec2(4.0,6.0))+89.0);
-    float rim=1.0-smoothstep(.04,.14+.12*grain,edge);
-    return mix(albedo,srgbToLinearColor(vec3(.25,.18,.12)),rim*.49);
+    vec2 rimPixel=floor(vWorld.xz*12.0)/12.0;
+    float grain=labNoise(rimPixel*4.2+89.0);
+    float rim=1.0-smoothstep(.04,.13+.13*grain,edge);
+    return mix(albedo,srgbToLinearColor(vec3(.22,.16,.10)),rim*(.32+.31*grain));
   }
   int cut=labMaterial(ivec3(exposed.x,2,exposed.y))/85;
   if(cut==0)return albedo;
   int floorY=labMaterial(ivec3(exposed.x,0,exposed.y))/4-4;
   if(top?parent.y!=floorY:parent.y<=floorY||parent.y>floorY+cut)return albedo;
   if(material==1)return albedo*.62;
+
+  // The same world-space bedding runs across the crater floor and walls.
+  // Quantize the artwork before evaluating the strata, leaving voxel edges
+  // out of the palette and fracture coordinates.
+  vec3 pixel=(floor(vWorld*12.0+.002)+.5)/12.0;
   float depth=float(cut)/3.0;
-  vec2 pixel=floor((top?vWorld.xz:vec2(abs(vNormal.x)>.5?vWorld.z:vWorld.x,vWorld.y))*12.0);
-  float grain=soilHash(floor(pixel/vec2(3.0,2.0))+89.0);
-  vec3 shade=material==2?vec3(.28,.19,.13):vec3(.37,.37,.40);
-  vec3 light=material==2?vec3(.51,.35,.21):vec3(.59,.55,.53);
-  vec3 cutColor=srgbToLinearColor(mix(shade,light,step(.57,grain)));
-  return mix(albedo,cutColor,.56+depth*.19);
+  float weathering=labNoise(pixel.xz*.86+pixel.y*.31+19.0);
+  if(material==2){
+    vec3 umber=srgbToLinearColor(vec3(.31,.21,.14));
+    vec3 clay=srgbToLinearColor(vec3(.49,.34,.23));
+    float bands=floor(smoothstep(.18,.83,weathering)*4.0)/4.0;
+    return mix(albedo,mix(umber,clay,bands),.49+depth*.17);
+  }
+
+  vec2 bedding=vec2(pixel.x+pixel.z*.44,pixel.z-pixel.x*.37);
+  float buckling=labNoise(bedding*.78+38.0)-.5;
+  float bed=bedding.y*1.08+pixel.y*.72+buckling*.47;
+  float row=floor(bed);
+  float seam=min(fract(bed),1.0-fract(bed));
+  float block=bedding.x*.67+soilHash(vec2(row,17.0))*.8+buckling*.29;
+  float fault=fract(block);
+  float joint=1.0-smoothstep(.018,.075,min(seam,fault));
+  float face=soilHash(vec2(floor(block),row));
+  vec3 slate=srgbToLinearColor(mix(vec3(.35,.36,.39),vec3(.50,.50,.51),face));
+  slate*=1.0-.35*joint;
+  float edgeGlow=step(.08,seam)*(1.0-step(.17,seam));
+  slate*=1.0+.13*edgeGlow;
+  return mix(albedo,slate,.66+depth*.13);
 }
 
 vec3 huntGrassShoulder(vec3 albedo,int material) {
