@@ -85,7 +85,7 @@ function consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades) {
 
   const stoneUnderTurf=new Set();
   for(let z=3;z<=13;z++)for(let x=-13;x<=13;x++){
-    if(Math.abs(x)<4||!canShape(x,z))continue;
+    if(Math.abs(x)<4)continue;
     const i=at(x,z);
     const exposed=[[0,1],[0,-1],[1,0],[-1,0]].some(([dx,dz])=>
       heights[i]>heights[at(x+dx,z+dz)]);
@@ -251,16 +251,21 @@ function prepareGeometry(plan,seed) {
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
 // mutation. Full 3D strata (not only a heightmap) cross signed chunk origins.
-function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf) {
+function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf,turfLips) {
   const runs=[];
   const size=radius*2;
   let maxY=FLOOR;
   for(const height of heights) maxY=Math.max(maxY,height);
+  for(const i of turfLips)maxY=Math.max(maxY,heights[i]+1);
   let totalCells=0;
   const materialAt=(x,y,z)=>{
     const idx=gridIndex(radius,x,z);
     const top=heights[idx];
+    // Preserve the full rock face. The extra parent voxel holds only a
+    // thin, physically subdivided turf lip, as declared by the surface pass.
+    if(turfLips.has(idx)&&y===top+1)return 1;
     if(y>top) return 0;
+    if(turfLips.has(idx))return 3;
     if(y===top) return surfaces[idx];
     // Rock outcrops are a contiguous stone mass, never a thin grey cap
     // above two unsupported brown dirt bands on vertical mountain walls.
@@ -280,7 +285,7 @@ function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf) {
       start=end;
     }
   }
-  return {runs,totalCells};
+  return {runs,totalCells,maxY};
 }
 
 function canonicalDigest(value) {
@@ -355,17 +360,18 @@ export class WorldGeneratorV2 {
       radius:recipe.radius,heights,surfaces,
       routes:plan.routes,combatSpaces:plan.combatSpaces,roadWork
     });
-    const {runs,totalCells}=generateRuns(
-      recipe.radius,heights,surfaces,plan.terrain.soilDepth,stoneUnderTurf
-    );
     const microSurface=composeMicroSurfaceTiles({
       radius:recipe.radius,seed,
       heights,surfaces,routes:plan.routes,
       gradedTopTenths:roadGrades.gradedTopTenths,
       flowLinks:plan.flowLinks,escapeRoutes:plan.escapeRoutes,
       approaches:plan.approaches,combatSpaces:plan.combatSpaces,
-      rockFaceThreshold:plan.terrain.rockFaceThreshold
+      rockFaceThreshold:plan.terrain.rockFaceThreshold,stoneUnderTurf
     });
+    const turfLips=new Set(microSurface.turfLips.map(tile=>gridIndex(recipe.radius,tile.x,tile.z)));
+    const {runs,totalCells,maxY}=generateRuns(
+      recipe.radius,heights,surfaces,plan.terrain.soilDepth,stoneUnderTurf,turfLips
+    );
     const definition=this.#terrainAdapter({
       siteId:recipe.siteId,seed:recipe.seed,
       chunkEdge:recipe.chunkEdge,runs,
@@ -402,7 +408,7 @@ export class WorldGeneratorV2 {
       footprint:Object.freeze({
         minX:-recipe.radius,maxX:recipe.radius-1,
         minZ:-recipe.radius,maxZ:recipe.radius-1,
-        minY:FLOOR,maxY:Math.max(...heights)
+        minY:FLOOR,maxY
       }),
       topology
     });

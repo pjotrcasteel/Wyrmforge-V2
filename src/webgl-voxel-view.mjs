@@ -62,7 +62,6 @@ uniform bool uHuntHeightContrast;
 uniform bool uHuntGrassArt;
 uniform bool uHuntGrassEdges;
 uniform float uHuntElevationReference;
-uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
 ${FIRE_MATERIAL_LAB_UNIFORMS_GLSL}
 out vec4 outColor;
@@ -204,7 +203,6 @@ void main() {
   }
   // The scenic woodland extends up to the playable shelf in the Hunt view.
   // Hide its exposed stone skirt on both sides, including the underside.
-  if (uWoodlandBackdrop && vNormal.y < 0.5 && abs(vMaterial - 3.0) < 0.5) discard;
   // The early mobile Play Hunt has no authored texture atlas, lighting,
   // normal or ORM assets. Do not shade every phone pixel with the entire
   // optional material pipeline when exploring this terrain prototype.
@@ -242,17 +240,7 @@ void main() {
     }
   }
   // Surface-specific albedo layers; negative layer means procedural fallback.
-  bool rockUnderTurf=false;
-  if(uHuntGrassEdges&&vMaterial==1.0&&abs(vNormal.y)<.5){
-    ivec3 cell=ivec3(floor(vWorld-vNormal*.002));
-    ivec3 adjacent=cell+ivec3(round(vNormal));
-    int here=labMaterial(ivec3(cell.x,0,cell.z));
-    int there=labMaterial(ivec3(adjacent.x,0,adjacent.z));
-    float fringe=.16+.16*soilHash(floor(vWorld.xz*8.0));
-    rockUnderTurf=here%4==1&&here/4-4==cell.y&&there!=0&&
-      cell.y-(there/4-4)>=1&&fract(vWorld.y)<1.0-fringe;
-  }
-  int surfaceIndex = rockUnderTurf ? 3 : abs(vMaterial - 1.0) < 0.5
+  int surfaceIndex = abs(vMaterial - 1.0) < 0.5
     ? (vNormal.y > 0.5 ? 0 : 1)
     : (abs(vMaterial - 2.0) < 0.5 ? 2 : 3);
   vec2 materialUv = abs(vNormal.y) > 0.5 ? vWorld.xz
@@ -768,7 +756,6 @@ export class WebGLVoxelView {
       huntGrassArt: gl.getUniformLocation(this.#program, 'uHuntGrassArt'),
       huntGrassEdges: gl.getUniformLocation(this.#program, 'uHuntGrassEdges'),
       huntElevationReference: gl.getUniformLocation(this.#program, 'uHuntElevationReference'),
-      woodlandBackdrop: gl.getUniformLocation(this.#program, 'uWoodlandBackdrop'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
       terrainNormal: gl.getUniformLocation(this.#program, 'uTerrainNormal'),
@@ -993,7 +980,6 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.huntHeightContrast,huntHeightContrast?1:0);
     gl.uniform1i(this.#uniforms.huntGrassArt,huntGrassArt?1:0);
     gl.uniform1f(this.#uniforms.huntElevationReference,huntElevationReference);
-    gl.uniform1i(this.#uniforms.woodlandBackdrop,this.#transparentBackground&&camera==='hunt'?1:0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];
     const layers = keys.map(key => {
