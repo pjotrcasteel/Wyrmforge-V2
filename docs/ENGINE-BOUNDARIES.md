@@ -4,6 +4,7 @@
 | --- | --- |
 | World Generation | Seeded geography, authored routes, biome/surface intent, prop placement descriptors and usable encounter space. |
 | Voxel and Physics | Terrain cells, material IDs, terrain edit replay, spatial queries and physical movement/collision. |
+| Water V2 / Fluids | Fluid amounts, levels, flow connectivity and response to terrain edits. Supply surface state to Materials and Rendering. |
 | World Objects | Prop IDs and state, grounding and support-loss decisions using terrain queries, and prop collider lifecycle. |
 | AI and Agents | Perception, pursuit, path decisions and agent intent using public spatial queries. |
 | Encounter | Wave composition, spawn timing, encounter objectives and outcomes. |
@@ -32,3 +33,12 @@ with separate Encounter and AI responsibilities, not a World Objects gate.
 H08-08 coordinates spell hits, terrain edits and object damage after its
 prerequisite contracts are in place. Terrain visibility and streaming work
 remains tracked under #223.
+
+
+## River destruction handoff
+
+[WAT-01](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/323) tracks water
+entering connected Fireball craters and draining through breached banks. Lava
+uses the same terrain connectivity with a slower material-specific flow rate.
+WorldGen supplies initial channels and sources. Voxel publishes terrain edits.
+Water V2 owns the changed fluid state, while Materials consumes its surface.
