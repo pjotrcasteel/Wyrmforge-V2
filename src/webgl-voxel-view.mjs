@@ -134,7 +134,7 @@ vec3 huntRootMoss(vec3 grass,vec2 ground) {
   vec3 size=vec3(textureSize(uLabMaterials,0));
   vec2 local=ground-uLabOrigin.xz;
   if(any(lessThan(local,vec2(.5)))||any(greaterThan(local,size.xz-.5)))return grass;
-  float canopy=texture(uLabMaterials,vec3(local.x/size.x,.75,local.y/size.z)).r;
+  float canopy=texture(uLabMaterials,vec3(local.x/size.x,.5,local.y/size.z)).r;
   if(canopy<=.02)return grass;
   vec2 pixel=floor(ground*12.0);
   float broken=soilHash(floor(pixel/3.0)+91.0);
@@ -142,6 +142,37 @@ vec3 huntRootMoss(vec3 grass,vec2 ground) {
   vec3 peat=srgbToLinearColor(vec3(.22,.28,.16));
   vec3 moss=srgbToLinearColor(vec3(.31,.41,.25));
   return mix(grass,mix(peat,moss,step(.32,broken)),weight*.72);
+}
+
+vec3 huntCutTerrain(vec3 albedo,int material) {
+  bool top=vNormal.y>.5;
+  ivec3 parent=ivec3(floor(vWorld-vNormal*.002));
+  ivec2 column=parent.xz;
+  ivec2 exposed=column+ivec2(round(vNormal.xz));
+  if(material==1&&top){
+    vec2 across=fract(vWorld.xz);
+    int axis=min(across.x,1.0-across.x)<min(across.y,1.0-across.y)?0:1;
+    float edge=min(across[axis],1.0-across[axis]);
+    if(edge>.30)return albedo;
+    column[axis]+=across[axis]<.5?-1:1;
+    float cut=float(labMaterial(ivec3(column.x,2,column.y)))/255.0;
+    if(cut==0.0)return albedo;
+    float grain=soilHash(floor(vWorld.xz*vec2(4.0,6.0))+89.0);
+    float rim=1.0-smoothstep(.04,.14+.12*grain,edge);
+    return mix(albedo,srgbToLinearColor(vec3(.25,.18,.12)),rim*.49);
+  }
+  int cut=labMaterial(ivec3(exposed.x,2,exposed.y))/85;
+  if(cut==0)return albedo;
+  int floorY=labMaterial(ivec3(exposed.x,0,exposed.y))/4-4;
+  if(top?parent.y!=floorY:parent.y<=floorY||parent.y>floorY+cut)return albedo;
+  if(material==1)return albedo*.62;
+  float depth=float(cut)/3.0;
+  vec2 pixel=floor((top?vWorld.xz:vec2(abs(vNormal.x)>.5?vWorld.z:vWorld.x,vWorld.y))*12.0);
+  float grain=soilHash(floor(pixel/vec2(3.0,2.0))+89.0);
+  vec3 shade=material==2?vec3(.28,.19,.13):vec3(.37,.37,.40);
+  vec3 light=material==2?vec3(.51,.35,.21):vec3(.59,.55,.53);
+  vec3 cutColor=srgbToLinearColor(mix(shade,light,step(.57,grain)));
+  return mix(albedo,cutColor,.56+depth*.19);
 }
 
 vec3 huntGrassShoulder(vec3 albedo,int material) {
@@ -344,6 +375,7 @@ void main() {
   if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
     linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
   }
+  if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
     if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;

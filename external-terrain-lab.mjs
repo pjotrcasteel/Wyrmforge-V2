@@ -1341,7 +1341,7 @@ function updateHuntGrassMaterialVolume() {
   const height=playStream?.cellCatalog?.height;
   renderer.setLabMaterialVolume(huntGrassMaterialVolume(world,x,z,
     Number.isFinite(height?.minY)?height.minY:-3,
-    Number.isFinite(height?.maxY)?height.maxY:30,trees));
+    Number.isFinite(height?.maxY)?height.maxY:30,trees,playStream?.terrainSave.removedCells));
   grassVolumeWorld=world;
   grassVolumeKey=key;
   grassVolumeTrees=trees;
