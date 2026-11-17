@@ -6,7 +6,7 @@ on:
     paths:
       - 'src/fluid/**'
       - 'external-terrain-lab.mjs'
-      - 'scripts/test-fluid-play-hunt-browser.mjs'
+      - '.github/witness/water-play-hunt-browser.mjs'
       - '.github/workflows/water-play-hunt-browser.yml'
   workflow_dispatch:
 
@@ -35,7 +35,7 @@ jobs:
         env:
           CHROME_BIN: /usr/bin/google-chrome
           FLUID_BROWSER_INLINE_SNAPSHOT: '1'
-        run: node scripts/test-fluid-play-hunt-browser.mjs
+        run: node .github/witness/water-play-hunt-browser.mjs
       - name: Save before/after browser screenshots and full scenario diagnostics
         if: always()
         uses: actions/upload-artifact@v4
