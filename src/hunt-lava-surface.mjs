@@ -1,5 +1,5 @@
 import {waterRippleMotifGlsl} from './river-water-art.mjs';
-import {FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from './fire-lava-art.mjs';
+import {FIRE_LAVA_TEXELS_PER_VOXEL} from './fire-lava-art.mjs';
 
 // Surface presentation for WorldGen's cut stone channels. Each map texel
 // records the authored face height, flow angle, and open shoreline edges.
@@ -135,7 +135,6 @@ bool huntLavaSurface(out vec3 color) {
   float angle=float(channel.g)*6.2831853/255.0-3.14159265;
   vec2 downstream=vec2(cos(angle),sin(angle));
   vec2 across=vec2(-downstream.y,downstream.x);
-  float travel=dot(position,downstream);
   float margin=1.0;
   if(vNormal.y>.5){
     if(abs(vWorld.y-float(channel.r))>.015)return false;
@@ -148,7 +147,6 @@ bool huntLavaSurface(out vec3 color) {
     if(lower.a==0||float(lower.r)>=float(channel.r)||
       vWorld.y<float(lower.r)||vWorld.y>float(channel.r))return false;
     // Local height differences define spills, including cross-current steps.
-    travel=float(channel.r)-vWorld.y;
   }
 
   if(channel.a==128){
@@ -218,18 +216,9 @@ bool huntLavaSurface(out vec3 color) {
     return true;
   }
 
-  int lateral=int(floor(dot(position,across)*density));
-  int lane=int(floor(float(lateral)/12.0));
-  int pace=margin<.35?3:4;
-  int frame=int(floor(uLabTime*${FIRE_LAVA_FRAMES_PER_SECOND}.0))*pace/4;
-  int column=int(mod(floor(travel*density)-float(frame)+float(lane*7),24.0));
-  int row=int(mod(float(lateral),12.0));
-  if((lane&1)!=0)row=11-row;
-  int band=int((LAB_LAVA_MOTIF[row][column/8]>>uint(3*(column%8)))&7u);
-  if(margin<.09)return false;
-  if(margin<.21)band=0;
-  else if(margin<.38)band=min(band,1);
-  color=fireLavaColor(band);
+  if(margin<.07)return false;
+  color=fireLavaSurface(position,downstream,margin,vNormal.y<.5,
+    float(channel.r)-vWorld.y,uLabTime);
   return true;
 }
 `;

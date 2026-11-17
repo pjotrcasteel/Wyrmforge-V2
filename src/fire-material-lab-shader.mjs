@@ -1,4 +1,5 @@
-import {fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from './fire-lava-art.mjs';
+import {FIRE_LAVA_MATERIAL_GLSL} from './fire-lava-material.mjs';
+import {fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL} from './fire-lava-art.mjs';
 import {FIRE_ROAD_FADING_Z,FIRE_ROAD_APPROACH_Z,FIRE_ROAD_LAVA_Z,FIRE_ROAD_BRIDGE} from './fire-hunt-material-lab.mjs';
 // These paths are enabled only for lab fixtures that publish a material volume.
 export const FIRE_MATERIAL_LAB_UNIFORMS_GLSL=`
@@ -129,14 +130,7 @@ vec3 labLinearSurface(int material, vec2 uv, bool topFace) {
 
 ${fireLavaMotifGlsl()}
 
-vec3 fireLavaColor(int band) {
-  vec3 color=vec3(.30,.071,.11);
-  if(band==1)color=vec3(.58,.127,.14);
-  else if(band==2)color=vec3(.80,.235,.12);
-  else if(band==3)color=vec3(.98,.441,.16);
-  else if(band==4)color=vec3(1.0,.74,.31);
-  return srgbToLinearColor(color);
-}
+${FIRE_LAVA_MATERIAL_GLSL}
 
 vec3 labLava(vec2 uv) {
   // Quantize first. The palette, river banks, and movement all share this grid.
@@ -147,22 +141,10 @@ vec3 labLava(vec2 uv) {
   vec2 world=(vec2(pixel)+.5)/density;
   float center=road?4.8-.6*sin(world.x*.53):1.6*sin(world.x*.26)+.55*sin(world.x*.63);
   float halfWidth=road?1.05:2.1+.42*cos(world.x*.49);
-  int lateral=int(floor((world.y-center)*density));
-  int lane=int(floor(float(lateral)/12.0));
-  int frame=int(floor(uLabTime*${FIRE_LAVA_FRAMES_PER_SECOND}.0));
-  int travel=abs(lane)<=1?frame:frame*3/4;
-  int column=int(mod(float(pixel.x-travel+lane*7),24.0));
-  int row=int(mod(float(lateral),12.0));
-  if(mod(float(lane),2.0)>0.5)row=11-row;
-  int band=int((LAB_LAVA_MOTIF[row][column/8]>>uint(3*(column%8)))&7u);
-
   float margin=halfWidth-abs(world.y-center);
   if(road)margin=min(margin,world.x+${FIRE_ROAD_LAVA_Z}.0);
-  if(margin<.18)band=0;
-  else if(margin<.48)band=min(band,1);
-  if(labMaterial(ivec3(floor(vWorld.x),2,floor(vWorld.z)))==3)band=min(band,1);
-
-  return fireLavaColor(band);
+  if(labMaterial(ivec3(floor(vWorld.x),2,floor(vWorld.z)))==3)margin=min(margin,.25);
+  return fireLavaSurface(world,vec2(1,0),margin,false,0.0,uLabTime);
 }
 
 float labGrassCoverage(float distanceToGrass,vec2 boundaryUv) {
