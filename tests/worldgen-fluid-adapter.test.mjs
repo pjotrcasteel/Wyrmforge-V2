@@ -14,7 +14,9 @@ import {
 function synthetic(){
   const world=new VoxelWorld();
   for(let z=0;z<6;z++)for(let x=0;x<7;x++){
-    const top=z===1?0:z>=3&&z<=4?-2:2;
+    const primaryCrater=x>=3&&x<=5&&z>=3&&z<=4;
+    const sealedCrater=x===0&&z===5;
+    const top=z===1?0:primaryCrater||sealedCrater?-2:2;
     for(let y=-4;y<top;y++)world.set(x,y,z,y===-4?4:3);
   }
   const ledger=new TerrainEditLedger(world);
@@ -79,7 +81,7 @@ test('a real Voxel terrain-change event opens a water route into a crater',()=>{
   for(let i=0;i<100;i++)fluid.step({budget:42});
   assert.equal(fluid.sample(3,2).floorY,0,'breach remains physically open');
   assert.ok(fluid.sample(3,3).depth>0,'crater fills across the open bank');
-  assert.equal(fluid.sample(0,3).depth,0,'unconnected crater remains dry');
+  assert.equal(fluid.sample(0,5).depth,0,'unconnected crater remains dry');
   assert.equal(port.metrics().listenerFailures,0);
   const snap=JSON.parse(JSON.stringify(fluid.snapshot()));
   const other=synthetic();
