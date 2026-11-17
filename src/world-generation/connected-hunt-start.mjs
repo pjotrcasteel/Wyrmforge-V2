@@ -65,6 +65,8 @@ function joinBoundaries(south,north,offsetZ) {
   // outside the actual traversable road; micrograde only the passage and
   // its two-cell shoulder. Voxel storage and collision remain authoritative.
   const phase=(south.recipe.seed%97)*.19;
+  const roadNorth=northEdge.get(0).topTenths;
+  const roadDelta=southEdge.get(0).topTenths-roadNorth;
   for(let x=a.minX;x<=a.maxX;x++){
     const s=southEdge.get(x),n=northEdge.get(x);
     let previous=n.topTenths;
@@ -83,11 +85,9 @@ function joinBoundaries(south,north,offsetZ) {
       const eased=u*u*(3-2*u);
       const broadTop=10*Math.round((n.y+1)*(1-eased)+(s.y+1)*eased);
       const shoulder=clamp((Math.abs(x)-3)/3,0,1);
-      const topTenths=shoulder===1?broadTop:
+      let topTenths=shoulder===1?broadTop:
         shoulder===0?Math.round(grade):
           5*Math.round((grade*(1-shoulder)+broadTop*shoulder)/5);
-      const y=Math.ceil(topTenths/10)-1;
-      const level=topTenths-y*10;
       // Follow both authored caps, with a modest asymmetric bend. Do not
       // widen a narrow trail into a rectangular arena at the seam.
       const bend=interior*Math.sin(phase)*.65;
@@ -104,8 +104,25 @@ function joinBoundaries(south,north,offsetZ) {
       }
       const edgeMaterial=t<.5?n.material:s.material;
       const central=Math.abs(x)<=Math.max(Math.abs(left),Math.abs(right))+1;
-      const material=x>=left && x<=right?2:
+      let material=x>=left && x<=right?2:
         (central && edgeMaterial===2?1:edgeMaterial);
+      // Keep the entire graded passage. Outside it, the two shoulders
+      // resolve to a continuous shelf with exposed rock at the inner rim.
+      const side=Math.abs(x);
+      const rim=5+(x<0&&t<.40||x>0&&t>.65?1:0);
+      const floorTop=10*Math.round((roadNorth+roadDelta*t)/10);
+      if(side>=4&&side<=8&&z<a.minZ-1){
+        if(side<rim){
+          topTenths=floorTop;
+          material=1;
+        }else{
+          const rise=z===start?10:20;
+          topTenths=floorTop+rise-(side===8?10:0);
+          material=side===rim||(z===a.minZ-2&&side<8)?3:1;
+        }
+      }
+      const y=Math.ceil(topTenths/10)-1;
+      const level=topTenths-y*10;
       columns.set(x+','+z,{y,material});
       maxY=Math.max(maxY,y);
       if(level!==10)surfaceTiles.push({x,y,z,levels:Array(100).fill(level)});
@@ -136,7 +153,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   return {runs,surfaceTiles,seam:Object.freeze({
     direction:'north',minZ:start,maxZ:a.minZ-1,routeWidthMetres:7,
-    profile:'broad-relief-road-v5',
+    profile:'bedrock-banks-road-v6',
     maximumRouteGradeTenths,depthMetres:CONNECTOR_DEPTH
   }),maxY};
 }
@@ -175,7 +192,7 @@ export function composeConnectedHuntStart(plan,south,{generateSite,createRecipe,
     ]),
     streaming:false,
     // The generated-site hashes remain intact; only the composition is new.
-    hash:'connected-v5-'+south.hash+'-'+north.hash
+    hash:'connected-v6-'+south.hash+'-'+north.hash
   });
 }
 
