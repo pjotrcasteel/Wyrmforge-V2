@@ -187,7 +187,11 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
           Math.abs(c.surfaceY-neighbor.surfaceY)<=SMOOTH_HEAD_DIFFERENCE){
         continue;
       }
-      const lower=Math.max(c.floorY,
+      const waterfall=isRealFall(side,neighbor);
+      // Only falling, connected water is allowed to extend below the upper
+      // *solid floor* to the actual lower pool's surface. Other side walls
+      // retain their original solid-floor clamp.
+      const lower=waterfall?neighbor.surfaceY:Math.max(c.floorY,
         neighbor.depth>0?neighbor.surfaceY:neighbor.floorY);
       const a=side.dx!==0
         ?[side.dx===1?x+1:x,z]
@@ -202,7 +206,6 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       else if(i===1){quad=[[x,lower,z],[x,lower,z+1],[x,hb,z+1],[x,ha,z]];}
       else if(i===2){quad=[[x,lower,z+1],[x+1,lower,z+1],[x+1,hb,z+1],[x,ha,z+1]];}
       else{quad=[[x,lower,z],[x,ha,z],[x+1,hb,z],[x+1,lower,z]];}
-      const waterfall=isRealFall(side,neighbor);
       pushFace(quad,side.normal,flow,{
         mode:waterfall?2:1,
         landingY:waterfall?neighbor.surfaceY:0
