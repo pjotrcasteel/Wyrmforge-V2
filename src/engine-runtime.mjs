@@ -2,9 +2,9 @@
 // No voxel-world, renderer, DOM, or physics implementation imports.
 export const ENGINE_RUNTIME_SCHEMA='wyrmforge.engine-runtime.v1';
 export const ENGINE_KINDS=Object.freeze([
-  'terrain','physics','lighting','vfx','audio','navigation','rendering','worldGeneration'
+  'terrain','physics','lighting','vfx','audio','navigation','fluids','rendering','worldGeneration'
 ]);
-const TERRAIN_CONSUMERS=new Set(['physics','lighting','vfx','audio','navigation']);
+const TERRAIN_CONSUMERS=new Set(['physics','lighting','vfx','audio','navigation','fluids']);
 function assertEngine(kind,engine) {
   if(!engine || typeof engine.start!=='function' ||
      typeof engine.stop!=='function' || typeof engine.dispose!=='function') {
