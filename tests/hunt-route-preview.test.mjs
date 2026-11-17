@@ -5,6 +5,7 @@ import {generateWorldSite} from '../src/world-generation/index.mjs';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {stepHuntExplorer} from '../src/hunt-play-runtime.mjs';
+import {actorOverlapsTerrain} from '../src/terrain-actor.mjs';
 
 for(const [route,count,start] of [['forest',3,'wet-forest'],['mountain',4,'mountain-pass'],['highland',10,'wet-forest']]){
   test(`Play Hunt ${route} route loads all ${count} destinations on physical terrain`,()=>{
@@ -45,4 +46,28 @@ test('the long route uses authored highlands before the mountain pass',()=>{
   assert.equal(stops[7].kind,'scorched-approach');
   assert.equal(huntRoutePreview(null,0),null);
   assert.equal(huntRoutePreview('constructor',0),null);
+});
+
+test('explicit Water V2 witness starts the real actor near a dry bank in Play Hunt',()=>{
+  for(const kind of ['wet-forest','wyrm-lair']){
+    const river=kind==='wyrm-lair'?'lava':'water';
+    const site=generateWorldSite(createWorldSiteRecipe({
+      kind,river,seed:7,corruption:river==='lava'?1:0
+    }));
+    const loader=new V2ExternalTerrainLoader(site.definition,{microSurfaceCapacity:2048});
+    while(!loader.progress.done)loader.loadStep(192);
+    try{
+      const actor=spawnHuntRoutePreview(loader.terrain.world,site.layout,{nearRiver:true});
+      assert.ok(actor.grounded,'test actor uses existing physical Voxel spawn');
+      assert.equal(actorOverlapsTerrain(loader.terrain.world,actor),false);
+      const riverCells=new Set(site.layout.riverChannels[0].floor.map(cell=>cell.x+','+cell.z));
+      const actorCell=Math.floor(actor.x)+','+Math.floor(actor.z);
+      assert.equal(riverCells.has(actorCell),false,'start must be on a dry bank');
+      const distance=Math.min(...site.layout.riverChannels[0].floor.map(cell=>
+        Math.hypot(cell.x+.5-actor.x,cell.z+.5-actor.z)));
+      assert.ok(distance<=6,'the user can immediately see the river from the game camera');
+    }finally{
+      loader.unload();
+    }
+  }
 });
