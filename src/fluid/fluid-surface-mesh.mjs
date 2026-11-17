@@ -1,22 +1,99 @@
-// Render-only geometry derived from Water V2's immutable surface state.
-// The floor and liquid connectivity remain the simulation's authority.
-// Faces use the SAME orthographic V2 world coordinates as Voxel terrain.
+// Pure Water V2 presentation geometry. Voxel remains the only solid terrain
+// authority, and ColumnFluidEngine owns volume and 10cm vertical levels.
+// A thin 10cm horizontal silhouette is refined only beside *higher* dry banks:
+// water cannot secretly cross a bank or flood a dry Voxel column.
 import {FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs';
 
-const SIDES=Object.freeze([
-  {dx:1,dz:0,normal:[1,0,0],quad:(x,z,low,high)=>[
-    [x+1,low,z],[x+1,high,z],[x+1,high,z+1],[x+1,low,z+1]]},
-  {dx:-1,dz:0,normal:[-1,0,0],quad:(x,z,low,high)=>[
-    [x,low,z],[x,low,z+1],[x,high,z+1],[x,high,z]]},
-  {dx:0,dz:1,normal:[0,0,1],quad:(x,z,low,high)=>[
-    [x,low,z+1],[x+1,low,z+1],[x+1,high,z+1],[x,high,z+1]]},
-  {dx:0,dz:-1,normal:[0,0,-1],quad:(x,z,low,high)=>[
-    [x,low,z],[x,high,z],[x+1,high,z],[x+1,low,z]]}
-]);
+export const FLUID_SHORE_MICRO_STEPS=10;
 const CELL_EPSILON=.006;
+const SMOOTH_HEAD_DIFFERENCE=.5;
+const DIRECTIONS=Object.freeze([
+  {dx:1,dz:0,normal:[1,0,0],edge:'east'},
+  {dx:-1,dz:0,normal:[-1,0,0],edge:'west'},
+  {dx:0,dz:1,normal:[0,0,1],edge:'south'},
+  {dx:0,dz:-1,normal:[0,0,-1],edge:'north'}
+]);
+const key=(x,z)=>x+','+z;
 
-// Source includes only wet columns. Dry neighboring terrain floors are read
-// via the engine's public sampleAt, never guessed from a world heightmap.
+// Deterministic, nonperiodic pixel chips in world coordinates. Avoid smooth
+// triangles/warping and never carve the actual terrain's material or collision.
+function shoreCut(x,z,side,segment){
+  let hash=Math.imul(x,73856093)^Math.imul(z,19349663)^
+    Math.imul(side+1,83492791)^Math.imul(segment+1,2654435761);
+  hash=Math.imul(hash^(hash>>>16),2246822507);
+  hash=Math.imul(hash^(hash>>>13),3266489909);
+  const value=(hash^(hash>>>16))>>>0;
+  // Most pixels are flush, some inset 10cm and very few inset 20cm.
+  return value%11===0?2:value%3===0?1:0;
+}
+
+function topQuad(x0,x1,z0,z1,height){
+  return [
+    [x0,height(x0,z0),z0],
+    [x0,height(x0,z1),z1],
+    [x1,height(x1,z1),z1],
+    [x1,height(x1,z0),z0]
+  ];
+}
+
+// One compact top-face rectangle per span of adjacent 10cm pixels. Adjacent
+// rows with identical spans merge, so normal rivers keep one cap per column.
+function microShoreCaps(x,z,shore,height){
+  if(!shore.some(Boolean)){
+    return [topQuad(x,x+1,z,z+1,height)];
+  }
+  const spans=[],previous=new Map();
+  for(let row=0;row<FLUID_SHORE_MICRO_STEPS;row++){
+    const next=new Map();
+    let start=-1;
+    for(let col=0;col<=FLUID_SHORE_MICRO_STEPS;col++){
+      const inside=col<FLUID_SHORE_MICRO_STEPS &&
+        (!shore[0]||col<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,0,row)) &&
+        (!shore[1]||col>=shoreCut(x,z,1,row)) &&
+        (!shore[2]||row<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,2,col)) &&
+        (!shore[3]||row>=shoreCut(x,z,3,col));
+      if(inside&&start<0)start=col;
+      if((!inside||col===FLUID_SHORE_MICRO_STEPS)&&start>=0){
+        const name=start+','+col;
+        const span=previous.get(name);
+        if(span){
+          span.endRow=row+1;
+        }else{
+          const created={start,end:col,startRow:row,endRow:row+1};
+          spans.push(created);
+          next.set(name,created);
+        }
+        if(span)next.set(name,span);
+        start=-1;
+      }
+    }
+    previous.clear();
+    for(const [k,v] of next)previous.set(k,v);
+  }
+  return spans.map(span=>topQuad(
+    x+span.start/FLUID_SHORE_MICRO_STEPS,
+    x+span.end/FLUID_SHORE_MICRO_STEPS,
+    z+span.startRow/FLUID_SHORE_MICRO_STEPS,
+    z+span.endRow/FLUID_SHORE_MICRO_STEPS,height));
+}
+
+// Independent wet surfaces that differ by <=50cm share a corner head, avoiding
+// water walls at every 1m tile seam. A real cliff/large drop stays vertical.
+function cornerHead(x,z,cell,at){
+  const values=[];
+  for(let dz=-1;dz<=0;dz++)for(let dx=-1;dx<=0;dx++){
+    const near=at(x+dx,z+dz);
+    if(near?.depth>0&&Number.isFinite(near.surfaceY)){
+      values.push(near.surfaceY);
+    }
+  }
+  if(!values.length)return cell.surfaceY;
+  const min=Math.min(...values),max=Math.max(...values);
+  return max-min<=SMOOTH_HEAD_DIFFERENCE
+    ?values.reduce((sum,value)=>sum+value,0)/values.length
+    :cell.surfaceY;
+}
+
 export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   if(surface?.schema!==FLUID_SURFACE_SCHEMA||
       !['water','lava'].includes(surface.kind)||!Array.isArray(surface.cells)||
@@ -29,8 +106,15 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     throw new RangeError('Invalid fluid resident bounds');
   }
 
+  const cache=new Map();
+  const at=(x,z)=>{
+    if(x<minX||x>maxX||z<minZ||z>maxZ)return null;
+    const id=key(x,z);
+    if(!cache.has(id))cache.set(id,sampleAt(x,z));
+    return cache.get(id);
+  };
   const positions=[],normals=[],flows=[],indices=[];
-  let faceCount=0,topFaces=0,sideFaces=0;
+  let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
   const seen=new Set();
   const pushFace=(quad,normal,flow)=>{
     const vertex=positions.length/3;
@@ -42,6 +126,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     indices.push(vertex,vertex+1,vertex+2,vertex,vertex+2,vertex+3);
     faceCount++;
   };
+
   for(const c of surface.cells){
     if(!c||![c.x,c.z,c.floorY,c.surfaceY,c.depth].every(Number.isFinite)||
         !Number.isInteger(c.x)||!Number.isInteger(c.z)||!Number.isInteger(c.floorY)||
@@ -50,35 +135,64 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
         Math.abs(c.surfaceY-(c.floorY+c.depth/10))>1e-6){
       throw new RangeError('Invalid fluid surface column');
     }
-    const key=c.x+','+c.z;
-    if(seen.has(key))throw new Error('Duplicate wet column in fluid mesh');
-    seen.add(key);
     if(![c.flowX,c.flowZ].every(v=>Number.isInteger(v)&&Math.abs(v)<=1)){
       throw new RangeError('Fluid flow direction must be a signed cardinal vector');
     }
-    const x=c.x,z=c.z,high=c.surfaceY+CELL_EPSILON;
-    const flow=[c.flowX,c.flowZ];
-    pushFace([
-      [x,high,z],[x,high,z+1],[x+1,high,z+1],[x+1,high,z]
-    ],[0,1,0],flow);
-    topFaces++;
-    for(const side of SIDES){
-      const nx=x+side.dx,nz=z+side.dz;
-      if(nx<minX||nx>maxX||nz<minZ||nz>maxZ)continue;
-      const neighbor=sampleAt(nx,nz);
+    const id=key(c.x,c.z);
+    if(seen.has(id))throw new Error('Duplicate wet column in fluid mesh');
+    seen.add(id);
+
+    const x=c.x,z=c.z,flow=[c.flowX,c.flowZ];
+    const neighbors=DIRECTIONS.map(side=>at(x+side.dx,z+side.dz));
+    const shoreline=neighbors.map(neighbor=>
+      Boolean(neighbor&&neighbor.depth===0&&neighbor.floorY>=c.surfaceY));
+    if(shoreline.some(Boolean))refinedShoreColumns++;
+
+    const h00=cornerHead(x,z,c,at),h01=cornerHead(x,z+1,c,at);
+    const h10=cornerHead(x+1,z,c,at),h11=cornerHead(x+1,z+1,c,at);
+    const height=(px,pz)=>{
+      const fx=px-x,fz=pz-z;
+      return ((h00*(1-fx)+h10*fx)*(1-fz)+
+        (h01*(1-fx)+h11*fx)*fz)+CELL_EPSILON;
+    };
+    // Left/right/south/north order is identical to DIRECTIONS. Cutting is
+    // entirely inward from a wet column, never painted onto dry terrain.
+    const caps=microShoreCaps(x,z,shoreline,height);
+    for(const quad of caps)pushFace(quad,[0,1,0],flow);
+    topFaces+=caps.length;
+
+    for(let i=0;i<DIRECTIONS.length;i++){
+      const side=DIRECTIONS[i],neighbor=neighbors[i];
       if(!neighbor||!Number.isFinite(neighbor.floorY))continue;
-      // A higher dry bank hides the side. A lower liquid head exposes only
-      // the actual differential; zero-depth terrain is not liquid.
+      // Small adjacent wet-level differences were joined by the corner
+      // interpolation: no extra dark water wall between those caps.
+      if(neighbor.depth>0&&
+          Math.abs(c.surfaceY-neighbor.surfaceY)<=SMOOTH_HEAD_DIFFERENCE){
+        continue;
+      }
       const lower=Math.max(c.floorY,
         neighbor.depth>0?neighbor.surfaceY:neighbor.floorY);
-      if(lower>=c.surfaceY-0.01)continue;
-      pushFace(side.quad(x,z,lower,high),side.normal,flow);
+      const a=side.dx!==0
+        ?[side.dx===1?x+1:x,z]
+        :[x,side.dz===1?z+1:z];
+      const b=side.dx!==0
+        ?[side.dx===1?x+1:x,z+1]
+        :[x+1,side.dz===1?z+1:z];
+      const ha=height(a[0],a[1]),hb=height(b[0],b[1]);
+      if(Math.max(ha,hb)<=lower+0.01)continue;
+      let quad;
+      if(i===0){quad=[[x+1,lower,z],[x+1,ha,z],[x+1,hb,z+1],[x+1,lower,z+1]];}
+      else if(i===1){quad=[[x,lower,z],[x,lower,z+1],[x,hb,z+1],[x,ha,z]];}
+      else if(i===2){quad=[[x,lower,z+1],[x+1,lower,z+1],[x+1,hb,z+1],[x,ha,z+1]];}
+      else{quad=[[x,lower,z],[x,ha,z],[x+1,hb,z],[x+1,lower,z]];}
+      pushFace(quad,side.normal,flow);
       sideFaces++;
     }
   }
   return Object.freeze({
     schema:'wyrmforge.fluid-surface-mesh.v1',
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
+    wetColumns:surface.cells.length,refinedShoreColumns,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),

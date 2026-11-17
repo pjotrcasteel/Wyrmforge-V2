@@ -1010,7 +1010,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.sideFaces??0)+' liquid walls':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.refinedShoreColumns??0)+' refined banks':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1448,6 +1448,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
       // An opt-in automated witness of the real in-game pipeline, available
       // only to the headless browser regression test. No fake terrain or
       // direct mutation of the fluid model is possible through this hook.
+      const witnessedBreaches=[];
       window.__WyrmforgeFluidTest={
         status(){
           const channel=generatedSite.layout.riverChannels[0];
@@ -1455,13 +1456,17 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
           const wet=playFluid.snapshotSurface().cells;
           return {
             kind:playFluid.kind,steps:playFluid.steps,
+            busy:Boolean(pendingEdit||pendingMesh||renderer.pendingUploads||streamingBusy()||errorMessage),
+            breachCount:witnessedBreaches.length,
             wetColumns:wet.length,
             wetBeyondChannel:wet.filter(c=>!authored.has(c.x+','+c.z)).length,
             worldRevision:active.world.revision,
             liveFluidTexture:Boolean(playLava?.count),
             presentedCells:playLava?.count??0,
             raisedSurfaceFaces:playFluidVisual?.stats.topFaces??0,
-            verticalFluidFaces:playFluidVisual?.stats.sideFaces??0
+            verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
+            refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
+            fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0
           };
         },
         breach(){
@@ -1485,9 +1490,13 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
           }
           candidates.sort((a,b)=>a.score-b.score||
             a.z-b.z||a.x-b.x);
-          const target=candidates[0];
-          if(!target)throw new Error('WorldGen has no reachable breakable riverbank');
+          // A second/third cast must damage a different real physical bank.
+          // Keep a deterministic 5m exclusion around each earlier crater.
+          const target=candidates.find(candidate=>witnessedBreaches.every(
+            previous=>Math.hypot(candidate.x-previous.x,candidate.z-previous.z)>=5));
+          if(!target)throw new Error('WorldGen has no unbreached riverbank for this cast');
           const result=impactSpan(target);
+          if(result?.removedVoxels>0)witnessedBreaches.push(target);
           return result?{
             removedVoxels:result.removedVoxels,
             changedBounds:result.changedBounds,target
@@ -1961,7 +1970,7 @@ if(playMode) {
         renderedCells:playLava?.count??0,
         raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
-        presentation:'existing water/lava art on exposed terrain; raised-volume geometry pending'
+        presentation:'independent simulated surface caps and sidewalls; 10cm high-bank shoreline details'
       }:null,
       terrain:{
         initializedCells:loader?.progress.totalCells??null,

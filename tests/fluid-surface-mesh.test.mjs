@@ -22,11 +22,12 @@ test('real fluid geometry uses 10cm surface head instead of painting the solid f
   const {engine,mesh}=fixture();
   const result=mesh();
   assert.equal(result.schema,'wyrmforge.fluid-surface-mesh.v1');
-  assert.equal(result.topFaces,2);
+  assert.ok(result.topFaces>=2);
+  assert.ok(result.refinedShoreColumns>=1);
   assert.equal(result.sideFaces,1,'higher pool exposes a real vertical liquid wall');
-  assert.equal(result.faceCount,3);
-  assert.equal(result.vertexCount,12);
-  assert.equal(result.triangleCount,6);
+  assert.equal(result.faceCount,result.topFaces+result.sideFaces);
+  assert.equal(result.vertexCount,result.faceCount*4);
+  assert.equal(result.triangleCount,result.faceCount*2);
   assert.ok(result.positions instanceof Float32Array);
   assert.ok(result.normals instanceof Int8Array);
   assert.ok(result.flows instanceof Int8Array);
@@ -36,19 +37,20 @@ test('real fluid geometry uses 10cm surface head instead of painting the solid f
   assert.ok(result.indices.every(i=>i<result.vertexCount));
   assert.equal(engine.sample(1,0).surfaceY,-.5);
   const waterCapY=result.positions[1];
-  const craterCapY=result.positions[25];
+  const capHeights=[...Array(result.vertexCount).keys()]
+    .filter(i=>result.normals[i*3+1]===1&&result.positions[i*3]>=1)
+    .map(i=>result.positions[i*3+1]);
   assert.ok(Math.abs(waterCapY-1.006)<.001);
-  assert.ok(Math.abs(craterCapY-(-.494))<.001,
+  assert.ok(capHeights.some(height=>Math.abs(height-(-.494))<.001),
     'crater liquid top must not be flattened to the solid floor -2');
-  assert.equal(result.positions[12],1);
-  assert.equal(result.positions[14],0);
 });
 
 test('a dry elevated bank never becomes a fake water face',()=>{
   const {engine,mesh}=fixture('lava');
   const first=mesh();
   assert.equal(first.kind,'lava');
-  assert.equal(first.topFaces,2);
+  assert.ok(first.topFaces>=2);
+  assert.ok(first.refinedShoreColumns>=1);
   assert.equal(first.sideFaces,1,'the elevated dry bank should hide lava behind it');
   assert.equal(engine.sample(2,0).depth,0);
   assert.equal(engine.sample(2,0).floorY,3);

@@ -63,16 +63,41 @@ try{
     throw new Error('Real generated river did not seed in browser: '+JSON.stringify(before));
   }
   await page.screenshot({path:artifacts+'/forest-before.jpeg',type:'jpeg',quality:67});
-  const edit=await page.evaluate(()=>window.__WyrmforgeFluidTest.breach());
+  // User's native iPhone report includes 18 real Fireballs and a fragmented
+  // shoreline. Exercise three distinct craters automatically, not merely one
+  // synthetic unit-test basin, to catch stale flow/rendering and GPU leaks.
+  const edits=[],observations=[];
+  for(let shot=0;shot<3;shot++){
+    await page.waitForFunction(()=>!window.__WyrmforgeFluidTest?.status().busy,
+      null,{timeout:120000});
+    const atRest=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
+    const edit=await page.evaluate(()=>window.__WyrmforgeFluidTest.breach());
+    if(!edit?.removedVoxels){
+      throw new Error('Real Fireball-style bank edit '+(shot+1)+' removed no solid voxels');
+    }
+    edits.push(edit);
+    await page.waitForFunction(initial=>{
+      const state=window.__WyrmforgeFluidTest?.status();
+      return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
+    },atRest,{timeout:120000});
+    const state=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
+    if(state.fluidMeshBytes>2*1024*1024){
+      throw new Error('Fluid GPU mesh exceeded the independent 2MiB budget');
+    }
+    if(state.breachCount!==shot+1){
+      throw new Error('Repeatable witness failed to count independent craters');
+    }
+    observations.push(state);
+    await page.screenshot({
+      path:artifacts+'/forest-impact-'+(shot+1)+'.jpeg',type:'jpeg',quality:67
+    });
+  }
+  const edit=edits[0],after=observations.at(-1);
   report.edit=edit;
-  if(!edit?.removedVoxels)throw new Error('Real Fireball-style terrain edit removed no Voxel cells');
-  await page.waitForFunction((initial)=>{
-    const next=window.__WyrmforgeFluidTest?.status();
-    return next?.steps>=initial.steps+80;
-  },before,{timeout:120000});
-  const after=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
+  report.edits=edits;
+  report.observations=observations;
   report.after=after;
-  console.log('FLUID_BROWSER_MEASUREMENTS '+JSON.stringify({before,edit,after}));
+  console.log('FLUID_BROWSER_MEASUREMENTS '+JSON.stringify({before,edits,observations,after}));
   await page.screenshot({path:artifacts+'/forest-after.jpeg',type:'jpeg',quality:67});
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect
@@ -88,6 +113,12 @@ try{
     throw new Error('Breach did not wet any new cells beyond the WorldGen river: '+JSON.stringify({before,after}));
   }
   if(after.raisedSurfaceFaces<1)throw new Error('Actual liquid surface mesh did not render in browser');
+  if(after.refinedShoreColumns<1){
+    throw new Error('The 10cm bank micro-contours did not reach the real game');
+  }
+  if(after.fluidMeshBytes<=0){
+    throw new Error('The actual water mesh did not allocate any geometry');
+  }
   if(report.errors.length)throw new Error('Game browser errors: '+report.errors.join('; ').slice(0,800));
   console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after}));
 }catch(error){
