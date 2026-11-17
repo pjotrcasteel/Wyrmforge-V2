@@ -67,7 +67,9 @@ void main(){
     if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48);
     if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72);
     color*=mix(.87,1.0,top);
-    opacity=mix(.92,.83,top);
+    // Prevent the old terrain decal from showing through as hard dark
+    // blocks at excavation boundaries, while keeping slight depth blending.
+    opacity=mix(.975,.94,top);
   }else{
     float ember=fluidHash(pixel-vec2(frame,frame*.25)+79.0);
     color=mix(vec3(.29,.055,.015),vec3(.86,.29,.045),.40+.45*pool);
@@ -138,6 +140,11 @@ export class HuntFluidSurfaceRenderer {
       wetFaces:this.#mesh?.faceCount??0,
       topFaces:this.#mesh?.topFaces??0,
       sideFaces:this.#mesh?.sideFaces??0,
+      wetColumns:this.#mesh?.wetColumns??0,
+      refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
+      cpuMeshBytes:this.#mesh?this.#mesh.positions.byteLength+
+        this.#mesh.normals.byteLength+this.#mesh.flows.byteLength+
+        this.#mesh.indices.byteLength:0,
       uploadedTriangles:this.#record?.count?this.#record.count/3:0,
       surfaceStep:this.#mesh?.step??null
     });
