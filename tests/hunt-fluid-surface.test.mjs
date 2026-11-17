@@ -81,7 +81,7 @@ test('Play Hunt runs Water V2 at fixed-step budget, feeds the shader and cleans 
   assert.match(host,/createWorldGenFluidEngine\(generatedSite\.layout,terrain\.port\)/);
   assert.match(host,/attachWorldGenFluid\(terrain\.port,playFluid\)/);
   assert.match(host,/playFluid\.step\(\{budget:96\}\)/);
-  assert.match(host,/huntFluidSurface\(generatedSite\.layout,world,playFluid\.snapshotSurface\(\)\)/);
+  assert.match(host,/huntFluidSurface\(generatedSite\.layout,world,state\)/);
   assert.match(host,/huntLava:playLava/);
   assert.match(host,/detachPlayFluid\?\.\(\)/);
   assert.match(shader,/#bindHuntLava\(huntLava\)/);
