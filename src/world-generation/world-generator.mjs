@@ -26,6 +26,32 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const smooth=(x)=>x*x*(3-2*x);
 const gridIndex=(radius,x,z)=>(z+radius)*radius*2+(x+radius);
 
+// Shape the two rock shoulders inside Woodland Trail, north of the seam.
+// Keep authored grades and combat access authoritative.
+function shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades) {
+  if(plan.recipe.kind!=='wet-forest'||plan.recipe.regionId!=='region-woodland-trail')return;
+  const {radius}=plan.recipe;
+  const floor=heights[gridIndex(radius,-2,14)];
+  const front=13;
+  for(const side of [-1,1]){
+    for(let distance=4;distance<=12;distance++){
+      const x=distance*side;
+      const lip=front-(distance>=10?1:0);
+      const toe=gridIndex(radius,x,lip+1);
+      const bankBase=surfaces[toe]===2||roadGrades.gradedTopTenths[toe]>0?heights[toe]:floor;
+      for(let z=8;z<=front+2;z++){
+        const i=gridIndex(radius,x,z);
+        if(surfaces[i]===2||roadGrades.gradedTopTenths[i]>0||
+          plan.combatSpaces.some(space=>Math.hypot(x-space.x,z-space.z)<=space.radius+1)||
+          plan.maneuverPockets.some(space=>Math.hypot(x-space.x,z-space.z)<=space.radius))continue;
+        const rise=z>lip||distance===4?0:z===8||distance===12?1:2;
+        heights[i]=bankBase+rise;
+        surfaces[i]=rise>0?3:1;
+      }
+    }
+  }
+}
+
 // This is coherent geographical shaping, not one noise value per voxel.
 function prepareGeometry(plan,seed) {
   const {radius}=plan.recipe;
@@ -159,6 +185,7 @@ function prepareGeometry(plan,seed) {
     approaches:plan.approaches,combatSpaces:plan.combatSpaces,
     lateralPorts:plan.recipe.lateralPorts??[]
   });
+  shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades);
   // Volcanic fissures are real rock cuts, but must never sever the
   // already-graded authored routes, protected combat floor or exits.
   const volcanicTerrain=composeVolcanicTerrain({
