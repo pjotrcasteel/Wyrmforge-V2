@@ -60,6 +60,7 @@ uniform bool uGrassEnabled;
 uniform bool uFastHuntMode;
 uniform bool uHuntHeightContrast;
 uniform bool uHuntGrassArt;
+uniform bool uHuntGrassEdges;
 uniform float uHuntElevationReference;
 uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
@@ -107,14 +108,19 @@ vec3 huntGrassArt(vec3 albedo,vec2 ground) {
   float clearing=labNoise(at*.23)+.25*(labNoise(at*.61)-.5);
   vec3 moss=srgbToLinearColor(vec3(.27,.36,.19));
   vec3 sun=srgbToLinearColor(vec3(.47,.55,.26));
-  vec3 bed=mix(moss,sun,smoothstep(.34,.67,clearing));
-  bed=mix(albedo,bed,.76);
+  float light=floor(clamp(clearing*5.0,0.0,4.0))*.25;
+  vec3 bed=mix(albedo,mix(moss,sun,light),.64);
+  vec2 chips=floor((pixel+vec2(mod(floor(pixel.y/3.0),2.0)*2.0,0.0))/vec2(4.0,3.0));
+  float cluster=soilHash(chips+41.0);
+  float stitch=soilHash(floor(pixel/2.0)+15.0);
+  if(cluster<.29)bed*=.69+stitch*.16;
+  else if(cluster>.62)bed*=1.17+stitch*.24;
 
   // One small rooted silhouette per eligible cluster. Quiet canopy floor
   // stays legible around the actor, with tufts concentrated in the light.
-  vec2 grid=floor(pixel/vec2(17.0,15.0));
-  vec2 anchor=vec2(3.0)+floor(vec2(soilHash(grid+8.0),soilHash(grid+19.0))*vec2(11.0,9.0));
-  vec2 p=pixel-grid*vec2(17.0,15.0)-anchor;
+  vec2 grid=floor(pixel/vec2(15.0,13.0));
+  vec2 anchor=vec2(3.0)+floor(vec2(soilHash(grid+8.0),soilHash(grid+19.0))*vec2(9.0,7.0));
+  vec2 p=pixel-grid*vec2(15.0,13.0)-anchor;
   bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=0.0)
     ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=1.0)
     ||(p.x==-2.0&&p.y==0.0);
@@ -123,6 +129,58 @@ vec3 huntGrassArt(vec3 albedo,vec2 ground) {
     return p.y<0.0?mix(bed,tips,.66):bed*.77;
   }
   return bed;
+}
+
+vec3 huntGrassShoulder(vec3 albedo,int material) {
+  ivec2 cell=ivec2(floor(vWorld.xz));
+  int height=int(floor(vWorld.y-.002));
+  int here=labMaterial(ivec3(cell.x,0,cell.y));
+  if(here%4!=material||here/4-4!=height)return albedo;
+
+  vec2 fraction=fract(vWorld.xz);
+  float edgeWeight=0.0;
+  float distanceToGrass=0.0;
+  vec2 seam=vWorld.xz;
+  int alongAxis=0;
+  for(int axis=0;axis<2;axis++){
+    for(int side=-1;side<=1;side+=2){
+      float edge=side<0?fraction[axis]:1.0-fraction[axis];
+      if(edge>=.40)continue;
+      ivec2 adjacent=cell;
+      adjacent[axis]+=side;
+      int next=labMaterial(ivec3(adjacent.x,0,adjacent.y));
+      if(next%4!=3-material||abs(next/4-4-height)>1)continue;
+      vec2 boundary=vWorld.xz;
+      boundary[axis]=float(cell[axis])+(side<0?0.0:1.0);
+      float distance=material==1?edge:-edge;
+      float weight=1.0-smoothstep(.10,.40,edge);
+      if(weight<=edgeWeight)continue;
+      edgeWeight=weight;
+      distanceToGrass=distance;
+      seam=boundary;
+      alongAxis=1-axis;
+    }
+  }
+  if(edgeWeight<=0.0)return albedo;
+
+  // Both faces use the same shoulder palette and pattern at the join.
+  // A few lobes reach into the dirt, with a highlight and root shadow.
+  vec2 pixel=floor(vWorld.xz*12.0);
+  vec2 seamPixel=floor(seam*12.0);
+  float along=seamPixel[alongAxis];
+  float group=floor(along/8.0);
+  float phase=mod(along,8.0);
+  float variation=soilHash(floor(seamPixel/8.0)+29.0);
+  float extension=(variation>.32?max(0.0,3.0-abs(phase-3.0)):0.0)/12.0;
+  float signedStep=floor(abs(distanceToGrass)*12.0+.0001)*sign(distanceToGrass)/12.0;
+  float coverage=smoothstep(-.10,.07,signedStep+extension-.05);
+  vec3 soil=srgbToLinearColor(vec3(.41,.30,.21));
+  vec3 green=huntGrassArt(srgbToLinearColor(vec3(.34,.44,.21)),vWorld.xz);
+  if(extension>.08&&signedStep+extension<.12){
+    vec3 tip=srgbToLinearColor(vec3(.54,.61,.29));
+    green=mix(green,tip,mod(group+pixel.x+pixel.y,3.0)==0.0?.24:.53);
+  }
+  return mix(albedo,mix(soil,green,coverage),edgeWeight);
 }
 
 void main() {
@@ -258,6 +316,9 @@ void main() {
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
   if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
     linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
+  }
+  if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
+    linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
   }
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
@@ -669,6 +730,7 @@ export class WebGLVoxelView {
       fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
       huntHeightContrast: gl.getUniformLocation(this.#program, 'uHuntHeightContrast'),
       huntGrassArt: gl.getUniformLocation(this.#program, 'uHuntGrassArt'),
+      huntGrassEdges: gl.getUniformLocation(this.#program, 'uHuntGrassEdges'),
       huntElevationReference: gl.getUniformLocation(this.#program, 'uHuntElevationReference'),
       woodlandBackdrop: gl.getUniformLocation(this.#program, 'uWoodlandBackdrop'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
@@ -933,7 +995,8 @@ export class WebGLVoxelView {
     gl.uniform4fv?.(this.#uniforms.terrainSecondaryLayers, secondaryLayers);
     gl.uniform1f(this.#uniforms.terrainScale, this.#terrainTilesPerVoxel);
     gl.uniform1i(this.#uniforms.labMaterials,4);
-    gl.uniform1i(this.#uniforms.labEnabled,this.#labVolume?1:0);
+    gl.uniform1i(this.#uniforms.labEnabled,this.#labVolume&&!huntGrassArt?1:0);
+    gl.uniform1i(this.#uniforms.huntGrassEdges,this.#labVolume&&huntGrassArt?1:0);
     if(this.#labVolume){
       gl.activeTexture(gl.TEXTURE4);
       gl.bindTexture(gl.TEXTURE_3D,this.#labVolume);
