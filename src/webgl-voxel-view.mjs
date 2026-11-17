@@ -250,7 +250,7 @@ void main() {
     int there=labMaterial(ivec3(adjacent.x,0,adjacent.z));
     float fringe=.16+.16*soilHash(floor(vWorld.xz*8.0));
     rockUnderTurf=here%4==1&&here/4-4==cell.y&&there!=0&&
-      cell.y-(there/4-4)>=2&&fract(vWorld.y)<1.0-fringe;
+      cell.y-(there/4-4)>=1&&fract(vWorld.y)<1.0-fringe;
   }
   int surfaceIndex = rockUnderTurf ? 3 : abs(vMaterial - 1.0) < 0.5
     ? (vNormal.y > 0.5 ? 0 : 1)

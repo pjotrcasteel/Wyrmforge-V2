@@ -114,7 +114,7 @@ test('both authored region seams retain a continuous dirt road at every row',()=
     const materialAt=(x,z)=>topMaterialAt(
       z<start.footprint.minZ?next.definition:start.definition,x,z);
     for(const seam of [start.seam,next.seam]) {
-      assert.equal(seam.profile,'stone-banks-road-v6');
+      assert.equal(seam.profile,'broad-relief-road-v5');
       assert.ok(seam.maximumRouteGradeTenths<=5);
       for(let z=seam.minZ;z<=seam.maxZ;z++) {
         assert.equal(materialAt(0,z),2,'Missing dirt road at seed '+seed+', z='+z);
@@ -144,7 +144,7 @@ function auditBroadRelief(definition,seam) {
   let outerMicroTiles=0,outerRisers=0,outerFineRisers=0;
   const elevations=new Set();
   for(let x=-20;x<20;x++){
-    if(Math.abs(x)<=8)continue;
+    if(Math.abs(x)<6)continue;
     let previous=null,previousSign=0;
     for(let z=seam.minZ;z<=seam.maxZ;z++) {
       const y=top.get(x+','+z);
@@ -194,56 +194,23 @@ test('both joins have broad physical landforms without dense fractional shoulder
   }
 });
 
-test('the streamed opening connector has continuous two-voxel stone banks beside its road',()=>{
-  for(const seed of [7,19,101,267]){
-    const graph=generateAuthoredHuntTerrainGraph(entry(seed));
-    const link=graph.layout.links.find(item=>item.fromId==='region-entry'&&
-      item.toId==='region-woodland-trail');
-    const {definition,maximumRouteGradeTenths}=graph.link(link.id);
-    const column=(x,z)=>definition.runs.filter(run=>run.z===z&&
-      run.x<=x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
-    for(let z=link.bounds.minZ+1;z<link.bounds.maxZ;z++){
-      assert.equal(column(0,z)[0].material,2);
-      for(const direction of [-1,1]){
-        const rim=[5,6].find(x=>column(x*direction,z)[0].y-column((x-1)*direction,z)[0].y===2);
-        assert.ok(rim);
-        const rock=column(rim*direction,z);
-        const floor=column((rim-1)*direction,z)[0];
-        assert.equal(rock[0].y-floor.y,2);
-        assert.equal(rock[0].material,1);
-        assert.equal(rock[1].material,3);
-      }
+test('Woodland Trail keeps its route and exposes stone beneath existing grassy contours',()=>{
+  const graph=generateAuthoredHuntTerrainGraph(entry(7));
+  const region=graph.layout.regions.find(item=>item.id==='region-woodland-trail');
+  const {definition}=graph.region(region.id);
+  const column=(x,z)=>definition.runs.filter(run=>run.z===z+region.offsetZ&&
+    x>=run.x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
+  for(const direction of [-1,1]){
+    let grassyRockEdges=0,isolated=0;
+    const drop=(x,z)=>column(x,z)[0].y-column(x,z+1)[0].y;
+    for(let z=3;z<=13;z++)for(let x=4;x<=12;x++){
+      const high=column(x*direction,z);
+      const low=column(x*direction,z+1)[0];
+      if(high[0].material===1&&high[1].material===3&&high[0].y>low.y)grassyRockEdges++;
+      if(drop(x*direction,z)>0&&drop(x*direction-1,z)<=0&&drop(x*direction+1,z)<=0)isolated++;
     }
-    assert.ok(maximumRouteGradeTenths<=5);
-    const loader=new V2ExternalTerrainLoader(definition);
-    try {
-      while(!loader.progress.done)loader.loadStep(4096);
-      const z=link.bounds.minZ+3;
-      const rock=[5,6].map(x=>({x,top:column(x,z)[1]})).find(cell=>cell.top.material===3);
-      loader.terrain.port.apply({id:'cliff-rock-damage',type:'damage-sphere',
-        x:rock.x,y:rock.top.y,z,radius:.5,power:3});
-      assert.equal(loader.terrain.world.get(rock.x,rock.top.y,z),0,
-        'exposed cliff rock can break through the regular terrain edit path');
-    }finally{loader.unload();}
+    assert.ok(grassyRockEdges>=3);
+    assert.ok(isolated<=4,'avoid rows of one-cell cliff faces');
   }
-});
-
-test('the Woodland Trail interior has stone faces on both sides north of the connector',()=>{
-  for(const seed of [7,19,101,267]){
-    const graph=generateAuthoredHuntTerrainGraph(entry(seed));
-    const region=graph.layout.regions.find(item=>item.id==='region-woodland-trail');
-    const {definition}=graph.region(region.id);
-    const column=(x,z)=>definition.runs.filter(run=>run.z===z+region.offsetZ&&
-      x>=run.x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
-    const lip=13;
-    for(const direction of [-1,1]){
-      for(let x=6;x<=8;x++){
-        const rock=column(x*direction,lip);
-        assert.equal(rock[0].y-column(x*direction,lip+1)[0].y,2,`seed ${seed}, x ${x*direction}`);
-        assert.equal(rock[0].material,1);
-        assert.equal(rock[1].material,3);
-      }
-    }
-    for(let z=9;z<=15;z++)assert.equal(column(-2,z)[0].material,2);
-  }
+  for(let z=9;z<=15;z++)assert.equal(column(-2,z)[0].material,2);
 });

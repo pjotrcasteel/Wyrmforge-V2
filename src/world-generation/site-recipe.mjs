@@ -1,7 +1,7 @@
 // World Generation V2: immutable input contract. World Map owns the chosen
 // site and allowed exits; this engine owns only deterministic local geography.
 export const WORLD_SITE_RECIPE_SCHEMA='wyrmforge.world-site-recipe.v2';
-export const WORLD_GENERATOR_VERSION='worldgen-v2.7.6';
+export const WORLD_GENERATOR_VERSION='worldgen-v2.7.7';
 export const WORLD_SITE_RADIUS=20;
 export const WORLD_MINIBOSS_RADIUS=28;
 export const WORLD_WYRM_LAIR_RADIUS=32;
