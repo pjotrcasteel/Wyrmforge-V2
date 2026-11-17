@@ -31,7 +31,24 @@ export function huntRoutePreview(route, destination) {
 
 // The streamed forest entrance assumes a fixed inset. Steep standalone
 // road grades can require a different stable foothold near the same entry.
-export function spawnHuntRoutePreview(world,layout) {
+// Only the explicit water test URL starts the real Wizard near a bank.
+// Normal route entry, generated terrain and saved worlds are unchanged.
+export function spawnHuntRoutePreview(world,layout,{nearRiver=false}={}) {
+  if(nearRiver){
+    const channel=layout.riverChannels?.[0];
+    if(channel?.nodes?.length&&channel?.floor?.length){
+      const wet=new Set(channel.floor.map(cell=>cell.x+','+cell.z));
+      const center=channel.nodes[Math.floor(channel.nodes.length/2)];
+      const bounds=layout.footprint;
+      for(const [dx,dz] of [[-3,0],[3,0],[-4,0],[4,0],[0,-3],[0,3],[-2,0],[2,0]]){
+        const x=center.x+dx,z=center.z+dz;
+        if(x<bounds.minX+1||x>bounds.maxX-1||
+            z<bounds.minZ+1||z>bounds.maxZ-1||wet.has(x+','+z))continue;
+        const actor=spawnTerrainActor(world,{x:x+.5,z:z+.5,searchTopY:30,maxSearchDistance:64});
+        if(actor&&Math.abs(actor.y-center.y)<=3)return Object.freeze({...actor});
+      }
+    }
+  }
   const {x,z}=layout.topology.entry;
   const {minZ,maxZ}=layout.footprint;
   for(const offset of [0,-1,-2,-3,1]){
