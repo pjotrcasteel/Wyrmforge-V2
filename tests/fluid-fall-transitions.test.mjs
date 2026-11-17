@@ -46,6 +46,10 @@ test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',(
     assert.equal(surface.landingHeights[i],1,
       'the sheet terminates on the authoritative lower liquid head');
   }
+  const curtainY=[...Array(4).keys()].map(i=>surface.positions[(curtain+i)*3+1]);
+  assert.ok(Math.abs(Math.min(...curtainY)-1)<.00001,
+    'a real falling sheet reaches the downstream pool, not the upper rock floor');
+  assert.ok(Math.abs(Math.max(...curtainY)-3.006)<.0001);
   assert.ok([...surface.faceModes].some(mode=>mode===3));
   assert.equal(engine.wetCount,2,'mesh must not modify fluid volume');
 });
