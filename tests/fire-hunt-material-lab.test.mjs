@@ -1,3 +1,5 @@
+import {FIRE_LAVA_CRUST_MOTIF,lavaCrustMotifGlsl} from '../src/fire-lava-crust-art.mjs';
+import {FIRE_LAVA_PALETTE} from '../src/fire-lava-material.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -136,4 +138,23 @@ test('The Fire Road bridge preserves the lava underneath and is walkable in both
   assert.ok(Math.abs(walker.y-3)<.001);
   for(let i=0;i<240&&walker.x>.75;i++)walker=stepHuntExplorer(world,walker,bounds,{moveX:-1});
   assert.ok(walker.x<=.75);
+});
+
+
+test('lava crust art reaches the GPU intact and cooled crust carries zero emission',()=>{
+  const packed=[...lavaCrustMotifGlsl().matchAll(/(\d+)u/g)].map(match=>Number(match[1]));
+  assert.equal(FIRE_LAVA_CRUST_MOTIF.length,24);
+  for(const [index,row] of FIRE_LAVA_CRUST_MOTIF.entries()){
+    assert.match(row,/^[0-3]{32}$/);
+    const unpacked=Array.from({length:32},(_,x)=>
+      (packed[index*4+Math.floor(x/8)]>>((x%8)*3))&7).join('');
+    assert.equal(unpacked,row);
+  }
+  assert.equal(FIRE_LAVA_PALETTE[0].emission,0);
+  assert.ok(FIRE_LAVA_PALETTE.at(-1).emission>FIRE_LAVA_PALETTE[2].emission);
+  for(const {srgb,emission} of FIRE_LAVA_PALETTE){
+    assert.equal(srgb.length,3);
+    assert.ok(srgb.every(value=>Number.isFinite(value)&&value>=0&&value<=1));
+    assert.ok(Number.isFinite(emission)&&emission>=0);
+  }
 });
