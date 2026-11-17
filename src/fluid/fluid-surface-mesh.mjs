@@ -7,6 +7,7 @@ import {FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs'
 export const FLUID_SHORE_MICRO_STEPS=10;
 const CELL_EPSILON=.006;
 const SMOOTH_HEAD_DIFFERENCE=.5;
+export const FLUID_FALL_MIN_DROP=.75;
 const DIRECTIONS=Object.freeze([
   {dx:1,dz:0,normal:[1,0,0],edge:'east'},
   {dx:-1,dz:0,normal:[-1,0,0],edge:'west'},
@@ -113,15 +114,18 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     if(!cache.has(id))cache.set(id,sampleAt(x,z));
     return cache.get(id);
   };
-  const positions=[],normals=[],flows=[],indices=[];
+  const positions=[],normals=[],flows=[],faceModes=[],landingHeights=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
+  let waterfallFaces=0,fallLipFaces=0;
   const seen=new Set();
-  const pushFace=(quad,normal,flow)=>{
+  const pushFace=(quad,normal,flow,{mode=0,landingY=0}={})=>{
     const vertex=positions.length/3;
     for(const point of quad){
       positions.push(...point);
       normals.push(...normal);
       flows.push(flow[0],flow[1]);
+      faceModes.push(mode);
+      landingHeights.push(landingY);
     }
     indices.push(vertex,vertex+1,vertex+2,vertex,vertex+2,vertex+3);
     faceCount++;
@@ -147,6 +151,15 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     const shoreline=neighbors.map(neighbor=>
       Boolean(neighbor&&neighbor.depth===0&&neighbor.floorY>=c.surfaceY));
     if(shoreline.some(Boolean))refinedShoreColumns++;
+    // This is an existing physical lip with a lower, already wet receiving
+    // column. Render a flowing fall only when Water V2 publishes that actual
+    // downstream direction. A tall wall around a still pool is not a waterfall.
+    const isRealFall=(side,neighbor)=>Boolean(neighbor?.depth>0 &&
+      c.floorY>neighbor.floorY &&
+      c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP &&
+      c.flowX===side.dx && c.flowZ===side.dz);
+    const fallingIndex=DIRECTIONS.findIndex((side,i)=>isRealFall(side,neighbors[i]));
+    const hasFallingEdge=fallingIndex>=0;
 
     const h00=cornerHead(x,z,c,at),h01=cornerHead(x,z+1,c,at);
     const h10=cornerHead(x+1,z,c,at),h11=cornerHead(x+1,z+1,c,at);
@@ -158,8 +171,12 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     // Left/right/south/north order is identical to DIRECTIONS. Cutting is
     // entirely inward from a wet column, never painted onto dry terrain.
     const caps=microShoreCaps(x,z,shoreline,height);
-    for(const quad of caps)pushFace(quad,[0,1,0],flow);
+    for(const quad of caps)pushFace(quad,[0,1,0],flow,{
+      mode:hasFallingEdge?3:0,
+      landingY:hasFallingEdge?neighbors[fallingIndex].surfaceY:0
+    });
     topFaces+=caps.length;
+    if(hasFallingEdge)fallLipFaces+=caps.length;
 
     for(let i=0;i<DIRECTIONS.length;i++){
       const side=DIRECTIONS[i],neighbor=neighbors[i];
@@ -170,7 +187,11 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
           Math.abs(c.surfaceY-neighbor.surfaceY)<=SMOOTH_HEAD_DIFFERENCE){
         continue;
       }
-      const lower=Math.max(c.floorY,
+      const waterfall=isRealFall(side,neighbor);
+      // Only falling, connected water is allowed to extend below the upper
+      // *solid floor* to the actual lower pool's surface. Other side walls
+      // retain their original solid-floor clamp.
+      const lower=waterfall?neighbor.surfaceY:Math.max(c.floorY,
         neighbor.depth>0?neighbor.surfaceY:neighbor.floorY);
       const a=side.dx!==0
         ?[side.dx===1?x+1:x,z]
@@ -185,18 +206,30 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       else if(i===1){quad=[[x,lower,z],[x,lower,z+1],[x,hb,z+1],[x,ha,z]];}
       else if(i===2){quad=[[x,lower,z+1],[x+1,lower,z+1],[x+1,hb,z+1],[x,ha,z+1]];}
       else{quad=[[x,lower,z],[x,ha,z],[x+1,hb,z],[x+1,lower,z]];}
-      pushFace(quad,side.normal,flow);
+      // Lift falling sheets just outside the cliff face by 8mm to avoid
+      // depth-fighting with the authoritative Voxel rock, not to add volume.
+      const visibleQuad=waterfall
+        ?quad.map(([px,py,pz])=>[px+side.dx*.008,py,pz+side.dz*.008])
+        :quad;
+      pushFace(visibleQuad,side.normal,flow,{
+        mode:waterfall?2:1,
+        landingY:waterfall?neighbor.surfaceY:0
+      });
       sideFaces++;
+      if(waterfall)waterfallFaces++;
     }
   }
   return Object.freeze({
     schema:'wyrmforge.fluid-surface-mesh.v1',
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
     wetColumns:surface.cells.length,refinedShoreColumns,
+    waterfallFaces,fallLipFaces,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),
     flows:new Int8Array(flows),
+    faceModes:new Uint8Array(faceModes),
+    landingHeights:new Float32Array(landingHeights),
     indices:new Uint32Array(indices)
   });
 }

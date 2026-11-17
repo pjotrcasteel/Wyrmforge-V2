@@ -113,6 +113,17 @@ try{
     throw new Error('Breach did not wet any new cells beyond the WorldGen river: '+JSON.stringify({before,after}));
   }
   if(after.raisedSurfaceFaces<1)throw new Error('Actual liquid surface mesh did not render in browser');
+  // At least one of the real Fireball breaches must connect an upper,
+  // flowing column to an actually wet lower pool. Static cliff faces are
+  // never counted as Water V2 waterfalls.
+  const fallingFrames=observations.filter(item=>item.waterfallFaces>0);
+  if(!fallingFrames.length)throw new Error(
+    'No physically connected wet-to-wet waterfall after three real bank breaches: '+
+    JSON.stringify(observations.map(item=>({
+      step:item.steps,waterfallFaces:item.waterfallFaces,
+      wetBeyondChannel:item.wetBeyondChannel
+    })))
+  );
   if(after.refinedShoreColumns<1){
     throw new Error('The 10cm bank micro-contours did not reach the real game');
   }

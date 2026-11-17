@@ -1010,7 +1010,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.refinedShoreColumns??0)+' refined banks':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.waterfallFaces??0)+' active falls':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1465,6 +1465,8 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             presentedCells:playLava?.count??0,
             raisedSurfaceFaces:playFluidVisual?.stats.topFaces??0,
             verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
+            waterfallFaces:playFluidVisual?.stats.waterfallFaces??0,
+            fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0
           };
