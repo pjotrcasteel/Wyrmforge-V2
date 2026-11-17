@@ -11,8 +11,8 @@ test('the Hunt shoulder map tracks exposed materials and elevations after an edi
   world.set(1,5,-2,3);
   const read=()=>{
     const volume=huntGrassMaterialVolume(world,0,0,-3,6);
-    assert.deepEqual(volume.size,[40,1,40]);
-    return x=>volume.data[18*40+20+x];
+    assert.deepEqual(volume.size,[40,2,40]);
+    return x=>volume.data[18*80+20+x];
   };
   const before=read();
   assert.equal(before(-1),29);
@@ -21,4 +21,18 @@ test('the Hunt shoulder map tracks exposed materials and elevations after an edi
   assert.equal(before(2),0);
   world.set(-1,3,-2,0);
   assert.equal(read()(-1),26);
+});
+
+test('root shade follows only live trunks on their own grass level',()=>{
+  const world=new VoxelWorld();
+  world.set(0,3,0,1);
+  world.set(1,3,0,2);
+  world.set(0,7,1,1);
+  const tree={x:.5,y:4,z:.5,scale:1,sprite:{}};
+  const shade=(regions,x,z)=>huntGrassMaterialVolume(world,0,0,-3,8,regions)
+    .data[(20+z)*80+60+x];
+  assert.equal(shade([[tree]],0,0),255);
+  assert.equal(shade([[tree]],1,0),0);
+  assert.equal(shade([[tree]],0,1),0);
+  assert.equal(shade([],0,0),0);
 });
