@@ -2,12 +2,14 @@
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
 // Uses one small program/VAO. Never writes voxels or changes terrain textures.
 import {getCameraPreset} from '../camera-presets.mjs';
+import {waterRippleMotifGlsl} from '../river-water-art.mjs';
 import {buildFluidSurfaceMesh} from './fluid-surface-mesh.mjs';
 
 export const FLUID_VERTEX_GLSL=`#version 300 es
 precision highp float;
 layout(location=0) in vec3 aPosition;
 layout(location=1) in vec3 aNormal;
+layout(location=2) in vec2 aFlow;
 uniform vec2 uViewport;
 uniform vec2 uPan;
 uniform float uScale;
@@ -17,6 +19,7 @@ uniform vec3 uCameraDown;
 uniform vec3 uCameraDepth;
 out vec3 vWorld;
 out vec3 vNormal;
+out vec2 vFlow;
 void main(){
   vec3 world=aPosition;
   vec2 pixel=vec2(dot(world,uCameraRight),dot(world,uCameraDown))*uScale
@@ -26,6 +29,7 @@ void main(){
     dot(world,uCameraDepth)-uDepthOrigin,1.0);
   vWorld=world;
   vNormal=aNormal;
+  vFlow=aFlow;
 }
 `;
 
@@ -33,9 +37,11 @@ export const FLUID_FRAGMENT_GLSL=`#version 300 es
 precision highp float;
 in vec3 vWorld;
 in vec3 vNormal;
+in vec2 vFlow;
 uniform float uTime;
 uniform float uLava;
 out vec4 outColor;
+${waterRippleMotifGlsl()}
 float fluidHash(vec2 point){
   return fract(sin(dot(point,vec2(127.1,311.7)))*43758.5453);
 }
@@ -44,19 +50,24 @@ void main(){
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
   float frame=floor(uTime*4.0);
-  float drift=fluidHash(pixel-vec2(frame,0.0)+13.0);
-  float pool=fluidHash(floor(vWorld.xz*1.4)+31.0);
+  vec2 downstream=length(vFlow)>0.0?normalize(vFlow):vec2(0.0);
+  ivec2 moving=ivec2(floor(pixel-downstream*frame));
+  int col=int(mod(float(moving.x),32.0));
+  int row=int(mod(float(moving.y),16.0));
+  int ripple=int((HUNT_WATER_RIPPLES[row][col/8]>>uint(3*(col%8)))&7u);
+  float pool=fluidHash(floor(vWorld.xz*.25)+31.0);
   float top=step(0.5,vNormal.y);
   vec3 color;
   float opacity;
   if(uLava<0.5){
     vec3 deep=vec3(.075,.28,.32);
     vec3 shallow=vec3(.22,.49,.44);
-    color=mix(deep,shallow,.28+.32*pool);
-    float glint=step(.87,drift)*.22+step(.968,drift)*.16;
-    color=mix(color,vec3(.53,.75,.71),glint);
-    color*=mix(.70,1.0,top);
-    opacity=mix(.94,.86,top);
+    color=mix(deep,shallow,.36+.24*pool);
+    if(ripple==3)color=mix(color,vec3(.29,.55,.54),.25);
+    if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48);
+    if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72);
+    color*=mix(.87,1.0,top);
+    opacity=mix(.92,.83,top);
   }else{
     float ember=fluidHash(pixel-vec2(frame,frame*.25)+79.0);
     color=mix(vec3(.29,.055,.015),vec3(.86,.29,.045),.40+.45*pool);
@@ -149,7 +160,7 @@ export class HuntFluidSurfaceRenderer {
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
     const mesh=buildFluidSurfaceMesh(surface,{sampleAt});
-    const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.indices.byteLength;
+    const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
     this.#releaseBuffers();
     this.#mesh=mesh;
@@ -187,6 +198,9 @@ export class HuntFluidSurfaceRenderer {
       buffer(gl.ARRAY_BUFFER,this.#mesh.normals);
       gl.enableVertexAttribArray(1);
       gl.vertexAttribPointer(1,3,gl.BYTE,false,0,0);
+      buffer(gl.ARRAY_BUFFER,this.#mesh.flows);
+      gl.enableVertexAttribArray(2);
+      gl.vertexAttribPointer(2,2,gl.BYTE,false,0,0);
       buffer(gl.ELEMENT_ARRAY_BUFFER,this.#mesh.indices);
       this.#record={vao,buffers,count:this.#mesh.indices.length};
     }catch(error){
