@@ -52,9 +52,28 @@ import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
 
+import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
+
 const playMode=document.body.dataset.playHunt==='true';
 const playQuery=new URLSearchParams(location.search);
-const cellPreview=playMode&&playQuery.get('stream')==='cells';
+const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
+const routeNav=document.querySelector('#play-route-nav');
+if(routePreview&&routeNav){
+  routeNav.hidden=false;
+  const route=routeNav.querySelector('[name=route]');
+  const stop=routeNav.querySelector('[name=stop]');
+  route.value=routePreview.route;
+  for(const [index,item] of routePreview.stops.entries()){
+    stop.add(new Option((index+1)+' · '+item.name,index));
+  }
+  stop.value=routePreview.index;
+  route.addEventListener('change',()=>{
+    stop.value='0';
+    routeNav.submit();
+  });
+  stop.addEventListener('change',()=>routeNav.submit());
+}
+const cellPreview=playMode&&!routePreview&&playQuery.get('stream')==='cells';
 const gravityMode=playQuery.get('gravity');
 const splitSpanCollapse=gravityMode==='split-span';
 const shapedCollapse=gravityMode==='shaped'||splitSpanCollapse;
@@ -188,6 +207,12 @@ function resetPreviewView() {
 }
 
 function updateSiteSummary() {
+  if(routePreview){
+    const {index,stop,stops}=routePreview;
+    siteSummary.textContent=stop.name+' · '+(index+1)+'/'+stops.length+
+      ' · '+Math.round(stop.profile.corruption.progress*100)+'% corruption';
+    return;
+  }
   if(playMode) {
     siteSummary.textContent=(cellPreview?'Wet Forest · Cell preview · ':'Wet Forest · ')+(
       playConnected ? (playStream?.graph.layout.regions.length??2)+
@@ -786,7 +811,8 @@ function resetPlayActor() {
   const region={
     bounds:footprint,origin:{x:0,z:0}
   };
-  playActor=spawnHuntExplorer(active.world,region,{
+  if(routePreview)playActor=spawnHuntRoutePreview(active.world,generatedSite.layout);
+  else playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:startAt
   });
   playRecoveryCheckpoint=null;
@@ -1129,11 +1155,12 @@ function resetSite() {
       // The World Generation engine knows only site recipes and the public
       // terrain initialization contract; this host owns the adapter lifecycle.
       const kind=playMode?'wet-forest':siteKind.value;
+      const destinationKind=routePreview?.stop.kind??kind;
       const recipe=createWorldSiteRecipe({
-        regionId:'starter-region',siteId:'preview-'+kind,
-        encounterId:'preview-001',kind,
+        regionId:'starter-region',siteId:'preview-'+destinationKind,
+        encounterId:'preview-001',kind:destinationKind,
         seed:Number(siteSeed.value),worldRevision:0,
-        chunkEdge:Number(pitch.value),corruption:Number(siteInfluence.value)/100
+        chunkEdge:Number(pitch.value),corruption:routePreview?.stop.profile.corruption.progress??Number(siteInfluence.value)/100
       });
       generatedSite=generateWorldSite(recipe);
       // Fail closed if a future refactor accidentally feeds Play Hunt the
@@ -1147,7 +1174,7 @@ function resetSite() {
       )) {
         throw new Error('Play Hunt requires authored WorldGen V2 and Voxel V2 microterrain');
       }
-      if(playMode) {
+      if(playMode&&!routePreview) {
         playConnected=generateConnectedHuntStart(generatedSite);
         const initialFootprint=playConnected.footprint;
         const graph=generateAuthoredHuntTerrainGraph(generatedSite);
@@ -1196,7 +1223,7 @@ function resetSite() {
             addedCells:savedAdditions.filter(cell=>initialIds.includes(cell.owner.split(':cell:')[0]))});
       } else {
         loader=new V2ExternalTerrainLoader(generatedSite.definition,
-          {epoch:terrainEpochs.next()});
+          {epoch:terrainEpochs.next(),microSurfaceCapacity:routePreview?2048:undefined});
       }
     }
     breachButton.textContent=generatedSite || expeditionSite
@@ -1495,7 +1522,8 @@ function frame(now) {
       updateHuntGrassMaterialVolume();
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
-          huntFadingStartZ:(playConnected?.seam.minZ??-986)-14})) {
+          huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
+          huntCorruption:routePreview?.stop.profile.corruption})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
               !pendingEdit&&!errorMessage&&!renderer.pendingUploads){
@@ -1750,6 +1778,10 @@ if(playMode) {
       build:{version:VERSION,commit:COMMIT},
       capturedAtUtc:new Date().toISOString(),
       site:{
+        ...(routePreview?{materialRoute:{
+          id:routePreview.route,node:routePreview.index+1,nodes:routePreview.stops.length,
+          biome:routePreview.stop.kind,profile:routePreview.stop.profile
+        }}:{}),
         seed:generatedSite?.recipe.seed??null,
         siteId:generatedSite?.recipe.siteId??null,
         regionId:generatedSite?.recipe.regionId??null,

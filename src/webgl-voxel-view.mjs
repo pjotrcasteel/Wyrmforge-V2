@@ -61,6 +61,7 @@ uniform bool uFastHuntMode;
 uniform bool uHuntHeightContrast;
 uniform bool uHuntGrassArt;
 uniform float uHuntFadingStartZ;
+uniform vec3 uHuntCorruption; // route progress, ash, volcanic
 uniform bool uHuntGrassEdges;
 uniform float uHuntElevationReference;
 uniform float uGrassTexelsPerVoxel;
@@ -135,14 +136,28 @@ vec3 huntFadingSurface(vec3 surface,int material) {
   // Anchored to the map so adjacent regions share one continuous transition.
   // Skip all extra terrain sampling in the living woodland behind it.
   float distanceNorth=uHuntFadingStartZ-vWorld.z;
-  if(distanceNorth<-4.0)return surface;
+  bool route=uHuntCorruption.x>=0.0;
+  if(route?uHuntCorruption.x<=0.0:distanceNorth<-4.0)return surface;
   vec2 texel=(floor(vWorld.xz*12.0)+.5)/12.0;
   float pockets=labNoise(texel*.29+32.0);
-  float advance=smoothstep(0.0,32.0,distanceNorth+(pockets-.5)*8.0);
+  float advance=route?clamp(uHuntCorruption.x+(pockets-.5)*.24*uHuntCorruption.x*(1.0-uHuntCorruption.x),0.0,1.0):
+    smoothstep(0.0,32.0,distanceNorth+(pockets-.5)*8.0);
   if(advance<=0.0)return surface;
   float grains=labNoise(texel*2.0+vWorld.y*.53);
   float ash=smoothstep(.37,.73,pockets+.24*(grains-.5));
   float value=dot(surface,vec3(.2126,.7152,.0722));
+  if(route){
+    float ashCover=uHuntCorruption.y*(.43+.57*ash);
+    float heat=uHuntCorruption.z;
+    vec3 charcoal=value*vec3(.56,.55,.59);
+    if(material==1&&vNormal.y>.5){
+      vec3 faded=mix(surface*vec3(.72,.81,.73),value*vec3(.98,.82,.62),ash);
+      return mix(mix(surface,faded,advance*.76),charcoal,ashCover);
+    }
+    vec3 dust=value*vec3(.95,.86,.83);
+    vec3 basalt=mix(charcoal,value*vec3(.79,.52,.39),ash*.55);
+    return mix(mix(surface,dust,ashCover*.64),basalt,heat*.86);
+  }
   if(material==1){
     vec3 moss=surface*vec3(.63,.74,.66);
     vec3 dry=vec3(value)*vec3(.91,.83,.72);
@@ -836,6 +851,7 @@ export class WebGLVoxelView {
       huntHeightContrast: gl.getUniformLocation(this.#program, 'uHuntHeightContrast'),
       huntGrassArt: gl.getUniformLocation(this.#program, 'uHuntGrassArt'),
       huntFadingStartZ: gl.getUniformLocation(this.#program, 'uHuntFadingStartZ'),
+      huntCorruption: gl.getUniformLocation(this.#program, 'uHuntCorruption'),
       huntGrassEdges: gl.getUniformLocation(this.#program, 'uHuntGrassEdges'),
       huntElevationReference: gl.getUniformLocation(this.#program, 'uHuntElevationReference'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
@@ -1044,7 +1060,7 @@ export class WebGLVoxelView {
     this.#labOrigin=origin;
   }
 
-  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntElevationReference = 4, depthOrigin = 0,
+  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
     labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
@@ -1062,6 +1078,7 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.huntHeightContrast,huntHeightContrast?1:0);
     gl.uniform1i(this.#uniforms.huntGrassArt,huntGrassArt?1:0);
     gl.uniform1f(this.#uniforms.huntFadingStartZ,huntFadingStartZ);
+    gl.uniform3f(this.#uniforms.huntCorruption,huntCorruption?.progress??-1,huntCorruption?.ash??0,huntCorruption?.volcanic??0);
     gl.uniform1f(this.#uniforms.huntElevationReference,huntElevationReference);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
     const keys = ['terrain/grass', 'terrain/grass-soil-side', 'terrain/dirt', 'terrain/stone'];

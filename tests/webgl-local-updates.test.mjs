@@ -42,7 +42,7 @@ function fakeCanvas() {
     deleteBuffer: buffer => stats.deletedBuffers.push(buffer),
     bindBuffer() {}, bufferData() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     isContextLost: () => false, viewport() {}, clearColor() {}, clearDepth() {}, clear() {},
-    useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i() {}, uniform2f() {}, uniform1f() {},
+    useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i() {}, uniform2f() {}, uniform3f() {}, uniform1f() {},
     createTexture: () => ({ id: ++nextId }), deleteTexture() {}, pixelStorei() {},
     texImage2D() { stats.textureUploads = (stats.textureUploads ?? 0) + 1; }, texParameteri() {},
     uniform3fv: (location, value) => {
