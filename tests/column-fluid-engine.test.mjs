@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {VoxelWorld} from '../src/voxel-world.mjs';
 import {
-  ColumnFluidEngine,FLUID_STATE_SCHEMA,MAX_FLUID_COLUMNS
+  ColumnFluidEngine,FLUID_STATE_SCHEMA,FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS
 } from '../src/fluid/column-fluid-engine.mjs';
 
 const BOUNDS={minX:0,maxX:8,minZ:0,maxZ:8};
@@ -131,4 +131,41 @@ test('region, source and per-frame work are bounded',()=>{
     sources:[{x:0,z:0,surfaceY:1,rate:99}]
   }),/source rate/);
   assert.throws(()=>fixture().engine.step({budget:4097}),/budget/);
+});
+
+test('fluid-surface handoff is immutable and exposes downstream direction',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:1,minZ:0,maxZ:0},floorAt:()=>0,
+    initial:[{x:0,z:0,depth:40}]
+  });
+  const surface=fluid.snapshotSurface();
+  assert.equal(surface.schema,FLUID_SURFACE_SCHEMA);
+  assert.equal(surface.kind,'water');
+  assert.equal(surface.cells.length,1);
+  assert.deepEqual([surface.cells[0].x,surface.cells[0].z], [0,0]);
+  assert.deepEqual([surface.cells[0].flowX,surface.cells[0].flowZ], [1,0]);
+  assert.equal(surface.cells[0].surfaceY,4);
+  assert.ok(Object.isFrozen(surface));
+  assert.ok(Object.isFrozen(surface.cells));
+  assert.ok(Object.isFrozen(surface.cells[0]));
+  fluid.step({budget:2});
+  assert.equal(fluid.snapshotSurface().cells.length,2);
+  assert.equal(surface.cells.length,1,'published surface is an immutable snapshot');
+});
+
+test('fluid restore refuses a different WorldGen source configuration',()=>{
+  const first=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:2,minZ:0,maxZ:0},floorAt:()=>0,
+    initial:[{x:0,z:0,depth:10}],
+    sources:[{x:0,z:0,surfaceY:1,rate:3}]
+  });
+  const changed=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:2,minZ:0,maxZ:0},floorAt:()=>0,
+    initial:[{x:0,z:0,depth:10}],
+    sources:[{x:0,z:0,surfaceY:1,rate:2}]
+  });
+  const saved=first.snapshot();
+  assert.equal(saved.sources.length,1);
+  assert.throws(()=>changed.restore(saved),/Incompatible fluid snapshot/);
+  assert.deepEqual(changed.snapshot().depths,[10,0,0]);
 });
