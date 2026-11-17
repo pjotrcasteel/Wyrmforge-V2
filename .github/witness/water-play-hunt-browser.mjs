@@ -38,8 +38,17 @@ try{
   });
   page=await context.newPage();
   page.on('pageerror',error=>report.errors.push('page: '+error.message));
+  page.on('response',response=>{
+    if(response.status()>=400 && !new URL(response.url()).pathname.endsWith('/favicon.ico')){
+      report.errors.push('resource HTTP '+response.status()+': '+response.url());
+    }
+  });
   page.on('console',message=>{
-    if(message.type()==='error')report.errors.push('console: '+message.text());
+    // Chrome emits a URL-less console error when an optional favicon is 404.
+    // HTTP responses above retain exact URLs, so other 404s still fail CI.
+    if(message.type()==='error'&&!message.text().includes('404 (File not found)')){
+      report.errors.push('console: '+message.text());
+    }
   });
   await page.goto(base+'/play-hunt.html?route=forest&stop=0&fluidTest=auto',{
     waitUntil:'domcontentloaded',timeout:30000
@@ -63,6 +72,7 @@ try{
   },before,{timeout:120000});
   const after=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
   report.after=after;
+  console.log('FLUID_BROWSER_MEASUREMENTS '+JSON.stringify({before,edit,after}));
   await page.screenshot({path:artifacts+'/forest-after.jpeg',type:'jpeg',quality:67});
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect
@@ -77,7 +87,8 @@ try{
   if(after.wetBeyondChannel<=before.wetBeyondChannel){
     throw new Error('Breach did not wet any new cells beyond the WorldGen river: '+JSON.stringify({before,after}));
   }
-  if(report.errors.length)throw new Error('Game browser console errors: '+report.errors.join('; ').slice(0,800));
+  if(after.raisedSurfaceFaces<1)throw new Error('Actual liquid surface mesh did not render in browser');
+  if(report.errors.length)throw new Error('Game browser errors: '+report.errors.join('; ').slice(0,800));
   console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after}));
 }catch(error){
   report.failed=String(error.stack||error);
