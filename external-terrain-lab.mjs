@@ -25,6 +25,7 @@ import {
   createExternalSiteFixture, EXTERNAL_SITE_BREACH
 } from './src/diagnostics/external-site-fixture.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
+import { terrainArtKey } from './src/terrain-material-handoff.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
@@ -1477,7 +1478,7 @@ function frame(now) {
         playStream.cameraHoldStart=null;
       }
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY})) {
+          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
               !pendingEdit&&!errorMessage&&!renderer.pendingUploads){
@@ -1740,6 +1741,7 @@ if(playMode) {
         generatorHash:generatedSite?.hash??null,
         cameraPreset:viewCamera.value,
         fullWorldGenMaterialShading:true,
+        grassAlbedoTiles:renderer?.terrainTileStagingStatistics.retainedTiles??0,
         heightContrast:viewCamera.value===PLAY_HUNT_CAMERA,
         terrainDefinitionSchema:generatedSite?.definition.schema??null,
         microSurfaceTiles:active?.world.microSurfaceCount??playConnected?.definition.surfaceTiles.length??generatedSite?.layout.microSurface.tileCount??null,
@@ -1975,6 +1977,21 @@ try {
       lastStatusAt=-Infinity;
     }
   });
+  if(playMode){
+    try {
+      const grassTiles=await Promise.all([
+        ['grass/meadow','grass-clearing'],['grass/meadow-dark','grass-shade']
+      ].map(async ([slot,asset])=>{
+        const image=new Image();
+        image.src=new URL('./art/fire-hunt-materials/'+asset+'.png',import.meta.url);
+        await image.decode();
+        return [terrainArtKey(slot,'albedo'),image];
+      }));
+      for(const [key,image] of grassTiles)renderer.setTerrainMaterialTile('albedo',key,image);
+    } catch(error) {
+      console.warn('Wet Forest grass textures could not be loaded:',error);
+    }
+  }
   resetSite();
   requestAnimationFrame(frame);
 } catch(error) {

@@ -59,6 +59,7 @@ uniform float uTerrainTilesPerVoxel;
 uniform bool uGrassEnabled;
 uniform bool uFastHuntMode;
 uniform bool uHuntHeightContrast;
+uniform bool uHuntGrassArt;
 uniform float uHuntElevationReference;
 uniform bool uWoodlandBackdrop;
 uniform float uGrassTexelsPerVoxel;
@@ -98,6 +99,31 @@ vec3 grassAlbedo(vec3 world) {
 }
 
 ${FIRE_MATERIAL_LAB_GLSL}
+
+vec3 huntGrassArt(vec3 albedo,vec2 ground) {
+  // Large, coherent moss beds with a shared pixel grid for the grass motifs.
+  vec2 pixel=floor(ground*12.0);
+  vec2 at=(pixel+.5)/12.0;
+  float clearing=labNoise(at*.23)+.25*(labNoise(at*.61)-.5);
+  vec3 moss=srgbToLinearColor(vec3(.27,.36,.19));
+  vec3 sun=srgbToLinearColor(vec3(.47,.55,.26));
+  vec3 bed=mix(moss,sun,smoothstep(.34,.67,clearing));
+  bed=mix(albedo,bed,.76);
+
+  // One small rooted silhouette per eligible cluster. Quiet canopy floor
+  // stays legible around the actor, with tufts concentrated in the light.
+  vec2 grid=floor(pixel/vec2(17.0,15.0));
+  vec2 anchor=vec2(3.0)+floor(vec2(soilHash(grid+8.0),soilHash(grid+19.0))*vec2(11.0,9.0));
+  vec2 p=pixel-grid*vec2(17.0,15.0)-anchor;
+  bool tuft=(p.x==0.0&&p.y>=-2.0&&p.y<=0.0)
+    ||(abs(p.x)==1.0&&p.y>=-1.0&&p.y<=1.0)
+    ||(p.x==-2.0&&p.y==0.0);
+  if(tuft&&soilHash(grid+26.0)<.48&&clearing>.42){
+    vec3 tips=srgbToLinearColor(vec3(.61,.64,.31));
+    return p.y<0.0?mix(bed,tips,.66):bed*.77;
+  }
+  return bed;
+}
 
 void main() {
   if(uLabEnabled&&abs(vMaterial-5.0)<.5){
@@ -230,6 +256,9 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
+  if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
+    linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
+  }
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
     if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;
@@ -639,6 +668,7 @@ export class WebGLVoxelView {
       grassEnabled: gl.getUniformLocation(this.#program, 'uGrassEnabled'),
       fastHuntMode: gl.getUniformLocation(this.#program, 'uFastHuntMode'),
       huntHeightContrast: gl.getUniformLocation(this.#program, 'uHuntHeightContrast'),
+      huntGrassArt: gl.getUniformLocation(this.#program, 'uHuntGrassArt'),
       huntElevationReference: gl.getUniformLocation(this.#program, 'uHuntElevationReference'),
       woodlandBackdrop: gl.getUniformLocation(this.#program, 'uWoodlandBackdrop'),
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
@@ -847,7 +877,7 @@ export class WebGLVoxelView {
     this.#labOrigin=origin;
   }
 
-  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntElevationReference = 4, depthOrigin = 0,
+  render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntElevationReference = 4, depthOrigin = 0,
     labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0 }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
@@ -863,6 +893,7 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.grassEnabled, this.#grassTexture ? 1 : 0);
     gl.uniform1i(this.#uniforms.fastHuntMode,this.#fastHuntMode?1:0);
     gl.uniform1i(this.#uniforms.huntHeightContrast,huntHeightContrast?1:0);
+    gl.uniform1i(this.#uniforms.huntGrassArt,huntGrassArt?1:0);
     gl.uniform1f(this.#uniforms.huntElevationReference,huntElevationReference);
     gl.uniform1i(this.#uniforms.woodlandBackdrop,this.#transparentBackground&&camera==='hunt'?1:0);
     gl.uniform1f(this.#uniforms.grassDensity, this.#grassTexelsPerVoxel);
