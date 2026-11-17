@@ -54,10 +54,25 @@ try{
   await page.goto(base+'/play-hunt.html?route=forest&stop=0&fluidTest=auto',{
     waitUntil:'domcontentloaded',timeout:30000
   });
-  await page.waitForFunction(()=>{
-    return document.querySelector('#play-hud-details')?.textContent?.includes('Water V2:') &&
-      !!window.__WyrmforgeFluidTest;
-  },null,{timeout:120000});
+  try{
+    await page.waitForFunction(()=>{
+      return document.querySelector('#play-hud-details')?.textContent?.includes('Water V2:') &&
+        !!window.__WyrmforgeFluidTest;
+    },null,{timeout:30000});
+  }catch(error){
+    const diagnostics=await page.evaluate(()=>({
+      readyState:document.readyState,
+      hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,500)??null,
+      summary:document.querySelector('#site-summary')?.textContent?.slice(0,400)??null,
+      debugText:document.body?.innerText?.slice(-1500)??null,
+      canvasSize:document.querySelector('#site-view')?.width??null,
+      hookReady:Boolean(window.__WyrmforgeFluidTest)
+    }));
+    report.startup={diagnostics,errors:[...report.errors]};
+    console.error('FLUID_BROWSER_STARTUP_DIAGNOSTICS '+JSON.stringify(report.startup));
+    await page.screenshot({path:artifacts+'/startup-failure.jpeg',type:'jpeg',quality:65});
+    throw error;
+  }
   const before=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
   report.before=before;
   if(before.wetColumns<8||before.worldRevision<1){
@@ -111,10 +126,7 @@ try{
   await page.evaluate(()=>window.__WyrmforgeFluidTest.ribbons(false));
   await page.waitForTimeout(180);
   const noRibbon=PNG.sync.read(await page.screenshot({type:'png',scale:'css'}));
-  await page.evaluate(()=>{
-    window.__WyrmforgeFluidTest.ribbons(true);
-    window.__WyrmforgeFluidTest.hold(false);
-  });
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.ribbons(true));
   if(beforeRibbon.width!==noRibbon.width||beforeRibbon.height!==noRibbon.height){
     throw new Error('Screenshot sizes changed while toggling only the waterfall');
   }
@@ -145,6 +157,56 @@ try{
   if(maskedPixels<30||changedPixels<25){
     throw new Error('Fall geometry exists but is not visibly rendered in Hunt screenshot: '+
       JSON.stringify(report.visual));
+  }
+  // Landing acceptance must be independent of the waterfall visibility gate:
+  // only lower-pool impact pixels change, while the falling ribbons,
+  // authored water, fixed camera and frozen solver remain untouched.
+  const landingRects=await page.evaluate(()=>window.__WyrmforgeFluidTest.landingRects());
+  if(landingRects.length<1)throw new Error('No real wet waterfall landing is projected on Hunt camera');
+  const landingOn=PNG.sync.read(await page.screenshot({
+    path:artifacts+'/landing-on.png',type:'png',scale:'css'
+  }));
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.landing(false));
+  await page.waitForTimeout(180);
+  const landingOff=PNG.sync.read(await page.screenshot({
+    path:artifacts+'/landing-off.png',type:'png',scale:'css'
+  }));
+  await page.evaluate(()=>{
+    window.__WyrmforgeFluidTest.landing(true);
+    window.__WyrmforgeFluidTest.hold(false);
+  });
+  if(landingOn.width!==landingOff.width||landingOn.height!==landingOff.height){
+    throw new Error('Landing comparison screenshot sizes changed');
+  }
+  const landingMask=new Uint8Array(landingOn.width*landingOn.height);
+  for(const {left,right,top,bottom} of landingRects){
+    for(let y=Math.max(0,Math.floor(top));y<Math.min(landingOn.height,Math.ceil(bottom));y++){
+      for(let x=Math.max(0,Math.floor(left));x<Math.min(landingOn.width,Math.ceil(right));x++){
+        landingMask[y*landingOn.width+x]=1;
+      }
+    }
+  }
+  let landingPixels=0,landingChanged=0,landingDelta=0;
+  for(let i=0;i<landingMask.length;i++){
+    if(!landingMask[i])continue;
+    landingPixels++;
+    const offset=i*4;
+    const diff=Math.abs(landingOn.data[offset]-landingOff.data[offset])+
+      Math.abs(landingOn.data[offset+1]-landingOff.data[offset+1])+
+      Math.abs(landingOn.data[offset+2]-landingOff.data[offset+2]);
+    if(diff>=24){
+      landingChanged++;
+      landingDelta+=diff;
+    }
+  }
+  report.landingVisual={
+    projectedLandingBounds:landingRects.length,maskedPixels:landingPixels,
+    changedPixels:landingChanged,colorDelta:landingDelta
+  };
+  console.log('FLUID_BROWSER_LANDING '+JSON.stringify(report.landingVisual));
+  if(after.landingSplashFaces<16||landingPixels<12||landingChanged<8){
+    throw new Error('The real lower-pool impact is not visibly rendered: '+
+      JSON.stringify(report.landingVisual));
   }
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect

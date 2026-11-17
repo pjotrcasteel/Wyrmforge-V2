@@ -9,6 +9,12 @@ const CELL_EPSILON=.006;
 const SMOOTH_HEAD_DIFFERENCE=.5;
 export const FLUID_FALL_MIN_DROP=.75;
 export const FLUID_FALL_RIBBON_SECTIONS=2;
+// Sparse 10cm surface chips around the impact. The pattern is asymmetric,
+// giving pixel-art spray without an obviously repeating circular stamp.
+export const FLUID_LANDING_SPLASH_TILES=Object.freeze([
+  [-4,-1],[-3,-3],[-2,-4],[0,-4],[2,-3],[3,-1],[3,1],[2,3],
+  [0,3],[-2,3],[-4,2],[-3,0],[-1,-3],[1,-2],[-1,2],[1,2]
+].map(([across,downstream])=>Object.freeze([across,downstream])));
 const DIRECTIONS=Object.freeze([
   {dx:1,dz:0,normal:[1,0,0],edge:'east'},
   {dx:-1,dz:0,normal:[-1,0,0],edge:'west'},
@@ -117,7 +123,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   };
   const positions=[],normals=[],flows=[],faceModes=[],landingHeights=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
-  let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0;
+  let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0,landingSplashFaces=0;
   const seen=new Set();
   const pushFace=(quad,normal,flow,{mode=0,landingY=0}={})=>{
     const vertex=positions.length/3;
@@ -247,6 +253,27 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
             fallRibbonFaces++;
           }
         }
+        // The landing is *the lower cell's actual wet surface*, never a
+        // decorative puddle on dry ground. Small 10cm foam chips form an
+        // asymmetric burst across its 1m pool cap and move in the shader.
+        const poolX=x+side.dx+.5,poolZ=z+side.dz+.5;
+        const splashY=neighbor.surfaceY+.036;
+        const impact=(u,v)=>[
+          poolX+acrossX*u/FLUID_SHORE_MICRO_STEPS+
+            side.dx*v/FLUID_SHORE_MICRO_STEPS,
+          splashY,
+          poolZ+acrossZ*u/FLUID_SHORE_MICRO_STEPS+
+            side.dz*v/FLUID_SHORE_MICRO_STEPS
+        ];
+        for(const [across,downstream] of FLUID_LANDING_SPLASH_TILES){
+          pushFace([
+            impact(across,downstream),
+            impact(across+1,downstream),
+            impact(across+1,downstream+1),
+            impact(across,downstream+1)
+          ],[0,1,0],flow,{mode:5,landingY:neighbor.surfaceY});
+          landingSplashFaces++;
+        }
       }
     }
   }
@@ -254,7 +281,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     schema:'wyrmforge.fluid-surface-mesh.v1',
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
     wetColumns:surface.cells.length,refinedShoreColumns,
-    waterfallFaces,fallLipFaces,fallRibbonFaces,
+    waterfallFaces,fallLipFaces,fallRibbonFaces,landingSplashFaces,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),

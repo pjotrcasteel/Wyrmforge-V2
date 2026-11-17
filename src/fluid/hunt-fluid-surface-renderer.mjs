@@ -49,6 +49,7 @@ in float vLandingY;
 uniform float uTime;
 uniform float uLava;
 uniform float uRibbonEnabled;
+uniform float uLandingEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 float fluidHash(vec2 point){
@@ -56,6 +57,7 @@ float fluidHash(vec2 point){
 }
 void main(){
   if(vFaceMode==4&&uRibbonEnabled<.5)discard;
+  if(vFaceMode==5&&uLandingEnabled<.5)discard;
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
@@ -67,6 +69,21 @@ void main(){
   int ripple=int((HUNT_WATER_RIPPLES[row][col/8]>>uint(3*(col%8)))&7u);
   float pool=fluidHash(floor(vWorld.xz*.25)+31.0);
   float top=step(0.5,vNormal.y);
+  if(vFaceMode==5){
+    // Landing foam only exists where the physical river actually discharges
+    // into a wet lower pool. Sparse cap pixels travel with the flow rather
+    // than stamping a bright circle across every waterfall or still basin.
+    float stamp=fluidHash(floor(vWorld.xz*10.0)+vec2(19.0,73.0));
+    float pace=uLava<.5?2.4:.65;
+    float tumble=fract(uTime*pace+stamp*.48);
+    float sparkle=step(.14,tumble)*(1.0-step(.79,tumble));
+    float strong=step(.62,stamp);
+    vec3 foam=uLava<.5
+      ?mix(vec3(.40,.65,.64),vec3(.71,.83,.78),.35+.55*strong)
+      :mix(vec3(.83,.32,.07),vec3(1.0,.74,.24),.35+.55*strong);
+    outColor=vec4(foam,(uLava<.5?.64:.78)*mix(.6,1.0,sparkle));
+    return;
+  }
   vec3 color;
   float opacity;
   if(uLava<0.5){
@@ -191,6 +208,7 @@ export class HuntFluidSurfaceRenderer {
       sideFaces:this.#mesh?.sideFaces??0,
       waterfallFaces:this.#mesh?.waterfallFaces??0,
       fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
+      landingSplashFaces:this.#mesh?.landingSplashFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
       wetColumns:this.#mesh?.wetColumns??0,
       refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
@@ -203,15 +221,22 @@ export class HuntFluidSurfaceRenderer {
     });
   }
 
-  // Screenshot-witness projection only: these are true raster bounds of
-  // faces tagged as flowing ribbons, in the existing canvas pixel space.
-  // No texture reads and no camera or simulation mutation.
+  // Pixel-based browser acceptance can isolate the waterfall ribbon and
+  // its lower-pool landing separately, without changing the simulation.
   projectedRibbonBounds(view){
+    return this.#projectedModeBounds(view,4);
+  }
+
+  projectedLandingBounds(view){
+    return this.#projectedModeBounds(view,5);
+  }
+
+  #projectedModeBounds(view,mode){
     if(!this.#mesh||!view)return [];
     const basis=getCameraPreset(view.camera);
     const bounds=[];
     for(let vertex=0;vertex<this.#mesh.vertexCount;vertex+=4){
-      if(this.#mesh.faceModes[vertex]!==4)continue;
+      if(this.#mesh.faceModes[vertex]!==mode)continue;
       let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
       for(let i=vertex;i<vertex+4;i++){
         const x=this.#mesh.positions[i*3];
@@ -270,7 +295,7 @@ export class HuntFluidSurfaceRenderer {
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
         depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
-        ribbons:uniform('uRibbonEnabled')
+        ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled')
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
@@ -314,7 +339,7 @@ export class HuntFluidSurfaceRenderer {
     return true;
   }
 
-  render(view,{time=0,reducedMotion=false,showRibbons=true}={}){
+  render(view,{time=0,reducedMotion=false,showRibbons=true,showLanding=true}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -328,6 +353,7 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform1f(u.time,reducedMotion?0:time);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
+    gl.uniform1f(u.landing,showLanding?1:0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);

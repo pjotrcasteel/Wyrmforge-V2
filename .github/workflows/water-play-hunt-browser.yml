@@ -26,6 +26,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Parse the actual Play Hunt host and browser witness before starting WebGL
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check .github/witness/water-play-hunt-browser.mjs
       - name: Use runner Chrome for an actual WebGL2 browser test
         run: |
           command -v google-chrome
