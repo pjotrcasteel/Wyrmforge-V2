@@ -1010,7 +1010,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.sideFaces??0)+' liquid walls':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.refinedShoreColumns??0)+' refined banks':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1961,7 +1961,7 @@ if(playMode) {
         renderedCells:playLava?.count??0,
         raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
-        presentation:'existing water/lava art on exposed terrain; raised-volume geometry pending'
+        presentation:'independent simulated surface caps and sidewalls; 10cm high-bank shoreline details'
       }:null,
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
