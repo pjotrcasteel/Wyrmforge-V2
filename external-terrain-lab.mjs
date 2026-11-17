@@ -1007,6 +1007,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1892,6 +1893,14 @@ if(playMode) {
       },
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels,
         visualPreviewLevel:huntFireballVisualLevel(playFireballLevel?.value)},
+      fluids:playFluid?{
+        schema:playFluid.schema,kind:playFluid.kind,
+        step:playFluid.steps,wetColumns:playFluid.wetCount,
+        totalDepthUnits:playFluid.totalDepth,residentColumns:playFluid.columnCount,
+        renderedCells:playLava?.count??0,
+        solverBudgetPerFixedStep:96,
+        presentation:'existing water/lava art on exposed terrain; raised-volume geometry pending'
+      }:null,
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
