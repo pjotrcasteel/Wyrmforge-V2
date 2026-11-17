@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {FIRE_LAVA_MOTIF,fireLavaMotifGlsl,FIRE_LAVA_TEXELS_PER_VOXEL,FIRE_LAVA_FRAMES_PER_SECOND} from '../src/fire-lava-art.mjs';
+import {stepHuntExplorer} from '../src/hunt-play-runtime.mjs';
 import {spawnTerrainActor} from '../src/terrain-actor.mjs';
 import {FIRE_HUNT_MATERIALS,TERRAIN_BASE_TILES,createMaterialLabTerrain,materialLabVolume,LAB_LAVA,LAB_CRUST,LAB_LAVA_BRIDGE_X,MATERIAL_LAB_SPAWN,MATERIAL_LAB_TARGET} from '../src/fire-hunt-material-lab.mjs';
 import {terrainArtKey,TERRAIN_ART_CHANNELS,TERRAIN_ART_SLOTS} from '../src/terrain-material-handoff.mjs';
@@ -119,4 +120,20 @@ test('Fire Road has a continuous shallow trail alongside the lava at Hunt scale'
   assert.equal(world.get(4,2,4),1);
   assert.ok([4,5].some(x=>world.get(x,1,-14)===LAB_LAVA));
   assert.equal(world.get(5,2,-14),LAB_CRUST);
+});
+
+
+test('The Fire Road bridge preserves the lava underneath and is walkable in both directions',()=>{
+  const {world,radius}=createMaterialLabTerrain('grass','hunt',false,'broken',true,true);
+  const bounds={minX:-radius,maxX:radius-1,minZ:-radius,maxZ:radius-1};
+  const z=-12.5;
+  const start=spawnTerrainActor(world,{x:.5,z,searchTopY:10});
+  assert.equal(world.get(4,1,-13),LAB_LAVA);
+  assert.equal(world.get(4,2,-13),3);
+  let walker=start;
+  for(let i=0;i<240&&walker.x<7.25;i++)walker=stepHuntExplorer(world,walker,bounds,{moveX:1});
+  assert.ok(walker.x>=7.25);
+  assert.ok(Math.abs(walker.y-3)<.001);
+  for(let i=0;i<240&&walker.x>.75;i++)walker=stepHuntExplorer(world,walker,bounds,{moveX:-1});
+  assert.ok(walker.x<=.75);
 });
