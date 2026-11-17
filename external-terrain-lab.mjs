@@ -1,4 +1,4 @@
-import {createHuntFireballImpact,paintHuntFireballImpact} from './src/hunt-fireball-visuals.mjs';
+import {createHuntFireballImpact,paintHuntFireballImpact,huntFireballVisualLevel} from './src/hunt-fireball-visuals.mjs';
 import {huntGrassMaterialVolume,HUNT_GRASS_VOLUME_STRIDE} from './src/hunt-grass-material-volume.mjs';
 import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
 import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
@@ -76,6 +76,8 @@ const canvas=document.querySelector('#site-view');
 const playJoystick=document.querySelector('#play-joystick');
 const playStick=document.querySelector('#play-stick');
 const playHud=document.querySelector('#play-hud');
+const playFireballLevel=document.querySelector('#play-fireball-level');
+if(playFireballLevel)playFireballLevel.value=String(huntFireballVisualLevel(playQuery.get('fireballLevel')));
 const playHudDetails=document.querySelector('#play-hud-details');
 const playHudSummary=document.querySelector('#play-hud-summary');
 const playCameraToggle=document.querySelector('#play-camera-toggle');
@@ -703,6 +705,7 @@ function castPlayFireball(clientX,clientY,{guided=false}={}) {
   const distance=Math.hypot(target.point.x-from.x,
     target.point.y-from.y,target.point.z-from.z);
   playFireball={...target,from,world:active.world,startedAt:performance.now(),
+    level:huntFireballVisualLevel(playFireballLevel?.value),
     duration:Math.max(100,Math.min(420,distance*30))};
 }
 
@@ -722,7 +725,7 @@ function advancePlayFireball(now) {
       const boulder=cast.propKind==='boulder';
       if(boulder)playStream.directBoulderHits++;
       else playStream.directTreeHits++;
-      playImpact=createHuntFireballImpact(cast.point,now,{propKind:cast.propKind,reducedMotion});
+      playImpact=createHuntFireballImpact(cast.point,now,{propKind:cast.propKind,reducedMotion,level:cast.level});
       previewMessage.textContent=boulder
         ?(hit.hits===1?'Boulder cracked · Tap it again':'Boulder shattered')
         :(hit.hits===1?'Tree damaged · Tap the trunk again':'Tree felled');
@@ -736,7 +739,7 @@ function advancePlayFireball(now) {
   playFireballCount++;
   playRemovedVoxels+=result.removedVoxels;
   if(result.removedVoxels>0&&playActor?.grounded)playRecoveryCheckpoint=playActor;
-  playImpact=createHuntFireballImpact(cast.point,now,{material,removed:result.removedVoxels,reducedMotion});
+  playImpact=createHuntFireballImpact(cast.point,now,{material,removed:result.removedVoxels,reducedMotion,level:cast.level});
 }
 
 function playMovementInput() {
@@ -1804,7 +1807,8 @@ if(playMode) {
           movementPaused:awaitingPlayContext,lastRecovery:contextEvidence.snapshot}:null,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
-      fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels},
+      fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels,
+        visualPreviewLevel:huntFireballVisualLevel(playFireballLevel?.value)},
       terrain:{
         initializedCells:loader?.progress.totalCells??null,
         chunkEdge:active?.world.chunkEdge??null,
