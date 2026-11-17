@@ -25,7 +25,7 @@ export class ColumnFluidEngine {
   #steps=0;
 
   constructor({bounds,floorAt,kind='water',initial=[],sources=[]}={}){
-    if(!bounds||typeof floorAt!=='function'||!(kind in RATE)) {
+    if(!bounds||typeof floorAt!=='function'||!Object.hasOwn(RATE,kind)) {
       throw new TypeError('Expected bounded terrain floors and water or lava');
     }
     const {minX,maxX,minZ,maxZ}=bounds;
