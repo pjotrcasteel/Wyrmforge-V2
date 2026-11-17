@@ -47,7 +47,7 @@ try{
   await page.waitForFunction(()=>{
     return document.querySelector('#play-hud-details')?.textContent?.includes('Water V2:') &&
       !!window.__WyrmforgeFluidTest;
-  },{timeout:120000});
+  },null,{timeout:120000});
   const before=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
   report.before=before;
   if(before.wetColumns<8||before.worldRevision<1){
