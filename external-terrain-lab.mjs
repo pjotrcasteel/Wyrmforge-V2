@@ -818,7 +818,8 @@ function resetPlayActor() {
   const region={
     bounds:footprint,origin:{x:0,z:0}
   };
-  if(routePreview)playActor=spawnHuntRoutePreview(active.world,generatedSite.layout);
+  if(routePreview)playActor=spawnHuntRoutePreview(active.world,generatedSite.layout,
+    {nearRiver:playQuery.get('fluidTest')==='1'});
   else playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:startAt
   });
