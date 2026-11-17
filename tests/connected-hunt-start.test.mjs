@@ -226,3 +226,23 @@ test('the streamed opening connector has continuous two-voxel stone banks beside
     }finally{loader.unload();}
   }
 });
+
+test('the Woodland Trail interior has stone faces on both sides north of the connector',()=>{
+  for(const seed of [7,19,101,267]){
+    const graph=generateAuthoredHuntTerrainGraph(entry(seed));
+    const region=graph.layout.regions.find(item=>item.id==='region-woodland-trail');
+    const {definition}=graph.region(region.id);
+    const column=(x,z)=>definition.runs.filter(run=>run.z===z+region.offsetZ&&
+      x>=run.x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
+    const lip=13;
+    for(const direction of [-1,1]){
+      for(let x=6;x<=8;x++){
+        const rock=column(x*direction,lip);
+        assert.equal(rock[0].y-column(x*direction,lip+1)[0].y,2,`seed ${seed}, x ${x*direction}`);
+        assert.equal(rock[0].material,3);
+        assert.equal(rock[1].material,3);
+      }
+    }
+    for(let z=9;z<=15;z++)assert.equal(column(-2,z)[0].material,2);
+  }
+});
