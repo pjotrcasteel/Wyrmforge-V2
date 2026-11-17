@@ -448,6 +448,7 @@ void main() {
   if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
     linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
   }
+  if(uHuntLavaEnabled)linearAlbedo=huntRiverBank(linearAlbedo);
   if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
   if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
   if(uLabEnabled){

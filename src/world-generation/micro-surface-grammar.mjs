@@ -21,7 +21,7 @@ function noise(seed,x,z) {
 
 export function composeMicroSurfaceTiles({
   radius,seed,heights,surfaces,routes,rockFaceThreshold=null,
-  gradedTopTenths=null,stoneUnderTurf=null,
+  gradedTopTenths=null,stoneUnderTurf=null,surfaceExclusions=null,
   flowLinks=[],escapeRoutes=[],approaches=[],combatSpaces=[]
 }) {
   if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
@@ -57,6 +57,7 @@ export function composeMicroSurfaceTiles({
   const roads=[],connectors=[],cliffs=[],turfLips=[];
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=index(radius,x,z),top=heights[i];
+    if(surfaceExclusions?.has(i))continue;
     const authoredTop=gradedTopTenths?.[i]??0;
     const selected=selectRoadCell(x,z,tracks);
     const profile=selected?.route??null;

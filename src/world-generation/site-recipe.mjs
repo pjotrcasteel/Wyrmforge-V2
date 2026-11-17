@@ -33,13 +33,15 @@ export function validateWorldSiteRecipe(recipe) {
       !Number.isSafeInteger(recipe.worldRevision) ||
       recipe.worldRevision<0 ||
       ![16,32].includes(recipe.chunkEdge) ||
-      recipe.radius!==siteRadiusForKind(recipe.kind)) {
+      recipe.radius!==Math.min(32,siteRadiusForKind(recipe.kind)+(recipe.river?8:0))) {
     throw new RangeError('Invalid seed, revision, pitch, or bounded site extent');
   }
   if(!Number.isFinite(recipe.corruption) ||
       recipe.corruption<0 || recipe.corruption>1) {
     throw new RangeError('Corruption progress must be within [0,1]');
   }
+  if(recipe.river!==undefined&&!['water','lava'].includes(recipe.river))
+    throw new RangeError('River must specify water or lava');
   const role=recipe.huntRole;
   if(role!==undefined&&(recipe.kind!=='wet-forest'||!HUNT_ROLES.has(role)))
     throw new RangeError('Invalid authored Hunt region role');
@@ -54,6 +56,7 @@ export function validateWorldSiteRecipe(recipe) {
     seed:recipe.seed,worldRevision:recipe.worldRevision,
     chunkEdge:recipe.chunkEdge,radius:recipe.radius,
     corruption:recipe.corruption,
+    ...(recipe.river?{river:recipe.river}:{}),
     ...(role?{huntRole:role}:{}),
     ...(ports?.length?{lateralPorts:Object.freeze([...ports].sort())}:{})
   });
@@ -63,10 +66,10 @@ export function createWorldSiteRecipe({
   regionId='starter-forest',siteId='site-forest-01',
   encounterId='hunt-001',kind='wet-forest',
   seed=7,worldRevision=0,chunkEdge=16,
-  radius=siteRadiusForKind(kind),corruption=0,lateralPorts,huntRole
+  corruption=0,lateralPorts,huntRole,river,radius=Math.min(32,siteRadiusForKind(kind)+(river?8:0))
 }={}) {
   return validateWorldSiteRecipe({
     schema:WORLD_SITE_RECIPE_SCHEMA,regionId,siteId,encounterId,kind,
-    seed,worldRevision,chunkEdge,radius,corruption,lateralPorts,huntRole
+    seed,worldRevision,chunkEdge,radius,corruption,lateralPorts,huntRole,river
   });
 }

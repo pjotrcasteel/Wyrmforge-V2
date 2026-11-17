@@ -17,6 +17,7 @@ import { classifySurfaceStrata } from './terrain-strata.mjs';
 import { composeMicroSurfaceTiles } from './micro-surface-grammar.mjs';
 import { gradeNavigableRoads } from './navigable-road-grades.mjs';
 import { sampleWorldInfluence, WORLD_INFLUENCE_SCHEMA } from './world-influence-grammar.mjs';
+import {composeRiverChannels} from './river-channel-grammar.mjs';
 import { composeVolcanicTerrain } from './volcanic-terrain-grammar.mjs';
 import { specifyDedicatedArena } from './dedicated-arena-specification.mjs';
 
@@ -231,9 +232,10 @@ function prepareGeometry(plan,seed) {
   const stoneUnderTurf=consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades);
   // Volcanic fissures are real rock cuts, but must never sever the
   // already-graded authored routes, protected combat floor or exits.
-  const volcanicTerrain=composeVolcanicTerrain({
+  const volcanicTerrain=plan.recipe.river?null:composeVolcanicTerrain({
     plan,seed,heights,surfaces
   });
+  const riverChannel=composeRiverChannels({plan,heights,surfaces});
   const geology=classifySurfaceStrata({
     radius,heights,surfaces,terrain:plan.terrain
   });
@@ -247,7 +249,7 @@ function prepareGeometry(plan,seed) {
     // remain separate engines with their own contracts.
     hasFireSimulation:false
   });
-  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence,volcanicTerrain,stoneUnderTurf};
+  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence,volcanicTerrain,riverChannel,stoneUnderTurf};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
@@ -332,7 +334,7 @@ export class WorldGeneratorV2 {
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
     const {heights,surfaces,roadWork,geology,roadGrades,
-      worldInfluence,volcanicTerrain,stoneUnderTurf}=prepareGeometry(plan,seed);
+      worldInfluence,volcanicTerrain,riverChannel,stoneUnderTurf}=prepareGeometry(plan,seed);
     const dedicatedArena=specifyDedicatedArena({plan,heights});
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
@@ -366,6 +368,7 @@ export class WorldGeneratorV2 {
       radius:recipe.radius,seed,
       heights,surfaces,routes:plan.routes,
       gradedTopTenths:roadGrades.gradedTopTenths,
+      surfaceExclusions:riverChannel?new Set(riverChannel.floor.map(({x,z})=>gridIndex(recipe.radius,x,z))):null,
       flowLinks:plan.flowLinks,escapeRoutes:plan.escapeRoutes,
       approaches:plan.approaches,combatSpaces:plan.combatSpaces,
       rockFaceThreshold:plan.terrain.rockFaceThreshold,stoneUnderTurf
@@ -382,6 +385,7 @@ export class WorldGeneratorV2 {
     const layout=Object.freeze({
       routes:plan.routes,roads,geology,worldInfluence,
       dedicatedArena,volcanicTerrain,
+      ...(riverChannel?{riverChannels:Object.freeze([riverChannel])}:{}),
       roadGrades:Object.freeze({
         schema:roadGrades.schema,cells:roadGrades.cells,
         maximumGradeTenths:roadGrades.maximumGradeTenths,

@@ -1162,7 +1162,7 @@ function resetSite() {
       const destinationKind=routePreview?.stop.kind??kind;
       const recipe=createWorldSiteRecipe({
         regionId:'starter-region',siteId:'preview-'+destinationKind,
-        encounterId:'preview-001',kind:destinationKind,
+        encounterId:'preview-001',kind:destinationKind,river:routePreview?.stop.river,
         seed:Number(siteSeed.value),worldRevision:0,
         chunkEdge:Number(pitch.value),corruption:routePreview?.stop.profile.corruption.progress??Number(siteInfluence.value)/100
       });
@@ -1786,7 +1786,7 @@ if(playMode) {
       site:{
         ...(routePreview?{materialRoute:{
           id:routePreview.route,node:routePreview.index+1,nodes:routePreview.stops.length,
-          biome:routePreview.stop.kind,profile:routePreview.stop.profile,lavaChannelCells:playLava?.count??0
+          biome:routePreview.stop.kind,profile:routePreview.stop.profile,river:routePreview.stop.river,riverChannelCells:playLava?.count??0
         }}:{}),
         seed:generatedSite?.recipe.seed??null,
         siteId:generatedSite?.recipe.siteId??null,
