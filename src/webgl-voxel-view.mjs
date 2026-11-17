@@ -131,6 +131,20 @@ vec3 huntGrassArt(vec3 albedo,vec2 ground) {
   return bed;
 }
 
+vec3 huntRootMoss(vec3 grass,vec2 ground) {
+  vec3 size=vec3(textureSize(uLabMaterials,0));
+  vec2 local=ground-uLabOrigin.xz;
+  if(any(lessThan(local,vec2(.5)))||any(greaterThan(local,size.xz-.5)))return grass;
+  float canopy=texture(uLabMaterials,vec3(local.x/size.x,.75,local.y/size.z)).r;
+  if(canopy<=.02)return grass;
+  vec2 pixel=floor(ground*12.0);
+  float broken=soilHash(floor(pixel/3.0)+91.0);
+  float weight=smoothstep(.07,.70,canopy+(broken-.5)*.26);
+  vec3 peat=srgbToLinearColor(vec3(.22,.28,.16));
+  vec3 moss=srgbToLinearColor(vec3(.31,.41,.25));
+  return mix(grass,mix(peat,moss,step(.32,broken)),weight*.72);
+}
+
 vec3 huntGrassShoulder(vec3 albedo,int material) {
   ivec2 cell=ivec2(floor(vWorld.xz));
   int height=int(floor(vWorld.y-.002));
@@ -180,7 +194,7 @@ vec3 huntGrassShoulder(vec3 albedo,int material) {
     vec3 tip=srgbToLinearColor(vec3(.54,.61,.29));
     green=mix(green,tip,mod(group+pixel.x+pixel.y,3.0)==0.0?.24:.53);
   }
-  return mix(albedo,mix(soil,green,coverage),edgeWeight);
+  return mix(albedo,mix(soil,huntRootMoss(green,vWorld.xz),coverage),edgeWeight);
 }
 
 void main() {
@@ -316,6 +330,7 @@ void main() {
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
   if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
     linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
+    if(uHuntGrassEdges)linearAlbedo=huntRootMoss(linearAlbedo,vWorld.xz);
   }
   if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
     linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
@@ -928,8 +943,8 @@ export class WebGLVoxelView {
     if(!volume)throw new Error('Could not allocate material lab volume');
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_3D,volume);
-    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     const previousAlignment=gl.getParameter(gl.UNPACK_ALIGNMENT);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
     try{

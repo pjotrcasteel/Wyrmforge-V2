@@ -1326,6 +1326,7 @@ function restoreState() {
 }
 
 let grassVolumeWorld,grassVolumeKey;
+let grassVolumeTrees=[];
 
 function updateHuntGrassMaterialVolume() {
   if(!playMode||!playActor||!active?.world||!renderer.ready||
@@ -1334,13 +1335,16 @@ function updateHuntGrassMaterialVolume() {
   const snap=value=>Math.floor(value/HUNT_GRASS_VOLUME_STRIDE)*HUNT_GRASS_VOLUME_STRIDE;
   const x=snap(playActor.x),z=snap(playActor.z);
   const key=[x,z,world.revision].join(',');
-  if(world===grassVolumeWorld&&key===grassVolumeKey)return;
+  const trees=[...(playStream?.trees.objects.regions??[])];
+  if(world===grassVolumeWorld&&key===grassVolumeKey&&
+    trees.length===grassVolumeTrees.length&&trees.every((region,i)=>region===grassVolumeTrees[i]))return;
   const height=playStream?.cellCatalog?.height;
   renderer.setLabMaterialVolume(huntGrassMaterialVolume(world,x,z,
     Number.isFinite(height?.minY)?height.minY:-3,
-    Number.isFinite(height?.maxY)?height.maxY:30));
+    Number.isFinite(height?.maxY)?height.maxY:30,trees));
   grassVolumeWorld=world;
   grassVolumeKey=key;
+  grassVolumeTrees=trees;
 }
 
 function presentSiteMeshes(world,meshes) {
