@@ -47,7 +47,7 @@ test('V2 port is a read-only terrain/query boundary over one ledger, not another
   }
 });
 
-test('all six V2-only consumers observe the same ordered accepted edits', () => {
+test('all registered V2-only consumers observe the same ordered accepted edits', () => {
   for(const edge of [16,32]){
     const {world,ledger,port}=setup('arch',edge,5);
     const probes=attachTerrainConsumerProbes(port);
@@ -105,7 +105,7 @@ test('all six V2-only consumers observe the same ordered accepted edits', () => 
       assert.equal(proof.consumers[kind].epoch,5);
     }
     assert.equal(port.metrics().published,3);
-    assert.equal(port.metrics().delivered,21);
+    assert.equal(port.metrics().delivered,(TERRAIN_CONSUMERS.length+1)*3);
     assert.equal(port.metrics().listenerFailures,0);
     probes.dispose();
     port.dispose();
