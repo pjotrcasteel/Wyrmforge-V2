@@ -56,3 +56,20 @@ test('invalid adapter is rejected and startup failure cleans up subscriptions',(
   assert.equal(terrain.stopped,1);
   runtime.dispose();
 });
+
+test('fluid engine is a replaceable terrain subscriber with clean lifecycle',()=>{
+  const terrain=fakeTerrain();
+  const first=fakeConsumer();
+  const runtime=createEngineRuntime({terrain,fluids:first});
+  assert.equal(runtime.get('fluids'),first);
+  runtime.start();
+  assert.equal(terrain.listeners.has('fluids'),true);
+  terrain.apply({sequence:1,geometryChanged:true});
+  assert.deepEqual(first.received,[{sequence:1,geometryChanged:true}]);
+  runtime.stop();
+  assert.equal(terrain.listeners.size,0);
+  terrain.apply({sequence:2});
+  assert.equal(first.received.length,1);
+  runtime.dispose();
+  assert.equal(first.disposed,1);
+});

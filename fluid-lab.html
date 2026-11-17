@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111a20">
+<title>Wyrmforge V2 | Fluid Lab</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#101820;color:#e6f0f1}
+main{max-width:990px;margin:0 auto;padding:clamp(16px,4vw,36px)}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:clamp(23px,3vw,32px);letter-spacing:-.04em;margin:0}
+p{color:#a4b5bb;line-height:1.5;margin:8px 0 18px}
+small{color:#86a5af}
+figure{margin:0;border:1px solid #30414b;background:#17232c;border-radius:12px;overflow:hidden}
+canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+figcaption{padding:11px 14px;color:#b3c3c9;font-size:13px;border-top:1px solid #30414b}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+button{font:inherit;border:1px solid #426272;background:#203945;color:#e5f5f6;border-radius:8px;padding:11px 16px;cursor:pointer}
+button.primary{background:#296d73;border-color:#3a939a;color:white}
+button:hover{filter:brightness(1.15)}
+.output{margin-left:auto;color:#aed1d2;font-variant-numeric:tabular-nums;font-size:13px}
+aside{margin-top:20px;padding-top:16px;border-top:1px solid #30414b;color:#a4b5bb;font-size:13px}
+a{color:#84c8cc}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Fluid Lab <small>/ Water V2</small></h1><small>WAT-01 · isolated engine test</small></header>
+<p>The river is full, but the crater is dry behind an intact bank. Open the bank to let actual fluid state flow through the cut. Tap the bank to make an additional opening.</p>
+<figure><canvas id="scene" width="850" height="550" aria-label="Top-down physical river, bank and excavated crater"></canvas>
+<figcaption>Stone/earth = solid terrain · teal = water depth · dark basin = excavated crater. Geometry is read from the V2 voxel world.</figcaption></figure>
+<div class="toolbar">
+<button class="primary" id="breach">Breach bank</button>
+<button id="pause">Pause</button>
+<button id="reset">Reset</button>
+<output id="stats" class="output"></output>
+</div>
+<aside>This is a fluid simulation diagnostic, not final water art. It does not modify the Materials/Texture engine or Play Hunt. River state follows the shared 10 cm fluid units, bounded per-step updates and the existing Voxel terrain geometry.</aside>
+</main>
+<script type="module" src="./fluid-lab.mjs"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ import { actorOverlapsTerrain, sweepActorAxis, recoverTerrainActor } from './ter
 export const TERRAIN_PORT_SCHEMA = 'voxel-v2.terrain-port.v1';
 export const TERRAIN_CHANGE_SCHEMA = 'voxel-v2.terrain-change.v1';
 export const TERRAIN_CONSUMERS = Object.freeze([
-  'gameplay', 'physics', 'lighting', 'vfx', 'audio', 'navigation'
+  'gameplay', 'physics', 'lighting', 'vfx', 'audio', 'navigation', 'fluids'
 ]);
 export const MAX_TERRAIN_CONSUMERS = 12;
 
