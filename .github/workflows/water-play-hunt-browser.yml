@@ -30,7 +30,7 @@ jobs:
         run: |
           command -v google-chrome
           google-chrome --version
-          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
       - name: Run real WorldGen + Voxel Fireball + Water V2 + Hunt renderer
         env:
           CHROME_BIN: /usr/bin/google-chrome

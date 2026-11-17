@@ -8,6 +8,7 @@ export const FLUID_SHORE_MICRO_STEPS=10;
 const CELL_EPSILON=.006;
 const SMOOTH_HEAD_DIFFERENCE=.5;
 export const FLUID_FALL_MIN_DROP=.75;
+export const FLUID_FALL_RIBBON_SECTIONS=2;
 const DIRECTIONS=Object.freeze([
   {dx:1,dz:0,normal:[1,0,0],edge:'east'},
   {dx:-1,dz:0,normal:[-1,0,0],edge:'west'},
@@ -116,7 +117,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   };
   const positions=[],normals=[],flows=[],faceModes=[],landingHeights=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
-  let waterfallFaces=0,fallLipFaces=0;
+  let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0;
   const seen=new Set();
   const pushFace=(quad,normal,flow,{mode=0,landingY=0}={})=>{
     const vertex=positions.length/3;
@@ -216,14 +217,44 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
         landingY:waterfall?neighbor.surfaceY:0
       });
       sideFaces++;
-      if(waterfall)waterfallFaces++;
+      if(waterfall){
+        waterfallFaces++;
+        // A vertical face pressed against rock can disappear in the Hunt
+        // camera's depth buffer. Bridge the REAL upper/lower wet surfaces with
+        // an outward, 10cm-pixel-aligned cascading ribbon. This is purely
+        // visible presentation of the existing transfer, not new fluid mass.
+        const edgeX=x+.5+side.dx*.5,edgeZ=z+.5+side.dz*.5;
+        const acrossX=-side.dz,acrossZ=side.dx;
+        const high=(ha+hb)*.5+.024;
+        const low=neighbor.surfaceY+.026;
+        const offsets=[-.1,.2,.6];
+        const elevations=[high,Math.max(low+.08,high-.24),low];
+        const bands=[-.4,-.2,0,.2,.4];
+        for(let span=0;span<FLUID_FALL_RIBBON_SECTIONS;span++){
+          for(let strip=0;strip<bands.length-1;strip++){
+            const u=bands[strip],v=bands[strip+1];
+            const point=(distance,lateral,y)=>[
+              edgeX+side.dx*distance+acrossX*lateral,
+              y,
+              edgeZ+side.dz*distance+acrossZ*lateral
+            ];
+            pushFace([
+              point(offsets[span],u,elevations[span]),
+              point(offsets[span+1],u,elevations[span+1]),
+              point(offsets[span+1],v,elevations[span+1]),
+              point(offsets[span],v,elevations[span])
+            ],[0,1,0],flow,{mode:4,landingY:neighbor.surfaceY});
+            fallRibbonFaces++;
+          }
+        }
+      }
     }
   }
   return Object.freeze({
     schema:'wyrmforge.fluid-surface-mesh.v1',
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
     wetColumns:surface.cells.length,refinedShoreColumns,
-    waterfallFaces,fallLipFaces,
+    waterfallFaces,fallLipFaces,fallRibbonFaces,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),

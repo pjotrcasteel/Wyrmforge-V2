@@ -170,6 +170,7 @@ let reachabilityCache=null;
 let playActor=null;
 let playLava=null;
 let playFluid=null,detachPlayFluid=null,playFluidSurfaceStep=-1;
+let playFluidWitnessHold=false,playFluidRibbonsEnabled=true;
 let playRiverWorld=null,playRiverRevision=-1;
 const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
 let playRecoveryCheckpoint=null;
@@ -929,7 +930,7 @@ function updatePlayFrame(now) {
       while(playStepAccumulator>=HUNT_FIXED_STEP && steps<3) {
         // Bounded deterministic Water V2 work at the same fixed timestep as
         // gameplay. A terrain event already updated physical floor heights.
-        if(playFluid&&!streamingBusy())playFluid.step({budget:96});
+        if(playFluid&&!streamingBusy()&&!playFluidWitnessHold)playFluid.step({budget:96});
         // The graph is not a rectangle. A clearance-checked union of
         // published regions and seams constrains horizontal movement.
         const residency=playStream?.residency;
@@ -1010,7 +1011,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.waterfallFaces??0)+' active falls':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.fallRibbonFaces??0)+' visible fall patches':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1101,6 +1102,8 @@ function resetSite() {
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    playFluidWitnessHold=false;
+    playFluidRibbonsEnabled=true;
     playFluidVisual?.clear();
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
@@ -1450,6 +1453,19 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
       // direct mutation of the fluid model is possible through this hook.
       const witnessedBreaches=[];
       window.__WyrmforgeFluidTest={
+        hold(on){playFluidWitnessHold=Boolean(on);},
+        ribbons(on){playFluidRibbonsEnabled=Boolean(on);},
+        ribbonRects(){
+          const view=playView;
+          if(!view||!playFluidVisual)return [];
+          const rect=canvas.getBoundingClientRect();
+          return playFluidVisual.projectedRibbonBounds(view).map(bounds=>({
+            left:rect.left+bounds.left*rect.width/view.width,
+            right:rect.left+bounds.right*rect.width/view.width,
+            top:rect.top+bounds.top*rect.height/view.height,
+            bottom:rect.top+bounds.bottom*rect.height/view.height
+          }));
+        },
         status(){
           const channel=generatedSite.layout.riverChannels[0];
           const authored=new Set(channel.floor.map(c=>c.x+','+c.z));
@@ -1466,6 +1482,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             raisedSurfaceFaces:playFluidVisual?.stats.topFaces??0,
             verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
             waterfallFaces:playFluidVisual?.stats.waterfallFaces??0,
+            fallRibbonFaces:playFluidVisual?.stats.fallRibbonFaces??0,
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0
@@ -1653,7 +1670,8 @@ function frame(now) {
           }
           playView=view;
           if(playFluidVisual)playFluidVisual.render(view,{time:now/1000,
-            reducedMotion:reducedLavaMotion?.matches});
+            reducedMotion:reducedLavaMotion?.matches,
+            showRibbons:playFluidRibbonsEnabled});
           if(paintForest)paintForest(forestContext,view);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){

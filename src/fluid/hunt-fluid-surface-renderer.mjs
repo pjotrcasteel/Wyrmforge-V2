@@ -48,12 +48,14 @@ flat in int vFaceMode;
 in float vLandingY;
 uniform float uTime;
 uniform float uLava;
+uniform float uRibbonEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 float fluidHash(vec2 point){
   return fract(sin(dot(point,vec2(127.1,311.7)))*43758.5453);
 }
 void main(){
+  if(vFaceMode==4&&uRibbonEnabled<.5)discard;
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
@@ -84,6 +86,16 @@ void main(){
       color=mix(color,vec3(.47,.68,.65),.15+.18*step(.78,bead));
       float landing=1.0-smoothstep(.02,.35,vWorld.y-vLandingY);
       color=mix(color,vec3(.57,.74,.69),landing*.4);
+    } else if(vFaceMode==4) {
+      // True outward fall bridge, visible from the normal north-up Hunt
+      // camera where a cliff-flush vertical sheet can be depth-occluded.
+      // Quantize moving highlights to the Wyrmforge 10cm pixel grid.
+      float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);
+      float line=fluidHash(vec2(
+        floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0),
+        floor(vWorld.y*8.0+uTime*3.0)));
+      color=mix(color,vec3(.46,.67,.65),.33+.18*(1.0-fall));
+      color=mix(color,vec3(.67,.79,.73),step(.78,line)*.19);
     } else if(vFaceMode==3) {
       // Subtle broken glint at the lip, not a bright 1m-wide foam stripe.
       vec2 local=fract(vWorld.xz);
@@ -101,6 +113,10 @@ void main(){
     color=mix(vec3(.29,.055,.015),vec3(.86,.29,.045),.40+.45*pool);
     color=mix(color,vec3(1.0,.66,.16),step(.84,ember)*.5);
     color*=mix(.72,1.0,top);
+    if(vFaceMode==4){
+      float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);
+      color=mix(color,vec3(1.0,.66,.20),.16+.12*(1.0-fall));
+    }
     if(vFaceMode==2){
       float streak=fluidHash(vec2(floor(vWorld.y*8.0+uTime*2.0),
         floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0)));
@@ -174,6 +190,7 @@ export class HuntFluidSurfaceRenderer {
       topFaces:this.#mesh?.topFaces??0,
       sideFaces:this.#mesh?.sideFaces??0,
       waterfallFaces:this.#mesh?.waterfallFaces??0,
+      fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
       wetColumns:this.#mesh?.wetColumns??0,
       refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
@@ -184,6 +201,38 @@ export class HuntFluidSurfaceRenderer {
       uploadedTriangles:this.#record?.count?this.#record.count/3:0,
       surfaceStep:this.#mesh?.step??null
     });
+  }
+
+  // Screenshot-witness projection only: these are true raster bounds of
+  // faces tagged as flowing ribbons, in the existing canvas pixel space.
+  // No texture reads and no camera or simulation mutation.
+  projectedRibbonBounds(view){
+    if(!this.#mesh||!view)return [];
+    const basis=getCameraPreset(view.camera);
+    const bounds=[];
+    for(let vertex=0;vertex<this.#mesh.vertexCount;vertex+=4){
+      if(this.#mesh.faceModes[vertex]!==4)continue;
+      let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
+      for(let i=vertex;i<vertex+4;i++){
+        const x=this.#mesh.positions[i*3];
+        const y=this.#mesh.positions[i*3+1];
+        const z=this.#mesh.positions[i*3+2];
+        const px=(x*basis.right[0]+y*basis.right[1]+z*basis.right[2])*
+          view.scale+view.width*.5+view.panX;
+        const py=(x*basis.down[0]+y*basis.down[1]+z*basis.down[2])*
+          view.scale+view.height*.5+view.panY;
+        left=Math.min(left,px);
+        right=Math.max(right,px);
+        top=Math.min(top,py);
+        bottom=Math.max(bottom,py);
+      }
+      left=Math.max(0,Math.floor(left));
+      right=Math.min(view.width,Math.ceil(right));
+      top=Math.max(0,Math.floor(top));
+      bottom=Math.min(view.height,Math.ceil(bottom));
+      if(right>left&&bottom>top)bounds.push({left,top,right,bottom});
+    }
+    return bounds;
   }
 
   #releaseBuffers(){
@@ -220,7 +269,8 @@ export class HuntFluidSurfaceRenderer {
         viewport:uniform('uViewport'),pan:uniform('uPan'),scale:uniform('uScale'),
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
-        depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava')
+        depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
+        ribbons:uniform('uRibbonEnabled')
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
@@ -264,7 +314,7 @@ export class HuntFluidSurfaceRenderer {
     return true;
   }
 
-  render(view,{time=0,reducedMotion=false}={}){
+  render(view,{time=0,reducedMotion=false,showRibbons=true}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -277,6 +327,7 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform3fv(u.depth,basis.depth);
     gl.uniform1f(u.time,reducedMotion?0:time);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
+    gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);

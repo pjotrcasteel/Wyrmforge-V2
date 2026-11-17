@@ -25,7 +25,7 @@ test('real fluid geometry uses 10cm surface head instead of painting the solid f
   assert.ok(result.topFaces>=2);
   assert.ok(result.refinedShoreColumns>=1);
   assert.equal(result.sideFaces,1,'higher pool exposes a real vertical liquid wall');
-  assert.equal(result.faceCount,result.topFaces+result.sideFaces);
+  assert.equal(result.faceCount,result.topFaces+result.sideFaces+result.fallRibbonFaces);
   assert.equal(result.vertexCount,result.faceCount*4);
   assert.equal(result.triangleCount,result.faceCount*2);
   assert.ok(result.positions instanceof Float32Array);
