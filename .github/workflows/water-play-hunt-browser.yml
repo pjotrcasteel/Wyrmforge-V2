@@ -1,0 +1,46 @@
+name: Water V2 actual Play Hunt browser witness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/fluid/**'
+      - 'external-terrain-lab.mjs'
+      - 'scripts/test-fluid-play-hunt-browser.mjs'
+      - '.github/workflows/water-play-hunt-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('fluid-browser-pr-{0}', github.event.pull_request.number) || 'fluid-browser-manual' }}
+  cancel-in-progress: true
+
+jobs:
+  actual-play-hunt-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Use runner Chrome for an actual WebGL2 browser test
+        run: |
+          command -v google-chrome
+          google-chrome --version
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+      - name: Run real WorldGen + Voxel Fireball + Water V2 + Hunt renderer
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          FLUID_BROWSER_INLINE_SNAPSHOT: '1'
+        run: node scripts/test-fluid-play-hunt-browser.mjs
+      - name: Save before/after browser screenshots and full scenario diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: water-v2-actual-play-hunt-chromium
+          path: fluid-browser-evidence/
+          if-no-files-found: warn
+          retention-days: 14
