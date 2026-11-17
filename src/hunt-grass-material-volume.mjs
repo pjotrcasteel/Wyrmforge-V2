@@ -1,3 +1,5 @@
+import { V2_BEDROCK_MATERIAL } from './terrain-materials.mjs';
+
 // Pack the exposed parent voxel of each nearby column for Hunt edge shading.
 // Other slices carry live root influence and exposure from terrain edits.
 export const HUNT_GRASS_VOLUME_RADIUS=20;
@@ -13,8 +15,9 @@ export function huntGrassMaterialVolume(world,centerX,centerZ,minY,maxY,treeRegi
       const material=world.get(startX+x,y,startZ+z);
       if(!material)continue;
       const column=z*edge*3+x;
-      if(material<=3&&y>=-4&&y<60){
-        data[column]=(y+4)*4+material;
+      const appearance=material===V2_BEDROCK_MATERIAL?3:material;
+      if(appearance<=3&&y>=-4&&y<60){
+        data[column]=(y+4)*4+appearance;
         let cuts=0;
         while(cuts<3&&removedCells?.has([startX+x,y+cuts+1,startZ+z].join(',')))cuts++;
         data[column+edge*2]=cuts*85;

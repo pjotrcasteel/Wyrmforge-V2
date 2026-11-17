@@ -1,3 +1,4 @@
+import { V2_BEDROCK_MATERIAL } from '../terrain-materials.mjs';
 // H08-02A: first bounded playable connection between two authored WorldGen
 // sites. Keep every source voxel and microtile. Only the 8m joining strip
 // is new geometry, derived from the measured boundary profiles of both
@@ -118,6 +119,7 @@ function joinBoundaries(south,north,offsetZ) {
   }
   if(maximumRouteGradeTenths>5)throw new Error('Authored connection exceeds passive traversal grade');
   const materialAt=(x,y,z)=>{
+    if(y===floor)return V2_BEDROCK_MATERIAL;
     const column=columns.get(x+','+z);
     if(!column || y>column.y)return 0;
     if(y===column.y)return column.material;

@@ -37,7 +37,7 @@ test('Roads remain continuous through the actual combat arena across biome kinds
   for(const [k,kind] of kinds.entries())for(const seed of [7,19,101,267]) {
     const generated=generateWorldSite(recipe(kind,seed));
     const {roads,routes,geology}=generated.layout;
-    assert.equal(generated.generatorVersion,'worldgen-v2.7.9');
+    assert.equal(generated.generatorVersion,'worldgen-v2.7.10');
     assert.equal(roads.schema,'wyrmforge.road-surface-audit.v1');
     assert.equal(roads.ready,true);
     assert.equal(roads.throughArena,true);
@@ -133,7 +133,7 @@ test('Mountain Pass rock outcrops never contain unsupported brown soil sandwiche
         if(top.material!==3) continue;
         rockColumns++;
         for(let depth=1;depth<=Math.min(6,top.y+3);depth++) {
-          assert.equal(world.get(x,top.y-depth,z),3,
+          assert.equal(world.get(x,top.y-depth,z),top.y-depth===-3?4:3,
             'rock outcrop cannot have a brown soil layer beneath a stone cap');
         }
       }

@@ -24,7 +24,7 @@ test('H08-01 Play Hunt consumes the SAME authored WorldGeneratorV2 output as the
   const hunt=generateWorldSite({...recipe});
 
   assert.equal(hunt.schema,'wyrmforge.generated-site.v2');
-  assert.equal(hunt.generatorVersion,'worldgen-v2.7.9');
+  assert.equal(hunt.generatorVersion,'worldgen-v2.7.10');
   assert.equal(hunt.definition.generatorVersion,hunt.generatorVersion);
   assert.equal(hunt.definition.schema,'voxel-v2.terrain-initialization.v2');
   assert.ok(hunt.layout.topology.reachable);
@@ -225,4 +225,20 @@ test('the streamed Hunt arrival contains a stone escarpment and a fissure off it
     assert.ok(cut);
     assert.ok(top(1,-14).y-cut.y>=3,'the fissure is a cut into the physical terrain');
   }
+});
+
+test('repeated Fireball cuts in the streamed Hunt stop at real protected bedrock',()=>{
+  const graph=generateAuthoredHuntTerrainGraph(generateWorldSite(canonicalWetForestRecipe()));
+  const loader=new V2ExternalTerrainLoader(graph.region(graph.layout.entryRegionId).definition);
+  try {
+    while(!loader.progress.done)loader.loadStep(4096);
+    const {port}=loader.terrain;
+    const ground=()=>port.raycast({origin:[-5.5,15,13.5],direction:[0,-1,0],maxDistance:25});
+    for(let i=0;i<8;i++){
+      const {cell}=ground();
+      port.apply({id:'repeated-crater-'+i,type:'carve-crater',...cell,radius:2.3,depth:2});
+    }
+    assert.equal(ground().cell.y,-3);
+    assert.equal(ground().material,4);
+  }finally{loader.unload();}
 });

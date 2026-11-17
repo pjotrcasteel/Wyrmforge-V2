@@ -1,3 +1,4 @@
+import { V2_BEDROCK_MATERIAL } from '../terrain-materials.mjs';
 // World Generation V2 orchestration (Strategy -> Builder -> terrain grammar ->
 // topology Specification). No voxel internals, WebGL, DOM, V1, or props.
 // The public terrain adapter is the sole implementation boundary.
@@ -259,6 +260,7 @@ function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf,turfLips)
   for(const i of turfLips)maxY=Math.max(maxY,heights[i]+1);
   let totalCells=0;
   const materialAt=(x,y,z)=>{
+    if(y===FLOOR)return V2_BEDROCK_MATERIAL;
     const idx=gridIndex(radius,x,z);
     const top=heights[idx];
     // Preserve the full rock face. The extra parent voxel holds only a
