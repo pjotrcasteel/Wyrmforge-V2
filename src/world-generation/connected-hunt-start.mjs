@@ -111,6 +111,7 @@ function joinBoundaries(south,north,offsetZ) {
       const side=Math.abs(x);
       const rim=5+(x<0&&t<.40||x>0&&t>.65?1:0);
       const floorTop=10*Math.round((roadNorth+roadDelta*t)/10);
+      const stoneUnderTurf=side>=rim&&side<=8&&z<a.minZ-1;
       if(side>=4&&side<=8&&z<a.minZ-1){
         if(side<rim){
           topTenths=floorTop;
@@ -118,12 +119,12 @@ function joinBoundaries(south,north,offsetZ) {
         }else{
           const rise=z===start?10:20;
           topTenths=floorTop+rise-(side===8?10:0);
-          material=side===rim||(z===a.minZ-2&&side<8)?3:1;
+          material=1;
         }
       }
       const y=Math.ceil(topTenths/10)-1;
       const level=topTenths-y*10;
-      columns.set(x+','+z,{y,material});
+      columns.set(x+','+z,{y,material,stoneUnderTurf});
       maxY=Math.max(maxY,y);
       if(level!==10)surfaceTiles.push({x,y,z,levels:Array(100).fill(level)});
       if(Math.abs(x)<=3)maximumRouteGradeTenths=Math.max(
@@ -138,7 +139,7 @@ function joinBoundaries(south,north,offsetZ) {
     const column=columns.get(x+','+z);
     if(!column || y>column.y)return 0;
     if(y===column.y)return column.material;
-    return column.material!==3 && y>=column.y-2?2:3;
+    return !column.stoneUnderTurf&&column.material!==3&&y>=column.y-2?2:3;
   };
   for(let y=floor;y<=maxY;y++)for(let z=start;z<a.minZ;z++){
     let x=a.minX;

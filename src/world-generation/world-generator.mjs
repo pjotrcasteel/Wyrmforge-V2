@@ -29,7 +29,8 @@ const gridIndex=(radius,x,z)=>(z+radius)*radius*2+(x+radius);
 // Shape the two rock shoulders inside Woodland Trail, north of the seam.
 // Keep authored grades and combat access authoritative.
 function shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades) {
-  if(plan.recipe.kind!=='wet-forest'||plan.recipe.regionId!=='region-woodland-trail')return;
+  if(plan.recipe.kind!=='wet-forest'||plan.recipe.regionId!=='region-woodland-trail')return null;
+  const stoneUnderTurf=new Set();
   const {radius}=plan.recipe;
   const floor=heights[gridIndex(radius,-2,14)];
   const front=13;
@@ -46,10 +47,12 @@ function shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades) {
           plan.maneuverPockets.some(space=>Math.hypot(x-space.x,z-space.z)<=space.radius))continue;
         const rise=z>lip||distance===4?0:z===8||distance===12?1:2;
         heights[i]=bankBase+rise;
-        surfaces[i]=rise>0?3:1;
+        surfaces[i]=1;
+        if(rise>0)stoneUnderTurf.add(i);
       }
     }
   }
+  return stoneUnderTurf;
 }
 
 // This is coherent geographical shaping, not one noise value per voxel.
@@ -185,7 +188,7 @@ function prepareGeometry(plan,seed) {
     approaches:plan.approaches,combatSpaces:plan.combatSpaces,
     lateralPorts:plan.recipe.lateralPorts??[]
   });
-  shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades);
+  const stoneUnderTurf=shapeWoodlandTrailBanks(plan,heights,surfaces,roadGrades);
   // Volcanic fissures are real rock cuts, but must never sever the
   // already-graded authored routes, protected combat floor or exits.
   const volcanicTerrain=composeVolcanicTerrain({
@@ -204,12 +207,12 @@ function prepareGeometry(plan,seed) {
     // remain separate engines with their own contracts.
     hasFireSimulation:false
   });
-  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence,volcanicTerrain};
+  return {heights,surfaces,roadWork,geology,roadGrades,worldInfluence,volcanicTerrain,stoneUnderTurf};
 }
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
 // mutation. Full 3D strata (not only a heightmap) cross signed chunk origins.
-function generateRuns(radius,heights,surfaces,soilDepth) {
+function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf) {
   const runs=[];
   const size=radius*2;
   let maxY=FLOOR;
@@ -222,7 +225,7 @@ function generateRuns(radius,heights,surfaces,soilDepth) {
     if(y===top) return surfaces[idx];
     // Rock outcrops are a contiguous stone mass, never a thin grey cap
     // above two unsupported brown dirt bands on vertical mountain walls.
-    if(surfaces[idx]===3) return 3;
+    if(surfaces[idx]===3||stoneUnderTurf?.has(idx)) return 3;
     if(y>=top-soilDepth) return 2;
     return 3;
   };
@@ -283,7 +286,7 @@ export class WorldGeneratorV2 {
     strategy.compose(builder,Object.freeze({seed,recipe}));
     const plan=builder.build();
     const {heights,surfaces,roadWork,geology,roadGrades,
-      worldInfluence,volcanicTerrain}=prepareGeometry(plan,seed);
+      worldInfluence,volcanicTerrain,stoneUnderTurf}=prepareGeometry(plan,seed);
     const dedicatedArena=specifyDedicatedArena({plan,heights});
     const topology=specifySiteTopology({
       radius:recipe.radius,heights,
@@ -314,7 +317,7 @@ export class WorldGeneratorV2 {
       routes:plan.routes,combatSpaces:plan.combatSpaces,roadWork
     });
     const {runs,totalCells}=generateRuns(
-      recipe.radius,heights,surfaces,plan.terrain.soilDepth
+      recipe.radius,heights,surfaces,plan.terrain.soilDepth,stoneUnderTurf
     );
     const microSurface=composeMicroSurfaceTiles({
       radius:recipe.radius,seed,
