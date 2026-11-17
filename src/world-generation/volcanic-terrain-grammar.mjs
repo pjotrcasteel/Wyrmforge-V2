@@ -1,7 +1,6 @@
 // World Generation: physical volcanic fissures and validated vertical
-// lava-fall placement anchors. The former cut real 3D voxel columns; the
-// latter are NOT rendered liquid, fake geometry, damage, or lava simulation.
-// World Objects/VFX/Gameplay consume these locations in later V2 engines.
+// lava-fall placement anchors. Floor coordinates let Materials locate the
+// visual channel on the physical cuts. Gameplay owns hazard state.
 import { rasterizeEscapeRoute } from './escape-route-geometry.mjs';
 import { selectRoadCell } from './road-footprint.mjs';
 
@@ -95,7 +94,8 @@ export function composeVolcanicTerrain({plan,seed,heights,surfaces}) {
   const fissures=[];
   let totalFissureCells=0;
   for(const fault of createFaults(radius).slice(0,numberOfFaults)) {
-    let cells=0,deepest=0;
+    const floor=[];
+    let deepest=0;
     for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
       if(protectedCells.has(x+','+z) ||
           selectRoadCell(x,z,plan.routes))continue;
@@ -110,15 +110,15 @@ export function composeVolcanicTerrain({plan,seed,heights,surfaces}) {
       if(depth<2)continue;
       heights[i]=Math.max(0,before[i]-depth);
       surfaces[i]=3; // legitimate stone at the physical trench floor
-      cells++;
+      floor.push(Object.freeze({x,z,y:heights[i]+1}));
       deepest=Math.max(deepest,depth);
     }
-    if(cells>0)fissures.push(Object.freeze({
+    if(floor.length>0)fissures.push(Object.freeze({
       id:fault.id,kind:'physical-stone-fissure',
-      cutCells:cells,maxDepthMetres:deepest,
+      cutCells:floor.length,maxDepthMetres:deepest,floor:Object.freeze(floor),
       from:Object.freeze({...fault.from}),to:Object.freeze({...fault.to})
     }));
-    totalFissureCells+=cells;
+    totalFissureCells+=floor.length;
   }
 
   // A lava fall needs a genuine stone wall, not a floating waterfall VFX.

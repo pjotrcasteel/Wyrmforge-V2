@@ -247,3 +247,18 @@ test('externally initialized V2 site renders and updates actual GPU meshes after
     assert.equal(stats.createdArrays.length,stats.deletedArrays.length);
   }
 });
+
+test('Hunt lava shares one texture upload across animation frames and restores it on context recovery',()=>{
+  const {canvas,stats,events}=fakeCanvas();
+  const view=new WebGLVoxelView(canvas);
+  const huntLava={origin:[-1,-1],size:[1,1],data:new Uint8Array([7,128,12,255])};
+  const frame={width:128,height:128,scale:16,panX:0,panY:0,huntLava};
+  assert.ok(view.render({...frame,labTime:1}));
+  assert.ok(view.render({...frame,labTime:2}));
+  assert.equal(stats.textureUploads,1);
+  events.get('webglcontextlost')({preventDefault(){}});
+  events.get('webglcontextrestored')();
+  assert.ok(view.render({...frame,labTime:3}));
+  assert.equal(stats.textureUploads,2);
+  view.dispose();
+});
