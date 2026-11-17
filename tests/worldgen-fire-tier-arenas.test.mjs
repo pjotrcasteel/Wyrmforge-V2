@@ -53,7 +53,7 @@ test('authored Fire-tier sites preserve routes and physical topology across seed
   for(const kind of kinds)for(const seed of [7,19,101,267]) {
     const first=generateWorldSite(recipe(kind,seed));
     const second=generateWorldSite(recipe(kind,seed));
-    assert.equal(first.generatorVersion,'worldgen-v2.7.13');
+    assert.equal(first.generatorVersion,'worldgen-v2.7.14');
     assert.equal(first.hash,second.hash);
     assert.deepEqual(first.definition,second.definition);
     assert.ok(first.layout.topology.reachable);
@@ -113,4 +113,25 @@ test('volcanic fissures cut actual stone but cannot carve a mandatory fight floo
   assert.equal(cut,result.fissureCells);
   assert.ok(cut>0);
   assert.ok([...surfaces].every(material=>material===3));
+});
+
+test('large cavern escarpments form supported multi-metre stone faces outside fighting space',()=>{
+  for(const kind of ['mini-boss-arena','wyrm-lair'])for(const seed of [7,19,101,267]) {
+    const generated=generateWorldSite(recipe(kind,seed));
+    const tops=new Map();
+    for(const run of generated.definition.runs)for(let x=run.x;x<run.x+run.length;x++) {
+      const key=x+','+run.z;
+      if(!tops.has(key)||tops.get(key).y<run.y)tops.set(key,{x,z:run.z,y:run.y,material:run.material});
+    }
+    const faces=[];
+    for(const top of tops.values())for(const [dx,dz] of [[1,0],[0,1]]) {
+      const neighbor=tops.get((top.x+dx)+','+(top.z+dz));
+      if(neighbor&&Math.abs(top.y-neighbor.y)>=4)faces.push([top,neighbor]);
+    }
+    assert.ok(faces.length>=8,kind+' needs connected tall cliff runs');
+    assert.ok(faces.some(pair=>pair.every(t=>t.material===3)),
+      'large cliff crests and feet must expose stone');
+    assert.equal(generated.layout.topology.reachable,true);
+    assert.ok(generated.layout.dedicatedArena.usableFloorCells>=260);
+  }
 });

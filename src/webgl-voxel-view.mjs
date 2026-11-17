@@ -1,3 +1,4 @@
+import {CLIFF_STONE_MATERIAL_GLSL} from './cliff-stone-material.mjs';
 import {FIRE_TERRAIN_MATERIAL_GLSL} from './fire-terrain-material.mjs';
 import {HUNT_LAVA_SURFACE_GLSL} from './hunt-lava-surface.mjs';
 import {FIRE_MATERIAL_LAB_UNIFORMS_GLSL,FIRE_MATERIAL_LAB_GLSL} from './fire-material-lab-shader.mjs';
@@ -108,6 +109,7 @@ vec3 grassAlbedo(vec3 world) {
 ${FIRE_MATERIAL_LAB_GLSL}
 ${HUNT_LAVA_SURFACE_GLSL}
 ${FIRE_TERRAIN_MATERIAL_GLSL}
+${CLIFF_STONE_MATERIAL_GLSL}
 
 vec3 huntGrassArt(vec3 albedo,vec2 ground) {
   // Large, coherent moss beds with a shared pixel grid for the grass motifs.
@@ -435,14 +437,6 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
-  if(huntCliff){
-    vec2 pixel=floor(materialUv*12.0);
-    float strata=mod(pixel.y+floor(pixel.x/11.0),9.0);
-    float fracture=soilHash(floor(pixel/vec2(9.0,5.0))+54.0);
-    float relief=strata<1.0?.68:strata<2.0?1.12:1.0;
-    linearAlbedo*=relief*mix(.86,1.25,fracture);
-    lighting=mix(lighting,.82,.35);
-  }
   if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
     linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
     if(uHuntGrassEdges)linearAlbedo=huntRootMoss(linearAlbedo,vWorld.xz);
@@ -454,6 +448,7 @@ void main() {
   if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
   if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
   if(uHuntGrassArt)linearAlbedo=fireTerrainSurface(linearAlbedo,int(vMaterial));
+  if(huntCliff)linearAlbedo=cliffStoneSurface(linearAlbedo,materialUv);
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
     if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;
