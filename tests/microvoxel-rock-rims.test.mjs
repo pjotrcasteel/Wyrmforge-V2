@@ -16,9 +16,9 @@ test('rock rims chip only elevated outlines and preserve solid interiors',()=>{
   const result=rockRim();
   const corner=result.tiles.find(t=>t.x===0&&t.z===0);
   assert.ok(corner);
-  assert.ok(corner.levels[0]<=6,'convex corner is deeply chipped');
+  assert.ok(corner.levels[0]<10,'weathered convex corner is chipped');
   assert.equal(corner.levels[99],10,'shelf interior retains full height');
-  assert.ok(new Set(corner.levels).size>=4,'rim tapers in microvoxel steps');
+  assert.ok(new Set(corner.levels).size>=2,'rim tapers in microvoxel steps');
   assert.ok(result.tiles.every(t=>t.y===2),'lower floor is never depressed');
   assert.deepEqual(result,rockRim(),'seeded occupancy is reproducible');
   assert.ok(result.tileCount<=384);
@@ -69,4 +69,21 @@ test('coherent rim character crosses tile seams and varies between formations',(
     }
   }
   assert.ok(signatures.size>=3,'formations must have distinct rim depths');
+});
+
+test('seeded cliff exposure mixes intact stretches, light wear and occasional deep breaks',()=>{
+  for(const seed of [7,19,101,267]) {
+    let intact=0,light=0,deep=0;
+    for(let z=-24;z<24;z++)for(let x=-24;x<24;x++) {
+      const cut=rockRimCut(seed,x,z,5,0,[[0,-1]]);
+      assert.equal(cut,rockRimCut(seed,x,z,5,0,[[0,-1]]));
+      if(cut===0)intact++;
+      else if(cut<=4)light++;
+      else deep++;
+    }
+    assert.ok(intact>100,'some formations must retain intact faces');
+    assert.ok(light>deep,'light weathering must outnumber deep breaks');
+    assert.ok(deep>0,'occasional strongly weathered stretches remain');
+    assert.ok(deep<2304/3,'deep breaks must not cover most cliff edges');
+  }
 });
