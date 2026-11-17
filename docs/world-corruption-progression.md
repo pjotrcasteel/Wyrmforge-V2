@@ -1,6 +1,7 @@
 # Wyrmforge V2 — world corruption art direction
 
-The journey starts in a **bright, healthy forest** and becomes progressively
+The journey starts in a **0% corrupted Hunt arena**, in the biome chosen by the
+World Map, and becomes progressively
 darker, colder, ash-covered, and volcanic near the Wyrm. This is a *continuous
 geographical progression*, not four hard scene switches and not a screen-wide
 darkness overlay.
@@ -22,6 +23,12 @@ all rendered pixels. Darkness must be achieved through material selection,
 contrast, shadows, and eventually lighting. The Wyrmlayer must retain readable
 characters, attacks, terrain edges, and navigation.
 
+`createHuntRouteMaterialProfile` samples an ordered World Map route. Each node
+carries its biome and cumulative travel distance. Corruption is zero at the arena
+and reaches 100% at the lair whether the route has 3, 4, or 10 nodes. Material
+blending between adjacent biomes uses the local segment, so a mountain start is
+valid and a forest-to-mountain transition can happen anywhere along the route.
+
 ## Ownership and milestone boundary
 
 1. **Current Voxel V2 texture milestone**: finish authored albedo, normal,
@@ -34,5 +41,6 @@ characters, attacks, terrain edges, and navigation.
 5. **Objects — deferred**: healthy trees, dead trees, charred remains, lava
    props are owned by independent object systems.
 
-The profile currently has **no rendering integration and no visual effect**.
-Do not mistake it for a completed corruption system or a lighting milestone.
+The regular Hunt still uses the fixed-distance Fading Woods preview. The route
+profile is ready for the World Map to supply the actual arena-to-lair route;
+the preview expedition currently ends at extraction.
