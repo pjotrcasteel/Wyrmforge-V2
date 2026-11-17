@@ -201,16 +201,19 @@ test('Woodland Trail keeps its route and exposes stone beneath existing grassy c
   const column=(x,z)=>definition.runs.filter(run=>run.z===z+region.offsetZ&&
     x>=run.x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
   for(const direction of [-1,1]){
-    let grassyRockEdges=0,isolated=0;
+    let grassyRockEdges=0,isolated=0,deepFaces=0;
     const drop=(x,z)=>column(x,z)[0].y-column(x,z+1)[0].y;
     for(let z=3;z<=13;z++)for(let x=4;x<=12;x++){
       const high=column(x*direction,z);
       const low=column(x*direction,z+1)[0];
       if(high[0].material===1&&high[1].material===3&&high[0].y>low.y)grassyRockEdges++;
-      if(drop(x*direction,z)>0&&drop(x*direction-1,z)<=0&&drop(x*direction+1,z)<=0)isolated++;
+      if(high[0].y-low.y>=2&&high[1].material===3)deepFaces++;
+      const connected=[-1,1].some(dx=>[-1,0,1].some(dz=>drop(x*direction+dx,z+dz)>0));
+      if(high[0].y>low.y&&!connected)isolated++;
     }
     assert.ok(grassyRockEdges>=3);
-    assert.ok(isolated<=4,'avoid rows of one-cell cliff faces');
+    assert.ok(deepFaces>=2,'both slopes expose real two-voxel cliffs');
+    assert.ok(isolated<=1,'avoid detached cliff faces');
   }
   for(let z=9;z<=15;z++)assert.equal(column(-2,z)[0].material,2);
 });
