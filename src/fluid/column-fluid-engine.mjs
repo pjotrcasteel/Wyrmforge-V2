@@ -23,6 +23,7 @@ export class ColumnFluidEngine {
   #kind;
   #cursor=0;
   #steps=0;
+  #wet=0;
 
   constructor({bounds,floorAt,kind='water',initial=[],sources=[]}={}){
     if(!bounds||typeof floorAt!=='function'||!Object.hasOwn(RATE,kind)) {
@@ -50,6 +51,8 @@ export class ColumnFluidEngine {
       if(!Number.isSafeInteger(depth)||depth<0||depth>MAX_DEPTH){
         throw new RangeError('Invalid initial fluid depth');
       }
+      if(!this.#depths[index]&&depth)this.#wet++;
+      if(this.#depths[index]&&!depth)this.#wet--;
       this.#depths[index]=depth;
     }
     for(const {x,z,surfaceY,rate=2} of sources){
@@ -111,8 +114,10 @@ export class ColumnFluidEngine {
     const moved=Math.min(RATE[this.#kind],Math.floor(difference/2),
       amount,MAX_DEPTH-this.#depths[to]);
     if(moved<1)return 0;
+    if(!this.#depths[to])this.#wet++;
     this.#depths[from]-=moved;
     this.#depths[to]+=moved;
+    if(!this.#depths[from])this.#wet--;
     return moved;
   }
 
@@ -132,6 +137,7 @@ export class ColumnFluidEngine {
         const wanted=Math.min(MAX_DEPTH,
           Math.max(0,source.surfaceDeci-this.#floors[index]*FLUID_DEPTH_UNITS));
         const added=Math.min(source.rate,Math.max(0,wanted-this.#depths[index]));
+        if(!this.#depths[index]&&added)this.#wet++;
         this.#depths[index]+=added;
         injected+=added;
       }
@@ -144,14 +150,10 @@ export class ColumnFluidEngine {
       }
     }
     this.#steps++;
-    return Object.freeze({processed:count,transferred,injected,wet:this.wetCount});
+    return Object.freeze({processed:count,transferred,injected,wet:this.#wet});
   }
 
-  get wetCount(){
-    let count=0;
-    for(const value of this.#depths)if(value>0)count++;
-    return count;
-  }
+  get wetCount(){return this.#wet;}
 
   get totalDepth(){
     let sum=0;
@@ -212,6 +214,7 @@ export class ColumnFluidEngine {
       }
     }
     this.#depths.set(state.depths);
+    this.#wet=state.depths.reduce((count,depth)=>count+(depth>0?1:0),0);
     this.#cursor=state.cursor;
     this.#steps=state.steps;
   }
