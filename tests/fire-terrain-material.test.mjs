@@ -12,6 +12,8 @@ test('volcanic fracture art reaches the shader with the correct basalt palette i
       (packed[rowIndex*4+Math.floor(x/8)]>>((x%8)*3))&7).join('');
     assert.equal(unpacked,row);
   }
+  const crackTexels=[...FIRE_ROCK_MOTIF.join('')].filter(value=>value==='0').length;
+  assert.ok(crackTexels<=48,'fractures remain sparse over broad stone surfaces');
   assert.equal(FIRE_BASALT_PALETTE.length,4);
   for(const color of FIRE_BASALT_PALETTE){
     assert.equal(color.length,3);
