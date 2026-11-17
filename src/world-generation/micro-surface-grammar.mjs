@@ -75,16 +75,17 @@ export function composeMicroSurfaceTiles({
     if(profile && surfaces[i]!==profile.roadProfile.material) {
       throw new Error('Road surface material disagrees with selected microvoxels');
     }
-    let rockFace=false;
+    // Only the high side owns a chipped rim. Refining the low side used
+    // to lower entire floor tiles without breaking the elevated outline.
+    const lowerEdges=[];
     if(rockFaceThreshold!==null && surfaces[i]===3) {
       for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
         const nx=x+dx,nz=z+dz;
-        if(nx<-radius||nx>=radius||nz<-radius||nz>=radius) continue;
-        if(Math.abs(top-heights[index(radius,nx,nz)])>=rockFaceThreshold) {
-          rockFace=true;break;
-        }
+        if(nx<-radius||nx>=radius||nz<-radius||nz>=radius)continue;
+        if(top>heights[index(radius,nx,nz)])lowerEdges.push([dx,dz]);
       }
     }
+    const rockFace=lowerEdges.length>0&&!inPath(x,z);
     const turfLip=!profile&&!heightTransition&&!authoredTop&&!inPath(x,z)&&
       surfaces[i]===1&&stoneUnderTurf?.has(i);
     if(turfLip){
@@ -123,11 +124,18 @@ export function composeMicroSurfaceTiles({
         // It replaces an impassable whole-block step with two 50cm rises.
         cut=5;
       } else if(rockFace) {
-        // Staggered cliff lips with coarse clusters of tiny steps.
-        // No smoothly tilted top quads and no gratuitous 1000-cell
-        // subdivision of ordinary flat land.
-        const n=noise(seed,(x*10+ix)>>2,(z*10+iz)>>2);
-        cut=1+Math.floor(n*3);
+        // Physical 10cm chips taper into the solid interior. World-space
+        // clusters continue across tile seams; adjoining exposed directions
+        // deepen convex corners rather than leaving square plateau caps.
+        const variation=noise(seed,(x*10+ix)>>1,(z*10+iz)>>1);
+        const width=3+Math.floor(variation*2);
+        let cornerCut=0;
+        for(const [dx,dz] of lowerEdges) {
+          const distance=dx===1?9-ix:dx===-1?ix:dz===1?9-iz:iz;
+          cornerCut+=Math.max(0,width-distance)*2;
+        }
+        cut=Math.min(8,cornerCut);
+
       }
       const level=10-clamp(cut,0,9);
       levels.push(level);

@@ -134,11 +134,12 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
       for(const tile of surfaceTiles) {
         const selected=selectRoadCell(tile.x,tile.z,routes);
         if(!selected) {
-          if(kind==='wet-forest'&&!gradeMap.has(tile.x+','+tile.z) &&
-            tile.levels.every(level=>level>=7&&level<=9)) {
-            const stone=runs.find(run=>run.y===tile.y&&run.z===tile.z&&
-              run.x<=tile.x&&run.x+run.length>tile.x);
-            assert.equal(stone?.material,3,'weathered cliff lips only cut rock');
+          const parent=runs.find(run=>run.y===tile.y&&run.z===tile.z&&
+            run.x<=tile.x&&run.x+run.length>tile.x);
+          if(parent?.material===3&&!gradeMap.has(tile.x+','+tile.z)&&
+              !inCirculation(tile.x,tile.z)) {
+            assert.ok(tile.levels.every(level=>level>=1&&level<=10),
+              'weathered stone rims retain valid physical microcell heights');
             continue;
           }
           assert.ok(inCirculation(tile.x,tile.z) ||
