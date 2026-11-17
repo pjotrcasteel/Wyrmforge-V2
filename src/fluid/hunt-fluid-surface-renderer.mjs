@@ -10,6 +10,8 @@ precision highp float;
 layout(location=0) in vec3 aPosition;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aFlow;
+layout(location=3) in float aFaceMode;
+layout(location=4) in float aLandingY;
 uniform vec2 uViewport;
 uniform vec2 uPan;
 uniform float uScale;
@@ -20,6 +22,8 @@ uniform vec3 uCameraDepth;
 out vec3 vWorld;
 out vec3 vNormal;
 out vec2 vFlow;
+flat out int vFaceMode;
+out float vLandingY;
 void main(){
   vec3 world=aPosition;
   vec2 pixel=vec2(dot(world,uCameraRight),dot(world,uCameraDown))*uScale
@@ -30,6 +34,8 @@ void main(){
   vWorld=world;
   vNormal=aNormal;
   vFlow=aFlow;
+  vFaceMode=int(aFaceMode+.5);
+  vLandingY=aLandingY;
 }
 `;
 
@@ -38,6 +44,8 @@ precision highp float;
 in vec3 vWorld;
 in vec3 vNormal;
 in vec2 vFlow;
+flat in int vFaceMode;
+in float vLandingY;
 uniform float uTime;
 uniform float uLava;
 out vec4 outColor;
@@ -67,6 +75,24 @@ void main(){
     if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48);
     if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72);
     color*=mix(.87,1.0,top);
+    if(vFaceMode==2) {
+      // A real downstream wet column is lower. Vertical, pixel-quantized
+      // light strokes follow the falling sheet, never a generic pool wall.
+      vec2 across=vec2(-downstream.y,downstream.x);
+      float strip=floor(dot(vWorld.xz,across)*10.0);
+      float bead=fluidHash(vec2(strip,floor(vWorld.y*8.0+uTime*5.0)));
+      color=mix(color,vec3(.47,.68,.65),.15+.18*step(.78,bead));
+      float landing=1.0-smoothstep(.02,.35,vWorld.y-vLandingY);
+      color=mix(color,vec3(.57,.74,.69),landing*.4);
+    } else if(vFaceMode==3) {
+      // Subtle broken glint at the lip, not a bright 1m-wide foam stripe.
+      vec2 local=fract(vWorld.xz);
+      float distanceToEdge=abs(downstream.x)>abs(downstream.y)
+        ?(downstream.x>0.0?1.0-local.x:local.x)
+        :(downstream.y>0.0?1.0-local.y:local.y);
+      float lip=1.0-smoothstep(.0,.16,distanceToEdge);
+      color=mix(color,vec3(.55,.72,.67),lip*.30);
+    }
     // Prevent the old terrain decal from showing through as hard dark
     // blocks at excavation boundaries, while keeping slight depth blending.
     opacity=mix(.975,.94,top);
@@ -75,6 +101,13 @@ void main(){
     color=mix(vec3(.29,.055,.015),vec3(.86,.29,.045),.40+.45*pool);
     color=mix(color,vec3(1.0,.66,.16),step(.84,ember)*.5);
     color*=mix(.72,1.0,top);
+    if(vFaceMode==2){
+      float streak=fluidHash(vec2(floor(vWorld.y*8.0+uTime*2.0),
+        floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0)));
+      color=mix(color,vec3(1.0,.63,.16),step(.68,streak)*.22);
+      float landing=1.0-smoothstep(.02,.4,vWorld.y-vLandingY);
+      color=mix(color,vec3(1.0,.75,.24),landing*.24);
+    }
     opacity=.99;
   }
   outColor=vec4(color,opacity);
@@ -140,10 +173,13 @@ export class HuntFluidSurfaceRenderer {
       wetFaces:this.#mesh?.faceCount??0,
       topFaces:this.#mesh?.topFaces??0,
       sideFaces:this.#mesh?.sideFaces??0,
+      waterfallFaces:this.#mesh?.waterfallFaces??0,
+      fallLipFaces:this.#mesh?.fallLipFaces??0,
       wetColumns:this.#mesh?.wetColumns??0,
       refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
       cpuMeshBytes:this.#mesh?this.#mesh.positions.byteLength+
         this.#mesh.normals.byteLength+this.#mesh.flows.byteLength+
+        this.#mesh.faceModes.byteLength+this.#mesh.landingHeights.byteLength+
         this.#mesh.indices.byteLength:0,
       uploadedTriangles:this.#record?.count?this.#record.count/3:0,
       surfaceStep:this.#mesh?.step??null
@@ -167,7 +203,8 @@ export class HuntFluidSurfaceRenderer {
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
     const mesh=buildFluidSurfaceMesh(surface,{sampleAt});
-    const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+mesh.indices.byteLength;
+    const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+
+      mesh.faceModes.byteLength+mesh.landingHeights.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
     this.#releaseBuffers();
     this.#mesh=mesh;
@@ -208,6 +245,12 @@ export class HuntFluidSurfaceRenderer {
       buffer(gl.ARRAY_BUFFER,this.#mesh.flows);
       gl.enableVertexAttribArray(2);
       gl.vertexAttribPointer(2,2,gl.BYTE,false,0,0);
+      buffer(gl.ARRAY_BUFFER,this.#mesh.faceModes);
+      gl.enableVertexAttribArray(3);
+      gl.vertexAttribPointer(3,1,gl.UNSIGNED_BYTE,false,0,0);
+      buffer(gl.ARRAY_BUFFER,this.#mesh.landingHeights);
+      gl.enableVertexAttribArray(4);
+      gl.vertexAttribPointer(4,1,gl.FLOAT,false,0,0);
       buffer(gl.ELEMENT_ARRAY_BUFFER,this.#mesh.indices);
       this.#record={vao,buffers,count:this.#mesh.indices.length};
     }catch(error){
