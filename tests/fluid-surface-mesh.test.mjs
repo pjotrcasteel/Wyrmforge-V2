@@ -33,7 +33,7 @@ test('real fluid geometry uses 10cm surface head instead of painting the solid f
   assert.ok(result.indices.every(i=>i<result.vertexCount));
   assert.equal(engine.sample(1,0).surfaceY,-.5);
   const waterCapY=result.positions[1];
-  const craterCapY=result.positions[13];
+  const craterCapY=result.positions[25];
   assert.ok(Math.abs(waterCapY-1.006)<.001);
   assert.ok(Math.abs(craterCapY-(-.494))<.001,
     'crater liquid top must not be flattened to the solid floor -2');
