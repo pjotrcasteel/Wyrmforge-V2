@@ -1,3 +1,4 @@
+import {createHuntFireballImpact,paintHuntFireballImpact} from './src/hunt-fireball-visuals.mjs';
 import {huntGrassMaterialVolume,HUNT_GRASS_VOLUME_STRIDE} from './src/hunt-grass-material-volume.mjs';
 import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
 import {huntRegionCollapseScaffold,REGION_COLLAPSE_ENTRY,REGION_COLLAPSE_SUPPORT} from './src/diagnostics/hunt-region-collapse.mjs';
@@ -611,21 +612,7 @@ function paintPlayFireball(ctx,view) {
     ctx.fillStyle='#fff3a3';
     ctx.fillRect(screen.x-size*.5,screen.y-size*.5,size,size);
   }
-  if(playImpact) {
-    const age=now-playImpact.at;
-    if(age>=330) {playImpact=null;return;}
-    const point=playImpact.point;
-    const screen=projectVoxel(point.x,point.y,point.z,view);
-    const radius=view.scale*(.4+age/330*2.3);
-    ctx.save();
-    ctx.globalAlpha=1-age/330;
-    ctx.strokeStyle='#ffc05c';
-    ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.ellipse(screen.x,screen.y,radius,radius*.65,0,0,Math.PI*2);
-    ctx.stroke();
-    ctx.restore();
-  }
+  if(playImpact&&!paintHuntFireballImpact(ctx,view,playImpact,now))playImpact=null;
 }
 
 function streamingBusy() {
@@ -725,29 +712,31 @@ function advancePlayFireball(now) {
   if(now-cast.startedAt<cast.duration)return;
   playFireball=null;
   if(active?.world!==cast.world || active.port.revision!==cast.worldRevision)return;
+  const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(cast.propId){
     const residency=playStream.residency;
     const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
-    const hit=playStream.trees.hitProp(cast.propId,active.port,isPublished,now,
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const hit=playStream.trees.hitProp(cast.propId,active.port,isPublished,now,!reducedMotion);
     if(hit){
       playFireballCount++;
       const boulder=cast.propKind==='boulder';
       if(boulder)playStream.directBoulderHits++;
       else playStream.directTreeHits++;
-      playImpact={point:cast.point,at:now};
+      playImpact=createHuntFireballImpact(cast.point,now,{propKind:cast.propKind,reducedMotion});
       previewMessage.textContent=boulder
         ?(hit.hits===1?'Boulder cracked · Tap it again':'Boulder shattered')
         :(hit.hits===1?'Tree damaged · Tap the trunk again':'Tree felled');
     }
     return;
   }
+  const {x,y,z}=cast.target;
+  const material=active.world.get(x,y,z);
   const result=impactSpan(cast.target);
   if(!result)return;
   playFireballCount++;
   playRemovedVoxels+=result.removedVoxels;
   if(result.removedVoxels>0&&playActor?.grounded)playRecoveryCheckpoint=playActor;
-  playImpact={point:cast.point,at:now};
+  playImpact=createHuntFireballImpact(cast.point,now,{material,removed:result.removedVoxels,reducedMotion});
 }
 
 function playMovementInput() {
