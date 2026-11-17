@@ -1,3 +1,4 @@
+import { V2_BEDROCK_MATERIAL } from './terrain-materials.mjs';
 import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 
 // Independent V2.3 foundation: one synchronous authoritative writer for bounded,
@@ -5,7 +6,7 @@ import { markDirtyForEditedVoxel } from './chunk-dirty.mjs';
 // Protected material 4 is independent V2 bedrock. Partial damage is private to
 // this ledger and must eventually be included in a versioned snapshot/replay.
 export const TERRAIN_EDIT_SCHEMA = 'voxel-v2.terrain-edit.v1';
-export const V2_BEDROCK_MATERIAL = 4;
+export { V2_BEDROCK_MATERIAL };
 export const MAX_EDIT_RADIUS = 8;
 export const MAX_RECORDED_EDITS = 1024;
 export const MAX_PENDING_DAMAGE_CELLS = 8192;

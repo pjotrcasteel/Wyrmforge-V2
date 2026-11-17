@@ -214,7 +214,7 @@ test('Woodland Trail keeps its route and exposes stone beneath existing grassy c
       const lip=tiles.get(`${x*direction},${z+region.offsetZ}`);
       let hitStone=false;
       for(const cell of high){
-        if(hitStone)assert.equal(cell.material,3,'soil or turf cannot appear beneath stone');
+        if(hitStone)assert.equal(cell.material,cell.y===-3?4:3,'soil or turf cannot appear beneath stone');
         if(cell.material===3)hitStone=true;
       }
       if(high[0].material!==1||high[1].material!==3||

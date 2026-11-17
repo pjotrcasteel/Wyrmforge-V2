@@ -1,3 +1,4 @@
+import { V2_BEDROCK_MATERIAL } from '../terrain-materials.mjs';
 // H08-02B: physical east/west connections of native authored Wet Forest sites.
 // This is a spatial composition operation, never a second terrain generator.
 // The two sites remain immutable. Only their planned 8m seam is materialized.
@@ -68,6 +69,7 @@ export function composeLateralHuntConnector(layout,linkId,{westSite,eastSite,ter
   }
   if(maximumRouteGradeTenths>5)throw new Error('Lateral connection exceeds passive traversal grade');
   const materialAt=(x,y,z)=>{
+    if(y===floor)return V2_BEDROCK_MATERIAL;
     const c=columns.get(x+','+z);
     if(!c||y>c.y)return 0;
     return y===c.y?c.material:c.material!==3&&y>=c.y-2?2:3;

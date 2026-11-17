@@ -1,5 +1,7 @@
 // V2 terrain material contract. Stable voxel IDs, independent of rendering and art files.
 // Future texture packs replace appearance, never world material IDs or terrain edits.
+export const V2_BEDROCK_MATERIAL = 4;
+
 export const TERRAIN_MATERIALS = Object.freeze([
   Object.freeze({id:1,key:'grass',albedo:Object.freeze([0.38,0.55,0.28]),textureKey:'terrain/grass'}),
   Object.freeze({id:2,key:'dirt',albedo:Object.freeze([0.48,0.34,0.24]),textureKey:'terrain/dirt'}),
@@ -13,7 +15,8 @@ export function terrainMaterial(id) {
 // Generate only the material lookup, not lighting. Renderers can swap this for a
 // texture atlas without coupling the terrain world or meshing worker to artwork.
 export function terrainMaterialGlsl() {
-  const branches = TERRAIN_MATERIALS.map((material, index) => {
+  const bedrock = { id: V2_BEDROCK_MATERIAL, albedo: terrainMaterial(3).albedo };
+  const branches = [...TERRAIN_MATERIALS, bedrock].map((material, index) => {
     const color = material.albedo.map(value => value.toFixed(2)).join(', ');
     return `  ${index === 0 ? 'if' : 'else if'} (materialId < ${(material.id + 0.5).toFixed(1)}) return vec3(${color});`;
   });
@@ -32,7 +35,8 @@ export function terrainSurfaceKey(materialId, normalY) {
   switch (materialId) {
     case 1: return normalY > 0 ? 'terrain/grass' : 'terrain/grass-soil-side';
     case 2: return 'terrain/dirt';
-    case 3: return 'terrain/stone';
+    case 3:
+    case V2_BEDROCK_MATERIAL: return 'terrain/stone';
     default: return null;
   }
 }
