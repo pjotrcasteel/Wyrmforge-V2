@@ -97,21 +97,17 @@ function naturalCavernElevation(seed,siteNoise,x,z,{kind}) {
   const wallDistance=Math.max(0,r-wallStart);
   const scarpAt=2.8+1.2*(siteNoise(seed,x,z,14,105)-.5);
   const scarpHeight=4.8+1.8*siteNoise(seed,x,z,11,106);
-  const massif=wallDistance*.55+
-    (wallDistance>scarpAt?scarpHeight:0)+
-    (wallDistance>7?1.7:0);
-  const westSpine=x<-14 ? 1.5*siteNoise(seed,x,z,13,97):0;
-  const northRidge=z<-12 ? 1.7*siteNoise(seed,x,z,11,98):0;
-  const scree=1.6*(siteNoise(seed,x,z,9,99)-0.5);
   const base=wyrm?7.8:6;
-  // Connected vertical buttresses grow out of the existing outer massif.
-  // Warped bands vary their width. Flat shelves interrupt the climb at
-  // different elevations rather than adding isolated rectangular boulders.
-  const ribAxis=x*.83+z*.37+2.4*(siteNoise(seed,x,z,12,103)-.5);
-  const rib=Math.max(0,siteNoise(seed,ribAxis,0,3.8,104)-.48)*5;
-  const wallWeight=Math.min(1,wallDistance/3);
-  const shelf=wallDistance>2.5?Math.floor((wallDistance-2.5)/3.4)*.65:0;
-  return base+massif+westSpine+northRidge+scree+(rib+shelf)*wallWeight;
+  if(wallDistance>scarpAt) {
+    // One broad crest belongs to the connected massif. Short-wavelength
+    // elevation noise previously turned its face into separate square posts.
+    const crest=base+scarpHeight+1.5*siteNoise(seed,x,z,22,107);
+    const upperShelf=wallDistance>8.5?2.5:0;
+    return crest+upperShelf+Math.max(0,wallDistance-3)*.12;
+  }
+  const scree=1.1*(siteNoise(seed,x,z,12,99)-.5);
+  return base+wallDistance*.3+scree;
+
 }
 
 export function createFireArenaStrategies(siteNoise) {
