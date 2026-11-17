@@ -200,20 +200,30 @@ test('Woodland Trail keeps its route and exposes stone beneath existing grassy c
   const {definition}=graph.region(region.id);
   const column=(x,z)=>definition.runs.filter(run=>run.z===z+region.offsetZ&&
     x>=run.x&&x<run.x+run.length).sort((a,b)=>b.y-a.y);
+  const tiles=new Map(definition.surfaceTiles.map(tile=>[`${tile.x},${tile.z}`,tile]));
+  const roof=(x,z,edge)=>{
+    const top=column(x,z)[0];
+    const tile=tiles.get(`${x},${z+region.offsetZ}`);
+    const levels=tile?.levels.slice(edge==='south'?90:0,edge==='south'?100:10);
+    return top.y*10+(levels?Math.min(...levels):10);
+  };
   for(const direction of [-1,1]){
-    let grassyRockEdges=0,isolated=0,deepFaces=0;
-    const drop=(x,z)=>column(x,z)[0].y-column(x,z+1)[0].y;
+    let detailedFaces=0,deepFaces=0;
     for(let z=3;z<=13;z++)for(let x=4;x<=12;x++){
       const high=column(x*direction,z);
-      const low=column(x*direction,z+1)[0];
-      if(high[0].material===1&&high[1].material===3&&high[0].y>low.y)grassyRockEdges++;
-      if(high[0].y-low.y>=2&&high[1].material===3)deepFaces++;
-      const connected=[-1,1].some(dx=>[-1,0,1].some(dz=>drop(x*direction+dx,z+dz)>0));
-      if(high[0].y>low.y&&!connected)isolated++;
+      const lip=tiles.get(`${x*direction},${z+region.offsetZ}`);
+      let hitStone=false;
+      for(const cell of high){
+        if(hitStone)assert.equal(cell.material,3,'soil or turf cannot appear beneath stone');
+        if(cell.material===3)hitStone=true;
+      }
+      if(high[0].material!==1||high[1].material!==3||
+        lip?.y!==high[0].y||Math.max(...lip.levels)>3||new Set(lip.levels).size<2)continue;
+      detailedFaces++;
+      if(roof(x*direction,z,'south')-roof(x*direction,z+1,'north')>=20)deepFaces++;
     }
-    assert.ok(grassyRockEdges>=3);
-    assert.ok(deepFaces>=2,'both slopes expose real two-voxel cliffs');
-    assert.ok(isolated<=1,'avoid detached cliff faces');
+    assert.ok(detailedFaces>=3,'both slopes have real grass microvoxels above rock');
+    assert.ok(deepFaces>=2,'both slopes retain two-voxel drops after subdivision');
   }
   for(let z=9;z<=15;z++)assert.equal(column(-2,z)[0].material,2);
 });

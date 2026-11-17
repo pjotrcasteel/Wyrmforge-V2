@@ -21,7 +21,7 @@ function noise(seed,x,z) {
 
 export function composeMicroSurfaceTiles({
   radius,seed,heights,surfaces,routes,rockFaceThreshold=null,
-  gradedTopTenths=null,
+  gradedTopTenths=null,stoneUnderTurf=null,
   flowLinks=[],escapeRoutes=[],approaches=[],combatSpaces=[]
 }) {
   if(!Number.isSafeInteger(radius) || radius<2 || radius>32 ||
@@ -54,7 +54,7 @@ export function composeMicroSurfaceTiles({
     addPath([{x:approach.x,z:approach.z},{x:hub.x,z:hub.z}]);
   }
   const inPath=(x,z)=>pathCells.has(x+','+z);
-  const roads=[],connectors=[],cliffs=[];
+  const roads=[],connectors=[],cliffs=[],turfLips=[];
   for(let z=-radius;z<radius;z++)for(let x=-radius;x<radius;x++) {
     const i=index(radius,x,z),top=heights[i];
     const authoredTop=gradedTopTenths?.[i]??0;
@@ -83,6 +83,21 @@ export function composeMicroSurfaceTiles({
           rockFace=true;break;
         }
       }
+    }
+    const turfLip=!profile&&!heightTransition&&!authoredTop&&!inPath(x,z)&&
+      surfaces[i]===1&&stoneUnderTurf?.has(i);
+    if(turfLip){
+      const lower=(dx,dz)=>x+dx>=-radius&&x+dx<radius&&z+dz>=-radius&&z+dz<radius&&
+        heights[index(radius,x+dx,z+dz)]<top;
+      const west=lower(-1,0),east=lower(1,0),north=lower(0,-1),south=lower(0,1);
+      const levels=[];
+      for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++){
+        const distance=Math.min(west?ix:10,east?9-ix:10,north?iz:10,south?9-iz:10);
+        const variation=noise(seed,(x*10+ix)>>1,(z*10+iz)>>1);
+        levels.push(distance<=1+Math.floor(variation*3)?1+Math.floor(variation*2):2+Math.floor(variation*2));
+      }
+      turfLips.push({x,y:top+1,z,levels});
+      continue;
     }
     if(!profile && !rockFace && !heightTransition && !authoredTop) continue;
     const levels=[];
@@ -144,13 +159,16 @@ export function composeMicroSurfaceTiles({
     const ka=noise(seed,a.x,a.z),kb=noise(seed,b.x,b.z);
     return ka-kb || a.z-b.z || a.x-b.x;
   });
-  const tiles=[...roads,...connectors,...cliffs.slice(0,remaining)];
+  const selectedLips=turfLips.slice(0,remaining);
+  const selectedRock=cliffs.slice(0,remaining-selectedLips.length);
+  const tiles=[...roads,...connectors,...selectedLips,...selectedRock];
   tiles.sort((a,b)=>a.y-b.y || a.z-b.z || a.x-b.x);
   return Object.freeze({
     schema:MICRO_SURFACE_GRAMMAR_SCHEMA,
     tileCount:tiles.length,
     roadTiles:roads.length,connectorTiles:connectors.length,
-    rockTiles:Math.min(cliffs.length,remaining),
+    rockTiles:selectedRock.length+selectedLips.length,
+    turfLips:Object.freeze(selectedLips),
     tiles:Object.freeze(tiles)
   });
 }

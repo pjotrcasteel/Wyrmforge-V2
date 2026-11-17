@@ -53,7 +53,7 @@ test('authored Fire-tier sites preserve routes and physical topology across seed
   for(const kind of kinds)for(const seed of [7,19,101,267]) {
     const first=generateWorldSite(recipe(kind,seed));
     const second=generateWorldSite(recipe(kind,seed));
-    assert.equal(first.generatorVersion,'worldgen-v2.7.8');
+    assert.equal(first.generatorVersion,'worldgen-v2.7.9');
     assert.equal(first.hash,second.hash);
     assert.deepEqual(first.definition,second.definition);
     assert.ok(first.layout.topology.reachable);
