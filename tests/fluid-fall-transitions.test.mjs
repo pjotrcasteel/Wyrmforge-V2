@@ -38,10 +38,12 @@ test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',(
   assert.ok(surface.landingHeights instanceof Float32Array);
   assert.equal(surface.faceModes.length,surface.vertexCount);
   assert.equal(surface.landingHeights.length,surface.vertexCount);
-  assert.deepEqual([...new Set(surface.faceModes)],[3,2,4,5,0],
+  assert.deepEqual([...new Set(surface.faceModes)],[3,2,4,0,5],
     'upper lip, real falling cliff, projected falling ribbons and still lower pool');
   assert.equal(surface.fallRibbonFaces,FLUID_FALL_RIBBON_SECTIONS*4);
   assert.equal(surface.landingSplashFaces,16);
+  assert.ok([...surface.faceModes.slice(-16*4)].every(mode=>mode===5),
+    'landing splash must draw after all transparent pool caps');
   const curtain=[...surface.faceModes].findIndex(v=>v===2);
   assert.ok(curtain>=0);
   for(let i=curtain;i<curtain+4;i++){
