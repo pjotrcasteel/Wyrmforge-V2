@@ -2,6 +2,7 @@
 // Uses the regular WorldGen -> Voxel -> Fireball edit -> Water V2 -> renderer path.
 // Run: npm i --no-save playwright-core@1.56.1 && node .github/witness/water-play-hunt-browser.mjs
 import {chromium} from 'playwright-core';
+import {PNG} from 'pngjs';
 import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -99,6 +100,52 @@ try{
   report.after=after;
   console.log('FLUID_BROWSER_MEASUREMENTS '+JSON.stringify({before,edits,observations,after}));
   await page.screenshot({path:artifacts+'/forest-after.jpeg',type:'jpeg',quality:67});
+  // Actual appearance gate: compare the *same game frame* with only the
+  // waterfall ribbons enabled/disabled. Count changed pixels specifically
+  // inside their projected bounds, not in unrelated water or moving HUD.
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.hold(true));
+  await page.waitForTimeout(180);
+  const rects=await page.evaluate(()=>window.__WyrmforgeFluidTest.ribbonRects());
+  if(rects.length<1)throw new Error('No projected falling ribbon intersects the Hunt camera');
+  const beforeRibbon=PNG.sync.read(await page.screenshot({type:'png',scale:'css'}));
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.ribbons(false));
+  await page.waitForTimeout(180);
+  const noRibbon=PNG.sync.read(await page.screenshot({type:'png',scale:'css'}));
+  await page.evaluate(()=>{
+    window.__WyrmforgeFluidTest.ribbons(true);
+    window.__WyrmforgeFluidTest.hold(false);
+  });
+  if(beforeRibbon.width!==noRibbon.width||beforeRibbon.height!==noRibbon.height){
+    throw new Error('Screenshot sizes changed while toggling only the waterfall');
+  }
+  const width=beforeRibbon.width,height=beforeRibbon.height;
+  const marked=new Uint8Array(width*height);
+  for(const {left,right,top,bottom} of rects){
+    for(let y=Math.max(0,Math.floor(top));y<Math.min(height,Math.ceil(bottom));y++){
+      for(let x=Math.max(0,Math.floor(left));x<Math.min(width,Math.ceil(right));x++){
+        marked[y*width+x]=1;
+      }
+    }
+  }
+  let maskedPixels=0,changedPixels=0,colorDelta=0;
+  for(let i=0;i<marked.length;i++){
+    if(!marked[i])continue;
+    maskedPixels++;
+    const offset=i*4;
+    const diff=Math.abs(beforeRibbon.data[offset]-noRibbon.data[offset])+
+      Math.abs(beforeRibbon.data[offset+1]-noRibbon.data[offset+1])+
+      Math.abs(beforeRibbon.data[offset+2]-noRibbon.data[offset+2]);
+    if(diff>=36){
+      changedPixels++;
+      colorDelta+=diff;
+    }
+  }
+  report.visual={projectedRibbonBounds:rects.length,maskedPixels,changedPixels,colorDelta};
+  console.log('FLUID_BROWSER_VISIBLE_FALL '+JSON.stringify(report.visual));
+  if(maskedPixels<30||changedPixels<25){
+    throw new Error('Fall geometry exists but is not visibly rendered in Hunt screenshot: '+
+      JSON.stringify(report.visual));
+  }
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect
   // the browser output from CI logs, instead of claiming visual verification.
