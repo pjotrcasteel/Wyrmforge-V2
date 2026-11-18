@@ -38,9 +38,9 @@ test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',(
   assert.ok(surface.landingHeights instanceof Float32Array);
   assert.equal(surface.faceModes.length,surface.vertexCount);
   assert.equal(surface.landingHeights.length,surface.vertexCount);
-  assert.deepEqual([...new Set(surface.faceModes)],[3,2,4,0,5],
+  assert.deepEqual([...new Set(surface.faceModes)],[3,2,0,4,5],
     'upper lip, real falling cliff, projected falling ribbons and still lower pool');
-  assert.equal(surface.fallRibbonFaces,FLUID_FALL_RIBBON_SECTIONS*4);
+  assert.equal(surface.fallRibbonFaces,FLUID_FALL_RIBBON_SECTIONS*5);
   assert.equal(surface.landingSplashFaces,16);
   assert.ok([...surface.faceModes.slice(-16*4)].every(mode=>mode===5),
     'landing splash must draw after all transparent pool caps');
@@ -124,7 +124,7 @@ test('flow ribbons project across visible Hunt-camera pixels, not edge-on agains
     }
     ribbons.push(points);
   }
-  assert.equal(ribbons.length,8);
+  assert.equal(ribbons.length,10);
   const bounds=ribbons.map(points=>({
     width:Math.max(...points.map(p=>p.x))-Math.min(...points.map(p=>p.x)),
     height:Math.max(...points.map(p=>p.y))-Math.min(...points.map(p=>p.y))
@@ -161,8 +161,72 @@ test('a physically real airborne fall keeps a curtain over an as-yet dry lower p
   });
   assert.equal(surface.waterfallFaces,1,
     'live airborne transfer supplies physical evidence of a fall before impact');
-  assert.equal(surface.fallRibbonFaces,8);
+  assert.equal(surface.fallRibbonFaces,10);
   assert.equal(surface.landingSplashFaces,0,
     'no landing foam can appear before water actually wets the lower rock');
   assert.ok([...surface.faceModes].some(mode=>mode===4));
+});
+
+test('three adjacent physically connected waterfall columns form ONE gapless 3m cascade',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:1,minZ:0,maxZ:2},
+    floorAt:x=>x===0?2:0,
+    initial:Array.from({length:3},(_,z)=>[
+      {x:0,z,depth:4},{x:1,z,depth:4}
+    ]).flat()
+  });
+  const physicalBefore=fluid.snapshot();
+  const mesh=buildFluidSurfaceMesh(fluid.snapshotSurface(),{
+    sampleAt:(x,z)=>fluid.sample(x,z)
+  });
+  assert.equal(mesh.waterfallFaces,3);
+  assert.equal(mesh.waterfallGroups,1,
+    'physically adjacent falling cells must use one continuous waterfall');
+  assert.equal(mesh.maxWaterfallWidth,3);
+  assert.equal(mesh.fallRibbonFaces,3*5*FLUID_FALL_RIBBON_SECTIONS);
+  assert.ok(mesh.landingSplashFaces<3*16,
+    'one river-wide impact should not repeat three full identical foam patterns');
+  const stripes=[];
+  for(let v=0;v<mesh.vertexCount;v+=4){
+    if(mesh.faceModes[v]!==4)continue;
+    const xs=[],zs=[],ys=[];
+    for(let j=v;j<v+4;j++){
+      xs.push(mesh.positions[j*3]);
+      zs.push(mesh.positions[j*3+2]);
+      ys.push(mesh.positions[j*3+1]);
+    }
+    stripes.push({
+      minZ:Math.min(...zs),maxZ:Math.max(...zs),
+      minY:Math.min(...ys),maxY:Math.max(...ys)
+    });
+  }
+  assert.equal(stripes.length,30);
+  const firstBand=stripes.slice(0,15).sort((a,b)=>a.minZ-b.minZ);
+  assert.ok(Math.abs(firstBand[0].minZ-0)<1e-6);
+  assert.ok(Math.abs(firstBand.at(-1).maxZ-3)<1e-6);
+  for(let i=1;i<firstBand.length;i++){
+    assert.ok(Math.abs(firstBand[i].minZ-firstBand[i-1].maxZ)<1e-5,
+      'no uncovered 20cm gaps at former one-metre column boundaries');
+  }
+  assert.ok(new Set(firstBand.map(face=>face.maxY.toFixed(3))).size===1,
+    'the entire waterfall must share one upper liquid height, not 3 jittering jets');
+  assert.deepEqual(fluid.snapshot(),physicalBefore,
+    'joining fall geometry must never modify the real water volume');
+});
+
+test('disconnected banks and perpendicular falls remain separate waterfalls',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:1,minZ:0,maxZ:4},
+    floorAt:(x,z)=>x===0?2:0,
+    initial:[0,1,3,4].flatMap(z=>[
+      {x:0,z,depth:4},{x:1,z,depth:4}
+    ])
+  });
+  const mesh=buildFluidSurfaceMesh(fluid.snapshotSurface(),{
+    sampleAt:(x,z)=>fluid.sample(x,z)
+  });
+  assert.equal(mesh.waterfallFaces,4);
+  assert.equal(mesh.waterfallGroups,2);
+  assert.equal(mesh.maxWaterfallWidth,2);
+  assert.equal(mesh.fallRibbonFaces,40);
 });
