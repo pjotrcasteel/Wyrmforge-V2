@@ -4,6 +4,7 @@
 import {getCameraPreset} from '../camera-presets.mjs';
 import {waterRippleMotifGlsl} from '../river-water-art.mjs';
 import {buildFluidSurfaceMesh} from './fluid-surface-mesh.mjs';
+import {stabilizeFluidSurface} from './fluid-surface-stabilizer.mjs';
 
 export const FLUID_VERTEX_GLSL=`#version 300 es
 precision highp float;
@@ -198,6 +199,7 @@ export class HuntFluidSurfaceRenderer {
   #uniforms=null;
   #record=null;
   #mesh=null;
+  #visualHistory=new Map();
   #lost=false;
   #disposed=false;
   #onLost;
@@ -222,6 +224,8 @@ export class HuntFluidSurfaceRenderer {
       sideFaces:this.#mesh?.sideFaces??0,
       waterfallFaces:this.#mesh?.waterfallFaces??0,
       fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
+      waterfallGroups:this.#mesh?.waterfallGroups??0,
+      maxWaterfallWidth:this.#mesh?.maxWaterfallWidth??0,
       landingSplashFaces:this.#mesh?.landingSplashFaces??0,
       flightFaces:this.#mesh?.flightFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
@@ -295,16 +299,21 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#mesh=null;
+    this.#visualHistory.clear();
   }
 
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
-    const mesh=buildFluidSurfaceMesh(surface,{sampleAt});
+    const presented=stabilizeFluidSurface(surface,sampleAt,this.#visualHistory);
+    const mesh=buildFluidSurfaceMesh(presented.surface,{
+      sampleAt:presented.sampleAt
+    });
     const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+
       mesh.faceModes.byteLength+mesh.landingHeights.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
     this.#releaseBuffers();
     this.#mesh=mesh;
+    this.#visualHistory=presented.history;
   }
 
   #ensureReady(){
@@ -403,6 +412,7 @@ export class HuntFluidSurfaceRenderer {
     if(this.#program&&!this.#lost)this.#gl.deleteProgram(this.#program);
     this.#program=null;
     this.#mesh=null;
+    this.#visualHistory.clear();
     this.canvas.removeEventListener('webglcontextlost',this.#onLost);
     this.canvas.removeEventListener('webglcontextrestored',this.#onRestored);
     this.#disposed=true;
