@@ -40,6 +40,11 @@ import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
 import { createWorldSiteRecipe, siteRadiusForKind } from './src/world-generation/site-recipe.mjs';
+import {toVoxelTerrainDefinition} from './src/world-generation/voxel-terrain-adapter.mjs';
+import {planHuntRiverCorridor} from './src/world-generation/hunt-river-corridor-plan.mjs';
+import {
+  prepareHuntRiverEarthwork,composeHuntRiverEarthworkGraph
+} from './src/world-generation/hunt-river-earthwork.mjs';
 import {
   generateWorldSite,generateWorldExpeditionRegion,
   createHuntExpeditionRecipe,composeHuntExpeditionPlan,
@@ -717,7 +722,7 @@ function updatePlayStreaming(now) {
       // Restore only after Voxel has replayed committed terrain writes.
       try{
         stream.fluidRestored=stream.fluidSave?.restoreInto(playFluidStream)??false;
-        playFluidStream.syncResident(stream.residency.metrics.residentRegions);
+        playFluidStream.syncResident(stream.residency.metrics.residentIds);
       }catch(error){
         playFluidStream.dispose();
         playFluidStream=null;
@@ -736,6 +741,8 @@ function updatePlayStreaming(now) {
             checkpointStatus:stream.fluidSave?.status??null,
             restored:stream.fluidRestored??false,
             regionSteps:playFluidStream?.exportCheckpoint().regions.map(entry=>({id:entry.id,steps:entry.state.steps}))??[],
+            seamLinks:playFluidStream?.seamLinks??0,
+            seamTransferred:playFluidStream?.seamTransferred??0,
             wetColumns:playFluidStream?.wetCount??0,
             solverTicks:playFluidStream?.steps??0,
             totalDepth:playFluidStream?.totalDepth??0,
@@ -798,7 +805,7 @@ function updatePlayStreaming(now) {
   if(stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads) {
     residency.publish();
     if(playFluidStream){
-      const opened=playFluidStream.syncResident(residency.metrics.residentRegions);
+      const opened=playFluidStream.syncResident(residency.metrics.residentIds);
       if(opened){
         playFluidSurfaceStep=-1;
         playRiverRevision=-1;
@@ -1306,10 +1313,16 @@ function resetSite() {
       if(playMode&&!routePreview) {
         playConnected=generateConnectedHuntStart(generatedSite);
         const initialFootprint=playConnected.footprint;
-        const graph=generateAuthoredHuntTerrainGraph(generatedSite);
+        let graph=generateAuthoredHuntTerrainGraph(generatedSite);
         const initialIds=playConnected.sites.map(site=>site.id);
         const firstLink=graph.layout.links.find(link=>initialIds.includes(link.fromId)&&initialIds.includes(link.toId));
         initialIds.push(firstLink.id);
+        if(streamedWaterPreview&&!cellPreview){
+          const proposal=planHuntRiverCorridor(graph,firstLink.id);
+          if(!proposal)throw new Error('WorldGen has no physically grounded continuous river');
+          const earthwork=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
+          graph=composeHuntRiverEarthworkGraph(graph,earthwork,toVoxelTerrainDefinition);
+        }
         const all=graph.layout.regions.map(region=>region.bounds);
         const footprint={minX:Math.min(...all.map(b=>b.minX)),maxX:Math.max(...all.map(b=>b.maxX)),
           minZ:Math.min(...all.map(b=>b.minZ)),maxZ:Math.max(...all.map(b=>b.maxZ))};
@@ -1328,7 +1341,7 @@ function resetSite() {
         const structuralGravity=gravityPreview||terrainGravity;
         const terrainIdentity=huntTerrainSaveIdentity(saveIdentity,gravityMode,{
           structuralGravity,defaultEnabled:defaultGravity
-        });
+        })+(streamedWaterPreview&&!cellPreview?':connected-water-v1':'');
         const terrainSave=new HuntTerrainSave(findingStorage,terrainIdentity);
         const fluidSave=streamedWaterPreview&&!cellPreview?
           new HuntFluidSave(findingStorage,terrainIdentity):null;
