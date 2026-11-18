@@ -1,6 +1,7 @@
 // Terrain + physical objects are two interchangeable visibility providers.
 // This file has no spell, tree, building, Water, renderer or Voxel imports.
-import {nearestOccluderDistance,LIGHT_OCCLUDER_SCHEMA} from './occluder-contract.mjs';
+import {LIGHT_OCCLUDER_SCHEMA} from './occluder-contract.mjs';
+import {nearestLightObstruction} from './spatial-visibility.mjs';
 
 export const POINT_VISIBILITY_SCHEMA='wyrmforge.point-visibility.v1';
 export const POINT_VISIBILITY_BINS=12;
@@ -32,10 +33,7 @@ export function samplePointVisibility(field,index,position){
 function castRay(terrain,source,direction,range,shapes){
   const origin=source.map((value,i)=>value+direction[i]*EPSILON);
   const distance=range-EPSILON;
-  const terrainHit=terrain.raycast({origin,direction,maxDistance:distance});
-  let nearest=terrainHit?.distance;
-  if(!Number.isFinite(nearest)||nearest<0||nearest>distance)nearest=distance;
-  nearest=Math.min(nearest,nearestOccluderDistance(origin,direction,distance,shapes));
+  const nearest=nearestLightObstruction(terrain,origin,direction,distance,shapes);
   return Math.max(.12,(nearest+EPSILON)*Math.hypot(direction[0],direction[2]));
 }
 

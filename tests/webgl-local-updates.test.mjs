@@ -283,7 +283,7 @@ test('injected lighting fallback is the compiled renderer path and survives cont
 test('local lighting field uploads once per publication and restores after context loss',()=>{
   const {canvas,stats,events}=fakeCanvas();
   const view=new WebGLVoxelView(canvas);
-  const lightingField={schema:'wyrmforge.local-light-field.v1',origin:[-12,-12],
+  const lightingField={schema:'wyrmforge.local-light-field.v2',origin:[-12,-12],
     size:[24,24],data:new Float32Array(24*24*4)};
   const frame={width:128,height:128,scale:16,panX:0,panY:0,lightingField};
   view.render(frame);view.render(frame);assert.equal(stats.textureUploads,1);

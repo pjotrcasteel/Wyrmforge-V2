@@ -40,7 +40,15 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context){
   vec2 at=point.xz-.5;ivec2 grid=ivec2(floor(at));vec2 f=fract(at);
   vec4 a=lightingColumn(grid),b=lightingColumn(grid+ivec2(1,0));
   vec4 c=lightingColumn(grid+ivec2(0,1)),d=lightingColumn(grid+ivec2(1,1));
-  float energy=mix(mix(a.b,b.b,f.x),mix(c.b,d.b,f.x),f.y);
+  float topEnergy=mix(mix(a.b,b.b,f.x),mix(c.b,d.b,f.x),f.y);
+  // RGBA32F A contains 1 + side-face irradiance for occupied receivers;
+  // zero is reserved for missing geometry. Two physically sampled elevations
+  // share the existing one bounded field texture, no extra GPU allocation.
+  float sideEnergy=mix(mix(max(0.0,a.a-1.0),max(0.0,b.a-1.0),f.x),
+    mix(max(0.0,c.a-1.0),max(0.0,d.a-1.0),f.x),f.y);
+  float topY=mix(mix(a.r,b.r,f.x),mix(c.r,d.r,f.x),f.y);
+  float sideWeight=smoothstep(.12,1.1,max(0.0,topY-point.y));
+  float energy=mix(topEnergy,sideEnergy,sideWeight);
   float sourceY=mix(mix(a.g,b.g,f.x),mix(c.g,d.g,f.x),f.y);
   float warm=energy*1.65*fade*exp2(-abs(point.y-sourceY-.4)*.35);
   vec3 emission=vec3(${MOLTEN_PRESENTATION.emission.join(',')});
