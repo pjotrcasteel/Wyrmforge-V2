@@ -105,3 +105,14 @@ test('small shared link-visit budget fairly visits later seams',()=>{
   assert.throws(()=>new FluidSeamLinks([link(0,1,'other')]).restore(saved),
     /Incompatible physical/);
 });
+
+test('lava uses its own one-unit boundary transfer rate',()=>{
+  const left=make(0,{kind:'lava',depth:20});
+  const right=make(1,{kind:'lava'});
+  const resident=new Map([['band-0',left],['band-1',right]]);
+  const seam=new FluidSeamLinks([link(0,1)]);
+  const initial=mass([left,right]);
+  const result=seam.step(resident,{budget:1});
+  assert.equal(result.moved,1);
+  assert.equal(mass([left,right]),initial);
+});
