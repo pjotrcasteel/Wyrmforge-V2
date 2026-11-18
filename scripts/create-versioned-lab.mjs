@@ -1,6 +1,6 @@
-// GitHub Pages uses immutable per-commit URLs for reliable mobile validation.
-// The canonical root URL stays unchanged, but the build-specific directory
-// avoids reusing cached HTML and ES modules from a previous release.
+// This exact-SHA directory is a CI-only release witness, NOT a permanent
+// user URL: every GitHub Pages deploy replaces the previous artifact.
+// Share the stable /Wyrmforge-V2/play-hunt.html route with players instead.
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';

@@ -2,7 +2,7 @@
 // Check source, test and runtime entrypoints; external asset references must be
 // repo-relative and must not escape the repository or reference V1 directories.
 import { readdirSync, readFileSync, realpathSync, statSync, existsSync } from 'node:fs';
-import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const CODE_EXTENSIONS=new Set(['.mjs','.js']);
@@ -57,7 +57,20 @@ export function auditV2Dependencies(root) {
       issues.push(from+': non-local asset '+specifier);
       return;
     }
-    const candidate=resolve(dirname(from),pathOnly);
+    // Project-root URLs (e.g. /Wyrmforge-V2/play-hunt.html) are safe
+    // browser links, not absolute filesystem paths. Keep the same strict
+    // repository-boundary and existence audit after mapping their prefix.
+    let candidate;
+    if(kind==='asset' && pathOnly.startsWith('/')){
+      const projectPrefix='/'+basename(base)+'/';
+      if(!pathOnly.startsWith(projectPrefix)){
+        issues.push(from+': root-absolute asset outside project '+specifier);
+        return;
+      }
+      candidate=resolve(base,pathOnly.slice(projectPrefix.length));
+    }else{
+      candidate=resolve(dirname(from),pathOnly);
+    }
     if(candidate!==base && !within(base,candidate)) {
       issues.push(from+': escapes repository '+specifier);
       return;
