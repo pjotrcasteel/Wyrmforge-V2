@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wyrmforge V2 — Game link moved</title>
+<style>
+:root{color-scheme:dark}
+html,body{margin:0;min-height:100%;background:#101820;color:#e7edf1;font:16px system-ui}
+main{max-width:520px;padding:24px;margin:12vh auto}
+p{color:#c2d1df;line-height:1.6}
+a{display:inline-block;background:#325a69;color:#fff;padding:12px 18px;border-radius:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>This Wyrmforge V2 game link has moved</h1>
+<p id="status" role="status">Opening the current playable version. Historical build links are not permanently retained on GitHub Pages.</p>
+<a id="game-link" href="/Wyrmforge-V2/play-hunt.html">Play the current Hunt</a>
+</main>
+<script>
+(() => {
+  // Rescue only historical game entry pages. Never hide 404s for scripts/art.
+  const match = window.location.pathname.match(
+    /^\/Wyrmforge-V2\/builds\/([0-9a-f]{40})\/(play-hunt|index)\.html$/i
+  );
+  if (!match) {
+    document.getElementById('status').textContent =
+      'This file could not be found. You can open the current Hunt below.';
+    return;
+  }
+  const target = new URL('/Wyrmforge-V2/' + match[2] + '.html', window.location.origin);
+  target.search = window.location.search;
+  target.searchParams.set('requestedBuild', match[1].slice(0,7));
+  document.getElementById('game-link').href = target.href;
+  window.location.replace(target.href);
+})();
+</script>
+</body>
+</html>
