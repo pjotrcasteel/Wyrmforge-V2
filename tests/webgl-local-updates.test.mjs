@@ -1,3 +1,4 @@
+import {huntSpellLights} from '../src/hunt-spell-lighting.mjs';
 import {defineLightingEnvironment} from '../src/lighting/environment-contract.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import {
 
 function fakeCanvas() {
   let nextId = 0;
-  const stats = { lightingAmbient: [], shaderSources: [], createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
+  const stats = { transientCounts: [], lightingAmbient: [], shaderSources: [], createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
   const events = new Map();
   const gl = {
     VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
@@ -44,7 +45,7 @@ function fakeCanvas() {
     deleteBuffer: buffer => stats.deletedBuffers.push(buffer),
     bindBuffer() {}, bufferData() {}, enableVertexAttribArray() {}, vertexAttribPointer() {},
     isContextLost: () => false, viewport() {}, clearColor() {}, clearDepth() {}, clear() {},
-    useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i() {}, uniform2f() {}, uniform3f() {}, uniform1f() {},
+    useProgram() {}, activeTexture() {}, bindTexture() {}, uniform1i(location,value) { if(location==='uTransientLightCount')stats.transientCounts.push(value); }, uniform2f() {}, uniform3f() {}, uniform1f() {}, uniform4fv() {},
     createTexture: () => ({ id: ++nextId }), deleteTexture() {}, pixelStorei() {},
     texImage2D() { stats.textureUploads = (stats.textureUploads ?? 0) + 1; }, texParameteri() {},
     uniform3fv: (location, value) => {
@@ -298,4 +299,14 @@ test('renderer consumes explicit ambient data and rejects unsupported environmen
   view.render(frame);assert.deepEqual(stats.lightingAmbient.at(-1),lightingEnvironment.ambient);
   assert.throws(()=>view.render({...frame,lightingEnvironment:{...lightingEnvironment,schema:'future'}}),/schema/);
   view.dispose();
+});
+
+test('renderer accepts two transient spell emitters and clears their count after expiry',()=>{
+  const {canvas,stats}=fakeCanvas();const view=new WebGLVoxelView(canvas);
+  const cast={from:{x:0,y:1,z:0},point:{x:2,y:0,z:0},startedAt:0,duration:400,level:1};
+  const frame={width:128,height:128,scale:16,panX:0,panY:0};
+  const transientLights=huntSpellLights({cast,now:200,epoch:1,revision:1});
+  assert.ok(view.render({...frame,transientLights}));
+  assert.ok(view.render({...frame,transientLights:null}));
+  assert.deepEqual(stats.transientCounts.slice(-2),[1,0]);view.dispose();
 });

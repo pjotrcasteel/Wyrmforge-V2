@@ -1,3 +1,4 @@
+import {writeTransientLights} from './lighting/transient-lighting.mjs';
 import {LIGHTING_ENVIRONMENT_SCHEMA} from './lighting/environment-contract.mjs';
 import {SURFACE_GLSL} from './materials/surface-contract.mjs';
 import {LIGHTING_CONTEXT_GLSL,BASELINE_LIGHTING_GLSL,validateLightingShader} from './lighting/baseline-lighting.mjs';
@@ -508,6 +509,8 @@ export class WebGLVoxelView {
   #gl;
   #grassImage = null;
   #labVolume = null;
+  #transientPositions=new Float32Array(8);
+  #transientRadiance=new Float32Array(6);
   #lightingTexture=null;
   #lightingSource=null;
   #huntLavaTexture = null;
@@ -896,6 +899,9 @@ export class WebGLVoxelView {
       lightingEnabled:gl.getUniformLocation(this.#program,'uLightingFieldEnabled'),
       lightingWarm:gl.getUniformLocation(this.#program,'uLightingWarmEnabled'),
       lightingAmbient:gl.getUniformLocation(this.#program,'uLightingAmbient'),
+      transientCount:gl.getUniformLocation(this.#program,'uTransientLightCount'),
+      transientPositions:gl.getUniformLocation(this.#program,'uTransientPositions[0]'),
+      transientRadiance:gl.getUniformLocation(this.#program,'uTransientRadiance[0]'),
       lightingOrigin:gl.getUniformLocation(this.#program,'uLightingFieldOrigin'),
       huntLavaEnabled: gl.getUniformLocation(this.#program,'uHuntLavaEnabled'),
       huntLavaOrigin: gl.getUniformLocation(this.#program,'uHuntLavaOrigin'),
@@ -1134,7 +1140,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null,transientLights=null }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1210,6 +1216,12 @@ export class WebGLVoxelView {
       throw new TypeError('Invalid lighting environment');
     }
     gl.uniform3fv(this.#uniforms.lightingAmbient,ambient);
+    const transientCount=writeTransientLights(transientLights,this.#transientPositions,this.#transientRadiance);
+    gl.uniform1i(this.#uniforms.transientCount,transientCount);
+    if(transientCount){
+      gl.uniform4fv(this.#uniforms.transientPositions,this.#transientPositions);
+      gl.uniform3fv(this.#uniforms.transientRadiance,this.#transientRadiance);
+    }
     this.#bindLightingField(lightingField);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);

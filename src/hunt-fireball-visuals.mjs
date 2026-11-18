@@ -31,7 +31,7 @@ export function createHuntFireballImpact(point,at,{material,removed=0,propKind,r
     });
   }
   const flashMs=reducedMotion?115:130+rank*14;
-  return {point,at,particles,flashMs,radius:reducedMotion?5+rank:7+rank*3,
+  return {point,at,particles,flashMs,level:huntFireballVisualLevel(level),radius:reducedMotion?5+rank:7+rank*3,
     duration:reducedMotion?flashMs:417+rank*18};
 }
 
