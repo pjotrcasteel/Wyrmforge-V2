@@ -208,6 +208,62 @@ try{
     throw new Error('The real lower-pool impact is not visibly rendered: '+
       JSON.stringify(report.landingVisual));
   }
+  // Validate actual volume suspended between the two pools. Wait for a
+  // live solver packet which is also projected onto the ordinary Hunt view;
+  // then freeze *only* the solver and toggle parcel rendering in the same
+  // camera frame. Rendering-only ribbons cannot satisfy this test.
+  await page.waitForFunction(()=>{
+    const hook=window.__WyrmforgeFluidTest;
+    return Boolean(hook?.flightSample().count>0&&hook.parcelRects().length>0);
+  },null,{timeout:65000});
+  const airborne=await page.evaluate(()=>{
+    window.__WyrmforgeFluidTest.hold(true);
+    return window.__WyrmforgeFluidTest.flightSample();
+  });
+  await page.waitForTimeout(180);
+  const parcelRects=await page.evaluate(()=>window.__WyrmforgeFluidTest.parcelRects());
+  const parcelOn=PNG.sync.read(await page.screenshot({
+    path:artifacts+'/inflight-on.png',type:'png',scale:'css'
+  }));
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.parcels(false));
+  await page.waitForTimeout(180);
+  const parcelOff=PNG.sync.read(await page.screenshot({
+    path:artifacts+'/inflight-off.png',type:'png',scale:'css'
+  }));
+  await page.evaluate(()=>{
+    window.__WyrmforgeFluidTest.parcels(true);
+    window.__WyrmforgeFluidTest.hold(false);
+  });
+  if(parcelOn.width!==parcelOff.width||parcelOn.height!==parcelOff.height){
+    throw new Error('In-flight screenshot sizes changed unexpectedly');
+  }
+  const parcelMask=new Uint8Array(parcelOn.width*parcelOn.height);
+  for(const {left,right,top,bottom} of parcelRects){
+    for(let y=Math.max(0,Math.floor(top));y<Math.min(parcelOn.height,Math.ceil(bottom));y++){
+      for(let x=Math.max(0,Math.floor(left));x<Math.min(parcelOn.width,Math.ceil(right));x++){
+        parcelMask[y*parcelOn.width+x]=1;
+      }
+    }
+  }
+  let parcelVisiblePixels=0,parcelChangedPixels=0,parcelColorDelta=0;
+  for(let i=0;i<parcelMask.length;i++){
+    if(!parcelMask[i])continue;
+    parcelVisiblePixels++;
+    const offset=i*4;
+    const delta=Math.abs(parcelOn.data[offset]-parcelOff.data[offset])+
+      Math.abs(parcelOn.data[offset+1]-parcelOff.data[offset+1])+
+      Math.abs(parcelOn.data[offset+2]-parcelOff.data[offset+2]);
+    if(delta>=24){parcelChangedPixels++;parcelColorDelta+=delta;}
+  }
+  report.airborneVisual={
+    airborne,projectedBounds:parcelRects.length,maskedPixels:parcelVisiblePixels,
+    changedPixels:parcelChangedPixels,colorDelta:parcelColorDelta
+  };
+  console.log('FLUID_BROWSER_INFLIGHT '+JSON.stringify(report.airborneVisual));
+  if(airborne.units<1||parcelVisiblePixels<8||parcelChangedPixels<4){
+    throw new Error('Real in-air fluid volume was invisible to Hunt: '+
+      JSON.stringify(report.airborneVisual));
+  }
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect
   // the browser output from CI logs, instead of claiming visual verification.
