@@ -51,8 +51,15 @@ try{
   },null,{timeout:120000});
   result.on=await page.evaluate(()=>window.__WyrmforgeContactShadowTest.status());
   await page.screenshot({path:folder+'/game-on.png',type:'png',timeout:25000});
-  const canvas=page.locator('#combat-guide');
-  const on=PNG.sync.read(await canvas.screenshot({path:folder+'/overlay-on.png',timeout:25000}));
+  // Read the Canvas2D layer's RAW RGBA bytes. Element screenshots include
+  // WebGL terrain and transient HUD text behind it; those are NOT shadow pixels.
+  const pixelLayer=async(name)=>{
+    const data=await page.evaluate(()=>document.querySelector('#combat-guide').toDataURL('image/png'));
+    const buffer=Buffer.from(data.slice(data.indexOf(',')+1),'base64');
+    await writeFile(folder+'/'+name+'.png',buffer);
+    return PNG.sync.read(buffer);
+  };
+  const on=await pixelLayer('overlay-on');
   await page.evaluate(()=>window.__WyrmforgeContactShadowTest.toggle(false));
   const previouslyRendered=result.on.overlay.frames;
   await page.waitForFunction(previous=>{
@@ -60,7 +67,7 @@ try{
     return state.overlay.frames>previous&&state.contact.frameStamps===0;
   },previouslyRendered,{timeout:60000});
   result.off=await page.evaluate(()=>window.__WyrmforgeContactShadowTest.status());
-  const off=PNG.sync.read(await canvas.screenshot({path:folder+'/overlay-off.png',timeout:25000}));
+  const off=await pixelLayer('overlay-off');
   if(on.width!==off.width||on.height!==off.height)throw new Error('Nonmatching image sizes');
   let changed=0,difference=0;let minX=on.width,minY=on.height,maxX=0,maxY=0;
   for(let y=0;y<on.height;y++)for(let x=0;x<on.width;x++){
@@ -70,8 +77,18 @@ try{
     if(delta>12){changed++;difference+=delta;minX=Math.min(minX,x);minY=Math.min(minY,y);
       maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}
   }
-  result.visual={changedPixels:changed,totalDifference:difference,
-    bounds:changed?{minX,minY,maxX,maxY}:null,overlaySize:[on.width,on.height]};
+  const roots=result.on.residentProps.filter(prop=>prop.visible&&prop.foot);
+  let rootPixels=0;
+  for(let y=0;y<on.height;y++)for(let x=0;x<on.width;x++){
+    if(!roots.some(prop=>Math.abs(prop.foot.x-x)<35&&Math.abs(prop.foot.y-y)<27))continue;
+    const i=(y*on.width+x)*4;
+    const delta=Math.abs(on.data[i]-off.data[i])+Math.abs(on.data[i+1]-off.data[i+1])+
+      Math.abs(on.data[i+2]-off.data[i+2])+Math.abs(on.data[i+3]-off.data[i+3]);
+    if(delta>12)rootPixels++;
+  }
+  result.visual={changedPixels:changed,rootChangedPixels:rootPixels,totalDifference:difference,
+    bounds:changed?{minX,minY,maxX,maxY}:null,overlaySize:[on.width,on.height],
+    source:'raw Canvas2D pixels, not a composited screenshot'};
   console.log('CONTACT_SHADOW_WITNESS '+JSON.stringify({
     on:result.on,off:result.off,visual:result.visual,errors:result.errors
   }));
@@ -80,7 +97,7 @@ try{
   if(result.on.residentProps.length!==result.off.residentProps.length){
     throw new Error('Cannot compare images when prop residency changed between screenshots');
   }
-  if(changed<3000)throw new Error('Contact shadow remains too subtle at game pixel scale: '+changed+' changed pixels');
+  if(rootPixels<2600)throw new Error('Contact grounding is still visually too small: '+rootPixels+' changed ROOT pixels');
 }catch(error){failed=String(error.stack??error);result.failed=failed;console.error('CONTACT_SHADOW_FAILURE '+failed);}
 finally{
   await writeFile(folder+'/report.json',JSON.stringify(result,null,2));
