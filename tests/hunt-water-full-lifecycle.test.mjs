@@ -107,7 +107,8 @@ test('WAT-15a: a real connected-river Fireball survives graph eviction, revisit 
     },{captureRemovedCells:true});
     assert.ok(edit.removedVoxels>0,'real Fireball must actually remove Voxel solids');
     assert.ok(Array.isArray(edit.removedCells)&&edit.removedCells.length>0);
-    assert.equal(terrainSave.commit(edit.removedCells),true);
+    terrainSave.commit(edit.removedCells);
+    assert.equal(terrainSave.status,'saved');
     for(let i=0;i<180;i++){
       const result=fluid.step({budget:96});
       assert.ok(result.processed+result.seamInspected<=96);
