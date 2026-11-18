@@ -86,6 +86,7 @@ const pointOcclusionEnabled=localLightingEnabled&&
 const staticOcclusionEnabled=localLightingEnabled&&
   new URLSearchParams(location.search).get('staticOcclusion')!=='off';
 const playQuery=new URLSearchParams(location.search);
+const spriteEmissionEnabled=localLightingEnabled&&playQuery.get('spriteEmission')!=='off';
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
@@ -193,7 +194,8 @@ let rendererErrorMessage=null;
 let renderer=null;
 const playSpriteLighting={ambient:playLightingEnvironment.ambient,
   sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights,
-    [0,1,0],pointOcclusionEnabled?playPointVisibility:null,playVisibleLightingField)};
+    [0,1,0],pointOcclusionEnabled?playPointVisibility:null,
+    spriteEmissionEnabled?playVisibleLightingField:null)};
 let playPresentationNow=null;
 let playSpellLights=null;
 let playPointVisibility=null;
@@ -2431,6 +2433,8 @@ if(playMode) {
           registeredPhysicalOccluders:playOccluderCount},
         staticOcclusion:{enabled:staticOcclusionEnabled,
           sourceCells:playStaticEmissiveCells.length,...playLighting.statistics},
+        spriteEmission:{enabled:spriteEmissionEnabled,
+          validField:Boolean(playVisibleLightingField?.hasEmission)},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
