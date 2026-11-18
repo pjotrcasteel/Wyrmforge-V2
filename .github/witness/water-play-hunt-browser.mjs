@@ -367,6 +367,20 @@ try{
   if(after.fluidMeshBytes<=0){
     throw new Error('The actual water mesh did not allocate any geometry');
   }
+  // GPU buffers must remain allocated across all 3 real terrain edits and
+  // fluid changes. Windows/desktop Chrome can stall when per-frame geometry
+  // updates delete all six buffers/VAO and immediately reallocate them.
+  if(after.fluidGpuAllocations>before.fluidGpuAllocations||
+      after.fluidGpuDeletes>before.fluidGpuDeletes){
+    throw new Error('Water renderer churned GPU buffer objects during fluid animation: '+
+      JSON.stringify({
+        initialCreates:before.fluidGpuAllocations,
+        afterCreates:after.fluidGpuAllocations,
+        initialDeletes:before.fluidGpuDeletes,
+        afterDeletes:after.fluidGpuDeletes,
+        uploads:after.fluidGpuUploads
+      }));
+  }
   if(report.errors.length)throw new Error('Game browser errors: '+report.errors.join('; ').slice(0,800));
   console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after}));
 }catch(error){
