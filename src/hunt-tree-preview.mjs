@@ -1,6 +1,7 @@
 import {SpriteLightingCache,litSpriteColor} from './sprite-lighting-cache.mjs';
 import {TerrainContactShadowCache} from './terrain-contact-shadow-cache.mjs';
-import {TerrainDirectionalShadowCache} from './terrain-directional-shadow-cache.mjs';
+import {TerrainDirectionalShadowCache,directionalShadowMayReachView} from './terrain-directional-shadow-cache.mjs';
+import {describeDirectionalCaster} from './lighting/shadow-caster-contract.mjs';
 import { projectVoxel } from './camera-presets.mjs';
 import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
@@ -39,10 +40,23 @@ export class HuntTreePreview {
   #coverage=null;
   #scenery;
   #falls=new Map();
-  constructor(graph,image,damage){
+  #casterProviders=new Set();
+  #residentCasterIds=new Set();
+  constructor(graph,image,damage,{directionalCache=null,scenery=null,lightingCache=null}={}){
     this.objects=new HuntWoodlandObjects(graph,damage);
+    if(directionalCache)this.#canopyShadows=directionalCache;
+    if(lightingCache)this.#lightingCache=lightingCache;
     this.#image=image;
-    this.#scenery=new ScenicForest(graph.layout);
+    this.#scenery=scenery??new ScenicForest(graph.layout);
+  }
+  // Register an owning scene system ONCE. A new building/tree variant only
+  // publishes a descriptor, never a new shader branch or Lighting import.
+  registerDirectionalCasterProvider(provider){
+    if(typeof provider?.shadowCasters!=='function'){
+      throw new TypeError('Expected read-only shadowCasters(view) provider');
+    }
+    this.#casterProviders.add(provider);
+    return ()=>this.#casterProviders.delete(provider);
   }
   update(regionIds,terrain,coverage=null){
     if(this.#image.complete&&this.#image.naturalWidth){
@@ -51,7 +65,12 @@ export class HuntTreePreview {
       this.objects.update(regionIds,terrain,coverage);
       const ids=new Set([...this.objects.regions].flatMap(props=>props.map(prop=>prop.id)));
       this.#contacts.prune(ids);
-      this.#canopyShadows.prune(ids);
+      // Only prune casters formerly owned by these woodland regions.
+      // External building/structure providers keep their independent cache.
+      for(const id of this.#residentCasterIds){
+        if(!ids.has(id))this.#canopyShadows.remove(id);
+      }
+      this.#residentCasterIds=ids;
     }
   }
   terrainChanged(bounds,terrain,isPublished,now,animate=true){
@@ -81,6 +100,7 @@ export class HuntTreePreview {
   dispose(){
     this.#contacts.clear();this.#canopyShadows.clear();this.#lightingCache.clear();this.#falls.clear();
     this.#terrain=null;this.#coverage=null;
+    this.#casterProviders.clear();this.#residentCasterIds.clear();
   }
   paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null,contactShadows=true,directionalShadows=true){
     this.#lightingCache.beginFrame();
@@ -89,6 +109,17 @@ export class HuntTreePreview {
     let directionalCpuMs=0;
     const canopyReceivers=[];
     let contactCpuMs=0;
+    const collectDirectional=(instance)=>{
+      if(!lighting||!directionalShadows||!this.#terrain||instance.scenic||
+          this.#falls.has(instance.id))return;
+      const caster=describeDirectionalCaster(instance,this.#image);
+      if(!caster||!directionalShadowMayReachView(caster,view))return;
+      const started=performance.now();
+      const stamps=this.#canopyShadows.stamps(caster,this.#terrain,
+        this.#coverage?.has,view.camera);
+      directionalCpuMs+=performance.now()-started;
+      if(stamps.length)canopyReceivers.push(stamps);
+    };
     const addShadow=(tree,foot)=>{
       if(!lighting||!contactShadows||!this.#terrain||tree.scenic)return;
       const started=performance.now();
@@ -129,6 +160,7 @@ export class HuntTreePreview {
     if(this.#image.complete&&this.#image.naturalWidth){
       for(const trees of visible)for(const tree of trees){
         if(tree.kind){
+          collectDirectional(tree);
           const foot=projectVoxel(tree.x,tree.y,tree.z,view);
           const margin=2*view.scale;
           if(foot.x>=-margin&&foot.x<=view.width+margin&&foot.y>=-margin&&foot.y<=view.height+margin){
@@ -139,6 +171,9 @@ export class HuntTreePreview {
           }
           continue;
         }
+        // A shadow can be visible after the caster sprite has left the
+        // viewport. Do not tie receiver visibility to sprite culling.
+        collectDirectional(tree);
         const layer=projectTreeSprite(tree,view);
         if(!layer)continue;
         if(feature&&tree.scenic&&layer.x<feature.x+feature.w&&layer.x+layer.w>feature.x&&
@@ -148,15 +183,17 @@ export class HuntTreePreview {
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layer.lightPosition=[tree.x,tree.y+1,tree.z];
         addShadow(tree,projectVoxel(tree.x,tree.y,tree.z,view));
-        if(lighting&&directionalShadows&&this.#terrain&&!tree.scenic&&!this.#falls.has(tree.id)){
-          const started=performance.now();
-          const stamps=this.#canopyShadows.stamps({...tree,image:this.#image},
-            this.#terrain,this.#coverage?.has,view.camera);
-          directionalCpuMs+=performance.now()-started;
-          if(stamps.length)canopyReceivers.push(stamps);
-        }
         layers.push(layer);
       }
+    }
+    // Other scene systems (buildings, structures, future tree atlases) join
+    // through the same bounded descriptor/provider interface.
+    for(const provider of this.#casterProviders){
+      const casters=provider.shadowCasters(view);
+      if(!Array.isArray(casters)||casters.length>64){
+        throw new RangeError('Unbounded scene shadow-caster provider');
+      }
+      for(const caster of casters)collectDirectional(caster);
     }
     if(feature)layers.push(feature);
     const foot=projectVoxel(actor.x,actor.y,actor.z,view);

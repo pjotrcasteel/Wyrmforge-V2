@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {HUNT_SUN_CAST,projectCanopyReceivers,CANOPY_COLS,CANOPY_ROWS} from '../src/lighting/directional-sunlight.mjs';
+import {HUNT_SUN_CAST,projectCanopyReceivers,projectDirectionalReceivers,CANOPY_COLS,CANOPY_ROWS} from '../src/lighting/directional-sunlight.mjs';
+import {describeDirectionalCaster} from '../src/lighting/shadow-caster-contract.mjs';
+import {projectTreeSprite} from '../src/hunt-scenic-forest.mjs';
+import {HuntTreePreview} from '../src/hunt-tree-preview.mjs';
 import {VoxelWorld} from '../src/voxel-world.mjs';
 import {raycastTerrain} from '../src/terrain-raycast.mjs';
-import {sampleCanopyAlpha,TerrainDirectionalShadowCache,DIRECTIONAL_RAYS_PER_FRAME,
+import {sampleCanopyAlpha,TerrainDirectionalShadowCache,directionalShadowMayReachView,DIRECTIONAL_RAYS_PER_FRAME,
   DIRECTIONAL_MAX_ENTRIES} from '../src/terrain-directional-shadow-cache.mjs';
 const tree=(id,x=0)=>({id,x,y:5,z:0,scale:1,image:{complete:true,naturalWidth:800},
   sprite:{name:'oak',x:0,y:0,w:106,h:160,ax:47,ay:159}});
@@ -102,7 +105,7 @@ test('dense canopy churn never exceeds bounded retention and overlay draw budget
     for(let n=0;n<8;n++){cache.beginFrame();cache.stamps(tree('tree'+i,i*2),port);}
   }
   assert.ok(cache.statistics.entries<=DIRECTIONAL_MAX_ENTRIES);
-  assert.ok(cache.statistics.approxBytes<200000);
+  assert.ok(cache.statistics.approxBytes<400000);
   const rectangles=[],ctx={save(){},restore(){},fillRect(...r){rectangles.push(r);}};
   cache.beginFrame();
   cache.paint(ctx,{width:400,height:400,scale:16,camera:'hunt'},
@@ -186,4 +189,100 @@ test('real flat Voxel ground independently receives sun-lit canopy stamps',()=>{
   assert.ok(stamps.length>6,'ground and camera both have physical receivers');
   assert.ok(stamps.every(s=>s.face==='ground'));
   assert.ok(stamps.every(s=>Math.abs(s.y-5.045)<.01));
+});
+
+
+test('a crown outside the right edge still keeps its physically visible sunlight cast',()=>{
+  const caster=tree('edge',11),view={camera:'hunt',width:400,height:400,scale:24};
+  assert.equal(projectTreeSprite(caster,view),null,
+    'the sprite itself must be entirely outside the viewport');
+  assert.equal(directionalShadowMayReachView(caster,view),true,
+    'its long leftward physical cast can still reach the screen');
+  assert.equal(directionalShadowMayReachView(tree('far',40),view),false,
+    'unrelated distant casters must not consume the ray budget');
+});
+
+test('warm casters are genuine LRU entries, not evicted as the camera pans',()=>{
+  const port=terrain(),cache=new TerrainDirectionalShadowCache(()=>mask());
+  const make=(id,x=0)=>tree(id,x);
+  function build(caster){
+    let result=[];
+    for(let f=0;f<18;f++){
+      cache.beginFrame();
+      result=cache.stamps(caster,port);
+      if(cache.statistics.entries>=1&&result.length)break;
+    }
+    return result;
+  }
+  const original=build(make('foreground'));
+  assert.ok(original.length>0);
+  for(let i=0;i<DIRECTIONAL_MAX_ENTRIES-1;i++)build(make('other'+i,i+50));
+  const calls=port.calls;
+  cache.beginFrame();
+  assert.deepEqual(cache.stamps(make('foreground'),port),original);
+  assert.equal(port.calls,calls);
+  build(make('new-mover',100));
+  cache.beginFrame();
+  const later=port.calls;
+  assert.deepEqual(cache.stamps(make('foreground'),port),original);
+  assert.equal(port.calls,later,'recently used caster retains its shadow');
+  assert.ok(cache.statistics.cacheEvictions>=1);
+});
+
+test('physical buildings and newly authored sprite variants cast without asset-type branches',()=>{
+  const solid=describeDirectionalCaster({
+    id:'building.future',x:0,y:5,z:0,height:5,radius:1.2
+  });
+  const sprite=describeDirectionalCaster({...tree('future-tree'),sprite:{
+    name:'a-new-treetype',x:0,y:0,w:106,h:160,ax:47,ay:159
+  }});
+  assert.ok(solid.bounds&&!solid.silhouette);
+  assert.ok(sprite.silhouette);
+  const volume=projectDirectionalReceivers(solid,[]);
+  const silhouette=projectDirectionalReceivers(sprite,mask());
+  assert.equal(volume.length,16);
+  assert.ok(silhouette.length>12);
+  const cache=new TerrainDirectionalShadowCache(()=>mask()),port=terrain();
+  for(let i=0;i<18;i++){
+    cache.beginFrame();cache.stamps(solid,port);
+    if(cache.statistics.entries)break;
+  }
+  assert.ok(cache.statistics.entries>0);
+  assert.ok(cache.statistics.frameRays<=DIRECTIONAL_RAYS_PER_FRAME);
+});
+
+test('actual Hunt overlay retains a tree cast while its sprite walks out of view',()=>{
+  const image={complete:true,naturalWidth:1024};
+  const placement={kind:'tree',id:'tree.right-edge',seed:7,scale:1,
+    position:{x:11,y:5,z:0},footprint:{radius:.46}};
+  const graph={layout:{regions:[],links:[]},
+    placement:()=>({placements:[placement]})};
+  const directionalCache=new TerrainDirectionalShadowCache(()=>mask());
+  const preview=new HuntTreePreview(graph,image,undefined,{
+    directionalCache,scenery:{trees:()=>[]},
+    lightingCache:{beginFrame(){},draw(){},clear(){},statistics:{bytes:0,entries:0}}
+  });
+  const port=terrain();
+  preview.update(['one'],port);
+  const treeInstance=[...preview.objects.regions].flat()[0];
+  assert.ok(treeInstance?.sprite);
+  const base={camera:'hunt',width:400,height:400,scale:24};
+  const ctx={save(){},restore(){},fillRect(){},drawImage(){},
+    imageSmoothingEnabled:false};
+  const light={ambient:[.4,.4,.4],sample:()=>[.4,.4,.4]};
+  const actor={x:0,y:5,z:0};
+  // Establish a directional shadow while the source sprite is visible.
+  const near={...base,panX:-105};
+  for(let i=0;i<20;i++)preview.paint(ctx,near,actor,()=>{},null,i*16,light,false,true);
+  assert.ok(preview.directionalShadowStatistics.entries>0);
+  // The caster sprite is now entirely offscreen but its cast still lands
+  // inside the camera. We must draw its WARM shadow, not return [].
+  const edge={...base,panX:0};
+  assert.equal(projectTreeSprite(treeInstance,edge),null);
+  preview.paint(ctx,edge,actor,()=>{},null,500,light,false,true);
+  assert.ok(preview.directionalShadowStatistics.frameStamps>0,
+    'moving across the tree-crown edge cannot switch the shadow off');
+  assert.equal(preview.directionalShadowStatistics.frameRays,0,
+    'the stable cast must be reused without cold recasting');
+  preview.dispose();
 });

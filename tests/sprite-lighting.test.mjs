@@ -48,3 +48,23 @@ test('sprite cache reuses crops/tints, bounds cold work and preserves destinatio
   assert.equal(counts().reads,1);
   cache.clear();assert.equal(cache.statistics.bytes,0);assert.equal(cache.statistics.entries,0);
 });
+
+test('cache churn cannot flash an already warmed sprite back to its bright raw atlas',()=>{
+  const {cache,ctx,draws}=fixture(),image={};
+  const sprite={x:0,y:0,w:128,h:255},rect=[0,0,128,255];
+  cache.beginFrame();
+  cache.draw(ctx,image,sprite,rect,[.38,.42,.45]);
+  const firstTint=draws.at(-1)[0];
+  assert.notEqual(firstTint,image);
+  // A new lighting value is requested while this frame's 65K pixel
+  // tint limit is exhausted. Use the closest valid existing crop instead.
+  cache.draw(ctx,image,sprite,rect,[.9,.32,.25]);
+  assert.equal(draws.at(-1)[0],firstTint);
+  assert.equal(cache.statistics.fallbackDraws,1);
+  assert.equal(cache.statistics.untintedDraws,0);
+  cache.beginFrame();
+  cache.draw(ctx,image,sprite,rect,[.9,.32,.25]);
+  assert.notEqual(draws.at(-1)[0],image);
+  assert.equal(cache.statistics.fallbackDraws,0);
+  assert.ok(cache.statistics.bytes<=SPRITE_LIGHT_CACHE_BYTES);
+});
