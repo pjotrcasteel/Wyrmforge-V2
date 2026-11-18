@@ -28,7 +28,9 @@ test('both CPU sprites and assembled WebGL shader share generic visibility atten
   const exposed=sampleSurfaceIrradiance(pos,environment,lights);
   const occluded=sampleSurfaceIrradiance(pos,environment,lights,[0,1,0],visibility);
   assert.ok(exposed[0]>environment.ambient[0]);
-  assert.ok(occluded[0]<exposed[0]*.5);
+  assert.ok(occluded[0]-environment.ambient[0]<
+    (exposed[0]-environment.ambient[0])*.1,
+    'wall suppresses local radiance, but never removes ambient');
   assert.equal(samplePointVisibility(visibility,0,pos),0);
   const glsl=assembleVoxelFragmentShader(LOCAL_FIELD_LIGHTING_GLSL);
   assert.match(glsl,/uniform float uPointVisibilityDistances\[48\]/);
