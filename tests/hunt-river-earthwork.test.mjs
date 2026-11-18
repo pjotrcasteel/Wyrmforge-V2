@@ -11,6 +11,8 @@ import {
 } from '../src/world-generation/hunt-river-earthwork.mjs';
 import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {createFluidTerrainFloorQuery} from '../src/fluid/worldgen-fluid-adapter.mjs';
+import {spawnTerrainActor,actorOverlapsTerrain} from '../src/terrain-actor.mjs';
+import {stepHuntExplorer,HUNT_FIXED_STEP} from '../src/hunt-play-runtime.mjs';
 
 function fixture(){
   const entry=generateWorldSite(createWorldSiteRecipe({
@@ -118,4 +120,48 @@ test('invalid source identity or unsafe earthwork is never silently accepted',()
   assert.throws(()=>prepareHuntRiverEarthwork(graph,{
     ...proposal,status:'native-voxel-definitions-prepared'
   },toVoxelTerrainDefinition),/bounded unapplied/);
+});
+
+
+test('the Voxel actor can still cross the carved connector in both directions',()=>{
+  const {graph,proposal,link}=fixture();
+  const earthwork=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
+  const loader=load(earthwork.bands);
+  try{
+    const {world}=loader.terrain;
+    const a=graph.region(link.fromId),b=graph.region(link.toId);
+    const bounds={
+      minX:Math.min(a.bounds.minX,b.bounds.minX),
+      maxX:Math.max(a.bounds.maxX,b.bounds.maxX),
+      minZ:Math.min(a.bounds.minZ,b.bounds.minZ),
+      maxZ:Math.max(a.bounds.maxZ,b.bounds.maxZ)
+    };
+    const horizontal=['east','west'].includes(link.fromPort.direction);
+    const min=horizontal?link.bounds.minX:link.bounds.minZ;
+    const max=horizontal?link.bounds.maxX:link.bounds.maxZ;
+    const cross=horizontal?(link.bounds.minZ+link.bounds.maxZ+1)/2+.5:
+      (link.bounds.minX+link.bounds.maxX+1)/2+.5;
+    for(const direction of [-1,1]){
+      const from=direction>0?min-.5:max+1.5;
+      const to=direction>0?max+1.5:min-.5;
+      let actor=spawnTerrainActor(world,{
+        x:horizontal?from:cross,z:horizontal?cross:from,
+        searchTopY:30,maxSearchDistance:64
+      });
+      assert.ok(actor?.grounded,'river preparation cannot bury the player at the port');
+      for(let i=0;i<250;i++){
+        actor=stepHuntExplorer(world,actor,bounds,horizontal?
+          {moveX:direction}:{moveZ:direction},HUNT_FIXED_STEP);
+        assert.ok(!actor.error);
+        assert.equal(actorOverlapsTerrain(world,actor),false);
+        const position=horizontal?actor.x:actor.z;
+        if(direction>0?position>=to:position<=to)break;
+      }
+      const position=horizontal?actor.x:actor.z;
+      assert.ok(direction>0?position>=to:position<=to,
+        'the newly authored riverbed must not block the real traversal corridor');
+    }
+  }finally{
+    loader.unload();
+  }
 });
