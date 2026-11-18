@@ -4,6 +4,7 @@
 import {getCameraPreset} from '../camera-presets.mjs';
 import {waterRippleMotifGlsl} from '../river-water-art.mjs';
 import {buildFluidSurfaceMesh} from './fluid-surface-mesh.mjs';
+import {stabilizeFluidSurface} from './fluid-surface-stabilizer.mjs';
 
 export const FLUID_VERTEX_GLSL=`#version 300 es
 precision highp float;
@@ -63,7 +64,7 @@ void main(){
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
-  float frame=floor(uTime*4.0);
+  float frame=floor(uTime*2.0);
   vec2 downstream=length(vFlow)>0.0?normalize(vFlow):vec2(0.0);
   ivec2 moving=ivec2(floor(pixel-downstream*frame));
   int col=int(mod(float(moving.x),32.0));
@@ -90,7 +91,8 @@ void main(){
     float stamp=fluidHash(floor(vWorld.xz*10.0)+vec2(19.0,73.0));
     float pace=uLava<.5?2.4:.65;
     float tumble=fract(uTime*pace+stamp*.48);
-    float sparkle=step(.14,tumble)*(1.0-step(.79,tumble));
+    float sparkle=smoothstep(.08,.28,tumble)*
+      (1.0-smoothstep(.68,.9,tumble));
     float strong=step(.62,stamp);
     vec3 foam=uLava<.5
       ?mix(vec3(.40,.65,.64),vec3(.71,.83,.78),.35+.55*strong)
@@ -113,8 +115,11 @@ void main(){
       // light strokes follow the falling sheet, never a generic pool wall.
       vec2 across=vec2(-downstream.y,downstream.x);
       float strip=floor(dot(vWorld.xz,across)*10.0);
-      float bead=fluidHash(vec2(strip,floor(vWorld.y*8.0+uTime*5.0)));
-      color=mix(color,vec3(.47,.68,.65),.15+.18*step(.78,bead));
+      float phase=fract(uTime*1.3+
+        fluidHash(vec2(strip,91.0))*.75+.2*vWorld.y);
+      float bead=smoothstep(.03,.17,phase)*
+        (1.0-smoothstep(.42,.67,phase));
+      color=mix(color,vec3(.47,.68,.65),.14+.10*bead);
       float landing=1.0-smoothstep(.02,.35,vWorld.y-vLandingY);
       color=mix(color,vec3(.57,.74,.69),landing*.4);
     } else if(vFaceMode==4) {
@@ -122,11 +127,16 @@ void main(){
       // camera where a cliff-flush vertical sheet can be depth-occluded.
       // Quantize moving highlights to the Wyrmforge 10cm pixel grid.
       float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);
-      float line=fluidHash(vec2(
-        floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0),
-        floor(vWorld.y*8.0+uTime*3.0)));
+      float acrossLane=floor(dot(vWorld.xz,
+        vec2(-downstream.y,downstream.x))*5.0);
+      // Continuous phase anchored to world coordinates, not a different
+      // random flash for each one-metre waterfall column on every frame.
+      float phase=fract(uTime*1.3+
+        fluidHash(vec2(acrossLane,37.0))*.6-.25*vWorld.y);
+      float line=smoothstep(.08,.22,phase)*
+        (1.0-smoothstep(.55,.78,phase));
       color=mix(color,vec3(.46,.67,.65),.33+.18*(1.0-fall));
-      color=mix(color,vec3(.67,.79,.73),step(.78,line)*.19);
+      color=mix(color,vec3(.67,.79,.73),line*.15);
     } else if(vFaceMode==3) {
       // Subtle broken glint at the lip, not a bright 1m-wide foam stripe.
       vec2 local=fract(vWorld.xz);
@@ -198,6 +208,7 @@ export class HuntFluidSurfaceRenderer {
   #uniforms=null;
   #record=null;
   #mesh=null;
+  #visualHistory=new Map();
   #lost=false;
   #disposed=false;
   #onLost;
@@ -222,6 +233,8 @@ export class HuntFluidSurfaceRenderer {
       sideFaces:this.#mesh?.sideFaces??0,
       waterfallFaces:this.#mesh?.waterfallFaces??0,
       fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
+      waterfallGroups:this.#mesh?.waterfallGroups??0,
+      maxWaterfallWidth:this.#mesh?.maxWaterfallWidth??0,
       landingSplashFaces:this.#mesh?.landingSplashFaces??0,
       flightFaces:this.#mesh?.flightFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
@@ -295,16 +308,21 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#mesh=null;
+    this.#visualHistory.clear();
   }
 
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
-    const mesh=buildFluidSurfaceMesh(surface,{sampleAt});
+    const presented=stabilizeFluidSurface(surface,sampleAt,this.#visualHistory);
+    const mesh=buildFluidSurfaceMesh(presented.surface,{
+      sampleAt:presented.sampleAt
+    });
     const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+
       mesh.faceModes.byteLength+mesh.landingHeights.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
     this.#releaseBuffers();
     this.#mesh=mesh;
+    this.#visualHistory=presented.history;
   }
 
   #ensureReady(){
@@ -403,6 +421,7 @@ export class HuntFluidSurfaceRenderer {
     if(this.#program&&!this.#lost)this.#gl.deleteProgram(this.#program);
     this.#program=null;
     this.#mesh=null;
+    this.#visualHistory.clear();
     this.canvas.removeEventListener('webglcontextlost',this.#onLost);
     this.canvas.removeEventListener('webglcontextrestored',this.#onRestored);
     this.#disposed=true;
