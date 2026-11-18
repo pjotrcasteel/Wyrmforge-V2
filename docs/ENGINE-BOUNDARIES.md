@@ -104,3 +104,17 @@ object-specific integration. No extra raycasts or GPU textures are allocated.
 The fluid renderer's Water/foam visual receiving and multi-height sprite
 response remain L10-08 acceptance work, not completed by this PR.
 See [shared emissive documentation](LIGHTING-SHARED-EMISSIVE-SPRITES.md).
+
+
+## Height-banded cutout lighting (L10-08 #408)
+
+The Canvas presentation layer `src/sprite-light-bands.mjs` derives read-only
+world-space crown/middle/base samples from an arbitrary cutout's sprite
+anchor, pose, scale and optional presentation height. It never imports
+Water, Voxel, species data or Materials. `HuntTreePreview` composes
+it with the **existing** `lighting.sample(position)` function, while
+`SpriteLightingCache` tints three non-overlapping source crops with
+the existing memory/pixel budgets. Actor motion, falling/damage and
+collision remain owned by the Hunt/World Objects systems. New sprites
+and building artwork can call the same presenter without per-type Lighting
+code. Fluid shading remains the next integration boundary.
