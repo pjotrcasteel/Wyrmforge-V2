@@ -151,7 +151,7 @@ export class HuntTreePreview {
         if(lighting&&directionalShadows&&this.#terrain&&!tree.scenic&&!this.#falls.has(tree.id)){
           const started=performance.now();
           const stamps=this.#canopyShadows.stamps({...tree,image:this.#image},
-            this.#terrain,this.#coverage?.has);
+            this.#terrain,this.#coverage?.has,view.camera);
           directionalCpuMs+=performance.now()-started;
           if(stamps.length)canopyReceivers.push(stamps);
         }

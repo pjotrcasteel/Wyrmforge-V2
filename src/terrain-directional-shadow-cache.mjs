@@ -1,11 +1,49 @@
 // Renderer-owned bounded and cached terrain receiver projection.
 // Sprite alpha is read ONCE per variant, never during each frame.
-import {projectVoxel} from './camera-presets.mjs';
-import {CANOPY_COLS,CANOPY_ROWS,projectCanopyReceivers} from './lighting/directional-sunlight.mjs';
+import {projectVoxel,getCameraPreset} from './camera-presets.mjs';
+import {CANOPY_COLS,CANOPY_ROWS,projectCanopyReceivers,HUNT_SUN_RAY,HUNT_SUN_RAY_LENGTH} from './lighting/directional-sunlight.mjs';
 export const DIRECTIONAL_MAX_ENTRIES=48;
 export const DIRECTIONAL_RAYS_PER_FRAME=16;
 export const DIRECTIONAL_DRAW_LIMIT=1100;
 const spriteKey=s=>s.name??[s.x,s.y,s.w,s.h].join(':');
+const CAMERA_RAY_DISTANCE=6;
+const RECEIVER_EPSILON=.045;
+const MAX_CLIFF_DROP=3.5;
+const normalize=vector=>vector.map(n=>n/Math.hypot(...vector));
+function cameraCastDirection(camera){
+  const {right,down}=getCameraPreset(camera);
+  return normalize([
+    right[1]*down[2]-right[2]*down[1],
+    right[2]*down[0]-right[0]*down[2],
+    right[0]*down[1]-right[1]*down[0]
+  ]);
+}
+function normalOf(hit){
+  // A missing normal from a very old/custom port is safe only for top
+  // receivers. Native Voxel DDA always provides normals for outside hits.
+  return hit?.normal??{x:0,y:1,z:0};
+}
+function validReceiver(hit,tree,direction){
+  if(!hit?.point||!Number.isFinite(hit.point.y)||hit.distance<=0)return null;
+  const normal=normalOf(hit);
+  const isTop=normal.y>.5;
+  const isWall=Math.abs(normal.x)>.5||Math.abs(normal.z)>.5;
+  if(!isTop&&!isWall)return null;
+  const exposure=-(normal.x*HUNT_SUN_RAY[0]+normal.y*HUNT_SUN_RAY[1]+normal.z*HUNT_SUN_RAY[2]);
+  if(exposure<.12||Math.abs(hit.point.y-tree.y)>MAX_CLIFF_DROP)return null;
+  const cameraExposure=-(normal.x*direction[0]+normal.y*direction[1]+normal.z*direction[2]);
+  if(cameraExposure<.12)return null;
+  return {normal,isWall};
+}
+function cameraSeesReceiver(terrain,point,normal,direction){
+  const lifted=[point.x+normal.x*RECEIVER_EPSILON,
+    point.y+normal.y*RECEIVER_EPSILON,
+    point.z+normal.z*RECEIVER_EPSILON];
+  const eye=lifted.map((value,index)=>value-direction[index]*CAMERA_RAY_DISTANCE);
+  const seen=terrain.raycast({origin:eye,direction,maxDistance:CAMERA_RAY_DISTANCE+.2});
+  return Boolean(seen?.point)&&
+    Math.hypot(seen.point.x-point.x,seen.point.y-point.y,seen.point.z-point.z)<.20;
+}
 export function sampleCanopyAlpha(data,width,height){
   if(!data||data.length<width*height*4||width<=0||height<=0)return [];
   const result=[],offsets=[[.22,.22],[.78,.22],[.22,.78],[.78,.78]];
@@ -31,9 +69,9 @@ function spriteMask(image,sprite){
 }
 export class TerrainDirectionalShadowCache{
   #masks=new Map();#entries=new Map();#pending=null;#epoch=null;
-  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];#frame=0;
+  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];#frame=0;#cliffDrawn=0;#occluded=0;
   constructor(maskFactory=spriteMask){this.maskFactory=maskFactory;}
-  beginFrame(){this.#frame++;this.#queries=0;this.#drawn=0;}
+  beginFrame(){this.#frame++;this.#queries=0;this.#drawn=0;this.#cliffDrawn=0;}
   endFrame(ms){
     // A caster partially built before a camera move must never starve new
     // visible trees while it remains resident but outside the viewport.
@@ -47,7 +85,8 @@ export class TerrainDirectionalShadowCache{
     return {entries:this.#entries.size,maskVariants:this.#masks.size,
       approxBytes:this.#entries.size*CANOPY_COLS*CANOPY_ROWS*44+
         this.#masks.size*CANOPY_COLS*CANOPY_ROWS*4,
-      frameRays:this.#queries,frameStamps:this.#drawn,cacheHits:this.#hits,
+      frameRays:this.#queries,frameStamps:this.#drawn,frameCliffStamps:this.#cliffDrawn,
+      occlusionRejects:this.#occluded,cacheHits:this.#hits,
       completed:this.#built,building:Boolean(this.#pending),
       p50CpuMs:q(.5),p95CpuMs:q(.95),p99CpuMs:q(.99),
       gpuTimerMs:null,gpuTimerStatus:'unavailable: Canvas2D shadow overlay'};
@@ -68,12 +107,12 @@ export class TerrainDirectionalShadowCache{
     for(const [id,entry] of this.#entries)if(overlap(entry.bounds))this.#entries.delete(id);
     if(overlap(this.#pending?.bounds))this.#pending=null;
   }
-  stamps(tree,terrain,isPublished=null){
+  stamps(tree,terrain,isPublished=null,camera='hunt'){
     if(!tree?.sprite||!tree.id||!terrain||typeof terrain.raycast!=='function')return [];
     if(this.#epoch!==terrain.epoch){
       this.#entries.clear();this.#pending=null;this.#epoch=terrain.epoch;
     }
-    const signature=[tree.id,tree.x,tree.y,tree.z,tree.scale,spriteKey(tree.sprite)].join(':');
+    const signature=[tree.id,tree.x,tree.y,tree.z,tree.scale,spriteKey(tree.sprite),camera].join(':');
     const cached=this.#entries.get(tree.id);
     if(cached?.signature===signature){this.#hits++;return cached.stamps;}
     if(this.#queries>=DIRECTIONAL_RAYS_PER_FRAME)return [];
@@ -91,15 +130,28 @@ export class TerrainDirectionalShadowCache{
     }
     const job=this.#pending;
     job.seenFrame=this.#frame;
-    while(job.index<job.samples.length&&this.#queries<DIRECTIONAL_RAYS_PER_FRAME){
+    const viewRay=cameraCastDirection(camera);
+    // Two bounded physical queries per receiver: first solid struck by sun,
+    // then nearest face visible to the Hunt camera. This avoids full-height
+    // columns, light through solid cliffs and shadows drawn through ridges.
+    while(job.index<job.samples.length&&this.#queries+2<=DIRECTIONAL_RAYS_PER_FRAME){
       const s=job.samples[job.index++];
-      if(isPublished&&!isPublished(s.x,s.z))continue;
       this.#queries++;
-      const hit=terrain.raycast({origin:[s.x,tree.y+5,s.z],
-        direction:[0,-1,0],maxDistance:12});
-      const y=hit?.point?.y;
-      if(!Number.isFinite(y)||Math.abs(y-tree.y)>3.5)continue;
-      job.stamps.push({...s,y:y+.04});
+      const rayLength=Math.min(16,(s.height+MAX_CLIFF_DROP+.4)*HUNT_SUN_RAY_LENGTH);
+      const hit=terrain.raycast({
+        origin:[s.source[0],s.source[1]+.025,s.source[2]],
+        direction:HUNT_SUN_RAY,maxDistance:rayLength
+      });
+      const face=validReceiver(hit,tree,viewRay);
+      if(!face||isPublished&&!isPublished(hit.point.x,hit.point.z))continue;
+      this.#queries++;
+      if(!cameraSeesReceiver(terrain,hit.point,face.normal,viewRay)){
+        this.#occluded++;
+        continue;
+      }
+      const {x,y,z}=hit.point;
+      job.stamps.push({...s,x,y:y+face.normal.y*RECEIVER_EPSILON,
+        z:z+face.normal.z*RECEIVER_EPSILON,face:face.isWall?'cliff':'ground'});
     }
     if(job.index<job.samples.length)return [];
     while(this.#entries.size>=DIRECTIONAL_MAX_ENTRIES){
@@ -116,11 +168,14 @@ export class TerrainDirectionalShadowCache{
       if(this.#drawn>=DIRECTIONAL_DRAW_LIMIT)break;
       const p=projectVoxel(s.x,s.y,s.z,view);
       const w=Math.max(1,Math.round(s.width*view.scale));
-      const h=Math.max(1,Math.round(s.depth*view.scale*.77));
+      const h=s.face==='cliff'
+        ?Math.max(2,Math.round(Math.min(.7,s.depth)*view.scale*.64))
+        :Math.max(1,Math.round(s.depth*view.scale*.77));
       if(p.x+w<0||p.x-w>view.width||p.y+h<0||p.y-h>view.height)continue;
       ctx.globalAlpha=s.alpha;
       ctx.fillRect(Math.round(p.x-w*.5),Math.round(p.y-h*.5),w,h);
       this.#drawn++;
+      if(s.face==='cliff')this.#cliffDrawn++;
     }
     ctx.restore();
   }
