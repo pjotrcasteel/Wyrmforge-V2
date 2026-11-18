@@ -48,6 +48,8 @@ in vec2 vFlow;
 flat in int vFaceMode;
 in float vLandingY;
 uniform float uTime;
+uniform float uRippleFrame;
+uniform float uRippleFade;
 uniform float uLava;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
@@ -64,14 +66,10 @@ void main(){
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
-  // A full pixel-art ripple shift happens slowly. Fade each old ripple out
-  // before shifting the 8px pattern, then fade its successor in, instead of
-  // instantly moving every white glint twice per second.
-  float rippleCycle=uTime*.65;
-  float frame=floor(rippleCycle);
-  float ripplePosition=fract(rippleCycle);
-  float rippleFade=smoothstep(.0,.22,ripplePosition)*
-    (1.0-smoothstep(.78,1.0,ripplePosition));
+  // This fade is shared by all water pixels. JS computes it ONCE per draw,
+  // avoiding expensive per-fragment smoothstep work on weak GPUs/software GL.
+  float frame=uRippleFrame;
+  float rippleFade=uRippleFade;
   vec2 downstream=length(vFlow)>0.0?normalize(vFlow):vec2(0.0);
   ivec2 moving=ivec2(floor(pixel-downstream*frame));
   int col=int(mod(float(moving.x),32.0));
@@ -227,6 +225,22 @@ const sameGeometry=(a,b)=>{
   }
   return true;
 };
+
+// Advance the pixel-art ripple animation with a continuous brightness
+// envelope. Hoisted from GLSL so it is evaluated once per WebGL draw.
+export function fluidRippleTiming(time){
+  if(!Number.isFinite(time))throw new TypeError('Fluid animation time must be finite');
+  const cycle=time*.65;
+  const phase=cycle-Math.floor(cycle);
+  const smooth=(a,b,x)=>{
+    const f=Math.max(0,Math.min(1,(x-a)/(b-a)));
+    return f*f*(3-2*f);
+  };
+  return {
+    frame:Math.floor(cycle),
+    fade:smooth(0,.22,phase)*(1-smooth(.78,1,phase))
+  };
+}
 
 const fluidStreams=mesh=>[
   mesh.positions,mesh.normals,mesh.flows,
@@ -419,7 +433,9 @@ export class HuntFluidSurfaceRenderer {
         viewport:uniform('uViewport'),pan:uniform('uPan'),scale:uniform('uScale'),
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
-        depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
+        depth:uniform('uCameraDepth'),time:uniform('uTime'),
+        rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
+        lava:uniform('uLava'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
       };
@@ -487,7 +503,11 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform3fv(u.right,basis.right);
     gl.uniform3fv(u.down,basis.down);
     gl.uniform3fv(u.depth,basis.depth);
-    gl.uniform1f(u.time,reducedMotion?0:time);
+    const animatedTime=reducedMotion?0:time;
+    gl.uniform1f(u.time,animatedTime);
+    const ripple=fluidRippleTiming(animatedTime);
+    gl.uniform1f(u.rippleFrame,ripple.frame);
+    gl.uniform1f(u.rippleFade,ripple.fade);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
