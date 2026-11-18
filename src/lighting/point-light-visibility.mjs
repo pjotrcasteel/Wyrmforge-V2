@@ -40,13 +40,17 @@ function castRay(terrain,source,direction,range,shapes){
 }
 
 export class PointLightVisibility {
-  #port;#state=null;#processed=0;#frames=0;#rays=0;#resets=0;#lastCpu=0;
+  #port;#state=null;#processed=0;#frames=0;#rays=0;#resets=0;#lastCpu=0;#times=[];
   constructor(port){if(!port||typeof port.raycast!=='function')
     throw new TypeError('Expected public spatial raycast provider');this.#port=port;}
   clear(){this.#state=null;}
   get statistics(){
+    const samples=[...this.#times].sort((a,b)=>a-b);
+    const percentile=q=>samples.length?Number(
+      samples[Math.ceil((samples.length-1)*q)].toFixed(3)):null;
     return {frameRays:this.#rays,completed:this.#processed,
       resets:this.#resets,frames:this.#frames,lastCpuMs:this.#lastCpu,
+      p50CpuMs:percentile(.5),p95CpuMs:percentile(.95),p99CpuMs:percentile(.99),
       retainedBytes:this.#state?POINT_VISIBILITY_FLOATS*4:0,
       pending:Boolean(this.#state?.pending)};
   }
@@ -70,7 +74,7 @@ export class PointLightVisibility {
       this.#state={identity,distances,lights:records.map(({id,position,radius})=>(
         {id,position:[...position],radius})),epoch:lights?.epoch??this.#port.epoch,
         revision:lights?.revision??this.#port.revision,pending:records.length*24,
-        next:0,shapes:occluders?.entries??[]};
+        next:0,shapes:occluders?.entries??[],counted:false};
       this.#resets++;
     }
     const state=this.#state;
@@ -90,8 +94,13 @@ export class PointLightVisibility {
       state.distances[slot]=castRay(this.#port,light.position,direction,reach,state.shapes);
       this.#rays++;state.pending--;
     }
-    if(!state.pending)this.#processed++;
+    if(!state.pending&&!state.counted){
+      this.#processed++;
+      state.counted=true;
+    }
     this.#lastCpu=performance.now()-begin;
+    this.#times.push(this.#lastCpu);
+    if(this.#times.length>180)this.#times.shift();
     return {schema:POINT_VISIBILITY_SCHEMA,epoch:state.epoch,revision:state.revision,
       lights:state.lights,distances:state.distances,pending:state.pending,
       ready:state.pending===0};
