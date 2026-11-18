@@ -69,6 +69,18 @@ void main(){
   int ripple=int((HUNT_WATER_RIPPLES[row][col/8]>>uint(3*(col%8)))&7u);
   float pool=fluidHash(floor(vWorld.xz*.25)+31.0);
   float top=step(0.5,vNormal.y);
+  if(vFaceMode==6){
+    // These droplets are actual reserved fluid units between the upper
+    // source and lower destination. Their world-space Y changes in the
+    // solver snapshot, rather than being a shader-only simulated fall.
+    vec2 p=floor(vWorld.xz*10.0);
+    float variation=fluidHash(p+floor(vWorld.y*10.0));
+    vec3 drop=uLava<.5
+      ?mix(vec3(.25,.53,.54),vec3(.63,.81,.76),.35+.35*variation)
+      :mix(vec3(.77,.22,.02),vec3(1.0,.65,.17),.35+.35*variation);
+    outColor=vec4(drop,uLava<.5?.88:.95);
+    return;
+  }
   if(vFaceMode==5){
     // Landing foam only exists where the physical river actually discharges
     // into a wet lower pool. Sparse cap pixels travel with the flow rather
@@ -209,6 +221,7 @@ export class HuntFluidSurfaceRenderer {
       waterfallFaces:this.#mesh?.waterfallFaces??0,
       fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
       landingSplashFaces:this.#mesh?.landingSplashFaces??0,
+      flightFaces:this.#mesh?.flightFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
       wetColumns:this.#mesh?.wetColumns??0,
       refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
@@ -229,6 +242,10 @@ export class HuntFluidSurfaceRenderer {
 
   projectedLandingBounds(view){
     return this.#projectedModeBounds(view,5);
+  }
+
+  projectedFlightBounds(view){
+    return this.#projectedModeBounds(view,6);
   }
 
   #projectedModeBounds(view,mode){
