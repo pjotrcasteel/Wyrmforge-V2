@@ -176,7 +176,19 @@ try{
     const state=window.__WyrmforgeStreamWaterTest?.status();
     return Boolean(state&&!state.error&&!state.busy&&
       state.activeRegions?.length>=3&&state.wetColumns>0);
-  },null,{timeout:140000});
+  },null,{timeout:55000}).catch(async failure=>{
+    report.resetDiagnostics=await page.evaluate(()=>({
+      url:location.href,readyState:document.readyState,
+      message:document.querySelector('#preview-message')?.textContent,
+      status:document.querySelector('#status')?.textContent,
+      summary:document.querySelector('#site-summary')?.textContent,
+      hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,1200),
+      scriptCount:document.scripts.length,
+      keys:localStorage.length
+    }));
+    throw new Error('Fresh Hunt reset failed to activate Water V2: '+
+      JSON.stringify(report.resetDiagnostics)+' | '+failure.message);
+  });
   report.reset=await status();
   report.resetBank=await page.evaluate(cell=>
     window.__WyrmforgeStreamWaterTest.inspectCell(cell.x,cell.y,cell.z),cast.target);
