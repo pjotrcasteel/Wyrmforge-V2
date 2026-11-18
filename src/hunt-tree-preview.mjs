@@ -42,11 +42,11 @@ export class HuntTreePreview {
   #falls=new Map();
   #casterProviders=new Set();
   #residentCasterIds=new Set();
-  constructor(graph,image,damage,{directionalCache=null}={}){
+  constructor(graph,image,damage,{directionalCache=null,scenery=null}={}){
     this.objects=new HuntWoodlandObjects(graph,damage);
     if(directionalCache)this.#canopyShadows=directionalCache;
     this.#image=image;
-    this.#scenery=new ScenicForest(graph.layout);
+    this.#scenery=scenery??new ScenicForest(graph.layout);
   }
   // Register an owning scene system ONCE. A new building/tree variant only
   // publishes a descriptor, never a new shader branch or Lighting import.
