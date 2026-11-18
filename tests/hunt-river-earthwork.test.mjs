@@ -35,7 +35,7 @@ function load(bands){
     runs:bands.flatMap(b=>b.definition.runs),
     surfaceTiles:bands.flatMap(b=>b.definition.surfaceTiles??[])
   });
-  const loader=new V2ExternalTerrainLoader(definition,{microSurfaceCapacity:8192});
+  const loader=new V2ExternalTerrainLoader(definition,{microSurfaceCapacity:2048});
   while(!loader.progress.done)loader.loadStep(4096);
   return loader;
 }
