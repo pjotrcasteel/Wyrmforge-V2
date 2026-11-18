@@ -38,12 +38,22 @@ try{
   // A second OFF capture is a mandatory negative control for tint-cache churn.
   const snapshots=await page.evaluate(()=>{
     const api=window.__WyrmforgeDirectionalShadowTest;
-    for(let i=0;i<12;i++)api.capture(false); // warm sprite tint cache
+    // SpriteLightingCache tints at most 65K source pixels per frame;
+    // several large trees need many repaint frames before their pixels settle.
+    // Validate three identical OFF captures before measuring shadow delta.
+    let previous=null,stable=0,passes=0;
+    for(;passes<160;passes++){
+      const current=api.capture(false);
+      if(current===previous)stable++;
+      else stable=0;
+      previous=current;
+      if(stable>=3)break;
+    }
     const offBefore=api.capture(false);
     const on=api.capture(true);
     const onState=api.status();
     const offAfter=api.capture(false);
-    return {on,offBefore,offAfter,onState,offState:api.status()};
+    return {on,offBefore,offAfter,onState,offState:api.status(),warmPasses:passes};
   });
   const raw=async(data,name)=>{
     const bytes=Buffer.from(data.slice(data.indexOf(',')+1),'base64');
@@ -64,7 +74,7 @@ try{
         Math.abs(off.data[i+2]-offAgain.data[i+2])+
         Math.abs(off.data[i+3]-offAgain.data[i+3])>16)controlDrift++;
   }
-  report.control={offVsOffChangedPixels:controlDrift,freeze:'same JS task, no simulation advance'};
+  report.control={offVsOffChangedPixels:controlDrift,warmPasses:snapshots.warmPasses,freeze:'same JS task, no simulation advance'};
   let changed=0,alphaChanged=0,delta=0;
   for(let i=0;i<on.data.length;i+=4){
     const diff=Math.abs(on.data[i]-off.data[i])+
