@@ -381,8 +381,43 @@ try{
         uploads:after.fluidGpuUploads
       }));
   }
+  // The actual default multi-region graph-streamed Play Hunt now has an
+  // explicit opt-in Water V2 path. Verify this is a genuinely rendered scene,
+  // not only a unit-tested channel descriptor or a separate route-preview lab.
+  await page.close();
+  page=await context.newPage();
+  page.on('pageerror',error=>report.errors.push('streamed page: '+error.message));
+  page.on('response',response=>{
+    if(response.status()>=400&&!new URL(response.url()).pathname.endsWith('/favicon.ico')){
+      report.errors.push('streamed resource HTTP '+response.status()+': '+response.url());
+    }
+  });
+  await page.goto(base+'/play-hunt.html?water=1&fluidTest=auto',{
+    waitUntil:'domcontentloaded',timeout:30000
+  });
+  try{
+    await page.waitForFunction(()=>{
+      const state=window.__WyrmforgeStreamWaterTest?.status();
+      return Boolean(state&&!state.error&&state.activeRegions.length>=2&&
+        state.solverTicks>=3&&state.wetColumns>=8&&
+        state.topFaces>0&&state.fluidMeshBytes>0);
+    },null,{timeout:90000});
+  }catch(error){
+    report.streamedStart=await page.evaluate(()=>({
+      state:window.__WyrmforgeStreamWaterTest?.status()??null,
+      summary:document.querySelector('#site-summary')?.textContent,
+      hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,650)
+    }));
+    await page.screenshot({path:artifacts+'/streamed-hunt-startup-failure.jpeg',
+      type:'jpeg',quality:65});
+    throw new Error('Opt-in streamed Play Hunt has no physically rendered river: '+
+      JSON.stringify(report.streamedStart)+' | '+error.message);
+  }
+  report.streamedHunt=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
+  await page.screenshot({path:artifacts+'/streamed-hunt-water.jpeg',type:'jpeg',quality:67});
+  console.log('FLUID_STREAMED_HUNT_PASS '+JSON.stringify(report.streamedHunt));
   if(report.errors.length)throw new Error('Game browser errors: '+report.errors.join('; ').slice(0,800));
-  console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after}));
+  console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after,streamedHunt:report.streamedHunt}));
 }catch(error){
   report.failed=String(error.stack||error);
   console.error('FLUID_BROWSER_FAIL '+report.failed);
