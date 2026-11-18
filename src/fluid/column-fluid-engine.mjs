@@ -6,6 +6,7 @@ export const FLUID_SURFACE_SCHEMA='wyrmforge.fluid-surface.v1';
 export const MAX_FLUID_COLUMNS=4096;
 export const MAX_FLUID_FLIGHTS=256;
 export const MAX_FLUID_SOURCES=8;
+export const MAX_FLUID_OUTLETS=8;
 export const FLUID_DEPTH_UNITS=10; // 10 cm of water per column unit
 const MAX_DEPTH=160; // 16 m of resident liquid per 1 m2 column
 const DIRECTIONS=[[1,0],[0,1],[-1,0],[0,-1]];
@@ -22,6 +23,7 @@ export class ColumnFluidEngine {
   #floors;
   #depths;
   #sources=new Map();
+  #outlets=new Map();
   // Units actually in the air, not already in the receiving pool. Each
   // destination capacity is reserved; in-flight volume remains conserved.
   #flights=[];
@@ -29,13 +31,16 @@ export class ColumnFluidEngine {
   #flightCursor=0;
   #sourceManifest=[];
   #sourceCursor=0;
+  #outletManifest=[];
+  #outletCursor=0;
+  #drainedTotal=0;
   #floorAt;
   #kind;
   #cursor=0;
   #steps=0;
   #wet=0;
 
-  constructor({bounds,floorAt,kind='water',initial=[],sources=[]}={}){
+  constructor({bounds,floorAt,kind='water',initial=[],sources=[],outlets=[]}={}){
     if(!bounds||typeof floorAt!=='function'||!Object.hasOwn(RATE,kind)) {
       throw new TypeError('Expected bounded terrain floors and water or lava');
     }
@@ -56,8 +61,11 @@ export class ColumnFluidEngine {
       const x=minX+i%width,z=minZ+Math.floor(i/width);
       this.#floors[i]=this.#readFloor(x,z);
     }
-    if(!Array.isArray(initial)||!Array.isArray(sources))throw new TypeError('Expected fluid seed arrays');
+    if(!Array.isArray(initial)||!Array.isArray(sources)||!Array.isArray(outlets)){
+      throw new TypeError('Expected bounded fluid seed and boundary arrays');
+    }
     if(sources.length>MAX_FLUID_SOURCES)throw new RangeError('Too many bounded fluid inlet sources');
+    if(outlets.length>MAX_FLUID_OUTLETS)throw new RangeError('Too many bounded fluid outlets');
     for(const {x,z,depth} of initial){
       const index=this.#requiredIndex(x,z);
       if(!Number.isSafeInteger(depth)||depth<0||depth>MAX_DEPTH){
@@ -76,6 +84,20 @@ export class ColumnFluidEngine {
       this.#sources.set(index,Object.freeze({surfaceDeci:surfaceY*FLUID_DEPTH_UNITS,rate}));
     }
     this.#sourceManifest=[...this.#sources.entries()].sort(([a],[b])=>a-b)
+      .map(([index,{surfaceDeci,rate}])=>Object.freeze({index,surfaceDeci,rate}));
+    for(const {x,z,surfaceY,rate=2} of outlets){
+      const index=this.#requiredIndex(x,z);
+      integer(surfaceY,'outlet surfaceY');
+      if(!Number.isSafeInteger(rate)||rate<1||rate>FLUID_DEPTH_UNITS){
+        throw new RangeError('Invalid bounded outlet rate');
+      }
+      if(this.#sources.has(index))throw new RangeError('River inlet and outlet must be separate');
+      if(this.#outlets.has(index))throw new RangeError('Duplicate physical outlet');
+      this.#outlets.set(index,Object.freeze({
+        surfaceDeci:surfaceY*FLUID_DEPTH_UNITS,rate
+      }));
+    }
+    this.#outletManifest=[...this.#outlets.entries()].sort(([a],[b])=>a-b)
       .map(([index,{surfaceDeci,rate}])=>Object.freeze({index,surfaceDeci,rate}));
   }
 
@@ -195,18 +217,58 @@ export class ColumnFluidEngine {
     return {injected,processed};
   }
 
-  // No more than "budget" source+column visits per step. Existing flights
-  // are independently capped and budgeted just as before this change.
+  // Drain only real lower-river water above its downstream boundary head.
+  // This makes the authored river an open stream rather than a closed bathtub
+  // which would eventually equalize and permanently stop its own waterfall.
+  #drainOutlets(budget){
+    if(!budget||!this.#outletManifest.length)return {drained:0,processed:0};
+    let drained=0;
+    const processed=Math.min(budget,this.#outletManifest.length);
+    for(let i=0;i<processed;i++){
+      const outlet=this.#outletManifest[this.#outletCursor];
+      this.#outletCursor=(this.#outletCursor+1)%this.#outletManifest.length;
+      const {index,surfaceDeci,rate}=outlet;
+      const target=Math.max(0,surfaceDeci-this.#floors[index]*FLUID_DEPTH_UNITS);
+      const removed=Math.min(rate,Math.max(0,this.#depths[index]-target));
+      this.#depths[index]-=removed;
+      if(!this.#depths[index]&&removed)this.#wet--;
+      drained+=removed;
+    }
+    this.#drainedTotal+=drained;
+    return {drained,processed};
+  }
+
+  // No more than "budget" inlet+outlet+column visits per step. Existing
+  // flights are independently capped and budgeted just as before this change.
   step({budget=128}={}){
     if(!Number.isSafeInteger(budget)||budget<1||budget>MAX_FLUID_COLUMNS){
       throw new RangeError('Invalid per-step fluid column budget');
     }
-    const sourceBudget=this.#sourceManifest.length
-      ?budget===1?(this.#steps%2===0?1:0)
-        :Math.min(this.#sourceManifest.length,Math.max(1,Math.floor(budget/4)))
-      :0;
+    const nSources=this.#sourceManifest.length,nOutlets=this.#outletManifest.length;
+    let sourceBudget=0,outletBudget=0;
+    if(nSources+nOutlets){
+      if(budget===1){
+        if(this.#steps%3===0&&nSources)sourceBudget=1;
+        if(this.#steps%3===1&&nOutlets)outletBudget=1;
+      }else{
+        const boundarySlots=Math.min(nSources+nOutlets,
+          Math.max(1,Math.floor(budget/4)));
+        if(nSources&&nOutlets&&boundarySlots===1){
+          if(this.#steps%2===0)sourceBudget=1;
+          else outletBudget=1;
+        }else{
+          sourceBudget=Math.min(nSources,Math.ceil(boundarySlots/2));
+          outletBudget=Math.min(nOutlets,boundarySlots-sourceBudget);
+          const remaining=boundarySlots-sourceBudget-outletBudget;
+          const extraSources=Math.min(remaining,nSources-sourceBudget);
+          sourceBudget+=extraSources;
+          outletBudget+=Math.min(remaining-extraSources,nOutlets-outletBudget);
+        }
+      }
+    }
     const {injected,processed:sourcesProcessed}=this.#injectSources(sourceBudget);
-    const count=Math.min(budget-sourcesProcessed,this.columnCount);
+    const {drained,processed:outletsProcessed}=this.#drainOutlets(outletBudget);
+    const count=Math.min(budget-sourcesProcessed-outletsProcessed,this.columnCount);
     const {landed,processed:flightsProcessed}=this.#landFlights(budget);
     let transferred=0;
     for(let i=0;i<count;i++){
@@ -222,13 +284,15 @@ export class ColumnFluidEngine {
     }
     this.#steps++;
     return Object.freeze({
-      processed:count+sourcesProcessed,columnsProcessed:count,
-      sourcesProcessed,flightsProcessed,transferred,injected,landed,
+      processed:count+sourcesProcessed+outletsProcessed,columnsProcessed:count,
+      sourcesProcessed,outletsProcessed,flightsProcessed,
+      transferred,injected,drained,landed,
       inFlight:this.#flights.length,wet:this.#wet
     });
   }
 
   get wetCount(){return this.#wet;}
+  get totalDrained(){return this.#drainedTotal;}
   get inFlightCount(){return this.#flights.length;}
   get inFlightUnits(){
     return this.#flights.reduce((sum,packet)=>sum+packet.units,0);
@@ -320,6 +384,8 @@ export class ColumnFluidEngine {
       floors:Array.from(this.#floors),depths:Array.from(this.#depths),
       sources:this.#sourceManifest.map(source=>({...source})),
       sourceCursor:this.#sourceCursor,
+      outlets:this.#outletManifest.map(outlet=>({...outlet})),
+      outletCursor:this.#outletCursor,drainedTotal:this.#drainedTotal,
       cursor:this.#cursor,steps:this.#steps,
       flights:this.#flights.map(packet=>({...packet})),
       flightCursor:this.#flightCursor
@@ -329,11 +395,17 @@ export class ColumnFluidEngine {
   restore(state){
     const bounds=state?.bounds;
     const sourceCursor=state?.sourceCursor??0;
+    const outletCursor=state?.outletCursor??0;
+    const drainedTotal=state?.drainedTotal??0;
     if(state?.schema!==FLUID_STATE_SCHEMA||state.kind!==this.#kind||
         !bounds||Object.keys(this.#bounds).some(key=>bounds[key]!==this.#bounds[key])||
         !Array.isArray(state.floors)||!Array.isArray(state.depths)||
         state.floors.length!==this.columnCount||state.depths.length!==this.columnCount||
         JSON.stringify(state.sources)!==JSON.stringify(this.#sourceManifest)||
+        JSON.stringify(state.outlets??[])!==JSON.stringify(this.#outletManifest)||
+        !Number.isSafeInteger(outletCursor)||outletCursor<0||
+        outletCursor>=Math.max(1,this.#outletManifest.length)||
+        !Number.isSafeInteger(drainedTotal)||drainedTotal<0||
         !Number.isSafeInteger(sourceCursor)||sourceCursor<0||
         sourceCursor>=Math.max(1,this.#sourceManifest.length)||
         !Number.isSafeInteger(state.cursor)||state.cursor<0||state.cursor>=this.columnCount||
@@ -387,6 +459,8 @@ export class ColumnFluidEngine {
     this.#wet=state.depths.reduce((count,depth)=>count+(depth>0?1:0),0);
     this.#cursor=state.cursor;
     this.#sourceCursor=sourceCursor;
+    this.#outletCursor=outletCursor;
+    this.#drainedTotal=drainedTotal;
     this.#steps=state.steps;
   }
 }
