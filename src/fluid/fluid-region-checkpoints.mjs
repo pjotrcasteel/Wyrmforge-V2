@@ -8,7 +8,7 @@ export const MAX_FLUID_REGIONS=48;
 export const MAX_ACTIVE_FLUID_REGIONS=5;
 const MAX_REGION_BYTES=131072;
 const MAX_CHECKPOINT_BYTES=2097152;
-const VALID_ID=/^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/;
+const VALID_ID=/^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
 
 function requireId(id,label){
   if(typeof id!=='string'||!VALID_ID.test(id)){
