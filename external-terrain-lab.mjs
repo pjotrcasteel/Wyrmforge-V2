@@ -252,6 +252,14 @@ if(playMode&&playQuery.get('directionalShadowTest')==='1'){
     toggle:enabled=>{
       directionalShadowsEnabled=Boolean(enabled);
       return directionalShadowsEnabled;
+    },
+    capture:enabled=>{
+      // Both captures occur inside ONE synchronous browser evaluation.
+      // No RAF, actor, streaming or spell clock advances between them.
+      if(!playView||!combatGuide)return null;
+      directionalShadowsEnabled=Boolean(enabled);
+      paintEncounterGuide({...playView});
+      return combatGuide.toDataURL('image/png');
     }
   };
 }
