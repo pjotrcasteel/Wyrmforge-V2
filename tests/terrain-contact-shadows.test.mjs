@@ -17,11 +17,20 @@ function terrain({floor=()=>5,epoch=1,hidden=()=>false}={}){
       return Number.isFinite(y)&&origin[1]-y<=maxDistance&&origin[1]>=y?
         {point:{x:origin[0],y,z:origin[2]}}:null;
     }
-    const y=floor(origin[0],origin[2]);
-    if(!Number.isFinite(y))return null;
-    const t=(origin[1]-y)/-direction[1];
-    if(t<0||t>maxDistance)return null;
-    return {point:{x:origin[0]+t*direction[0],y,z:origin[2]+t*direction[2]}};
+    // A camera ray travels across X/Z as it descends: intersect the
+    // height profile along the ray, not the column at its origin.
+    const steps=160;
+    for(let i=0;i<=steps;i++){
+      const t=i*maxDistance/steps;
+      const x=origin[0]+t*direction[0];
+      const y=origin[1]+t*direction[1];
+      const z=origin[2]+t*direction[2];
+      const ground=floor(x,z);
+      if(Number.isFinite(ground)&&y<=ground+.025){
+        return {point:{x,y:ground,z}};
+      }
+    }
+    return null;
   }};
 }
 test('contact attenuation is bounded and logs respect their elongated physical root footprint',()=>{
