@@ -47,7 +47,7 @@ test('natural profiles vary setbacks while upper occupancy remains within lower 
     const widths=[];
     for(let y=1;y<=6;y++) {
       const tile=map.get(x+','+y+',-1');
-      const levels=tile?.levels??Array(100).fill(10);
+      const levels=tile?.levels??Array(100).fill(result.voidCells.has(x+','+y+',-1')?0:10);
       widths.push(levels.filter(h=>h>0).length);
     }
     assert.equal(widths[0],100,'base remains full width');
@@ -72,4 +72,21 @@ test('generated stacked cliff occupancy survives checkpoint JSON and replay',()=
     } finally {replay.unload();}
     assert.doesNotThrow(()=>buildPixelMicroSurfaceMeshes(world,buildExposedFaceMeshes(world)));
   } finally {loader.unload();}
+});
+
+test('deep taper crosses parent-voxel boundaries and rounds diagonally exposed corners',()=>{
+  const radius=8,heights=new Int16Array(256),surfaces=new Uint8Array(256).fill(3);
+  for(let z=-8;z<8;z++)for(let x=-8;x<8;x++)heights[(z+8)*16+x+8]=x<0&&z<0?9:0;
+  const plan={recipe:{kind:'wyrm-lair',radius,seed:19,river:'lava'},routes:[],escapeRoutes:[],flowLinks:[],combatSpaces:[],clearings:[],maneuverPockets:[],approaches:[],landmarks:[]};
+  const result=composeCliffTaperTiles({plan,heights,surfaces,tiles:[]});
+  assert.ok(result.voidCells.size>0,'deep retreat removes entire outer parents where necessary');
+  assert.ok(result.tiles.some(t=>(t.z===-2||t.x===-2)&&t.levels.some(h=>h===0)),
+    'the next parent layer must also be refined');
+  assert.ok([...result.voidCells].every(key=>Number(key.split(',')[1])>1),'full base stays intact');
+  const corner=result.tiles.find(t=>t.x===-1&&t.z===-1&&t.y===2);
+  assert.ok(corner);
+  assert.ok(new Set(corner.levels).size>1,'the exposed corner is cut at microvoxel scale');
+  assert.ok(result.tiles.length<=1024);
+  assert.ok(result.tiles.every(t=>t.levels.some(h=>h>0)),
+    'empty parents become coarse terrain cuts, not phantom solid microtiles');
 });
