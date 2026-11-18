@@ -30,8 +30,8 @@ try{
     waitUntil:'domcontentloaded',timeout:30000});
   await page.waitForFunction(()=>{
     const s=window.__WyrmforgeDirectionalShadowTest?.status();
-    return s?.ready&&s.visibleProps>=10&&s.direction?.completed>=2&&
-      s.direction.frameStamps>5;
+    return s?.ready&&s.visibleProps>=10&&s.direction?.completed>=8&&
+      s.direction.frameStamps>=80;
   },null,{timeout:150000});
   // Three matched captures during a SINGLE synchronous browser evaluation.
   // No rAF can advance movement or sprite/ambient/light inputs between states.
