@@ -108,20 +108,25 @@ try{
     throw new Error('Voxel crater missing from native terrain save: '+
       JSON.stringify(report.bankVoxel));
   }
-  // "New wet columns somewhere" is not enough. The exact dry shore chosen
-  // by the real Fireball helper must now hold landed Water V2 volume.
-  report.shoreWater=await page.evaluate(shore=>
-    window.__WyrmforgeStreamWaterTest.inspectCell(shore.x,0,shore.z),cast.shore);
-  if(report.shoreWater.depth<=0){
-    throw new Error('Real Fireball breach has no landed water at the opened shore: '+
+  // The chosen bank top can survive a bowl-shaped explosion while
+  // lower adjacent voxels are excavated. Require actually LANDED fluid in a
+  // NEW wet column where the same Fireball physically removed solid terrain.
+  // Do not accept a global wet-count increase or old river water as evidence.
+  report.breach=await page.evaluate(shore=>
+    window.__WyrmforgeStreamWaterTest.inspectBreach(shore),cast.shore);
+  const beforeWet=new Set(cast.beforeWetColumns);
+  const newFlood=report.breach.flooded.filter(cell=>
+    !beforeWet.has(cell.x+','+cell.z));
+  if(!report.breach.physicallyRemoved.length||!newFlood.length){
+    throw new Error('Fireball failed to flood a physically excavated, previously dry crater column: '+
       JSON.stringify({shore:cast.shore,river:cast.river,
-        after:report.after,shoreWater:report.shoreWater}));
+        after:report.after,breach:report.breach,beforeWet:cast.beforeWetColumns}));
   }
   console.log('WAT15A_REAL_FIREBALL_PASS '+JSON.stringify({
     removedVoxels:editStatus.lastImpactRemoved,
     newlyWetColumns:report.after.wetOutsideAuthored-
       report.before.wetOutsideAuthored,
-    waterAtBreach:report.shoreWater.depth,
+    newlyFloodedExcavatedColumns:newFlood.length,
     savedVoxel:report.bankVoxel.savedRemoved,
     activeRegions:report.after.activeRegions
   }));
