@@ -1,3 +1,4 @@
+import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
 // Uses one small program/VAO. Never writes voxels or changes terrain textures.
@@ -56,6 +57,7 @@ uniform float uLandingEnabled;
 uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
+${MOLTEN_DISPLAY_GLSL}
 float fluidHash(vec2 point){
   return fract(sin(dot(point,vec2(127.1,311.7)))*43758.5453);
 }
@@ -160,8 +162,8 @@ void main(){
     opacity=mix(.975,.94,top);
   }else{
     float ember=fluidHash(pixel-vec2(frame,frame*.25)+79.0);
-    color=mix(vec3(.29,.055,.015),vec3(.86,.29,.045),.40+.45*pool);
-    color=mix(color,vec3(1.0,.66,.16),step(.84,ember)*.5);
+    color=mix(MOLTEN_DARK,MOLTEN_HOT,.40+.45*pool);
+    color=mix(color,MOLTEN_CORE,step(.84,ember)*.5);
     color*=mix(.72,1.0,top);
     if(vFaceMode==4){
       float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);

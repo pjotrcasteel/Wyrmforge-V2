@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Lighting V2 entry seam L10-01 is implemented; next is the bounded visible L10-02 slice after device/performance review. First review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
+**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Lighting V2 entry seam L10-01 is complete; the visible local L10-02 preview needs player/device review. First review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -549,10 +549,18 @@ See [Lighting V2 entry contracts and evidence](LIGHTING-V2-ENTRY.md). Actual GLE
 ### L10-02 — Bounded Hunt cliff shading and lava spill
 
 - **GitHub Issue:** [#354](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/354).
-- **Status:** READY for the next coordinated visible slice after L10-01.
+- **Status:** NEEDS PLAYER REVIEW — local lighting preview implemented; mobile appearance and cost acceptance remain open.
 - **Owner:** Lighting/Rendering; Materials and Fluid presentation expose surface/emission inputs. Fluid amounts and transport remain Water V2 authority.
 - **Deliverable:** bounded cliff/crevice shading and warm lava spill in the actual Hunt, with committed-terrain-change invalidation.
 - **Gate:** shared molten surface/emission adapter coordinated with Water presentation, explicit measured light-count/radius/work budgets, epoch/revision correctness, diagnostic fallback, no reverse core dependencies and mobile appearance/frame review. The 32-emitter descriptor ceiling is not the mobile target.
 - **Open dependencies:** fresh device lag report after WAT-10/material optimization; F07-04 remains separate for generated overhangs.
 
 L10-01 validation: 787 tests pass; dependency audit (317 files / 1,149 dependencies), diff checks, actual GLES3 baseline/textured pixel comparisons and independent unlit render pass. CI now compiles both lighting variants. No phone performance or new lighting appearance acceptance is claimed.
+
+### L10-02 local rock/lava preview — 2026-11-18
+
+Added a bounded 24×24 m local lighting field via public terrain raycasts and read-only live fluid snapshots. It adds crevice/contact shading and warm diffuse lava spill through the L10-01 hook. Height reads are capped at 24/frame; wet-source searches and shader taps are fixed. Stale terrain epochs/revisions invalidate the field; walking retains valid old data while preparing a new window. Shared molten display constants preserve current fluid colour calculations; no solver changes. WAT-12 `3211481` GPU buffer/ripple fixes are included intact.
+
+See [local-lighting bounds, evidence and limits](LOCAL-HUNT-LIGHTING.md). Workstation CPU p95 0.987 ms (48 update calls); active software GLES stone draws add roughly 0.7 ms in a synthetic full-field fixture. Field is 9,216 GPU bytes; phone costs are unverified. Reports expose local lighting CPU. Baseline comparison uses `lighting=off`. This is local indirect illumination, not full shadows or overhang-aware transport. Next action: player/device review of the actual Hunt lighting and renewed performance evidence; do not mark R10-01/R10-02 release acceptance complete.
+
+L10-02 validation: 801 tests pass with WAT-12 integrated; dependency audit (325 files / 1,173 dependencies) and diff check pass. Static runtime graph remains acyclic (155 modules / 220 import edges). Actual GLES3 local-field shader compiles, links and renders with active float texture data. New visual/mobile acceptance and sustained frame targets remain pending.

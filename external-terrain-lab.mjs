@@ -1,3 +1,5 @@
+import {LocalLightField} from './src/lighting/local-light-field.mjs';
+import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
 import {huntScreenMovement} from './src/hunt-movement-input.mjs';
 import {createHuntFireballImpact,paintHuntFireballImpact,huntFireballVisualLevel} from './src/hunt-fireball-visuals.mjs';
 import {huntGrassMaterialVolume,HUNT_GRASS_VOLUME_STRIDE} from './src/hunt-grass-material-volume.mjs';
@@ -60,6 +62,7 @@ import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
 const playMode=document.body.dataset.playHunt==='true';
+const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 const routeNav=document.querySelector('#play-route-nav');
@@ -159,6 +162,10 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
+let playLightingLiquid=null;
+const playLighting=new LocalLightField((x,z,y)=>active?.port.raycast({
+  origin:[x,y+16,z],direction:[0,-1,0],maxDistance:32
+})?.point.y??NaN);
 let playFluidVisual=null;
 let meshBridge=null;
 let pendingMesh=null;
@@ -200,6 +207,7 @@ let playFrameStats=new HuntPlayPerformance();
 let webglRestores=0,webglRestoreFailures=0;
 let awaitingPlayContext=false;
 let contextEvidence=new HuntContextRecoveryEvidence();
+let playLightingStats=new HuntPlayPerformance();
 let playCpuStats=new HuntPlayPerformance();
 let playWoodlandPaintStats=new HuntPlayPerformance();
 let playEvidence=new HuntStreamingEvidence();
@@ -1096,6 +1104,7 @@ function resetSite() {
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    playLightingLiquid=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
     playFluidLandingEnabled=true;
@@ -1125,6 +1134,7 @@ function resetSite() {
     playFrameAt=null;
     playFrameStats=new HuntPlayPerformance();
     contextEvidence=new HuntContextRecoveryEvidence();
+    playLightingStats=new HuntPlayPerformance();
     playCpuStats=new HuntPlayPerformance();
     playWoodlandPaintStats=new HuntPlayPerformance();
     playEvidence=new HuntStreamingEvidence();
@@ -1380,6 +1390,7 @@ function updateHuntRiverSurface() {
     if(playRiverWorld===world&&playRiverRevision===world.revision&&
         playFluid.steps-playFluidSurfaceStep<(playFluid.inFlightCount?4:8))return;
     const state=playFluid.snapshotSurface();
+    playLightingLiquid=state;
     playLava=huntFluidSurface(generatedSite.layout,world,state);
     if(playFluidOverlayMode!=='no-mesh'){
       playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
@@ -1759,8 +1770,16 @@ function frame(now) {
       }
       updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
+      if(localLightingEnabled&&active?.port&&playActor&&!pendingMesh&&!pendingEdit&&!streamingBusy()){
+        const lightingStarted=performance.now();
+        playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
+          center:playActor,liquid:playLightingLiquid,now});
+        playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
+      }
+      const lightingField=localLightingEnabled&&playLighting.snapshot?.epoch===active?.port.epoch&&
+        playLighting.snapshot?.revision===active?.port.revision?playLighting.snapshot:null;
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
+          camera===PLAY_HUNT_CAMERA,lightingField,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
           huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
@@ -2073,6 +2092,7 @@ if(playMode) {
       performance:{
         frameIntervals:playFrameStats.snapshot,
         frameWorkCpu:playCpuStats.snapshot,
+        localLightingCpu:playLightingStats.snapshot,
         terrainEditToRender:{editsRendered:terrainTiming.frames,sampleCount:terrainTiming.sampleCount,
           p50Ms:terrainTiming.p50Ms,p95Ms:terrainTiming.p95Ms,p99Ms:terrainTiming.p99Ms,
           maxMs:terrainTiming.maxFrameMs,source:'committed-edit-to-render-submission',
@@ -2195,6 +2215,7 @@ window.addEventListener('pagehide',()=>{
 });
 try {
   renderer=new WebGLVoxelView(canvas,{
+    ...(localLightingEnabled?{lightingShader:LOCAL_FIELD_LIGHTING_GLSL}:{}),
     // Use the actual WorldGen V2 material pipeline for BOTH camera
     // projections. The 2.5D game camera does not require 2D fake terrain.
     transparentBackground:Boolean(forestContext),fastHuntMode:false,
