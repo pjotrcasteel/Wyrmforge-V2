@@ -146,3 +146,23 @@ test('flow ribbons project across visible Hunt-camera pixels, not edge-on agains
     'fall ribbon boundaries stay on the 10cm pixel grid');
   assert.equal(engine.wetCount,2,'ribbons are rendering only and conserve fluid volume');
 });
+
+test('a physically real airborne fall keeps a curtain over an as-yet dry lower pool',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:1,minZ:0,maxZ:0},
+    floorAt:x=>x===0?2:0,
+    initial:[{x:0,z:0,depth:10}]
+  });
+  fluid.step({budget:2});
+  assert.equal(fluid.sample(1,0).depth,0);
+  assert.equal(fluid.inFlightCount,1);
+  const surface=buildFluidSurfaceMesh(fluid.snapshotSurface(),{
+    sampleAt:(x,z)=>fluid.sample(x,z)
+  });
+  assert.equal(surface.waterfallFaces,1,
+    'live airborne transfer supplies physical evidence of a fall before impact');
+  assert.equal(surface.fallRibbonFaces,8);
+  assert.equal(surface.landingSplashFaces,0,
+    'no landing foam can appear before water actually wets the lower rock');
+  assert.ok([...surface.faceModes].some(mode=>mode===4));
+});
