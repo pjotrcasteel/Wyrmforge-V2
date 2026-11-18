@@ -45,9 +45,9 @@ try{
   // shadow frame before measuring the same scene on/off.
   await page.waitForFunction(()=>{
     const state=window.__WyrmforgeContactShadowTest.status();
-    return state.residentProps.filter(prop=>prop.visible).length>=4 &&
-      state.contact?.cacheMisses>0 && state.contact.frameStamps>0 &&
-      state.overlay.frames>=8;
+    return state.residentProps.filter(prop=>prop.visible).length>=12 &&
+      state.contact?.entries>=14 && state.contact.frameStamps>0 &&
+      state.overlay.frames>=16;
   },null,{timeout:120000});
   result.on=await page.evaluate(()=>window.__WyrmforgeContactShadowTest.status());
   await page.screenshot({path:folder+'/game-on.png',type:'png',timeout:25000});
@@ -80,7 +80,7 @@ try{
   if(result.on.residentProps.length!==result.off.residentProps.length){
     throw new Error('Cannot compare images when prop residency changed between screenshots');
   }
-  if(changed<20)throw new Error('Contact shadow has no meaningful actual Canvas screenshot difference');
+  if(changed<3000)throw new Error('Contact shadow remains too subtle at game pixel scale: '+changed+' changed pixels');
 }catch(error){failed=String(error.stack??error);result.failed=failed;console.error('CONTACT_SHADOW_FAILURE '+failed);}
 finally{
   await writeFile(folder+'/report.json',JSON.stringify(result,null,2));
