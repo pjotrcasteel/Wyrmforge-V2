@@ -75,7 +75,7 @@ export class FluidSeamLinks {
       }
       moved+=from.transferToAdjacent(to,{
         x:link.from.x,z:link.from.z,
-        toX:link.to.x,toZ:link.to.z,maxUnits:2
+        toX:link.to.x,toZ:link.to.z,maxUnits:from.kind==='lava'?1:2
       });
     }
     if(this.#links.length)this.#cursor=(this.#cursor+count)%this.#links.length;
