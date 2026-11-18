@@ -15,6 +15,7 @@ import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {HuntGraphResidency} from '../src/hunt-graph-residency.mjs';
 import {HuntStreamedFluid} from '../src/fluid/hunt-streamed-fluid.mjs';
 import {HuntFluidSave} from '../src/fluid/hunt-fluid-save.mjs';
+import {findConnectedRiverBankTarget} from '../src/diagnostics/hunt-connected-river-bank.mjs';
 import {HuntTerrainSave} from '../src/hunt-terrain-save.mjs';
 import {containsHuntLandform} from '../src/world-generation/hunt-landform-footprint.mjs';
 import {analyzeCharacterReachability} from '../src/character-reachability.mjs';
@@ -63,25 +64,6 @@ function setup(storage){
   return {graph,plan,earthwork,entry,ids,loader,world,port,stream,fluid,terrainSave,fluidSave};
 }
 
-function findBank(state){
-  const {port,graph,fluid}=state;
-  const channel=graph.region('region-entry').fluidLayout.riverChannels[0];
-  const channelCells=new Set(channel.floor.map(cell=>key(cell.x,cell.z)));
-  const sampled=channel.floor.filter(cell=>fluid.sample(cell.x,cell.z)?.depth>0);
-  for(const cell of sampled){
-    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const x=cell.x+dx,z=cell.z+dz;
-      if(channelCells.has(key(x,z))||fluid.sample(x,z)?.depth>0)continue;
-      const hit=port.raycast({
-        origin:[x+.5,30,z+.5],direction:[0,-1,0],maxDistance:80
-      });
-      if(hit&&Math.abs(hit.cell.y+1-cell.y)<=3){
-        return {hit,shore:{x,z},river:cell};
-      }
-    }
-  }
-  throw new Error('No authentic dry voxel river bank adjacent to connected wet channel');
-}
 
 function wetBeyond(state,authored){
   return state.fluid.snapshotSurface().cells.filter(cell=>cell.depth>0&&
@@ -98,7 +80,7 @@ test('WAT-15a: a real connected-river Fireball survives graph eviction, revisit 
     const authored=new Set(s.earthwork.bands.flatMap(b=>
       b.fluidLayout.riverChannels.flatMap(ch=>ch.floor.map(cell=>key(cell.x,cell.z)))));
     for(let i=0;i<24;i++)fluid.step({budget:96});
-    const bank=findBank(s);
+    const bank=findConnectedRiverBankTarget(graph,port,fluid);
     const oldWet=new Set(wetBeyond(s,authored));
     const target={...bank.hit.cell,radius:2.3,depth:2};
     const edit=port.apply({
