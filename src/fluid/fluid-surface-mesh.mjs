@@ -7,7 +7,7 @@ import {FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs'
 export const FLUID_SHORE_MICRO_STEPS=10;
 const CELL_EPSILON=.006;
 const SMOOTH_HEAD_DIFFERENCE=.5;
-export const FLUID_FALL_MIN_DROP=.75;
+export const FLUID_FALL_MIN_DROP=.2;
 export const FLUID_FALL_RIBBON_SECTIONS=2;
 // Sparse 10cm surface chips around the impact. The pattern is asymmetric,
 // giving pixel-art spray without an obviously repeating circular stamp.
@@ -185,7 +185,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       c.floorY>neighbor.floorY &&
       (activeFlightEdges.has(key(x,z)+'>'+key(x+side.dx,z+side.dz)) ||
         (neighbor.depth>0 &&
-          c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP &&
+          c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP-1e-6 &&
           c.flowX===side.dx&&c.flowZ===side.dz)));
     const fallingIndex=DIRECTIONS.findIndex((side,i)=>isRealFall(side,neighbors[i]));
     const hasFallingEdge=fallingIndex>=0;
