@@ -101,6 +101,27 @@ export function createWorldGenFluidEngine(layout,terrain,{
       return ax*ax+az*az-(bx*bx+bz*bz)||a.z-b.z||a.x-b.x;
     })
     .slice(0,MAX_FLUID_SOURCES);
+  // The last authored river mouth is an OPEN boundary. Water can continue
+  // downstream at its published pool depth instead of collecting forever in
+  // a closed finite bathtub and gradually drowning the upper waterfall.
+  const sink=channel.nodes?.at(-1)??
+    floorCells.get(signedKey(channel.to?.x,channel.to?.z));
+  const beforeSink=channel.nodes?.at(-2)??source;
+  const sinkX=Math.sign((sink?.x??source.x)-beforeSink.x);
+  const sinkZ=Math.sign((sink?.z??source.z)-beforeSink.z);
+  const inletKeys=new Set(mouth.map(({x,z})=>signedKey(x,z)));
+  const exits=[...floorCells.values()]
+    .filter(cell=>{
+      if(!sink||inletKeys.has(signedKey(cell.x,cell.z)))return false;
+      const dx=cell.x-sink.x,dz=cell.z-sink.z;
+      return dx*dx+dz*dz<=4&&dx*sinkX+dz*sinkZ>=-1;
+    })
+    .sort((a,b)=>{
+      const ax=a.x-sink.x,az=a.z-sink.z;
+      const bx=b.x-sink.x,bz=b.z-sink.z;
+      return ax*ax+az*az-(bx*bx+bz*bz)||a.z-b.z||a.x-b.x;
+    })
+    .slice(0,MAX_FLUID_SOURCES);
   // All water/lava starts with a finite volume, seeded against actual solid
   // terrain instead of pretending the WorldGen channel descriptor is current.
   const initial=[...floorCells.values()].map(({x,z})=>({x,z,depth:initialDepth}));
@@ -112,6 +133,11 @@ export function createWorldGenFluidEngine(layout,terrain,{
     floorAt,kind:channel.kind,initial,
     sources:mouth.map(({x,z})=>({
       x,z,surfaceY:floorAt(x,z)+1,rate:sourceRate
+    })),
+    outlets:exits.map(({x,z})=>({
+      x,z,surfaceY:floorAt(x,z)+1,
+      rate:Math.min(10,Math.max(sourceRate,
+        Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
     }))
   });
   return Object.freeze({
@@ -119,7 +145,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
       x:source.x,z:source.z,kind:channel.kind
     }),
     channelCellCount:floorCells.size,
-    inletCellCount:mouth.length
+    inletCellCount:mouth.length,
+    outletCellCount:exits.length
   });
 }
 
