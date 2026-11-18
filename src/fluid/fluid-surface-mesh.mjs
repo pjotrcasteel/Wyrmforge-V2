@@ -139,12 +139,17 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   const positions=[],normals=[],flows=[],faceModes=[],landingHeights=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
   let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0,landingSplashFaces=0;
+  let waterfallGroups=0,maxWaterfallWidth=0;
   let flightFaces=0,submergedFlightCount=0;
   const seen=new Set();
   // Translucent cap pixels are composited without depth writes. Queue
   // downstream foam until AFTER every pool cap so it cannot be painted over
   // by a later wet column in the deterministic resident scan order.
   const landingQuads=[];
+  // Group only adjacent real falling edges lying on the SAME physical
+  // stone plane and pointing downhill in the same direction. An unrelated
+  // nearby stream or disconnected ledge must never join the waterfall.
+  const fallingEdges=[];
   const pushFace=(quad,normal,flow,{mode=0,landingY=0}={})=>{
     const vertex=positions.length/3;
     for(const point of quad){
@@ -252,60 +257,107 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       sideFaces++;
       if(waterfall){
         waterfallFaces++;
-        // A vertical face pressed against rock can disappear in the Hunt
-        // camera's depth buffer. Bridge the REAL upper/lower wet surfaces with
-        // an outward, 10cm-pixel-aligned cascading ribbon. This is purely
-        // visible presentation of the existing transfer, not new fluid mass.
+        // Hold the render-only ribbon and lower-pool glints until all
+        // physical edges are known. Rendering them together removes the
+        // 20cm gaps and independently oscillating narrow waterfall strips.
         const edgeX=x+.5+side.dx*.5,edgeZ=z+.5+side.dz*.5;
         const acrossX=-side.dz,acrossZ=side.dx;
-        const high=(ha+hb)*.5+.024;
-        const low=landingHead+.026;
-        const offsets=[-.1,.2,.6];
-        const elevations=[high,Math.max(low+.08,high-.24),low];
-        const bands=[-.4,-.2,0,.2,.4];
-        for(let span=0;span<FLUID_FALL_RIBBON_SECTIONS;span++){
-          for(let strip=0;strip<bands.length-1;strip++){
-            const u=bands[strip],v=bands[strip+1];
-            const point=(distance,lateral,y)=>[
-              edgeX+side.dx*distance+acrossX*lateral,
-              y,
-              edgeZ+side.dz*distance+acrossZ*lateral
-            ];
-            pushFace([
-              point(offsets[span],u,elevations[span]),
-              point(offsets[span+1],u,elevations[span+1]),
-              point(offsets[span+1],v,elevations[span+1]),
-              point(offsets[span],v,elevations[span])
-            ],[0,1,0],flow,{mode:4,landingY:landingHead});
-            fallRibbonFaces++;
-          }
-        }
-        // Foam belongs only to an ACTUALLY wet lower pool. Falling parcels
-        // can display their moving curtain above a dry receiving crater,
-        // but must not invent a splash where liquid has not yet landed.
-        if(neighbor.depth>0){
-        const poolX=x+side.dx+.5,poolZ=z+side.dz+.5;
-        const splashY=neighbor.surfaceY+.036;
-        const impact=(u,v)=>[
-          poolX+acrossX*u/FLUID_SHORE_MICRO_STEPS+
-            side.dx*v/FLUID_SHORE_MICRO_STEPS,
-          splashY,
-          poolZ+acrossZ*u/FLUID_SHORE_MICRO_STEPS+
-            side.dz*v/FLUID_SHORE_MICRO_STEPS
-        ];
-        for(const [across,downstream] of FLUID_LANDING_SPLASH_TILES){
-          landingQuads.push({
-            quad:[
-              impact(across,downstream),
-              impact(across+1,downstream),
-              impact(across+1,downstream+1),
-              impact(across,downstream+1)
-            ],flow,landingY:neighbor.surfaceY
-          });
-          landingSplashFaces++;
-        }
-        }
+        const plane=side.dx!==0?edgeX:edgeZ;
+        fallingEdges.push({
+          dx:side.dx,dz:side.dz,plane,
+          edgeX,edgeZ,acrossX,acrossZ,
+          lateral:edgeX*acrossX+edgeZ*acrossZ,
+          high:(ha+hb)*.5+.024,
+          low:landingHead+.026,landingHead,
+          flow,
+          lowerWet:neighbor.depth>0
+        });
       }
+    }
+  }
+  const sorted=fallingEdges.sort((a,b)=>
+    a.dx-b.dx||a.dz-b.dz||a.plane-b.plane||a.lateral-b.lateral);
+  const groups=[];
+  for(const edge of sorted){
+    const last=groups.at(-1);
+    const previous=last?.at(-1);
+    if(last&&previous&&
+        edge.dx===previous.dx&&edge.dz===previous.dz&&
+        edge.plane===previous.plane&&
+        Math.abs(edge.lateral-previous.lateral-1)<1e-6&&
+        Math.abs(edge.high-previous.high)<=.35&&
+        Math.abs(edge.low-previous.low)<=.35){
+      last.push(edge);
+    }else{
+      groups.push([edge]);
+    }
+  }
+  waterfallGroups=groups.length;
+  for(const group of groups){
+    const first=group[0],width=group.length;
+    maxWaterfallWidth=Math.max(maxWaterfallWidth,width);
+    const high=group.reduce((sum,edge)=>sum+edge.high,0)/width;
+    const low=group.reduce((sum,edge)=>sum+edge.low,0)/width;
+    const landing=group.reduce((sum,edge)=>sum+edge.landingHead,0)/width;
+    const edgePoint=(distance,lateral,y)=>[
+      first.edgeX+first.dx*distance+first.acrossX*lateral,
+      y,
+      first.edgeZ+first.dz*distance+first.acrossZ*lateral
+    ];
+    // One uninterrupted face band from the first real falling column to
+    // the last: exactly five 20cm pixel strips per metre, with NO margins
+    // or gaps at former 1m column borders. Each group has ONE shared upper
+    // and lower height; no independent three-jet animation can develop.
+    const offsets=[-.1,.2,.6];
+    const heights=[high,Math.max(low+.08,high-.24),low];
+    for(let span=0;span<FLUID_FALL_RIBBON_SECTIONS;span++){
+      for(let strip=0;strip<width*5;strip++){
+        const left=-.5+strip*.2,right=left+.2;
+        pushFace([
+          edgePoint(offsets[span],left,heights[span]),
+          edgePoint(offsets[span+1],left,heights[span+1]),
+          edgePoint(offsets[span+1],right,heights[span+1]),
+          edgePoint(offsets[span],right,heights[span])
+        ],[0,1,0],[first.dx,first.dz],{mode:4,landingY:landing});
+        fallRibbonFaces++;
+      }
+    }
+    // A broad fall has one dispersed receiving-pool splash footprint;
+    // overlapping identical 16-pixel stamps on every metre made adjacent
+    // columns look like separate waterfalls. Isolated 1m falls retain the
+    // accepted 16-chip footprint and remain physically wet-to-wet.
+    const wetEdges=group.filter(edge=>edge.lowerWet);
+    if(!wetEdges.length)continue;
+    const count=width===1?FLUID_LANDING_SPLASH_TILES.length:
+      Math.max(16,Math.ceil(wetEdges.length*8));
+    for(let i=0;i<count;i++){
+      const [across,downstream]=FLUID_LANDING_SPLASH_TILES[
+        i%FLUID_LANDING_SPLASH_TILES.length];
+      const lateral=width===1?across/FLUID_SHORE_MICRO_STEPS:
+        Math.round((-.5+(i+.5)/count*width)*10)/10;
+      const edge=width===1?first:
+        group[Math.min(width-1,Math.max(0,Math.floor(lateral+.5)))];
+      if(!edge.lowerWet)continue;
+      const lowerY=edge.landingHead;
+      const originX=first.edgeX+first.dx*.5+first.acrossX*lateral;
+      const originZ=first.edgeZ+first.dz*.5+first.acrossZ*lateral;
+      const splashPoint=(distance,offset)=>[
+        originX+first.dx*distance+first.acrossX*offset,
+        lowerY+.036,
+        originZ+first.dz*distance+first.acrossZ*offset
+      ];
+      const step=1/FLUID_SHORE_MICRO_STEPS;
+      const distance=downstream/FLUID_SHORE_MICRO_STEPS;
+      landingQuads.push({
+        quad:[
+          splashPoint(distance,0),
+          splashPoint(distance,step),
+          splashPoint(distance+step,step),
+          splashPoint(distance+step,0)
+        ],
+        flow:[first.dx,first.dz],landingY:lowerY
+      });
+      landingSplashFaces++;
     }
   }
   for(const {quad,flow,landingY} of landingQuads){
@@ -357,7 +409,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
     wetColumns:surface.cells.length,refinedShoreColumns,
     waterfallFaces,fallLipFaces,fallRibbonFaces,landingSplashFaces,
-    flightFaces,submergedFlightCount,
+    waterfallGroups,maxWaterfallWidth,flightFaces,submergedFlightCount,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),
