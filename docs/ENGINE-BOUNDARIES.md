@@ -90,3 +90,17 @@ shadows stay while visible even if their sprite exits the camera. Bounded LRU
 caches retain warm casters during walking and invalidate real owner changes.
 Mixed sprite/terrain/fluid material response and mobile performance remain open.
 See `docs/LIGHTING-GENERIC-OCCLUSION.md` and #377.
+
+
+## L10-08 shared emissive evaluation
+
+[PR #405](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/405) publishes one
+Materials-owned `emissionColor` in the bounded local field already generated
+from authored and Water-published surfaces. The Lighting CPU sampler and WebGL
+terrain shader use matching spatial irradiance and receiver elevation rules.
+Play Hunt hands them the **same completed snapshot** in a presentation frame.
+Any Canvas tree/prop/actor consumes `lighting.sample(position)` with no new
+object-specific integration. No extra raycasts or GPU textures are allocated.
+The fluid renderer's Water/foam visual receiving and multi-height sprite
+response remain L10-08 acceptance work, not completed by this PR.
+See [shared emissive documentation](LIGHTING-SHARED-EMISSIVE-SPRITES.md).
