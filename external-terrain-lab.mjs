@@ -756,6 +756,7 @@ function updatePlayStreaming(now) {
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
             worldRevision:active?.world.revision??null,
             fireballs:playFireballCount,
+            busy:Boolean(playFireball||pendingEdit||pendingMesh||renderer.pendingUploads||streamingBusy()),
             lastImpactRemoved,
             terrainRemovedCells:stream.terrainSave?.removedCells.size??0,
             terrainSaved:stream.terrainSave?.status??null,
@@ -773,6 +774,12 @@ function updatePlayStreaming(now) {
             return {target:bank.hit.cell,shore:bank.shore,river:bank.river,
               beforeRemoved:stream.terrainSave.removedCells.size,
               beforeWetOutside:wetOutsideAuthored()};
+          },
+          inspectCell(x,y,z){
+            if(![x,y,z].every(Number.isSafeInteger))throw new TypeError('Whole voxel coordinates required');
+            return {material:active.port.materialAt(x,y,z),
+              savedRemoved:stream.terrainSave.removedCells.has(x+','+y+','+z),
+              depth:playFluidStream.sample(x,z)?.depth??0};
           },
           advanceFluid(count){
             if(!Number.isSafeInteger(count)||count<1||count>180||
