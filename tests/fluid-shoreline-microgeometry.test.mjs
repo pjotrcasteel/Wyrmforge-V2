@@ -94,3 +94,27 @@ test('bounded river with thousands of micro-shore edges cannot exceed Water V2 G
   assert.ok(bytes<=2*1024*1024);
   assert.equal(engine.wetCount,64);
 });
+
+test('shallow river water cannot be smoothed below the top of a real stone lip',()=>{
+  const {mesh}=meshWith({
+    width:2,height:1,
+    materialFloor:x=>x===0?2:1,
+    seed:[{x:0,z:0,depth:1},{x:1,z:0,depth:8}]
+  });
+  assert.equal(mesh.wetColumns,2);
+  assert.equal(mesh.sideFaces,0,'neighboring heads are close enough for interpolation');
+  const highStoneTop=2;
+  const highCapHeights=[];
+  const sharedEdgeHeights=[];
+  for(let i=0;i<mesh.vertexCount;i++){
+    if(mesh.normals[i*3+1]!==1)continue;
+    const x=mesh.positions[i*3],y=mesh.positions[i*3+1];
+    if(x<=1+1e-6&&i<4)highCapHeights.push(y);
+    if(Math.abs(x-1)<1e-6)sharedEdgeHeights.push(y);
+  }
+  assert.ok(highCapHeights.length>=4);
+  assert.ok(highCapHeights.every(y=>y>highStoneTop+.09),
+    'the whole upper water cap must cover the rock, not be depth-clipped behind it');
+  assert.ok(sharedEdgeHeights.every(y=>y>=2.10),
+    'both neighboring water columns share a visible, continuous high-stone corner');
+});
