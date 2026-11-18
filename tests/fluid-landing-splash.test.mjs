@@ -69,7 +69,9 @@ test('water and lava use same bounded impact geometry but separate rendering pal
   assert.deepEqual(water.faceModes,lava.faceModes);
   assert.match(FLUID_FRAGMENT_GLSL,/if\(vFaceMode==5\)/);
   assert.match(FLUID_FRAGMENT_GLSL,/uLandingEnabled/);
-  assert.match(FLUID_FRAGMENT_GLSL,/uLava<.5\?2.4:.65/);
+  assert.match(FLUID_FRAGMENT_GLSL,/uLava<.5\\?\.9:\.45/);
+  assert.match(FLUID_FRAGMENT_GLSL,/float rippleCycle=uTime\\*\\.65/);
+  assert.match(FLUID_FRAGMENT_GLSL,/rippleFade/);
   assert.match(FLUID_VERTEX_GLSL,/dot\(world,uCameraDepth\)-uDepthOrigin/);
 });
 
