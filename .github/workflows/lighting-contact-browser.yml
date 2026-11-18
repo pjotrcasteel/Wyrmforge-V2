@@ -1,0 +1,45 @@
+name: Lighting L10-05 actual Play Hunt contact witness
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lighting/contact-shadows.mjs'
+      - 'src/terrain-contact-shadow-cache.mjs'
+      - 'src/hunt-tree-preview.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/lighting-contact-hunt.mjs'
+      - '.github/workflows/lighting-contact-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('lighting-contact-{0}', github.event.pull_request.number) || 'lighting-contact-manual' }}
+  cancel-in-progress: true
+
+jobs:
+  actual-hunt-shadow-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser witness dependencies
+        run: |
+          command -v google-chrome
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
+      - name: Verify contact pixels in an actual Play Hunt before and after disabling shadows
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/lighting-contact-hunt.mjs
+      - name: Retain matched screenshots and shadow statistics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighting-contact-hunt-chromium
+          path: lighting-contact-evidence/
+          if-no-files-found: warn
+          retention-days: 14

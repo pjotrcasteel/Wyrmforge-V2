@@ -76,7 +76,7 @@ import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.m
 const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
-const contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
+let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
@@ -210,6 +210,25 @@ const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: red
 let playRecoveryCheckpoint=null;
 let playConnected=null;
 let playStream=null;
+if(playMode&&playQuery.get('contactShadowTest')==='1'){
+  // Opt-in browser-only visualization witness, never a scene or terrain authority.
+  window.__WyrmforgeContactShadowTest={
+    status:()=>({
+      ready:Boolean(playStream?.trees&&playActor&&playView&&active?.port),
+      enabled:contactShadowsEnabled,
+      actors:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null,
+      residentProps:playStream?.trees?[...playStream.trees.objects.regions].flat().map(({id,kind,x,y,z,radius})=>({
+        id,kind:kind??'tree',x,y,z,radius,visible:playView?(()=>{
+          const p=projectVoxel(x,y,z,playView);
+          return p.x>=0&&p.x<=playView.width&&p.y>=0&&p.y<=playView.height;
+        })():false
+      })):[],
+      contact:playStream?.trees?.contactShadowStatistics??null,
+      overlay:playWoodlandPaintStats.snapshot
+    }),
+    toggle:(enabled)=>{contactShadowsEnabled=Boolean(enabled);return contactShadowsEnabled;}
+  };
+}
 let playView=null;
 let playDesiredView=null;
 const playTreeAtlas=playMode?new Image():null;
