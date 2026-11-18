@@ -33,23 +33,38 @@ try{
     return s?.ready&&s.visibleProps>=10&&s.direction?.completed>=2&&
       s.direction.frameStamps>5;
   },null,{timeout:150000});
-  const raw=async name=>{
-    const data=await page.evaluate(()=>document.querySelector('#combat-guide').toDataURL('image/png'));
-    const buffer=Buffer.from(data.slice(data.indexOf(',')+1),'base64');
-    await writeFile(folder+'/'+name+'.png',buffer);
-    return PNG.sync.read(buffer);
+  // Three matched captures during a SINGLE synchronous browser evaluation.
+  // No rAF can advance movement or sprite/ambient/light inputs between states.
+  // A second OFF capture is a mandatory negative control for tint-cache churn.
+  const snapshots=await page.evaluate(()=>{
+    const api=window.__WyrmforgeDirectionalShadowTest;
+    for(let i=0;i<12;i++)api.capture(false); // warm sprite tint cache
+    const offBefore=api.capture(false);
+    const on=api.capture(true);
+    const onState=api.status();
+    const offAfter=api.capture(false);
+    return {on,offBefore,offAfter,onState,offState:api.status()};
+  });
+  const raw=async(data,name)=>{
+    const bytes=Buffer.from(data.slice(data.indexOf(',')+1),'base64');
+    await writeFile(folder+'/'+name+'.png',bytes);
+    return PNG.sync.read(bytes);
   };
-  report.on=await page.evaluate(()=>window.__WyrmforgeDirectionalShadowTest.status());
-  const on=await raw('direction-on');
+  report.on=snapshots.onState;
+  report.off=snapshots.offState;
+  const on=await raw(snapshots.on,'direction-on');
+  const off=await raw(snapshots.offBefore,'direction-off');
+  const offAgain=await raw(snapshots.offAfter,'direction-off-control');
   await page.screenshot({path:folder+'/game-on.png',type:'png',timeout:25000});
-  await page.evaluate(()=>window.__WyrmforgeDirectionalShadowTest.toggle(false));
-  await page.waitForFunction(frames=>{
-    const s=window.__WyrmforgeDirectionalShadowTest.status();
-    return s.overlay.frames>frames&&s.direction.frameStamps===0;
-  },report.on.overlay.frames,{timeout:60000});
-  report.off=await page.evaluate(()=>window.__WyrmforgeDirectionalShadowTest.status());
-  const off=await raw('direction-off');
   if(on.width!==off.width||on.height!==off.height)throw new Error('Nonmatching canvas sizes');
+  let controlDrift=0;
+  for(let i=0;i<off.data.length;i+=4){
+    if(Math.abs(off.data[i]-offAgain.data[i])+
+        Math.abs(off.data[i+1]-offAgain.data[i+1])+
+        Math.abs(off.data[i+2]-offAgain.data[i+2])+
+        Math.abs(off.data[i+3]-offAgain.data[i+3])>16)controlDrift++;
+  }
+  report.control={offVsOffChangedPixels:controlDrift,freeze:'same JS task, no simulation advance'};
   let changed=0,alphaChanged=0,delta=0;
   for(let i=0;i<on.data.length;i+=4){
     const diff=Math.abs(on.data[i]-off.data[i])+
@@ -61,12 +76,13 @@ try{
     delta+=diff;
   }
   report.visual={changed,alphaChanged,delta,canvas:[on.width,on.height],
-    source:'raw Canvas2D, no WebGL or HUD'};
+    source:'frozen same-frame raw Canvas2D, no WebGL or HUD',controlDrift};
   console.log('DIRECTIONAL_HUNT_WITNESS '+JSON.stringify({
     on:report.on.direction,off:report.off.direction,visible:report.on.visibleProps,
     pixels:report.visual,errors:report.errors}));
   if(report.on.props!==report.off.props)throw new Error('Hunt residency changed between screenshots');
   if(report.errors.length)throw new Error('Page errors: '+report.errors.join('; ').slice(0,500));
+  if(controlDrift>2)throw new Error('Witness contaminated by sprite/cache churn: '+controlDrift+' OFF/OFF pixels');
   if(changed<100)throw new Error('No visible directional canopy shadow difference');
 }catch(error){
   failed=String(error.stack??error);
