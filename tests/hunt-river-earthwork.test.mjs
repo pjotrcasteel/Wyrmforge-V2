@@ -57,10 +57,13 @@ test('WorldGen materializes a real physical stone riverbed through the 8m link',
   try{
     const {port,world}=loader.terrain;
     const touched=new Set(proposal.points.map(p=>p.x+','+p.z));
+    const rawAt=(bands,x,y,z)=>bands.flatMap(b=>b.definition.runs)
+      .find(run=>run.y===y&&run.z===z&&x>=run.x&&x<run.x+run.length)?.material??0;
     assert.equal(touched.size,earthwork.bands.reduce((n,b)=>n+b.earthwork.cellCount,0));
     for(const point of proposal.points){
       assert.equal(port.materialAt(point.x,earthwork.bedFloorY-1,point.z),3,
-        'actual WorldGen/Voxel stone bed is required at '+point.x+','+point.z);
+        'actual WorldGen/Voxel stone bed is required at '+point.x+','+point.z+
+        ' raw='+rawAt(earthwork.bands,point.x,earthwork.bedFloorY-1,point.z));
       assert.equal(port.materialAt(point.x,earthwork.bedFloorY,point.z),0,
         'actual upper voxel must be AIR after earthwork at '+point.x+','+point.z);
     }
@@ -92,7 +95,8 @@ test('earthwork leaves every column outside the proposed bed exactly unchanged',
           if(touched.has(x+','+z))continue;
           for(let y=0;y<=12;y++){
             assert.equal(updated.materialAt(x,y,z),old.materialAt(x,y,z),
-              'non-water native Voxel terrain must not change: '+x+','+y+','+z);
+              'non-water native Voxel terrain must not change: '+x+','+y+','+z+
+              ' (outside planned bed)');
           }
         }
       }
