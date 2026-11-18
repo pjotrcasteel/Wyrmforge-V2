@@ -64,7 +64,14 @@ void main(){
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
-  float frame=floor(uTime*2.0);
+  // A full pixel-art ripple shift happens slowly. Fade each old ripple out
+  // before shifting the 8px pattern, then fade its successor in, instead of
+  // instantly moving every white glint twice per second.
+  float rippleCycle=uTime*.65;
+  float frame=floor(rippleCycle);
+  float ripplePosition=fract(rippleCycle);
+  float rippleFade=smoothstep(.0,.22,ripplePosition)*
+    (1.0-smoothstep(.78,1.0,ripplePosition));
   vec2 downstream=length(vFlow)>0.0?normalize(vFlow):vec2(0.0);
   ivec2 moving=ivec2(floor(pixel-downstream*frame));
   int col=int(mod(float(moving.x),32.0));
@@ -89,7 +96,7 @@ void main(){
     // into a wet lower pool. Sparse cap pixels travel with the flow rather
     // than stamping a bright circle across every waterfall or still basin.
     float stamp=fluidHash(floor(vWorld.xz*10.0)+vec2(19.0,73.0));
-    float pace=uLava<.5?2.4:.65;
+    float pace=uLava<.5?.9:.45;
     float tumble=fract(uTime*pace+stamp*.48);
     float sparkle=smoothstep(.08,.28,tumble)*
       (1.0-smoothstep(.68,.9,tumble));
@@ -106,16 +113,20 @@ void main(){
     vec3 deep=vec3(.075,.28,.32);
     vec3 shallow=vec3(.22,.49,.44);
     color=mix(deep,shallow,.36+.24*pool);
-    if(ripple==3)color=mix(color,vec3(.29,.55,.54),.25);
-    if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48);
-    if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72);
+    // Still pools do not blink; only a real moving downstream flow shifts
+    // water glints. Moving glints fade out at each 8px grid transition so
+    // they never teleport and look like water-surface jitter.
+    float movingGlint=length(downstream)>.001?rippleFade:.65;
+    if(ripple==3)color=mix(color,vec3(.29,.55,.54),.25*movingGlint);
+    if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48*movingGlint);
+    if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72*movingGlint);
     color*=mix(.87,1.0,top);
     if(vFaceMode==2) {
       // A real downstream wet column is lower. Vertical, pixel-quantized
       // light strokes follow the falling sheet, never a generic pool wall.
       vec2 across=vec2(-downstream.y,downstream.x);
       float strip=floor(dot(vWorld.xz,across)*10.0);
-      float phase=fract(uTime*1.3+
+      float phase=fract(uTime*.7+
         fluidHash(vec2(strip,91.0))*.75+.2*vWorld.y);
       float bead=smoothstep(.03,.17,phase)*
         (1.0-smoothstep(.42,.67,phase));
@@ -131,12 +142,12 @@ void main(){
         vec2(-downstream.y,downstream.x))*5.0);
       // Continuous phase anchored to world coordinates, not a different
       // random flash for each one-metre waterfall column on every frame.
-      float phase=fract(uTime*1.3+
+      float phase=fract(uTime*.7+
         fluidHash(vec2(acrossLane,37.0))*.6-.25*vWorld.y);
       float line=smoothstep(.08,.22,phase)*
         (1.0-smoothstep(.55,.78,phase));
       color=mix(color,vec3(.46,.67,.65),.33+.18*(1.0-fall));
-      color=mix(color,vec3(.67,.79,.73),line*.15);
+      color=mix(color,vec3(.67,.79,.73),line*.10);
     } else if(vFaceMode==3) {
       // Subtle broken glint at the lip, not a bright 1m-wide foam stripe.
       vec2 local=fract(vWorld.xz);
