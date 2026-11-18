@@ -88,6 +88,7 @@ const staticOcclusionEnabled=localLightingEnabled&&
   new URLSearchParams(location.search).get('staticOcclusion')!=='off';
 const playQuery=new URLSearchParams(location.search);
 const spriteEmissionEnabled=localLightingEnabled&&playQuery.get('spriteEmission')!=='off';
+const fluidEmissionEnabled=localLightingEnabled&&playQuery.get('fluidEmission')!=='off';
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
@@ -2118,7 +2119,8 @@ function frame(now) {
             showLanding:playFluidLandingEnabled,
             showParcels:playFluidParcelsEnabled,
             lightingEnvironment:localLightingEnabled?playLightingEnvironment:null,
-            transientLights:localLightingEnabled?playSpellLights:null});
+            transientLights:localLightingEnabled?playSpellLights:null,
+            lightingField:fluidEmissionEnabled?lightingField:null});
           if(paintForest)paintForest(forestContext,view,localLightingEnabled?playLightingEnvironment.ambient:null);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
@@ -2441,6 +2443,10 @@ if(playMode) {
           sourceCells:playStaticEmissiveCells.length,...playLighting.statistics},
         spriteEmission:{enabled:spriteEmissionEnabled,
           validField:Boolean(playVisibleLightingField?.hasEmission)},
+        fluidEmission:{enabled:fluidEmissionEnabled,
+          validField:Boolean(playVisibleLightingField?.hasEmission),
+          uploads:playFluidVisual?.stats.lightingUploads??0,
+          gpuBytes:playFluidVisual?.stats.lightingTextureBytes??0},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
