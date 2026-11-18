@@ -31,3 +31,37 @@ export function projectCanopyReceivers(tree,mask,sun=HUNT_SUN_CAST){
   }
   return result.slice(0,CANOPY_COLS*CANOPY_ROWS);
 }
+
+// Any physical volume can cast toward the same sun without sprite artwork.
+// World Objects owns the collider bounds; Lighting only projects read-only
+// descriptors. A building/rock/procedural shape requires no type-specific code.
+export function projectVolumeReceivers(caster,sun=HUNT_SUN_CAST){
+  const bounds=caster?.bounds;
+  const min=bounds?.min,max=bounds?.max;
+  if(!Array.isArray(min)||!Array.isArray(max)||min.length!==3||max.length!==3||
+    !min.every(Number.isFinite)||!max.every(Number.isFinite)||
+    min.some((v,i)=>v>=max[i])||!Number.isFinite(caster.y))return [];
+  const columns=4,rows=4,top=max[1],height=top-caster.y;
+  if(height<.6)return []; // L10-05 provides tiny-object contact grounding.
+  const result=[];
+  for(let z=0;z<rows;z++)for(let x=0;x<columns;x++){
+    const sourceX=min[0]+(x+.5)*(max[0]-min[0])/columns;
+    const sourceZ=min[2]+(z+.5)*(max[2]-min[2])/rows;
+    result.push({
+      source:[sourceX,top,sourceZ],
+      x:sourceX+height*sun.x,z:sourceZ+height*sun.z,height,
+      width:Math.max(.18,(max[0]-min[0])/columns),
+      depth:Math.max(.18,(max[2]-min[2])/rows*.9),
+      alpha:.29
+    });
+  }
+  return result;
+}
+
+export function projectDirectionalReceivers(caster,mask,sun=HUNT_SUN_CAST){
+  if(caster?.silhouette||caster?.sprite){
+    const sprite=caster.silhouette??caster.sprite;
+    return projectCanopyReceivers({...caster,sprite},mask,sun);
+  }
+  return projectVolumeReceivers(caster,sun);
+}
