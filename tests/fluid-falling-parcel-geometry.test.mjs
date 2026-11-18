@@ -67,3 +67,42 @@ test('one real parcel uses bounded mesh allocation even with dynamic 3D fall geo
     m.indices.byteLength;
   assert.ok(bytes<2*1024*1024);
 });
+
+test('a rising lower pool submerges airborne droplets without crashing Play Hunt',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:1,minZ:0,maxZ:0},
+    floorAt:x=>x===0?2:0,
+    initial:[{x:0,z:0,depth:10}],
+    sources:[{x:1,z:0,surfaceY:5,rate:10}]
+  });
+  fluid.step({budget:2});
+  assert.equal(fluid.inFlightCount,1);
+  assert.equal(mesh(fluid).flightFaces,1);
+  fluid.step({budget:2});
+  fluid.step({budget:2});
+  const snapshot=fluid.snapshotSurface();
+  assert.equal(fluid.inFlightCount,1);
+  assert.ok(snapshot.flights[0].landingY>=snapshot.flights[0].startY,
+    'the lower pool has risen above the launch point during parcel flight');
+  const volume=fluid.totalDepth;
+  const rendered=mesh(fluid);
+  assert.equal(rendered.flightFaces,0,'submerged spray must be culled, not drawn through a pool');
+  assert.equal(rendered.submergedFlightCount,1);
+  assert.equal(fluid.totalDepth,volume,'rendering may not remove or duplicate in-flight units');
+});
+
+test('a source can hold 40cm water above its physical voxel riverbed',()=>{
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:0,minZ:0,maxZ:0},
+    floorAt:()=>2,
+    sources:[{x:0,z:0,surfaceY:2.4,rate:3}]
+  });
+  for(let i=0;i<4;i++)fluid.step({budget:1});
+  assert.equal(fluid.sample(0,0).depth,4);
+  assert.equal(fluid.sample(0,0).surfaceY,2.4);
+  assert.equal(fluid.snapshot().sources[0].surfaceDeci,24);
+  assert.throws(()=>new ColumnFluidEngine({
+    bounds:{minX:0,maxX:0,minZ:0,maxZ:0},floorAt:()=>2,
+    sources:[{x:0,z:0,surfaceY:2.45,rate:3}]
+  }),/10cm fluid grid/);
+});
