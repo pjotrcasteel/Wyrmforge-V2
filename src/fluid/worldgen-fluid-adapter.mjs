@@ -9,6 +9,7 @@ export const WORLDGEN_FLUID_SCHEMA='wyrmforge.fluid-worldgen-adapter.v1';
 const MAX_VERTICAL_SCAN=128;
 const MAX_CHANNEL_CELLS=4096;
 const DEFAULT_SOURCE_RATE=3;
+export const DEFAULT_CHANNEL_DEPTH_UNITS=4; // 40cm: water sits well below the grass bank
 
 function assertBounds(footprint){
   const {minX,maxX,minZ,maxZ,minY,maxY}=footprint??{};
@@ -55,7 +56,7 @@ export function createFluidTerrainFloorQuery(footprint,terrain){
 // The WorldGen endpoint closest to its first authored node is the upstream
 // source. No source is synthesized for empty or unsupported channel recipes.
 export function createWorldGenFluidEngine(layout,terrain,{
-  sourceRate=DEFAULT_SOURCE_RATE,initialDepth=10
+  sourceRate=DEFAULT_SOURCE_RATE,initialDepth=DEFAULT_CHANNEL_DEPTH_UNITS
 }={}){
   const footprint=assertBounds(layout?.footprint);
   const channels=layout?.riverChannels;
@@ -156,10 +157,10 @@ export function createWorldGenFluidEngine(layout,terrain,{
     },
     floorAt,kind:channel.kind,initial,
     sources:mouth.map(({x,z})=>({
-      x,z,surfaceY:floorAt(x,z)+1,rate:sourceRate
+      x,z,surfaceY:floorAt(x,z)+initialDepth/10,rate:sourceRate
     })),
     outlets:exits.map(({x,z})=>({
-      x,z,surfaceY:floorAt(x,z)+1,
+      x,z,surfaceY:floorAt(x,z)+initialDepth/10,
       rate:Math.min(10,Math.max(sourceRate,
         Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
     })),
@@ -172,7 +173,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
     channelCellCount:floorCells.size,
     inletCellCount:mouth.length,
     outletCellCount:exits.length,
-    currentCellCount:currents.length
+    currentCellCount:currents.length,
+    channelDepthUnits:initialDepth
   });
 }
 
