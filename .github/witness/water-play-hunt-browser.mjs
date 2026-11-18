@@ -92,10 +92,24 @@ try{
       throw new Error('Real Fireball-style bank edit '+(shot+1)+' removed no solid voxels');
     }
     edits.push(edit);
-    await page.waitForFunction(initial=>{
-      const state=window.__WyrmforgeFluidTest?.status();
-      return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
-    },atRest,{timeout:120000});
+    try{
+      await page.waitForFunction(initial=>{
+        const state=window.__WyrmforgeFluidTest?.status();
+        return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
+      },atRest,{timeout:60000});
+    }catch(error){
+      const diagnostic=await page.evaluate(()=>({
+        status:window.__WyrmforgeFluidTest?.status()??null,
+        hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,900)??null
+      }));
+      console.error('FLUID_BROWSER_IMPACT_TIMEOUT '+JSON.stringify({
+        shot,atRest,edit,diagnostic,pageErrors:report.errors
+      }));
+      await page.screenshot({
+        path:artifacts+'/impact-stall-'+(shot+1)+'.jpeg',type:'jpeg',quality:66
+      });
+      throw error;
+    }
     const state=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
     if(state.fluidMeshBytes>2*1024*1024){
       throw new Error('Fluid GPU mesh exceeded the independent 2MiB budget');
@@ -263,6 +277,50 @@ try{
   if(airborne.units<1||parcelVisiblePixels<8||parcelChangedPixels<4){
     throw new Error('Real in-air fluid volume was invisible to Hunt: '+
       JSON.stringify(report.airborneVisual));
+  }
+  // The owner's regression is *shooting the river rock*, not just
+  // breaching dry banks. Use the same in-game edit path on a genuinely wet
+  // WorldGen stone lip; check it stays covered and the waterfall persists
+  // at two later, separate physical simulation checkpoints.
+  const rockBefore=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
+  if(rockBefore.stoneLipCount<1){
+    throw new Error('No authored physical waterfall stone ledge was found');
+  }
+  await page.screenshot({path:artifacts+'/stone-lip-before.jpeg',type:'jpeg',quality:67});
+  const lipEdit=await page.evaluate(()=>window.__WyrmforgeFluidTest.breachLip());
+  if(!lipEdit?.removedVoxels)throw new Error(
+    'Real Fireball failed to remove solid rock within the actual river lip');
+  const rockCheckpoints=[];
+  for(const additionalTicks of [65,130]){
+    await page.waitForFunction(({base,extra})=>{
+      const s=window.__WyrmforgeFluidTest?.status();
+      return Boolean(s&&!s.busy&&s.steps>=base+extra);
+    },{base:rockBefore.steps,extra:additionalTicks},{timeout:120000});
+    rockCheckpoints.push(await page.evaluate(()=>window.__WyrmforgeFluidTest.status()));
+  }
+  await page.screenshot({path:artifacts+'/stone-lip-after.jpeg',type:'jpeg',quality:67});
+  report.riverRock={before:rockBefore,edit:lipEdit,checkpoints:rockCheckpoints};
+  console.log('FLUID_BROWSER_RIVER_ROCK '+JSON.stringify({
+    before:{
+      stoneLipCount:rockBefore.stoneLipCount,
+      coveredStoneLips:rockBefore.coveredStoneLips,
+      waterfallFaces:rockBefore.waterfallFaces
+    },removedVoxels:lipEdit.removedVoxels,
+    checkpoints:rockCheckpoints.map(item=>({
+      steps:item.steps,stoneLipCount:item.stoneLipCount,
+      coveredStoneLips:item.coveredStoneLips,
+      exposedStoneLips:item.exposedStoneLips,
+      waterfallFaces:item.waterfallFaces,
+      drainedWater:item.drainedWater
+    }))
+  }));
+  for(const sample of rockCheckpoints){
+    if(sample.stoneLipCount<1||
+        sample.coveredStoneLips<Math.ceil(sample.stoneLipCount*.8)||
+        sample.waterfallFaces<1){
+      throw new Error('River rock stays exposed or the genuine waterfall stops: '+
+        JSON.stringify(report.riverRock));
+    }
   }
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect

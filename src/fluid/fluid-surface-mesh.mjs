@@ -7,7 +7,7 @@ import {FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs'
 export const FLUID_SHORE_MICRO_STEPS=10;
 const CELL_EPSILON=.006;
 const SMOOTH_HEAD_DIFFERENCE=.5;
-export const FLUID_FALL_MIN_DROP=.75;
+export const FLUID_FALL_MIN_DROP=.2;
 export const FLUID_FALL_RIBBON_SECTIONS=2;
 // Sparse 10cm surface chips around the impact. The pattern is asymmetric,
 // giving pixel-art spray without an obviously repeating circular stamp.
@@ -89,17 +89,23 @@ function microShoreCaps(x,z,shore,height){
 // water walls at every 1m tile seam. A real cliff/large drop stays vertical.
 function cornerHead(x,z,cell,at){
   const values=[];
+  let highestSolid=-Infinity;
   for(let dz=-1;dz<=0;dz++)for(let dx=-1;dx<=0;dx++){
     const near=at(x+dx,z+dz);
     if(near?.depth>0&&Number.isFinite(near.surfaceY)){
       values.push(near.surfaceY);
+      highestSolid=Math.max(highestSolid,near.floorY);
     }
   }
   if(!values.length)return cell.surfaceY;
   const min=Math.min(...values),max=Math.max(...values);
-  return max-min<=SMOOTH_HEAD_DIFFERENCE
-    ?values.reduce((sum,value)=>sum+value,0)/values.length
-    :cell.surfaceY;
+  if(max-min>SMOOTH_HEAD_DIFFERENCE)return cell.surfaceY;
+  // Never smooth liquid *inside* a neighboring wet stone roof. Previously a
+  // 2.1m / 1.8m shallow join averaged to 1.95m and the rock at 2m occluded
+  // the water. Shared corners use the same highest actual wet solid floor,
+  // keeping the surface continuous and visibly above the stone lip.
+  const average=values.reduce((sum,value)=>sum+value,0)/values.length;
+  return Math.max(average,highestSolid+0.1);
 }
 
 export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
@@ -114,6 +120,15 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     throw new RangeError('Invalid fluid resident bounds');
   }
 
+  // An actual falling packet is sufficient physical evidence of a live
+  // waterfall even before its lower receiving pool becomes wet. The old
+  // renderer hid the curtain whenever neighbor.depth===0 during transit.
+  const flights=surface.flights??[];
+  if(!Array.isArray(flights)||flights.length>256){
+    throw new RangeError('Invalid bounded real falling-fluid handoff');
+  }
+  const activeFlightEdges=new Set(flights.map(flight=>
+    key(flight.x,flight.z)+'>'+key(flight.toX,flight.toZ)));
   const cache=new Map();
   const at=(x,z)=>{
     if(x<minX||x>maxX||z<minZ||z>maxZ)return null;
@@ -166,10 +181,17 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     // This is an existing physical lip with a lower, already wet receiving
     // column. Render a flowing fall only when Water V2 publishes that actual
     // downstream direction. A tall wall around a still pool is not a waterfall.
-    const isRealFall=(side,neighbor)=>Boolean(neighbor?.depth>0 &&
+    const isRealFall=(side,neighbor)=>Boolean(neighbor &&
       c.floorY>neighbor.floorY &&
-      c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP &&
-      c.flowX===side.dx && c.flowZ===side.dz);
+      (activeFlightEdges.has(key(x,z)+'>'+key(x+side.dx,z+side.dz)) ||
+        (neighbor.depth>0 &&
+          ((c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP-1e-6 &&
+            c.flowX===side.dx&&c.flowZ===side.dz) ||
+            // A real WorldGen river current can carry liquid across a
+            // physical ledge at nearly equal water heads. Rendering must
+            // honor that actual conservative transfer, not hide its fall.
+            (c.currentX===side.dx&&c.currentZ===side.dz&&
+              c.surfaceY>=neighbor.surfaceY-.100001)))));
     const fallingIndex=DIRECTIONS.findIndex((side,i)=>isRealFall(side,neighbors[i]));
     const hasFallingEdge=fallingIndex>=0;
 
@@ -195,16 +217,16 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       if(!neighbor||!Number.isFinite(neighbor.floorY))continue;
       // Small adjacent wet-level differences were joined by the corner
       // interpolation: no extra dark water wall between those caps.
-      if(neighbor.depth>0&&
+      const waterfall=isRealFall(side,neighbor);
+      if(neighbor.depth>0&&!waterfall&&
           Math.abs(c.surfaceY-neighbor.surfaceY)<=SMOOTH_HEAD_DIFFERENCE){
         continue;
       }
-      const waterfall=isRealFall(side,neighbor);
       // Only falling, connected water is allowed to extend below the upper
       // *solid floor* to the actual lower pool's surface. Other side walls
       // retain their original solid-floor clamp.
-      const lower=waterfall?neighbor.surfaceY:Math.max(c.floorY,
-        neighbor.depth>0?neighbor.surfaceY:neighbor.floorY);
+      const landingHead=neighbor.depth>0?neighbor.surfaceY:neighbor.floorY;
+      const lower=waterfall?landingHead:Math.max(c.floorY,landingHead);
       const a=side.dx!==0
         ?[side.dx===1?x+1:x,z]
         :[x,side.dz===1?z+1:z];
@@ -225,7 +247,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
         :quad;
       pushFace(visibleQuad,side.normal,flow,{
         mode:waterfall?2:1,
-        landingY:waterfall?neighbor.surfaceY:0
+        landingY:waterfall?landingHead:0
       });
       sideFaces++;
       if(waterfall){
@@ -237,7 +259,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
         const edgeX=x+.5+side.dx*.5,edgeZ=z+.5+side.dz*.5;
         const acrossX=-side.dz,acrossZ=side.dx;
         const high=(ha+hb)*.5+.024;
-        const low=neighbor.surfaceY+.026;
+        const low=landingHead+.026;
         const offsets=[-.1,.2,.6];
         const elevations=[high,Math.max(low+.08,high-.24),low];
         const bands=[-.4,-.2,0,.2,.4];
@@ -254,13 +276,14 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
               point(offsets[span+1],u,elevations[span+1]),
               point(offsets[span+1],v,elevations[span+1]),
               point(offsets[span],v,elevations[span])
-            ],[0,1,0],flow,{mode:4,landingY:neighbor.surfaceY});
+            ],[0,1,0],flow,{mode:4,landingY:landingHead});
             fallRibbonFaces++;
           }
         }
-        // The landing is *the lower cell's actual wet surface*, never a
-        // decorative puddle on dry ground. Small 10cm foam chips form an
-        // asymmetric burst across its 1m pool cap and move in the shader.
+        // Foam belongs only to an ACTUALLY wet lower pool. Falling parcels
+        // can display their moving curtain above a dry receiving crater,
+        // but must not invent a splash where liquid has not yet landed.
+        if(neighbor.depth>0){
         const poolX=x+side.dx+.5,poolZ=z+side.dz+.5;
         const splashY=neighbor.surfaceY+.036;
         const impact=(u,v)=>[
@@ -281,6 +304,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
           });
           landingSplashFaces++;
         }
+        }
       }
     }
   }
@@ -290,10 +314,6 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   // Real solver-owned parcels occupy space between two columns. A parcel
   // never appears for a mere static height difference: only actual fluid
   // units removed from the source and pending arrival are rendered here.
-  const flights=surface.flights??[];
-  if(!Array.isArray(flights)||flights.length>256){
-    throw new RangeError('Invalid bounded real falling-fluid handoff');
-  }
   for(const parcel of flights){
     const {x,z,toX,toZ,units,progress,startY,landingY}=parcel??{};
     const dx=toX-x,dz=toZ-z;

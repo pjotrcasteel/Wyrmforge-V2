@@ -1491,16 +1491,70 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             bottom:rect.top+bounds.bottom*rect.height/view.height
           }));
         },
+        stoneLips(){
+          const channel=generatedSite.layout.riverChannels[0];
+          const authored=new Set(channel.floor.map(cell=>cell.x+','+cell.z));
+          const lips=[];
+          for(const cell of channel.floor){
+            const current=playFluid.sample(cell.x,cell.z);
+            if(!current)continue;
+            for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+              if(!authored.has((cell.x+dx)+','+(cell.z+dz)))continue;
+              const lower=playFluid.sample(cell.x+dx,cell.z+dz);
+              if(lower&&current.floorY-lower.floorY>=1){
+                lips.push({
+                  x:cell.x,z:cell.z,floorY:current.floorY,
+                  depth:current.depth,downX:dx,downZ:dz,
+                  lowerDepth:lower.depth
+                });
+                break;
+              }
+            }
+          }
+          return lips;
+        },
+        breachLip(){
+          const bounds=generatedSite.layout.footprint;
+          const candidates=this.stoneLips().filter(lip=>
+            lip.depth>0&&lip.x>bounds.minX+3&&lip.x<bounds.maxX-3&&
+            lip.z>bounds.minZ+3&&lip.z<bounds.maxZ-3);
+          candidates.sort((a,b)=>a.z-b.z||a.x-b.x);
+          const lip=candidates[0];
+          if(!lip)throw new Error('No physically wet WorldGen stone lip to breach');
+          const target={x:lip.x,z:lip.z,y:lip.floorY-1,radius:1.35,depth:2};
+          const result=impactSpan(target);
+          return result?{
+            removedVoxels:result.removedVoxels,target,
+            changedBounds:result.changedBounds
+          }:null;
+        },
         status(){
           const channel=generatedSite.layout.riverChannels[0];
           const authored=new Set(channel.floor.map(c=>c.x+','+c.z));
           const wet=playFluid.snapshotSurface().cells;
+          const stoneLips=this.stoneLips();
+          const dryStoneLips=stoneLips.filter(lip=>lip.depth===0);
           return {
             kind:playFluid.kind,steps:playFluid.steps,
             busy:Boolean(pendingEdit||pendingMesh||renderer.pendingUploads||streamingBusy()||errorMessage),
+            busyReasons:{
+              pendingEdit:Boolean(pendingEdit),
+              pendingMesh:Boolean(pendingMesh),
+              pendingUploads:Boolean(renderer.pendingUploads),
+              streaming:Boolean(streamingBusy()),
+              errorMessage:errorMessage||null,
+              awaitingPlayContext:Boolean(awaitingPlayContext),
+              restoring:Boolean(restoring)
+            },
             breachCount:witnessedBreaches.length,
             wetColumns:wet.length,
             wetBeyondChannel:wet.filter(c=>!authored.has(c.x+','+c.z)).length,
+            stoneLipCount:stoneLips.length,
+            coveredStoneLips:stoneLips.length-dryStoneLips.length,
+            exposedStoneLips:dryStoneLips.slice(0,6).map(lip=>[lip.x,lip.z]),
+            inletCells:seeded.inletCellCount,
+            outletCells:seeded.outletCellCount,
+            drainedWater:playFluid.totalDrained,
             worldRevision:active.world.revision,
             liveFluidTexture:Boolean(playLava?.count),
             presentedCells:playLava?.count??0,
