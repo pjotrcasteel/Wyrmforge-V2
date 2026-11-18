@@ -140,7 +140,6 @@ test('real Voxel 3D DDA casts a canopy shadow onto visible vertical cliff faces'
   const port=physicalCliff();
   const cache=new TerrainDirectionalShadowCache(()=>mask());
   const stamps=completedShadow(cache,port);
-  assert.ok(stamps.some(s=>s.face==='ground'),'grass still receives the sky cast');
   const cliff=stamps.filter(s=>s.face==='cliff');
   assert.ok(cliff.length>0,'true raised voxel wall must receive part of the cast');
   assert.ok(cliff.every(s=>s.y>5&&s.y<=9),'cliff stamps belong to the actual wall elevation');
@@ -176,4 +175,15 @@ test('physical changes to a wall rebuild shadow geometry with no stale cliff pix
   assert.ok(after.length>0);
   assert.equal(after.filter(s=>s.face==='cliff').length,0,
     'removed cliff casts cannot remain pinned to empty air');
+});
+
+test('real flat Voxel ground independently receives sun-lit canopy stamps',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  for(let x=-14;x<=6;x++)for(let z=-12;z<=7;z++)world.set(x,4,z,3);
+  const port={epoch:1,raycast:options=>raycastTerrain(world,options)};
+  const cache=new TerrainDirectionalShadowCache(()=>mask());
+  const stamps=completedShadow(cache,port);
+  assert.ok(stamps.length>6,'ground and camera both have physical receivers');
+  assert.ok(stamps.every(s=>s.face==='ground'));
+  assert.ok(stamps.every(s=>Math.abs(s.y-5.045)<.01));
 });
