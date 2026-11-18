@@ -47,6 +47,20 @@ test('validates local assets and rejects escaping or missing HTML resources',()=
 });
 
 
+test('project-rooted Pages links resolve inside the repo but reject sibling and traversal URLs',()=>{
+  const root=fixture('export const x=1;');
+  try {
+    writeFileSync(join(root,'play-hunt.html'),'<h1>Hunt</h1>');
+    const prefix='/'+root.split('/').at(-1)+'/';
+    writeFileSync(join(root,'404.html'),'<a href="'+prefix+'play-hunt.html">Play</a>');
+    assert.deepEqual(auditV2Dependencies(root).issues,[]);
+    writeFileSync(join(root,'404.html'),'<a href="/other-project/play-hunt.html">Wrong root</a>');
+    assert.match(auditV2Dependencies(root).issues.join('\\n'),/root-absolute asset outside project/);
+    writeFileSync(join(root,'404.html'),'<a href="'+prefix+'../../etc/passwd">Escape</a>');
+    assert.match(auditV2Dependencies(root).issues.join('\\n'),/escapes repository/);
+  }finally {rmSync(root,{recursive:true,force:true});}
+});
+
 test('literal dynamic imports obey the same V2 clean-room rules',()=>{
   const dynamic = specifier => "const load=()=>im" + "port('" + specifier + "');";
   const root=fixture(dynamic('./src/engine.mjs'));
