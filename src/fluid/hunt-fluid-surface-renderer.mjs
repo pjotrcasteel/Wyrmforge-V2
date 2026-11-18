@@ -3,6 +3,7 @@ import {terrainColorTransferGlsl} from '../terrain-color-space.mjs';
 import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transient-lighting.mjs';
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
+import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
 // Uses one small program/VAO. Never writes voxels or changes terrain textures.
@@ -30,8 +31,12 @@ out vec3 vNormal;
 out vec2 vFlow;
 flat out int vFaceMode;
 out float vLandingY;
+out vec3 vStaticIrradiance;
+${STATIC_FIELD_EMISSION_GLSL}
 void main(){
   vec3 world=aPosition;
+  // Vertex-side lookups: four cells per vertex, never per foam/glint pixel.
+  vStaticIrradiance=staticFieldIrradiance(world);
   vec2 pixel=vec2(dot(world,uCameraRight),dot(world,uCameraDown))*uScale
     +uViewport*.5+uPan;
   gl_Position=vec4(pixel.x*2.0/uViewport.x-1.0,
@@ -52,6 +57,7 @@ in vec3 vNormal;
 in vec2 vFlow;
 flat in int vFaceMode;
 in float vLandingY;
+in vec3 vStaticIrradiance;
 uniform float uTime;
 uniform float uRippleFrame;
 uniform float uRippleFade;
@@ -67,12 +73,19 @@ ${SURFACE_GLSL}
 ${TRANSIENT_LIGHTING_GLSL}
 uniform vec3 uLightingAmbient;
 vec3 litFluidColor(vec3 color){
-  // Molten display colour already includes self emission; keep it unchanged.
-  if(uLava>.5)return color;
-  if(uTransientLightCount==0&&all(equal(uLightingAmbient,vec3(1.0))))return color;
   vec3 albedo=srgbToLinearColor(color);
+  if(uTransientLightCount==0&&all(equal(uLightingAmbient,vec3(1.0)))&&
+      (uLava>.5||length(vStaticIrradiance)<.00001))return color;
   V2Surface surface=V2Surface(albedo,vNormal,vNormal,vec3(1.0,1.0,0.0),vec3(0.0),false,false);
-  return linearToSrgbColor(albedo*uLightingAmbient+transientIrradiance(surface,vWorld));
+  vec3 spell=transientIrradiance(surface,vWorld);
+  if(uLava>.5){
+    // Authored molten palette is predominantly self-emissive. Let the same
+    // environment shade its darker detail, without doubling its own spill.
+    return linearToSrgbColor(albedo*mix(vec3(1.0),uLightingAmbient,.18)+spell*.12);
+  }
+  // Actual Water, foam, sidewalls and falling parcels share the terrain's
+  // 24x24 occlusion-aware source, interpolated at physical vertex heights.
+  return linearToSrgbColor(albedo*(uLightingAmbient+vStaticIrradiance)+spell);
 }
 float fluidHash(vec2 point){
   return fract(sin(dot(point,vec2(127.1,311.7)))*43758.5453);
@@ -271,6 +284,10 @@ export class HuntFluidSurfaceRenderer {
   #program=null;
   #lightPositions=new Float32Array(8);
   #lightRadiance=new Float32Array(6);
+  #lightingTexture=null;
+  #lightingSource=null;
+  #lightingUploads=0;
+  #lightingUploadMs=0;
   #uniforms=null;
   #record=null;
   #mesh=null;
@@ -291,8 +308,10 @@ export class HuntFluidSurfaceRenderer {
     const gl=canvas.getContext('webgl2');
     if(!gl)throw new Error('Fluid surface requires the existing WebGL2 renderer');
     this.#gl=gl;
-    this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;};
-    this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;};
+    this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#lightingTexture=null;this.#lightingSource=null;};
+    this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#lightingTexture=null;this.#lightingSource=null;};
     canvas.addEventListener('webglcontextlost',this.#onLost);
     canvas.addEventListener('webglcontextrestored',this.#onRestored);
     this.canvas=canvas;
@@ -325,7 +344,10 @@ export class HuntFluidSurfaceRenderer {
       gpuUploadMs:this.#gpuUploadMs,
       gpuUploadCount:this.#gpuUploadCount,
       gpuAllocatedBytes:this.#record?.capacities.reduce(
-        (sum,bytes)=>sum+bytes,0)??0
+        (sum,bytes)=>sum+bytes,0)??0,
+      lightingTextureBytes:this.#lightingTexture?24*24*4*4:0,
+      lightingUploads:this.#lightingUploads,
+      lightingUploadMs:this.#lightingUploadMs
     });
   }
 
@@ -387,9 +409,18 @@ export class HuntFluidSurfaceRenderer {
     this.#record=null;
   }
 
+  #releaseLightingTexture(){
+    if(this.#lightingTexture&&!this.#lost&&!this.#gl.isContextLost()){
+      this.#gl.deleteTexture(this.#lightingTexture);
+    }
+    this.#lightingTexture=null;
+    this.#lightingSource=null;
+  }
+
   clear(){
     if(this.#disposed)return;
     this.#releaseBuffers();
+    this.#releaseLightingTexture();
     this.#mesh=null;
     this.#visualHistory.clear();
   }
@@ -455,7 +486,13 @@ export class HuntFluidSurfaceRenderer {
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
         depth:uniform('uCameraDepth'),time:uniform('uTime'),
         rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
-        ambient:uniform('uLightingAmbient'),lightCount:uniform('uTransientLightCount'),
+        ambient:uniform('uLightingAmbient'),
+        lightingField:uniform('uLightingField'),
+        lightingEnabled:uniform('uLightingFieldEnabled'),
+        lightingWarm:uniform('uLightingWarmEnabled'),
+        lightingOrigin:uniform('uLightingFieldOrigin'),
+        lightingEmission:uniform('uLightingEmissionColor'),
+        lightCount:uniform('uTransientLightCount'),
         lightPositions:uniform('uTransientPositions[0]'),lightRadiance:uniform('uTransientRadiance[0]'),
         lava:uniform('uLava'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
@@ -513,8 +550,43 @@ export class HuntFluidSurfaceRenderer {
     return true;
   }
 
+  #bindLightingField(field){
+    const gl=this.#gl,u=this.#uniforms;
+    const active=field?.hasEmission===true;
+    gl.uniform1i(u.lightingField,7);
+    gl.uniform1i(u.lightingEnabled,active?1:0);
+    gl.uniform1i(u.lightingWarm,active?1:0);
+    if(!active)return;
+    if(field.schema!=='wyrmforge.local-light-field.v2'||
+        field.size?.[0]!==24||field.size?.[1]!==24||
+        !(field.data instanceof Float32Array)||field.data.length!==24*24*4||
+        !field.data.every(Number.isFinite)||
+        field.origin?.length!==2||!field.origin.every(Number.isSafeInteger)||
+        field.emission?.length!==3||!field.emission.every(n=>Number.isFinite(n)&&n>=0&&n<=4)){
+      throw new TypeError('Invalid bounded fluid light-field receiver');
+    }
+    gl.activeTexture(gl.TEXTURE0+7);
+    this.#lightingTexture??=gl.createTexture();
+    if(!this.#lightingTexture)throw new Error('Could not allocate fluid lighting receiver');
+    gl.bindTexture(gl.TEXTURE_2D,this.#lightingTexture);
+    if(this.#lightingSource!==field){
+      const start=performance.now();
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,24,24,0,gl.RGBA,gl.FLOAT,field.data);
+      this.#lightingSource=field;
+      this.#lightingUploads++;
+      this.#lightingUploadMs=performance.now()-start;
+    }
+    gl.uniform2f(u.lightingOrigin,...field.origin);
+    gl.uniform3fv(u.lightingEmission,field.emission);
+  }
+
   render(view,{time=0,reducedMotion=false,showRibbons=true,
-    showLanding=true,showParcels=true,lightingEnvironment=null,transientLights=null}={}){
+    showLanding=true,showParcels=true,lightingEnvironment=null,transientLights=null,
+    lightingField=null}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -539,6 +611,7 @@ export class HuntFluidSurfaceRenderer {
     const lightCount=writeTransientLights(transientLights,this.#lightPositions,this.#lightRadiance);
     gl.uniform1i(u.lightCount,lightCount);
     if(lightCount){gl.uniform4fv(u.lightPositions,this.#lightPositions);gl.uniform3fv(u.lightRadiance,this.#lightRadiance);}
+    this.#bindLightingField(lightingField);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
@@ -563,6 +636,7 @@ export class HuntFluidSurfaceRenderer {
   dispose(){
     if(this.#disposed)return;
     this.#releaseBuffers();
+    this.#releaseLightingTexture();
     if(this.#program&&!this.#lost)this.#gl.deleteProgram(this.#program);
     this.#program=null;
     this.#mesh=null;

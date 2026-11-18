@@ -87,7 +87,7 @@ test('world epoch and terrain revision discard stale geometry and heights',()=>{
 test('WebGL local field uses the shared evaluated context and two physical elevations',()=>{
   const shader=assembleVoxelFragmentShader(LOCAL_FIELD_LIGHTING_GLSL);
   assert.match(shader,/if\(!uLightingFieldEnabled\)return base/);
-  assert.match(shader,/surface\.albedo\*emission\*warm/);
+  assert.match(shader,/surface\.albedo\*staticFieldIrradiance\(point\)/);
   assert.match(shader,/sideEnergy/);
   assert.match(shader,/topEnergy/);
   assert.match(shader,/topY-point\.y/);
