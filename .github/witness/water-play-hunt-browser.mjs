@@ -264,6 +264,50 @@ try{
     throw new Error('Real in-air fluid volume was invisible to Hunt: '+
       JSON.stringify(report.airborneVisual));
   }
+  // The owner's regression is *shooting the river rock*, not just
+  // breaching dry banks. Use the same in-game edit path on a genuinely wet
+  // WorldGen stone lip; check it stays covered and the waterfall persists
+  // at two later, separate physical simulation checkpoints.
+  const rockBefore=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
+  if(rockBefore.stoneLipCount<1){
+    throw new Error('No authored physical waterfall stone ledge was found');
+  }
+  await page.screenshot({path:artifacts+'/stone-lip-before.jpeg',type:'jpeg',quality:67});
+  const lipEdit=await page.evaluate(()=>window.__WyrmforgeFluidTest.breachLip());
+  if(!lipEdit?.removedVoxels)throw new Error(
+    'Real Fireball failed to remove solid rock within the actual river lip');
+  const rockCheckpoints=[];
+  for(const additionalTicks of [65,130]){
+    await page.waitForFunction(({base,extra})=>{
+      const s=window.__WyrmforgeFluidTest?.status();
+      return Boolean(s&&!s.busy&&s.steps>=base+extra);
+    },{base:rockBefore.steps,extra:additionalTicks},{timeout:120000});
+    rockCheckpoints.push(await page.evaluate(()=>window.__WyrmforgeFluidTest.status()));
+  }
+  await page.screenshot({path:artifacts+'/stone-lip-after.jpeg',type:'jpeg',quality:67});
+  report.riverRock={before:rockBefore,edit:lipEdit,checkpoints:rockCheckpoints};
+  console.log('FLUID_BROWSER_RIVER_ROCK '+JSON.stringify({
+    before:{
+      stoneLipCount:rockBefore.stoneLipCount,
+      coveredStoneLips:rockBefore.coveredStoneLips,
+      waterfallFaces:rockBefore.waterfallFaces
+    },removedVoxels:lipEdit.removedVoxels,
+    checkpoints:rockCheckpoints.map(item=>({
+      steps:item.steps,stoneLipCount:item.stoneLipCount,
+      coveredStoneLips:item.coveredStoneLips,
+      exposedStoneLips:item.exposedStoneLips,
+      waterfallFaces:item.waterfallFaces,
+      drainedWater:item.drainedWater
+    }))
+  }));
+  for(const sample of rockCheckpoints){
+    if(sample.stoneLipCount<1||
+        sample.coveredStoneLips<Math.ceil(sample.stoneLipCount*.8)||
+        sample.waterfallFaces<1){
+      throw new Error('River rock stays exposed or the genuine waterfall stops: '+
+        JSON.stringify(report.riverRock));
+    }
+  }
   const image=await (await import('node:fs/promises')).readFile(artifacts+'/forest-after.jpeg');
   // An inline, compressed copy allows the assistant to actually inspect
   // the browser output from CI logs, instead of claiming visual verification.
