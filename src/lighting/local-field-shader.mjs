@@ -5,13 +5,16 @@ uniform highp sampler2D uLightingField;
 uniform bool uLightingFieldEnabled;
 uniform bool uLightingWarmEnabled;
 uniform vec2 uLightingFieldOrigin;
+uniform vec3 uLightingAmbient;
 vec4 lightingColumn(ivec2 cell){
   ivec2 at=cell-ivec2(uLightingFieldOrigin);
   if(any(lessThan(at,ivec2(0)))||any(greaterThanEqual(at,textureSize(uLightingField,0))))return vec4(0.0);
   return texelFetch(uLightingField,at,0);
 }
 vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context){
-  vec3 base=evaluateBaselineLighting(surface,context);
+  // Ambient belongs to the entire scene, not the moving field footprint.
+  // Keep emitted energy independent of ambient attenuation.
+  vec3 base=(evaluateBaselineLighting(surface,context)-surface.emission)*uLightingAmbient+surface.emission;
   if(!uLightingFieldEnabled)return base;
   vec3 point=context.position;
   // Read the occupied side of the actual exposed face.

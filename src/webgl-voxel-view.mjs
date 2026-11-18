@@ -1,3 +1,4 @@
+import {LIGHTING_ENVIRONMENT_SCHEMA} from './lighting/environment-contract.mjs';
 import {SURFACE_GLSL} from './materials/surface-contract.mjs';
 import {LIGHTING_CONTEXT_GLSL,BASELINE_LIGHTING_GLSL,validateLightingShader} from './lighting/baseline-lighting.mjs';
 import {FIRE_TERRAIN_MATERIAL_GLSL} from './fire-terrain-material.mjs';
@@ -894,6 +895,7 @@ export class WebGLVoxelView {
       lightingField:gl.getUniformLocation(this.#program,'uLightingField'),
       lightingEnabled:gl.getUniformLocation(this.#program,'uLightingFieldEnabled'),
       lightingWarm:gl.getUniformLocation(this.#program,'uLightingWarmEnabled'),
+      lightingAmbient:gl.getUniformLocation(this.#program,'uLightingAmbient'),
       lightingOrigin:gl.getUniformLocation(this.#program,'uLightingFieldOrigin'),
       huntLavaEnabled: gl.getUniformLocation(this.#program,'uHuntLavaEnabled'),
       huntLavaOrigin: gl.getUniformLocation(this.#program,'uHuntLavaOrigin'),
@@ -1132,7 +1134,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1200,6 +1202,14 @@ export class WebGLVoxelView {
     }
     gl.uniform1f(this.#uniforms.labTime,labTime);
     this.#bindHuntLava(huntLava);
+    if(lightingEnvironment&&lightingEnvironment.schema!==LIGHTING_ENVIRONMENT_SCHEMA){
+      throw new TypeError('Unsupported lighting environment schema');
+    }
+    const ambient=lightingEnvironment?.ambient??[1,1,1];
+    if(ambient.length!==3||!ambient.every(n=>Number.isFinite(n)&&n>=0&&n<=2)){
+      throw new TypeError('Invalid lighting environment');
+    }
+    gl.uniform3fv(this.#uniforms.lightingAmbient,ambient);
     this.#bindLightingField(lightingField);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);

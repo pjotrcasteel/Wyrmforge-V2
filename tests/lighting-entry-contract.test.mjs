@@ -1,3 +1,4 @@
+import {defineLightingEnvironment} from '../src/lighting/environment-contract.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
@@ -44,7 +45,7 @@ test('renderer can independently assemble baseline and unlit lighting with one o
 
 test('new material and lighting contracts cannot transitively depend on mutable engines or GPU implementation',()=>{
   const root=fileURLToPath(new URL('../src/',import.meta.url));
-  const pending=['materials/surface-contract.mjs','lighting/light-contract.mjs','lighting/baseline-lighting.mjs'];
+  const pending=['materials/surface-contract.mjs','lighting/light-contract.mjs','lighting/baseline-lighting.mjs','lighting/environment-contract.mjs'];
   const visited=new Set();
   while(pending.length){
     const relative=pending.pop();
@@ -65,4 +66,16 @@ test('new material and lighting contracts cannot transitively depend on mutable 
         'existing owners must not acquire reverse lighting dependencies');
     }
   }
+});
+
+test('ambient environment is neutral in daylight, cooler in dim regions and immutable',()=>{
+  assert.deepEqual(defineLightingEnvironment().ambient,[1,1,1]);
+  const lair=defineLightingEnvironment({daylight:.45});
+  assert.ok(lair.ambient[0]<lair.ambient[1]&&lair.ambient[1]<lair.ambient[2]);
+  assert.ok(lair.ambient[0]>.7,'ambient still retains readable material detail');
+  const color=[.8,.9,1],copied=defineLightingEnvironment({ambient:color});
+  color[0]=0;assert.equal(copied.ambient[0],.8);
+  assert.ok(Object.isFrozen(copied.ambient));
+  for(const input of [{daylight:NaN},{daylight:-1},{ambient:[1,2,Infinity]},
+    {ambient:[1,1,3]}])assert.throws(()=>defineLightingEnvironment(input));
 });
