@@ -1012,7 +1012,7 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+(playFluidVisual?.stats.fallRibbonFaces??0)+' visible fall patches':'')+
+      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+playFluid.inFlightCount+' falling parcels':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1383,7 +1383,7 @@ function updateHuntRiverSurface() {
   const world=active.world;
   if(playFluid){
     if(playRiverWorld===world&&playRiverRevision===world.revision&&
-        playFluid.steps-playFluidSurfaceStep<8)return;
+        playFluid.steps-playFluidSurfaceStep<(playFluid.inFlightCount?4:8))return;
     const state=playFluid.snapshotSurface();
     playLava=huntFluidSurface(generatedSite.layout,world,state);
     playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
@@ -1497,6 +1497,9 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
             waterfallFaces:playFluidVisual?.stats.waterfallFaces??0,
             fallRibbonFaces:playFluidVisual?.stats.fallRibbonFaces??0,
+            inFlightCount:playFluid.inFlightCount,
+            inFlightUnits:playFluid.inFlightUnits,
+            travelingFluidFaces:playFluidVisual?.stats.flightFaces??0,
             landingSplashFaces:playFluidVisual?.stats.landingSplashFaces??0,
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
