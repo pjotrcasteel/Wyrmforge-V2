@@ -398,8 +398,9 @@ try{
   try{
     await page.waitForFunction(()=>{
       const state=window.__WyrmforgeStreamWaterTest?.status();
-      return Boolean(state&&!state.error&&state.activeRegions.length>=2&&
-        state.solverTicks>=3&&state.wetColumns>=8&&
+      return Boolean(state&&!state.error&&state.activeRegions.length>=3&&
+        state.activeRegions.some(id=>id.startsWith('link-'))&&
+        state.seamLinks===2&&state.solverTicks>=3&&state.wetColumns>=8&&
         state.topFaces>0&&state.fluidMeshBytes>0);
     },null,{timeout:90000});
   }catch(error){
@@ -413,6 +414,14 @@ try{
     throw new Error('Opt-in streamed Play Hunt has no physically rendered river: '+
       JSON.stringify(report.streamedStart)+' | '+error.message);
   }
+  await page.waitForFunction(()=>{
+    const state=window.__WyrmforgeStreamWaterTest?.status();
+    return state&&!state.error&&state.seamTransferred>0;
+  },null,{timeout:90000}).catch(async error=>{
+    const state=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest?.status()??null);
+    throw new Error('Actual 8m river connector never transferred physical water: '+
+      JSON.stringify(state)+' | '+error.message);
+  });
   report.streamedHunt=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
   await page.screenshot({path:artifacts+'/streamed-hunt-water.jpeg',type:'jpeg',quality:67});
   console.log('FLUID_STREAMED_HUNT_PASS '+JSON.stringify(report.streamedHunt));
