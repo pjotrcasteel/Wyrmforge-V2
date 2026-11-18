@@ -1,7 +1,9 @@
 // Water V2 ↔ WorldGen/Voxel contract adapter.
 // No generator, material renderer, private Voxel data or browser dependencies.
 // Create only after the terrain port has a fully resident site loaded.
-import {ColumnFluidEngine,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs';
+import {
+  ColumnFluidEngine,MAX_FLUID_COLUMNS,MAX_FLUID_SOURCES
+} from './column-fluid-engine.mjs';
 
 export const WORLDGEN_FLUID_SCHEMA='wyrmforge.fluid-worldgen-adapter.v1';
 const MAX_VERTICAL_SCAN=128;
@@ -81,6 +83,24 @@ export function createWorldGenFluidEngine(layout,terrain,{
   if(!floorCells.has(signedKey(source.x,source.z))){
     throw new Error('WorldGen upstream source must lie on an authored channel');
   }
+  // Keep the authored river's real upstream mouth wetted, rather than a
+  // single sparse cell in a potentially four-metre-wide stream. These bounded
+  // inlets are drawn only from the upstream cross-section of actual WorldGen
+  // river-bed cells: no groundwater, downstream teleport or invented terrain.
+  const next=channel.nodes?.[1]??source;
+  const alongX=Math.sign(next.x-source.x),alongZ=Math.sign(next.z-source.z);
+  const mouth=[...floorCells.values()]
+    .filter(cell=>{
+      const dx=cell.x-source.x,dz=cell.z-source.z;
+      const projection=dx*alongX+dz*alongZ;
+      return dx*dx+dz*dz<=4&&projection<=0;
+    })
+    .sort((a,b)=>{
+      const ax=a.x-source.x,az=a.z-source.z;
+      const bx=b.x-source.x,bz=b.z-source.z;
+      return ax*ax+az*az-(bx*bx+bz*bz)||a.z-b.z||a.x-b.x;
+    })
+    .slice(0,MAX_FLUID_SOURCES);
   // All water/lava starts with a finite volume, seeded against actual solid
   // terrain instead of pretending the WorldGen channel descriptor is current.
   const initial=[...floorCells.values()].map(({x,z})=>({x,z,depth:initialDepth}));
@@ -90,16 +110,16 @@ export function createWorldGenFluidEngine(layout,terrain,{
       minZ:footprint.minZ,maxZ:footprint.maxZ
     },
     floorAt,kind:channel.kind,initial,
-    sources:[{
-      x:source.x,z:source.z,surfaceY:floorAt(source.x,source.z)+1,
-      rate:sourceRate
-    }]
+    sources:mouth.map(({x,z})=>({
+      x,z,surfaceY:floorAt(x,z)+1,rate:sourceRate
+    }))
   });
   return Object.freeze({
     schema:WORLDGEN_FLUID_SCHEMA,fluid,source:Object.freeze({
       x:source.x,z:source.z,kind:channel.kind
     }),
-    channelCellCount:floorCells.size
+    channelCellCount:floorCells.size,
+    inletCellCount:mouth.length
   });
 }
 
