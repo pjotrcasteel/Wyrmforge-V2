@@ -144,7 +144,7 @@ test('Play Hunt uses Wyrmforge 2.5D camera and the SAME real WorldGen material e
   assert.match(host,/PLAY_HUNT_CAMERA/);
   assert.match(host,/fastHuntMode:false/);
   assert.match(host,/playMode && viewCamera\.value==='inspection'/);
-  assert.match(host,/const diagonal=Math\.SQRT1_2/);
+  assert.match(host,/return huntScreenMovement\(right,down,playMode && viewCamera\.value==='inspection'\)/);
   assert.match(host,/playCameraToggle\.addEventListener\('click'/);
   assert.match(host,/viewCamera\.value===PLAY_HUNT_CAMERA/);
   assert.match(play,/id="play-camera-toggle"/);
