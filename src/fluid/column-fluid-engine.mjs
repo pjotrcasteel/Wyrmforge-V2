@@ -4,6 +4,7 @@
 export const FLUID_STATE_SCHEMA='wyrmforge.fluid-state.v1';
 export const FLUID_SURFACE_SCHEMA='wyrmforge.fluid-surface.v1';
 export const MAX_FLUID_COLUMNS=4096;
+export const MAX_FLUID_FLIGHTS=256;
 export const FLUID_DEPTH_UNITS=10; // 10 cm of water per column unit
 const MAX_DEPTH=160; // 16 m of resident liquid per 1 m2 column
 const DIRECTIONS=[[1,0],[0,1],[-1,0],[0,-1]];
@@ -20,6 +21,11 @@ export class ColumnFluidEngine {
   #floors;
   #depths;
   #sources=new Map();
+  // Units actually in the air, not already in the receiving pool. Each
+  // destination capacity is reserved; in-flight volume remains conserved.
+  #flights=[];
+  #incoming;
+  #flightCursor=0;
   #sourceManifest=[];
   #floorAt;
   #kind;
@@ -41,6 +47,7 @@ export class ColumnFluidEngine {
     this.#width=width;
     this.#floors=new Int16Array(width*height);
     this.#depths=new Uint16Array(width*height);
+    this.#incoming=new Uint16Array(width*height);
     this.#floorAt=floorAt;
     this.#kind=kind;
     for(let i=0;i<this.#floors.length;i++){
@@ -101,28 +108,66 @@ export class ColumnFluidEngine {
     if(index<0)return null;
     const floorY=this.#floors[index],depth=this.#depths[index];
     return Object.freeze({
-      x,z,kind:this.#kind,floorY,depth,
+      x,z,kind:this.#kind,floorY,depth,pendingArrival:this.#incoming[index],
       surfaceY:depth?floorY+depth/FLUID_DEPTH_UNITS:null
     });
   }
 
   #exchange(from,to){
     const amount=this.#depths[from];
-    if(!amount||this.#depths[to]>=MAX_DEPTH)return 0;
+    if(!amount||this.#depths[to]+this.#incoming[to]>=MAX_DEPTH)return 0;
     const headFrom=this.#floors[from]*FLUID_DEPTH_UNITS+amount;
     const floorTo=this.#floors[to]*FLUID_DEPTH_UNITS;
     if(headFrom<=floorTo)return 0; // intact bank or higher solid floor
-    const headTo=floorTo+this.#depths[to];
+    const headTo=floorTo+this.#depths[to]+this.#incoming[to];
     const difference=headFrom-headTo;
     if(difference<2)return 0;
     const moved=Math.min(RATE[this.#kind],Math.floor(difference/2),
-      amount,MAX_DEPTH-this.#depths[to]);
+      amount,MAX_DEPTH-this.#depths[to]-this.#incoming[to]);
     if(moved<1)return 0;
-    if(!this.#depths[to])this.#wet++;
-    this.#depths[from]-=moved;
-    this.#depths[to]+=moved;
+    const drop=this.#floors[from]-this.#floors[to];
+    const falling=drop>=1 && headFrom-headTo>=FLUID_DEPTH_UNITS;
+    if(falling&&this.#flights.length>=MAX_FLUID_FLIGHTS)return 0;
+    if(!falling){
+      if(!this.#depths[to])this.#wet++;
+      this.#depths[from]-=moved;
+      this.#depths[to]+=moved;
+    }else{
+      // No instant teleportation to the lower basin. Water leaves the source
+      // and stays in a bounded flight until its physical fall time elapses.
+      this.#depths[from]-=moved;
+      this.#incoming[to]+=moved;
+      const flightTicks=Math.max(2,Math.min(12,
+        Math.ceil(Math.sqrt(drop*FLUID_DEPTH_UNITS))));
+      this.#flights.push({
+        from,to,units:moved,departedAt:this.#steps,
+        arrivesAt:this.#steps+flightTicks,
+        startDeci:headFrom
+      });
+    }
     if(!this.#depths[from])this.#wet--;
     return moved;
+  }
+
+  #landFlights(budget){
+    const count=Math.min(budget,this.#flights.length);
+    let landed=0,processed=0;
+    while(processed<count&&this.#flights.length){
+      const packet=this.#flights[this.#flightCursor];
+      processed++;
+      if(packet.arrivesAt<=this.#steps){
+        const {to,units}=packet;
+        if(!this.#depths[to])this.#wet++;
+        this.#incoming[to]-=units;
+        this.#depths[to]+=units;
+        landed+=units;
+        this.#flights.splice(this.#flightCursor,1);
+        if(this.#flightCursor>=this.#flights.length)this.#flightCursor=0;
+      }else{
+        this.#flightCursor=(this.#flightCursor+1)%this.#flights.length;
+      }
+    }
+    return {landed,processed};
   }
 
   // Each step touches no more than "budget" columns and four neighbors.
@@ -132,6 +177,7 @@ export class ColumnFluidEngine {
       throw new RangeError('Invalid per-step fluid column budget');
     }
     const count=Math.min(budget,this.columnCount);
+    const {landed,processed:flightsProcessed}=this.#landFlights(budget);
     let transferred=0,injected=0;
     for(let i=0;i<count;i++){
       const index=this.#cursor;
@@ -154,15 +200,22 @@ export class ColumnFluidEngine {
       }
     }
     this.#steps++;
-    return Object.freeze({processed:count,transferred,injected,wet:this.#wet});
+    return Object.freeze({
+      processed:count,flightsProcessed,transferred,injected,landed,
+      inFlight:this.#flights.length,wet:this.#wet
+    });
   }
 
   get wetCount(){return this.#wet;}
+  get inFlightCount(){return this.#flights.length;}
+  get inFlightUnits(){
+    return this.#flights.reduce((sum,packet)=>sum+packet.units,0);
+  }
 
   get totalDepth(){
     let sum=0;
     for(const value of this.#depths)sum+=value;
-    return sum;
+    return sum+this.inFlightUnits;
   }
 
   // Consumes the existing versioned Voxel change shape, without subscribing
@@ -218,9 +271,24 @@ export class ColumnFluidEngine {
         surfaceY:head/FLUID_DEPTH_UNITS,flowX,flowZ
       }));
     }
+    const flights=this.#flights.map(packet=>{
+      const x=this.#bounds.minX+packet.from%this.#width;
+      const z=this.#bounds.minZ+Math.floor(packet.from/this.#width);
+      const toX=this.#bounds.minX+packet.to%this.#width;
+      const toZ=this.#bounds.minZ+Math.floor(packet.to/this.#width);
+      const progress=Math.max(0,Math.min(1,
+        (this.#steps-packet.departedAt)/
+          (packet.arrivesAt-packet.departedAt)));
+      return Object.freeze({
+        x,z,toX,toZ,units:packet.units,progress,
+        startY:packet.startDeci/FLUID_DEPTH_UNITS,
+        landingY:this.#floors[packet.to]+this.#depths[packet.to]/FLUID_DEPTH_UNITS
+      });
+    });
     return Object.freeze({
       schema:FLUID_SURFACE_SCHEMA,kind:this.#kind,step:this.#steps,
-      bounds:this.#bounds,cells:Object.freeze(cells)
+      bounds:this.#bounds,cells:Object.freeze(cells),
+      flights:Object.freeze(flights)
     });
   }
 
@@ -229,7 +297,9 @@ export class ColumnFluidEngine {
       schema:FLUID_STATE_SCHEMA,kind:this.#kind,bounds:{...this.#bounds},
       floors:Array.from(this.#floors),depths:Array.from(this.#depths),
       sources:this.#sourceManifest.map(source=>({...source})),
-      cursor:this.#cursor,steps:this.#steps
+      cursor:this.#cursor,steps:this.#steps,
+      flights:this.#flights.map(packet=>({...packet})),
+      flightCursor:this.#flightCursor
     };
   }
 
@@ -251,7 +321,43 @@ export class ColumnFluidEngine {
         throw new Error('Fluid snapshot requires the same replayed physical terrain');
       }
     }
+    // Old V1 snapshots without flight data remain valid: they contain no
+    // suspended transfer. A new snapshot is validated before any mutation.
+    const packets=state.flights??[];
+    const flightCursor=state.flightCursor??0;
+    if(!Array.isArray(packets)||packets.length>MAX_FLUID_FLIGHTS||
+        !Number.isSafeInteger(flightCursor)||
+        flightCursor<0||flightCursor>=Math.max(1,packets.length)){
+      throw new TypeError('Invalid bounded in-flight fluid snapshot');
+    }
+    const reserved=new Uint16Array(this.columnCount);
+    for(const packet of packets){
+      if(!packet||!['from','to','units','departedAt','arrivesAt','startDeci']
+        .every(name=>Number.isSafeInteger(packet[name]))||
+          packet.from<0||packet.from>=this.columnCount||
+          packet.to<0||packet.to>=this.columnCount||
+          packet.units<1||packet.units>RATE[this.#kind]||
+          packet.departedAt<0||packet.departedAt>state.steps||
+          packet.arrivesAt<=packet.departedAt||
+          packet.arrivesAt-packet.departedAt>12||
+          packet.startDeci< -10240||packet.startDeci>10400){
+        throw new TypeError('Invalid in-flight fluid transfer');
+      }
+      const fromX=packet.from%this.#width,fromZ=Math.floor(packet.from/this.#width);
+      const toX=packet.to%this.#width,toZ=Math.floor(packet.to/this.#width);
+      if(Math.abs(fromX-toX)+Math.abs(fromZ-toZ)!==1||
+          this.#floors[packet.from]<=this.#floors[packet.to]){
+        throw new TypeError('In-flight water must cross a real downhill edge');
+      }
+      reserved[packet.to]+=packet.units;
+      if(reserved[packet.to]+state.depths[packet.to]>MAX_DEPTH){
+        throw new RangeError('Fluid snapshot exceeds reserved receiving capacity');
+      }
+    }
     this.#depths.set(state.depths);
+    this.#incoming.set(reserved);
+    this.#flights=packets.map(packet=>({...packet}));
+    this.#flightCursor=flightCursor;
     this.#wet=state.depths.reduce((count,depth)=>count+(depth>0?1:0),0);
     this.#cursor=state.cursor;
     this.#steps=state.steps;

@@ -50,6 +50,7 @@ uniform float uTime;
 uniform float uLava;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
+uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 float fluidHash(vec2 point){
@@ -58,6 +59,7 @@ float fluidHash(vec2 point){
 void main(){
   if(vFaceMode==4&&uRibbonEnabled<.5)discard;
   if(vFaceMode==5&&uLandingEnabled<.5)discard;
+  if(vFaceMode==6&&uParcelsEnabled<.5)discard;
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
@@ -69,6 +71,18 @@ void main(){
   int ripple=int((HUNT_WATER_RIPPLES[row][col/8]>>uint(3*(col%8)))&7u);
   float pool=fluidHash(floor(vWorld.xz*.25)+31.0);
   float top=step(0.5,vNormal.y);
+  if(vFaceMode==6){
+    // These droplets are actual reserved fluid units between the upper
+    // source and lower destination. Their world-space Y changes in the
+    // solver snapshot, rather than being a shader-only simulated fall.
+    vec2 p=floor(vWorld.xz*10.0);
+    float variation=fluidHash(p+floor(vWorld.y*10.0));
+    vec3 drop=uLava<.5
+      ?mix(vec3(.25,.53,.54),vec3(.63,.81,.76),.35+.35*variation)
+      :mix(vec3(.77,.22,.02),vec3(1.0,.65,.17),.35+.35*variation);
+    outColor=vec4(drop,uLava<.5?.88:.95);
+    return;
+  }
   if(vFaceMode==5){
     // Landing foam only exists where the physical river actually discharges
     // into a wet lower pool. Sparse cap pixels travel with the flow rather
@@ -209,6 +223,7 @@ export class HuntFluidSurfaceRenderer {
       waterfallFaces:this.#mesh?.waterfallFaces??0,
       fallRibbonFaces:this.#mesh?.fallRibbonFaces??0,
       landingSplashFaces:this.#mesh?.landingSplashFaces??0,
+      flightFaces:this.#mesh?.flightFaces??0,
       fallLipFaces:this.#mesh?.fallLipFaces??0,
       wetColumns:this.#mesh?.wetColumns??0,
       refinedShoreColumns:this.#mesh?.refinedShoreColumns??0,
@@ -229,6 +244,14 @@ export class HuntFluidSurfaceRenderer {
 
   projectedLandingBounds(view){
     return this.#projectedModeBounds(view,5);
+  }
+
+  projectedParcelBounds(view){
+    return this.#projectedModeBounds(view,6);
+  }
+
+  projectedFlightBounds(view){
+    return this.#projectedModeBounds(view,6);
   }
 
   #projectedModeBounds(view,mode){
@@ -295,7 +318,8 @@ export class HuntFluidSurfaceRenderer {
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
         depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
-        ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled')
+        ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
+        parcels:uniform('uParcelsEnabled')
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
@@ -339,7 +363,8 @@ export class HuntFluidSurfaceRenderer {
     return true;
   }
 
-  render(view,{time=0,reducedMotion=false,showRibbons=true,showLanding=true}={}){
+  render(view,{time=0,reducedMotion=false,showRibbons=true,
+    showLanding=true,showParcels=true}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -354,6 +379,7 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
+    gl.uniform1f(u.parcels,showParcels?1:0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);
