@@ -117,7 +117,8 @@ export function composeHuntRiverBankTiles({
       candidates.get(nid).sides.add(key(-dx,-dz));
     }
   }
-  const old=band.definition.surfaceTiles??[];
+  const old=(band.definition.surfaceTiles??[])
+    .filter(tile=>!changes.has(key(tile.x,tile.z)));
   const existing=new Map(old.map(tile=>[tileKey(tile),tile]));
   const output=[],modified=new Set();
   const ranked=[...candidates.values()].sort((a,b)=>{
