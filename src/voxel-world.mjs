@@ -80,8 +80,8 @@ export class VoxelWorld {
   // Defining it changes the authoritative revision and is replayable.
   setMicroSurfaceTile(x,y,z,levels) {
     const tile=validateMicroSurfaceTile({x,y,z,levels});
-    if(this.get(x,y,z)===0 || this.get(x,y+1,z)!==0) {
-      throw new Error('Microvoxels require an exposed solid top voxel');
+    if(this.get(x,y,z)===0) {
+      throw new Error('Microvoxels require an exposed solid voxel');
     }
     const id=key(x,y,z);
     const previous=this.#microSurfaces.get(id);
@@ -96,7 +96,7 @@ export class VoxelWorld {
     return true;
   }
 
-  // Physical material at a continuous world coordinate. On a refined top
+  // Physical material at a continuous world coordinate. On a refined
   // voxel, this queries the exact 10x10x10 occupied microcells.
   materialAtPoint(x,y,z) {
     if(![x,y,z].every(Number.isFinite) ||
@@ -114,7 +114,7 @@ export class VoxelWorld {
     return my<tile[mz*10+mx] ? material : 0;
   }
 
-  // Physical AABB overlap uses the 10cm occupied cells in refined top
+  // Physical AABB overlap uses the 10cm occupied cells in refined
   // voxels, and unchanged whole cubes elsewhere. No meshes or materials
   // shader are involved in collision.
   intersectsPhysicalBox(bounds) {
@@ -139,6 +139,7 @@ export class VoxelWorld {
         const iz0=Math.max(0,Math.floor((bounds.z[0]-z)*10+1e-5));
         const iz1=Math.min(9,Math.ceil((bounds.z[1]-z)*10-1e-5)-1);
         for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
+          if(tile[iz*10+ix]===0)continue;
           const top=y+tile[iz*10+ix]/10;
           if(bounds.y[0]<top-1e-7 && bounds.y[1]>y+1e-7)return true;
         }
@@ -165,13 +166,13 @@ export class VoxelWorld {
           const tile=this.#microSurfaces.get(key(x,y,z));
           let top=y+1;
           if(tile) {
-            top=y;
+            top=-Infinity;
             const ix0=Math.max(0,Math.floor((xRange[0]-x)*10+1e-5));
             const ix1=Math.min(9,Math.ceil((xRange[1]-x)*10-1e-5)-1);
             const iz0=Math.max(0,Math.floor((zRange[0]-z)*10+1e-5));
             const iz1=Math.min(9,Math.ceil((zRange[1]-z)*10-1e-5)-1);
             for(let iz=iz0;iz<=iz1;iz++)for(let ix=ix0;ix<=ix1;ix++) {
-              top=Math.max(top,y+tile[iz*10+ix]/10);
+              if(tile[iz*10+ix]>0)top=Math.max(top,y+tile[iz*10+ix]/10);
             }
           }
           if(top<=feetY+1e-5 &&
@@ -203,7 +204,7 @@ export class VoxelWorld {
     // Destruction/replace invalidates micro detail with the parent voxel.
     // No detached visual/physical mask can outlive its authoritative solid.
     this.#microSurfaces.delete(key(x,y,z));
-    this.#microSurfaces.delete(key(x,y-1,z));
+    // Neighbor microcells remain authoritative when this voxel changes.
     const wasSolid = chunk[offset] !== 0;
     chunk[offset] = material;
     const count = this.#occupied.get(id) + (material !== 0 ? 1 : 0) - (wasSolid ? 1 : 0);

@@ -1,4 +1,4 @@
-import {composeCliffSlabRecesses} from './cliff-slab-grammar.mjs';
+import {composeCliffTaperTiles} from './cliff-taper-grammar.mjs';
 import { V2_BEDROCK_MATERIAL } from '../terrain-materials.mjs';
 // World Generation V2 orchestration (Strategy -> Builder -> terrain grammar ->
 // topology Specification). No voxel internals, WebGL, DOM, V1, or props.
@@ -255,7 +255,7 @@ function prepareGeometry(plan,seed) {
 
 // Run-length encoding is an Adapter input rather than a direct VoxelWorld
 // mutation. Full 3D strata (not only a heightmap) cross signed chunk origins.
-function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf,turfLips,cliffRecesses) {
+function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf,turfLips) {
   const runs=[];
   const size=radius*2;
   let maxY=FLOOR;
@@ -269,7 +269,7 @@ function generateRuns(radius,heights,surfaces,soilDepth,stoneUnderTurf,turfLips,
     // Preserve the full rock face. The extra parent voxel holds only a
     // thin, physically subdivided turf lip, as declared by the surface pass.
     if(turfLips.has(idx)&&y===top+1)return 1;
-    if(y>top||cliffRecesses?.has(x+','+y+','+z)) return 0;
+    if(y>top) return 0;
     if(turfLips.has(idx))return 3;
     if(y===top) return surfaces[idx];
     // Rock outcrops are a contiguous stone mass, never a thin grey cap
@@ -375,14 +375,14 @@ export class WorldGeneratorV2 {
       rockFaceThreshold:plan.terrain.rockFaceThreshold,stoneUnderTurf
     });
     const turfLips=new Set(microSurface.turfLips.map(tile=>gridIndex(recipe.radius,tile.x,tile.z)));
-    const cliffRecesses=composeCliffSlabRecesses({plan,heights,surfaces,riverChannel,volcanicTerrain});
+    const cliffTaper=composeCliffTaperTiles({plan,heights,surfaces,riverChannel,tiles:microSurface.tiles});
     const {runs,totalCells,maxY}=generateRuns(
-      recipe.radius,heights,surfaces,plan.terrain.soilDepth,stoneUnderTurf,turfLips,cliffRecesses
+      recipe.radius,heights,surfaces,plan.terrain.soilDepth,stoneUnderTurf,turfLips
     );
     const definition=this.#terrainAdapter({
       siteId:recipe.siteId,seed:recipe.seed,
       chunkEdge:recipe.chunkEdge,runs,
-      surfaceTiles:microSurface.tiles
+      surfaceTiles:cliffTaper.tiles
     });
     const layout=Object.freeze({
       routes:plan.routes,roads,geology,worldInfluence,
@@ -395,7 +395,8 @@ export class WorldGeneratorV2 {
         boundaryAprons:roadGrades.boundaryAprons
       }),
       microSurface:Object.freeze({
-        schema:microSurface.schema,tileCount:microSurface.tileCount,
+        schema:microSurface.schema,tileCount:cliffTaper.tiles.length,
+        cliffStackTiles:cliffTaper.stackedTiles,
         roadTiles:microSurface.roadTiles,
         connectorTiles:microSurface.connectorTiles,
         rockTiles:microSurface.rockTiles
