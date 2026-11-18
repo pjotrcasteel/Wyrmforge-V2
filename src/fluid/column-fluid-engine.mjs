@@ -22,6 +22,7 @@ export class ColumnFluidEngine {
   #width;
   #floors;
   #depths;
+  #active=new Set();
   #sources=new Map();
   #outlets=new Map();
   // Units actually in the air, not already in the receiving pool. Each
@@ -74,6 +75,8 @@ export class ColumnFluidEngine {
       if(!this.#depths[index]&&depth)this.#wet++;
       if(this.#depths[index]&&!depth)this.#wet--;
       this.#depths[index]=depth;
+      if(depth)this.#active.add(index);
+      else this.#active.delete(index);
     }
     for(const {x,z,surfaceY,rate=2} of sources){
       const index=this.#requiredIndex(x,z);
@@ -157,6 +160,7 @@ export class ColumnFluidEngine {
       if(!this.#depths[to])this.#wet++;
       this.#depths[from]-=moved;
       this.#depths[to]+=moved;
+      this.#active.add(to);
     }else{
       // No instant teleportation to the lower basin. Water leaves the source
       // and stays in a bounded flight until its physical fall time elapses.
@@ -170,7 +174,10 @@ export class ColumnFluidEngine {
         startDeci:headFrom
       });
     }
-    if(!this.#depths[from])this.#wet--;
+    if(!this.#depths[from]){
+      this.#wet--;
+      this.#active.delete(from);
+    }
     return moved;
   }
 
@@ -185,6 +192,7 @@ export class ColumnFluidEngine {
         if(!this.#depths[to])this.#wet++;
         this.#incoming[to]-=units;
         this.#depths[to]+=units;
+        this.#active.add(to);
         landed+=units;
         this.#flights.splice(this.#flightCursor,1);
         if(this.#flightCursor>=this.#flights.length)this.#flightCursor=0;
@@ -212,6 +220,7 @@ export class ColumnFluidEngine {
       const added=Math.min(rate,Math.max(0,wanted-this.#depths[index]));
       if(!this.#depths[index]&&added)this.#wet++;
       this.#depths[index]+=added;
+      if(added)this.#active.add(index);
       injected+=added;
     }
     return {injected,processed};
@@ -231,7 +240,10 @@ export class ColumnFluidEngine {
       const target=Math.max(0,surfaceDeci-this.#floors[index]*FLUID_DEPTH_UNITS);
       const removed=Math.min(rate,Math.max(0,this.#depths[index]-target));
       this.#depths[index]-=removed;
-      if(!this.#depths[index]&&removed)this.#wet--;
+      if(!this.#depths[index]&&removed){
+        this.#wet--;
+        this.#active.delete(index);
+      }
       drained+=removed;
     }
     this.#drainedTotal+=drained;
@@ -268,12 +280,18 @@ export class ColumnFluidEngine {
     }
     const {injected,processed:sourcesProcessed}=this.#injectSources(sourceBudget);
     const {drained,processed:outletsProcessed}=this.#drainOutlets(outletBudget);
-    const count=Math.min(budget-sourcesProcessed-outletsProcessed,this.columnCount);
     const {landed,processed:flightsProcessed}=this.#landFlights(budget);
+    // Scan live liquid instead of ~4096 unrelated dry columns. Only up to
+    // the remaining budget is processed; the ascending index list and saved
+    // absolute cursor make the order deterministic across pauses/replays.
+    const active=[...this.#active].sort((a,b)=>a-b);
+    const count=Math.min(budget-sourcesProcessed-outletsProcessed,active.length);
+    let position=active.findIndex(index=>index>=this.#cursor);
+    if(position<0)position=0;
     let transferred=0;
     for(let i=0;i<count;i++){
-      const index=this.#cursor;
-      this.#cursor=(this.#cursor+1)%this.columnCount;
+      const index=active[(position+i)%active.length];
+      this.#cursor=(index+1)%this.columnCount;
       if(!this.#depths[index])continue;
       const x=this.#bounds.minX+index%this.#width;
       const z=this.#bounds.minZ+Math.floor(index/this.#width);
@@ -457,6 +475,10 @@ export class ColumnFluidEngine {
     this.#flights=packets.map(packet=>({...packet}));
     this.#flightCursor=flightCursor;
     this.#wet=state.depths.reduce((count,depth)=>count+(depth>0?1:0),0);
+    this.#active=new Set();
+    for(let i=0;i<this.columnCount;i++){
+      if(this.#depths[i])this.#active.add(i);
+    }
     this.#cursor=state.cursor;
     this.#sourceCursor=sourceCursor;
     this.#outletCursor=outletCursor;
