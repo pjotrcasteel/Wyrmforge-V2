@@ -42,9 +42,10 @@ export class HuntTreePreview {
   #falls=new Map();
   #casterProviders=new Set();
   #residentCasterIds=new Set();
-  constructor(graph,image,damage,{directionalCache=null,scenery=null}={}){
+  constructor(graph,image,damage,{directionalCache=null,scenery=null,lightingCache=null}={}){
     this.objects=new HuntWoodlandObjects(graph,damage);
     if(directionalCache)this.#canopyShadows=directionalCache;
+    if(lightingCache)this.#lightingCache=lightingCache;
     this.#image=image;
     this.#scenery=scenery??new ScenicForest(graph.layout);
   }
