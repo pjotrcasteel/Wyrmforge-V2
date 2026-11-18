@@ -6,6 +6,7 @@ import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
 import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
 import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
 import {LocalLightField} from './src/lighting/local-light-field.mjs';
+import {MOLTEN_PRESENTATION} from './src/materials/molten-presentation.mjs';
 import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
 import {huntScreenMovement} from './src/hunt-movement-input.mjs';
 import {createHuntFireballImpact,paintHuntFireballImpact,huntFireballVisualLevel} from './src/hunt-fireball-visuals.mjs';
@@ -192,10 +193,11 @@ let rendererErrorMessage=null;
 let renderer=null;
 const playSpriteLighting={ambient:playLightingEnvironment.ambient,
   sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights,
-    [0,1,0],pointOcclusionEnabled?playPointVisibility:null)};
+    [0,1,0],pointOcclusionEnabled?playPointVisibility:null,playVisibleLightingField)};
 let playPresentationNow=null;
 let playSpellLights=null;
 let playPointVisibility=null;
+let playVisibleLightingField=null;
 let playOccluderCount=0;
 let playVisibilityTransport=null;
 let playVisibilityPort=null;
@@ -1338,6 +1340,7 @@ function resetSite() {
     playFluidStream=null;
     playLightingLiquid=null;
     playStaticEmissiveCells=[];
+    playVisibleLightingField=null;
     playSpellLights=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
@@ -2045,6 +2048,7 @@ function frame(now) {
           ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
         playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
           center:playActor,emissionCells:playStaticEmissiveCells,
+          emissionColor:MOLTEN_PRESENTATION.emission,
           occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,now});
         playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
       }
@@ -2084,6 +2088,8 @@ function frame(now) {
       }
       const lightingField=localLightingEnabled&&playLighting.snapshot?.epoch===active?.port.epoch&&
         playLighting.snapshot?.revision===active?.port.revision?playLighting.snapshot:null;
+      // CPU and GPU presentation use exactly this completed field snapshot.
+      playVisibleLightingField=lightingField;
       if(renderer.render({...view,huntHeightContrast:playMode &&
           camera===PLAY_HUNT_CAMERA,lightingField,transientLights:playSpellLights,
           pointVisibility:pointOcclusionEnabled?playPointVisibility:null,

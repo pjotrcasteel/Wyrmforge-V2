@@ -47,7 +47,8 @@ export class LocalLightField {
       lastProcessed:this.#lastProcessed,retainedBytes:this.#published?.data.byteLength??0,
       geometryAware:Boolean(this.#geometry)};
   }
-  update({epoch,revision,center,emissionCells=[],occluders=null,occlusionEnabled=true,now=0}={}){
+  update({epoch,revision,center,emissionCells=[],emissionColor=[0,0,0],
+    occluders=null,occlusionEnabled=true,now=0}={}){
     if(!Number.isSafeInteger(epoch)||epoch<1||!Number.isSafeInteger(revision)||revision<0||
       !center||![center.x,center.y,center.z,now].every(Number.isFinite)){
       throw new TypeError('Invalid local lighting identity or position');
@@ -55,11 +56,16 @@ export class LocalLightField {
     if(!Array.isArray(emissionCells)||emissionCells.length>4096){
       throw new RangeError('Unbounded emissive surface source cells');
     }
+    if(!Array.isArray(emissionColor)||emissionColor.length!==3||
+        !emissionColor.every(v=>Number.isFinite(v)&&v>=0&&v<=4)){
+      throw new TypeError('Invalid material-owned emission colour');
+    }
     if(occluders&&occluders.schema!==LIGHT_OCCLUDER_SCHEMA){
       throw new TypeError('Invalid physical occluder snapshot');
     }
     const ox=Math.floor(center.x/6)*6-12,oz=Math.floor(center.z/6)*6-12;
-    const identity=[epoch,revision,ox,oz,occlusionEnabled?occluders?.revision??0:0,occlusionEnabled?1:0].join(':');
+    const identity=[epoch,revision,ox,oz,occlusionEnabled?occluders?.revision??0:0,
+      occlusionEnabled?1:0,...emissionColor].join(':');
     if(identity!==this.#key){
       this.#key=identity;this.#pending=null;this.#nextRefresh=0;
       if(this.#published?.epoch!==epoch||this.#published?.revision!==revision){
@@ -83,7 +89,8 @@ export class LocalLightField {
       }
       this.#pending={heights,sources,index:0,stage:sameGrid?'shade':'height',
         data:new Float32Array(LIGHT_FIELD_EDGE**2*4),origin:[ox,oz],
-        epoch,revision,shape:occluders?.entries??[],visibilityRays:0,
+        epoch,revision,emission:Object.freeze([...emissionColor]),
+        shape:occluders?.entries??[],visibilityRays:0,
         spatialEnabled:occlusionEnabled&&Boolean(this.#geometry)};
     }
     const job=this.#pending;
@@ -136,7 +143,8 @@ export class LocalLightField {
         this.#published=Object.freeze({
           schema:LIGHT_FIELD_SCHEMA,epoch,revision,origin:job.origin,
           size:[LIGHT_FIELD_EDGE,LIGHT_FIELD_EDGE],
-          hasEmission:job.sources.size>0,data:job.data,heights:job.heights,
+          hasEmission:job.sources.size>0,emission:job.emission,
+          data:job.data,heights:job.heights,
           visibilityRays:job.visibilityRays,geometryAware:job.spatialEnabled
         });
         this.#pending=null;
