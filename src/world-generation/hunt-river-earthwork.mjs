@@ -18,40 +18,60 @@ function topFaces(runs,cells){
   return heights;
 }
 
-function carveRuns(runs,changes,heights){
+function carveRuns(runs,changes,heights,maxFillMetres){
   const result=[];
+  const rows=new Map();
+  for(const [id,change] of changes){
+    const [x,z]=id.split(',').map(Number);
+    const row=rows.get(z)??[];
+    row.push({x,z,floorY:change.floorY});
+    rows.set(z,row);
+  }
+  for(const row of rows.values())row.sort((a,b)=>a.x-b.x);
+  // The native run is copied byte-for-byte whenever it does not intersect
+  // the proposed channel. Changed runs are split only at channel columns.
+  // This is safer than expanding/recompressing the entire Voxel landscape.
+  const support=new Map(),bedPresent=new Set();
   for(const run of runs){
-    let start=-1,material=0;
-    const flush=end=>{
-      if(start>=0)result.push({...run,x:start,length:end-start,material});
-      start=-1;
-      material=0;
-    };
-    // This also avoids a voxel allocation per native terrain cell.
-    for(let x=run.x;x<=run.x+run.length;x++){
-      const change=changes.get(key(x,run.z));
-      const original=x<run.x+run.length?run.material:0;
-      const next=change&&original?
-        run.y>=change.floorY?0:
-        run.y===change.floorY-1?3:original:original;
-      if(next!==material){
-        flush(x);
-        if(next){start=x;material=next;}
+    const hit=(rows.get(run.z)??[]).filter(cell=>
+      cell.x>=run.x&&cell.x<run.x+run.length);
+    if(!hit.length){
+      result.push(run);
+      continue;
+    }
+    let cursor=run.x;
+    for(const cell of hit){
+      const id=key(cell.x,cell.z);
+      if(cursor<cell.x)result.push({...run,x:cursor,length:cell.x-cursor});
+      if(run.y<cell.floorY-1){
+        result.push({...run,x:cell.x,length:1});
+        support.set(id,Math.max(support.get(id)??-Infinity,run.y));
+      }else if(run.y===cell.floorY-1){
+        result.push({...run,x:cell.x,length:1,material:3});
+        bedPresent.add(id);
       }
+      // Voxels at or above the channel's physical water floor are removed.
+      cursor=cell.x+1;
+    }
+    if(cursor<run.x+run.length){
+      result.push({...run,x:cursor,length:run.x+run.length-cursor});
     }
   }
-  // Some cells need a real supporting stone fill before the new riverbed
-  // can reach the shared upper face. Never create a floating single surface.
   for(const [id,change] of changes){
     const original=heights.get(id);
-    const [x,z]=id.split(',').map(Number);
-    for(let y=original;y<change.floorY;y++){
-      result.push({x,y,z,length:1,material:3});
+    const anchor=support.get(id);
+    if(!Number.isSafeInteger(original)||!Number.isSafeInteger(anchor)){
+      throw new Error('Riverbed has no supported native stone below '+id);
     }
-    // The final bed face is always true Voxel stone, not a shader stamp.
-    if(original<=change.floorY-1){
-      // A filled bed's highest stone was already emitted by the loop above.
-      continue;
+    const missing=Math.max(0,change.floorY-1-anchor);
+    if(missing>maxFillMetres){
+      throw new RangeError('Unsafe unsupported riverbed cavity at '+id+
+        ' requires '+missing+'m of stone support');
+    }
+    const [x,z]=id.split(',').map(Number);
+    for(let y=anchor+1;y<change.floorY;y++){
+      if(y===change.floorY-1&&bedPresent.has(id))continue;
+      result.push({x,y,z,length:1,material:3});
     }
   }
   return result;
@@ -135,7 +155,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
           ' (original '+top+', grade '+grade+')');
       }
     }
-    const raw=carveRuns(band.definition.runs,changes,heights);
+    const raw=carveRuns(band.definition.runs,changes,heights,maxFillMetres);
     const surfaceTiles=(band.definition.surfaceTiles??[])
       .filter(tile=>!changes.has(key(tile.x,tile.z)));
     const definition=terrainAdapter({
