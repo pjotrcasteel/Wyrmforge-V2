@@ -165,3 +165,42 @@ test('the Voxel actor can still cross the carved connector in both directions',(
     loader.unload();
   }
 });
+
+
+test('the entire authored river, not just its connector, is visibly recessed in physical Voxel terrain',()=>{
+  const {graph,proposal}=fixture();
+  const prepared=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
+  const loader=load(prepared.bands);
+  try{
+    const port=loader.terrain.port;
+    const routeKeys=new Set(proposal.points.map(p=>p.x+','+p.z));
+    let existingCells=0,offRouteCells=0;
+    for(const band of prepared.bands){
+      const old=graph.materialize(band.id);
+      const oldFloor=old.fluidLayout?.riverChannels?.[0]?.floor??[];
+      const revised=new Map(band.fluidLayout.riverChannels[0].floor
+        .map(cell=>[cell.x+','+cell.z,cell]));
+      assert.equal(band.earthwork.recessedCells,
+        revised.size,'each water column must correspond to a physical excavation');
+      for(const cell of oldFloor){
+        existingCells++;
+        const id=cell.x+','+cell.z;
+        const now=revised.get(id);
+        assert.ok(now,'original riverbed must not disappear from the connected river');
+        assert.ok(now.y<=cell.y-1,
+          'the existing waterbed must be cut at least 1m deeper at '+id);
+        assert.equal(port.materialAt(cell.x,now.y-1,cell.z),3,
+          'true Voxel stone, not a blue water decal, must support '+id);
+        assert.equal(port.materialAt(cell.x,now.y,cell.z),0,
+          'the former grass-level water column must be open air at '+id);
+        assert.ok(now.y+.4<=cell.y-.6+1e-6,
+          '40cm initial water must sit >=60cm below the original bed surface');
+        if(!routeKeys.has(id))offRouteCells++;
+      }
+    }
+    assert.ok(existingCells>100,'the full real river, not a connector-only strip, must be tested');
+    assert.ok(offRouteCells>100,'independent previously uncut river reaches must be recessed');
+  }finally{
+    loader.unload();
+  }
+});
