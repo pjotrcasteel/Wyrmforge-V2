@@ -40,13 +40,25 @@ try{
     result.startup={hud:await page.locator('#play-hud-details').textContent(),errors:result.errors};
     throw error;
   }
-  await page.waitForTimeout(600);
+  // Browser SwiftShader can spend dozens of seconds filling initial terrain.
+  // A ready actor is not enough: require resident visible props AND a completed
+  // shadow frame before measuring the same scene on/off.
+  await page.waitForFunction(()=>{
+    const state=window.__WyrmforgeContactShadowTest.status();
+    return state.residentProps.filter(prop=>prop.visible).length>=4 &&
+      state.contact?.cacheMisses>0 && state.contact.frameStamps>0 &&
+      state.overlay.frames>=8;
+  },null,{timeout:120000});
   result.on=await page.evaluate(()=>window.__WyrmforgeContactShadowTest.status());
   await page.screenshot({path:folder+'/game-on.png',type:'png',timeout:25000});
   const canvas=page.locator('#combat-guide');
   const on=PNG.sync.read(await canvas.screenshot({path:folder+'/overlay-on.png',timeout:25000}));
   await page.evaluate(()=>window.__WyrmforgeContactShadowTest.toggle(false));
-  await page.waitForTimeout(220);
+  const previouslyRendered=result.on.overlay.frames;
+  await page.waitForFunction(previous=>{
+    const state=window.__WyrmforgeContactShadowTest.status();
+    return state.overlay.frames>previous&&state.contact.frameStamps===0;
+  },previouslyRendered,{timeout:60000});
   result.off=await page.evaluate(()=>window.__WyrmforgeContactShadowTest.status());
   const off=PNG.sync.read(await canvas.screenshot({path:folder+'/overlay-off.png',timeout:25000}));
   if(on.width!==off.width||on.height!==off.height)throw new Error('Nonmatching image sizes');
@@ -64,7 +76,10 @@ try{
     on:result.on,off:result.off,visual:result.visual,errors:result.errors
   }));
   if(result.errors.length)throw new Error('Browser errors: '+result.errors.join('; ').slice(0,700));
-  if(!result.on.contact?.frameStamps)throw new Error('Play Hunt rendered ZERO contact stamps');
+  if(!result.on.contact?.frameStamps)throw new Error('Play Hunt rendered ZERO contact stamps after visible props loaded');
+  if(result.on.residentProps.length!==result.off.residentProps.length){
+    throw new Error('Cannot compare images when prop residency changed between screenshots');
+  }
   if(changed<20)throw new Error('Contact shadow has no meaningful actual Canvas screenshot difference');
 }catch(error){failed=String(error.stack??error);result.failed=failed;console.error('CONTACT_SHADOW_FAILURE '+failed);}
 finally{
