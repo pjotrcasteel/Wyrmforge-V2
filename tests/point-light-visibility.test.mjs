@@ -31,10 +31,13 @@ test('physical wall blocks light behind it but leaves the near side illuminated'
 });
 test('destroying a wall reopens its light ray after authoritative revision',()=>{
   const world=new VoxelWorld({chunkEdge:16});
+  // Both the eye-level and lower sloped ray must cross physical material.
+  world.set(3,1,0,3);
   world.set(3,2,0,3);
   const controller=new PointLightVisibility(port(world));
   const first=complete(controller,light());
   assert.ok(samplePointVisibility(first,0,[6,2,.5])<.2);
+  world.set(3,1,0,0);
   world.set(3,2,0,0);
   const changed=defineLightSet({epoch:1,revision:world.revision,
     emitters:light().emitters});
