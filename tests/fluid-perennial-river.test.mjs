@@ -152,3 +152,50 @@ test('lava uses the same open physical channel, but its lower transfer rate',()=
   assert.ok(waterTransfers>lavaTransfers);
   assert.ok(lava.totalDepth>0);
 });
+
+test('a 64x64 resident river continuously covers stone across a 30m level approach',()=>{
+  // The real Hunt footprint has 4096 columns but only a narrow authored
+  // river. Without downstream advection, per-cell 20cm head losses consume
+  // >1m of inlet head long before water reaches the 30m stone lip.
+  const lanes=[29,30,31,32];
+  const floor=(x,z)=>lanes.includes(x)?(z<30?2:0):4;
+  const initial=[],currents=[];
+  for(let z=0;z<64;z++)for(const x of lanes){
+    initial.push({x,z,depth:10});
+    if(z<63)currents.push({x,z,dx:0,dz:1});
+  }
+  const fluid=new ColumnFluidEngine({
+    bounds:{minX:0,maxX:63,minZ:0,maxZ:63},floorAt:floor,initial,
+    sources:lanes.map(x=>({x,z:0,surfaceY:3,rate:3})),
+    outlets:lanes.map(x=>({x,z:63,surfaceY:1,rate:3})),
+    currents
+  });
+  const initialVolume=fluid.totalDepth;
+  let injected=0,drained=0,checkpoints=0;
+  for(let tick=0;tick<=500;tick++){
+    const result=fluid.step({budget:96});
+    injected+=result.injected;
+    drained+=result.drained;
+    assert.ok(result.processed<=96,'river work must never exceed frame budget');
+    assert.equal(fluid.totalDepth+drained,initialVolume+injected);
+    if(tick<80||tick%40!==0)continue;
+    checkpoints++;
+    for(const x of lanes){
+      assert.ok(fluid.sample(x,29).depth>=1,
+        'stone ledge must retain a real water film despite a 30m flat approach');
+      assert.ok(fluid.sample(x,30).depth>=1,
+        'lower receiving pool must actually contain flowing liquid');
+      assert.equal(fluid.sample(x+0,32).floorY,0);
+    }
+    const mesh=buildFluidSurfaceMesh(fluid.snapshotSurface(),{
+      sampleAt:(x,z)=>fluid.sample(x,z)
+    });
+    assert.ok(mesh.waterfallFaces>=lanes.length,
+      'all four physical waterfall lips must remain visible for 500 ticks');
+    assert.equal(fluid.sample(28,29).depth,0,
+      'an actual higher solid stone bank remains dry');
+  }
+  assert.ok(checkpoints>=10);
+  assert.ok(fluid.totalDrained>500,
+    'water must travel the whole channel and leave the downstream boundary');
+});
