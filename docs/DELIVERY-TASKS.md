@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **R10-01 — Materials and Surface ([#177](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/177))**. G09-02 is complete. Water and lava appearance are accepted for now. Continue with volcanic terrain surfaces. See [engine ownership and handoffs](ENGINE-BOUNDARIES.md).
+**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Next is the Lighting V2 entry contract and renderer seam; first review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -520,3 +520,22 @@ Owner accepted the cliff direction in `40c5fb7` and requested stone surface char
 Owner screenshot also shows `Actor inputs or fixed-step delta outside supported bounds`. Inspection-camera rotation of combined diagonal input could exceed the Voxel actor's [-1,1] component bound. Play Hunt now normalizes combined screen input before rotation and clamps roundoff, while preserving partial analog magnitude. Voxel's strict input and timestep validation is unchanged. The regression passes real actor simulation for all tested directional/analog combinations.
 
 Validation: 770 tests pass; dependency audit and diff checks pass. Actual assembled Hunt GLSL compiles, links and renders through GLES3 with zero GL error. The terrain-only material render was inspected; physical seed 7 lair mesh stays at 57,963 faces. Cloud Browser inspection was attempted but reports `WebGL2 is unavailable on this device`, so no browser or phone visual/performance acceptance is claimed. Live shader source and the stable playable page must be verified after deployment. Next action is review of stone surface character and confirmation that the reported input error is gone. F07-04 #348 remains the overhang dependency.
+
+### R10-01 scoped material wrap-up and coupling audit — 2026-11-18
+
+Owner requested all three wrap-up items together: remove/measure redundant stone shading, document the surface handoff and freeze the current Materials scope, then review engine coupling. Implemented mineral-stone albedo dispatch before overwritten overlays, retaining shared lighting and lab behavior. The GLES3 software witness measured top 1.343→0.806 ms and side 1.190→0.743 ms per draw, with exact RGBA equality in four fixtures. See [handoff and raw evidence](MATERIALS-LIGHTING-HANDOFF.md). This does not prove mobile lag resolved.
+
+**Materials current Fire Hunt scope: DONE FOR NOW**; R10-01 overall atmosphere/lighting remains IN PROGRESS. The `4000e4a` iPhone report (96 ms p95, CPU p95 29 ms) and Water parcel exception remain open. Fluid implementation is untouched. The [coupling review](ENGINE-COUPLING-REVIEW.md) finds independent core authorities and no static import cycles, but renderer/material shader ABI, duplicated liquid palettes and the oversized host need explicit seams. Next one task: Lighting V2 entry surface/emission contract and renderer hook, before adding lighting effects. Full scene/release performance remains R10-02.
+
+### L10-01 — Lighting V2 entry contract and renderer seam
+
+- **GitHub Issue:** [#352](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/352).
+
+- **Status:** READY — next scoped task after the Materials wrap-up and coupling review. No lighting effect is implemented by this handoff.
+- **Owner:** Lighting/Rendering, consuming Materials and Voxel public contracts.
+- **Visible effect:** preserve the current Hunt baseline while making illumination replaceable; the next slice adds bounded cliff shading and lava spill.
+- **Boundary:** surface values and emission belong to Materials; light transport and occlusion belong to Lighting; GPU lifecycle belongs to Rendering. No terrain, fluid or gameplay state mutation from light evaluation.
+- **Dependencies:** [material handoff](MATERIALS-LIGHTING-HANDOFF.md), [coupling findings](ENGINE-COUPLING-REVIEW.md), terrain port epoch/revision notifications. WAT-10 `10664cd` is merged; fresh mobile lag/parcel confirmation is still required.
+- **Done for now:** explicit bounded surface/emitter descriptor and renderer light-evaluation hook, baseline appearance preserved, no new import cycle or reverse core dependency, independent fallback and measured render cost. Full mobile lighting acceptance belongs to the subsequent visible slice and R10-01/R10-02.
+
+Wrap-up validation: 782 combined tests pass after integrating WAT-10; dependency audit (313 files / 1,135 dependencies) and diff check pass. Actual assembled before/after fragment shaders compile/link/render through GLES3; measured evidence above is software-only.
