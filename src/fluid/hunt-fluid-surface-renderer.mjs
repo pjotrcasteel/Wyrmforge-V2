@@ -50,6 +50,7 @@ uniform float uTime;
 uniform float uLava;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
+uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 float fluidHash(vec2 point){
@@ -58,6 +59,7 @@ float fluidHash(vec2 point){
 void main(){
   if(vFaceMode==4&&uRibbonEnabled<.5)discard;
   if(vFaceMode==5&&uLandingEnabled<.5)discard;
+  if(vFaceMode==6&&uParcelsEnabled<.5)discard;
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
@@ -244,6 +246,10 @@ export class HuntFluidSurfaceRenderer {
     return this.#projectedModeBounds(view,5);
   }
 
+  projectedParcelBounds(view){
+    return this.#projectedModeBounds(view,6);
+  }
+
   projectedFlightBounds(view){
     return this.#projectedModeBounds(view,6);
   }
@@ -312,7 +318,8 @@ export class HuntFluidSurfaceRenderer {
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
         depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
-        ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled')
+        ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
+        parcels:uniform('uParcelsEnabled')
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
@@ -356,7 +363,8 @@ export class HuntFluidSurfaceRenderer {
     return true;
   }
 
-  render(view,{time=0,reducedMotion=false,showRibbons=true,showLanding=true}={}){
+  render(view,{time=0,reducedMotion=false,showRibbons=true,
+    showLanding=true,showParcels=true}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -371,6 +379,7 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
+    gl.uniform1f(u.parcels,showParcels?1:0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND);
