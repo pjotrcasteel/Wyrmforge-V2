@@ -117,4 +117,4 @@ it with the **existing** `lighting.sample(position)` function, while
 the existing memory/pixel budgets. Actor motion, falling/damage and
 collision remain owned by the Hunt/World Objects systems. New sprites
 and building artwork can call the same presenter without per-type Lighting
-code. Fluid shading remains the next integration boundary.
+code. Fluid static-emission shading followed in [L10-08 PR #412](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/412). Lighting now owns one pure shared GLSL emissive-field function used by both terrain and the independent Water V2 WebGL renderer; Rendering samples physical published Water mesh positions in its vertex stage. The Hunt host composes the same published field. Water's solver, levels, flow, persistence and Voxel terrain authority are untouched. The fluid consumer owns a fixed 9 KiB GPU field texture and its lifecycle. Materials still owns emitter colors and molten display colors. Cross-engine acceptance and desktop freeze diagnostics are tracked separately in Lighting #377 and Water.
