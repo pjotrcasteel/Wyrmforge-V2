@@ -78,6 +78,7 @@ const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
+const directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
@@ -378,7 +379,7 @@ function paintEncounterGuide(view) {
       const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
         extractionPortalLayer(view,playStream.extraction),playPresentationNow??started,
-        localLightingEnabled?playSpriteLighting:null,contactShadowsEnabled);
+        localLightingEnabled?playSpriteLighting:null,contactShadowsEnabled,directionalShadowsEnabled);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
@@ -2306,6 +2307,7 @@ if(playMode) {
         environment:playLightingEnvironment,transientEmitters:playSpellLights?.emitters??[],
         spriteLighting:playStream?.trees?.lightingStatistics??null,
         contactShadows:{enabled:contactShadowsEnabled,...playStream?.trees?.contactShadowStatistics},
+        directionalShadows:{enabled:directionalShadowsEnabled,...playStream?.trees?.directionalShadowStatistics},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
