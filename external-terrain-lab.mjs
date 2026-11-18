@@ -1581,7 +1581,13 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
-            overlayMode:playFluidOverlayMode
+            overlayMode:playFluidOverlayMode,
+            fluidMeshBuildMs:playFluidVisual?.stats.meshUpdateMs??0,
+            fluidMeshUpdates:playFluidVisual?.stats.meshUpdateCount??0,
+            fluidGpuAllocations:playFluidVisual?.stats.gpuAllocations??0,
+            fluidGpuDeletes:playFluidVisual?.stats.gpuDeletes??0,
+            fluidGpuUploadMs:playFluidVisual?.stats.gpuUploadMs??0,
+            fluidGpuUploads:playFluidVisual?.stats.gpuUploadCount??0
           };
         },
         breach(){
