@@ -70,7 +70,8 @@ test('water and lava use same bounded impact geometry but separate rendering pal
   assert.match(FLUID_FRAGMENT_GLSL,/if\(vFaceMode==5\)/);
   assert.match(FLUID_FRAGMENT_GLSL,/uLandingEnabled/);
   assert.ok(FLUID_FRAGMENT_GLSL.includes('float pace=uLava<.5?.9:.45;'));
-  assert.ok(FLUID_FRAGMENT_GLSL.includes('float rippleCycle=uTime*.65;'));
+  assert.ok(FLUID_FRAGMENT_GLSL.includes('uniform float uRippleFade;'));
+  assert.ok(FLUID_FRAGMENT_GLSL.includes('float rippleFade=uRippleFade;'));
   assert.match(FLUID_FRAGMENT_GLSL,/rippleFade/);
   assert.match(FLUID_VERTEX_GLSL,/dot\(world,uCameraDepth\)-uDepthOrigin/);
 });
