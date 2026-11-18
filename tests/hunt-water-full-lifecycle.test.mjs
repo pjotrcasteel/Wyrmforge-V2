@@ -248,3 +248,48 @@ test('WAT-15a: a real connected-river Fireball survives graph eviction, revisit 
     try{s.loader.unload();}catch{}
   }
 });
+
+
+test('WAT-15a: physically disconnected dry-bank crater stays dry',()=>{
+  const state=setup(memory());
+  try{
+    const {port,world,fluid,graph,earthwork}=state;
+    const region=graph.layout.regions.find(item=>item.id===graph.layout.entryRegionId);
+    const channel=earthwork.bands.flatMap(b=>
+      b.fluidLayout.riverChannels.flatMap(ch=>ch.floor));
+    let control=null;
+    for(let z=region.bounds.minZ+3;z<=region.bounds.maxZ-3&&!control;z+=2){
+      for(let x=region.bounds.minX+3;x<=region.bounds.maxX-3;x+=2){
+        const d2=Math.min(...channel.map(c=>(c.x-x)**2+(c.z-z)**2));
+        if(d2<100||(fluid.sample(x,z)?.depth??0)>0)continue;
+        const hit=port.raycast({
+          origin:[x+.5,30,z+.5],direction:[0,-1,0],maxDistance:80
+        });
+        if(hit?.cell&&hit.cell.y>-3){
+          control={x,z,hit,distanceMetres:Math.sqrt(d2)};
+          break;
+        }
+      }
+    }
+    assert.ok(control,'the authored wet forest must contain a genuinely isolated dry control bank');
+    const before=world.revision;
+    const result=port.apply({
+      id:'wat15a-disconnected-dry-control',type:'carve-crater',
+      ...control.hit.cell,radius:2.3,depth:2,expectedRevision:before
+    },{captureRemovedCells:true});
+    assert.ok(result.removedVoxels>0,'dry control must receive a real Voxel Fireball');
+    assert.equal(world.get(control.hit.cell.x,control.hit.cell.y,control.hit.cell.z),0);
+    for(let i=0;i<180;i++){
+      const tick=fluid.step({budget:96});
+      assert.ok(tick.processed+tick.seamInspected<=96);
+    }
+    for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++){
+      assert.equal(fluid.sample(control.x+dx,control.z+dz)?.depth??0,0,
+        'isolated real crater must not receive phantom Water V2 at '+
+        (control.x+dx)+','+(control.z+dz));
+    }
+  }finally{
+    state.fluid.dispose();
+    state.loader.unload();
+  }
+});
