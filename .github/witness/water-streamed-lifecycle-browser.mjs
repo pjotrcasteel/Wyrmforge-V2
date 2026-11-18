@@ -163,6 +163,51 @@ try{
     bankSaved:report.reloadedBank.savedRemoved,
     screenshots:report.screenshots.length
   }));
+  // WAT-17: Reset is NOT Respawn. Exercise the actual player-facing HUD
+  // control after the Fireball has already survived a full page reload.
+  // Only the current WorldGen seed's edits and fluid checkpoint are erased.
+  await page.locator('#play-hud-summary').click();
+  page.once('dialog',dialog=>dialog.accept());
+  await Promise.all([
+    page.waitForNavigation({waitUntil:'domcontentloaded',timeout:30000}),
+    page.locator('#play-reset-level').click()
+  ]);
+  await page.waitForFunction(()=>{
+    const state=window.__WyrmforgeStreamWaterTest?.status();
+    return Boolean(state&&!state.error&&!state.busy&&
+      state.activeRegions?.length>=3&&state.wetColumns>0);
+  },null,{timeout:55000}).catch(async failure=>{
+    report.resetDiagnostics=await page.evaluate(()=>({
+      url:location.href,readyState:document.readyState,
+      message:document.querySelector('#preview-message')?.textContent,
+      status:document.querySelector('#status')?.textContent,
+      summary:document.querySelector('#site-summary')?.textContent,
+      hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,1200),
+      scriptCount:document.scripts.length,
+      keys:localStorage.length
+    }));
+    throw new Error('Fresh Hunt reset failed to activate Water V2: '+
+      JSON.stringify(report.resetDiagnostics)+' | '+failure.message);
+  });
+  report.reset=await status();
+  report.resetBank=await page.evaluate(cell=>
+    window.__WyrmforgeStreamWaterTest.inspectCell(cell.x,cell.y,cell.z),cast.target);
+  if(report.reset.restored||report.reset.terrainRemovedCells!==0||
+      report.resetBank.savedRemoved||
+      report.reset.regionSteps.some(entry=>entry.steps>=saved.regionSteps[0].steps)){
+    throw new Error('Reset level failed to discard edited terrain and dormant water checkpoint: '+
+      JSON.stringify({
+        before:report.reloaded,
+        reset:report.reset,cell:report.resetBank
+      }));
+  }
+  console.log('WAT17_RESET_LEVEL_PASS '+JSON.stringify({
+    clearedTerrain:report.reset.terrainRemovedCells,
+    restoredOldWater:report.reset.restored,
+    craterStillSaved:report.resetBank.savedRemoved,
+    liveWaterRegions:report.reset.activeRegions.length,
+    rebuiltWaterSteps:report.reset.regionSteps
+  }));
   console.log('WAT15A_BROWSER_PASS');
 }catch(error){
   report.failure=error.stack??String(error);

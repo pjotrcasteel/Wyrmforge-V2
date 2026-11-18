@@ -106,6 +106,11 @@ body[data-play-hunt] #play-hud-details{
   padding-top:8px;
 }
 body[data-play-hunt] #play-hud:not([open]){background:rgba(17,35,39,.77)}
+body[data-play-hunt] #play-reset-level{
+  display:block;width:100%;min-height:44px;margin-top:10px;
+  background:#563e37;border-color:#947369;font-weight:600;
+}
+body[data-play-hunt] #play-reset-level:focus-visible{outline:3px solid #d6b099;outline-offset:2px}
 body[data-play-hunt] #play-respawn{
   display:block;position:absolute;right:16px;bottom:calc(45px + env(safe-area-inset-bottom,0px));
   z-index:5;background:#275548;font-weight:700;min-width:100px;min-height:47px
@@ -188,6 +193,7 @@ body.focus-mode #site-summary{max-width:46%}
       <option value="5">Level 5</option>
     </select>
     <div id="play-hud-details" role="status" aria-live="off">Loading real Voxel V2 terrain...</div>
+    <button id="play-reset-level" type="button" title="Delete saved edits and start this Hunt level again">Reset level</button>
   </details>
   <button id="play-collapse-preview" type="button" hidden>Preparing stone shelf…</button>
   <div id="play-joystick" aria-label="Move the Wizard with touch joystick">
