@@ -702,6 +702,21 @@ function updatePlayStreaming(now) {
       playFluidVisual??=new HuntFluidSurfaceRenderer(canvas);
       playFluidSurfaceStep=-1;
       playRiverRevision=-1;
+      if(playQuery.get('fluidTest')==='auto'){
+        // Read-only browser acceptance for the real graph-streamed Hunt.
+        window.__WyrmforgeStreamWaterTest={
+          status:()=>({
+            activeRegions:playFluidStream?.activeIds??[],
+            wetColumns:playFluidStream?.wetCount??0,
+            solverTicks:playFluidStream?.steps??0,
+            totalDepth:playFluidStream?.totalDepth??0,
+            topFaces:playFluidVisual?.stats.topFaces??0,
+            fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
+            worldRevision:active?.world.revision??null,
+            error:errorMessage
+          })
+        };
+      }
     }
   }
   const residency=stream.residency;
@@ -1132,7 +1147,10 @@ function resetSite() {
     restoredSession=null;
     // Tear down the previous authority before a new one becomes public.
     // Renderer removes stale scene data and retires GPU records per frame.
-    if(playQuery.get('fluidTest')==='auto')delete window.__WyrmforgeFluidTest;
+    if(playQuery.get('fluidTest')==='auto'){
+      delete window.__WyrmforgeFluidTest;
+      delete window.__WyrmforgeStreamWaterTest;
+    }
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
