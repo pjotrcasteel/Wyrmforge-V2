@@ -1110,7 +1110,7 @@ export class WebGLVoxelView {
     if(!this.#lightingTexture)throw new Error('Could not allocate local light field');
     gl.bindTexture(gl.TEXTURE_2D,this.#lightingTexture);
     if(this.#lightingSource!==field){
-      if(field.schema!=='wyrmforge.local-light-field.v1'||
+      if(field.schema!=='wyrmforge.local-light-field.v2'||
           field.size?.[0]!==24||field.size?.[1]!==24||
           !(field.data instanceof Float32Array)||field.data.length!==24*24*4||
           !field.data.every(Number.isFinite)||field.origin?.length!==2||
