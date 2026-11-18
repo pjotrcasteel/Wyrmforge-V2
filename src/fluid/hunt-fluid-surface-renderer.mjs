@@ -202,6 +202,27 @@ function program(gl){
   return result;
 }
 
+// Equal, non-animated GPU geometry does not need another upload. Compare
+// binary typed-array contents (including real 10cm heights and flow modes).
+const sameGeometry=(a,b)=>{
+  if(!a||!b)return false;
+  for(const name of ['positions','normals','flows','faceModes',
+    'landingHeights','indices']){
+    const left=a[name],right=b[name];
+    if(left.byteLength!==right.byteLength)return false;
+    const l=new Uint8Array(left.buffer,left.byteOffset,left.byteLength);
+    const r=new Uint8Array(right.buffer,right.byteOffset,right.byteLength);
+    for(let i=0;i<l.length;i++)if(l[i]!==r[i])return false;
+  }
+  return true;
+};
+
+const fluidStreams=mesh=>[
+  mesh.positions,mesh.normals,mesh.flows,
+  mesh.faceModes,mesh.landingHeights,mesh.indices
+];
+const fluidCapacity=bytes=>Math.ceil(Math.max(4096,bytes*1.25)/4096)*4096;
+
 export class HuntFluidSurfaceRenderer {
   #gl;
   #program=null;
@@ -257,7 +278,9 @@ export class HuntFluidSurfaceRenderer {
       gpuAllocations:this.#gpuAllocations,
       gpuDeletes:this.#gpuDeletes,
       gpuUploadMs:this.#gpuUploadMs,
-      gpuUploadCount:this.#gpuUploadCount
+      gpuUploadCount:this.#gpuUploadCount,
+      gpuAllocatedBytes:this.#record?.capacities.reduce(
+        (sum,bytes)=>sum+bytes,0)??0
     });
   }
 
@@ -336,11 +359,43 @@ export class HuntFluidSurfaceRenderer {
     const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+
       mesh.faceModes.byteLength+mesh.landingHeights.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
-    this.#releaseBuffers();
+    if(!sameGeometry(mesh,this.#mesh)&&this.#record&&
+        !this.#lost&&!this.#gl.isContextLost()){
+      this.#uploadReusableMesh(mesh);
+    }
     this.#mesh=mesh;
     this.#visualHistory=presented.history;
     this.#meshUpdateMs=performance.now()-start;
     this.#meshUpdateCount++;
+  }
+
+  #uploadReusableMesh(mesh){
+    const gl=this.#gl,record=this.#record;
+    if(!record)return;
+    const streams=fluidStreams(mesh);
+    const start=performance.now();
+    gl.bindVertexArray(record.vao);
+    try{
+      for(let i=0;i<streams.length;i++){
+        const target=i===streams.length-1?gl.ELEMENT_ARRAY_BUFFER:gl.ARRAY_BUFFER;
+        const data=streams[i];
+        gl.bindBuffer(target,record.buffers[i]);
+        if(data.byteLength>record.capacities[i]){
+          // Grow only when needed, never delete/recreate the VAO or buffers
+          // for a fluid snapshot. Capacity remains bounded by real mesh size.
+          const capacity=fluidCapacity(data.byteLength);
+          gl.bufferData(target,capacity,gl.DYNAMIC_DRAW);
+          record.capacities[i]=capacity;
+        }
+        if(data.byteLength)gl.bufferSubData(target,0,data);
+      }
+      record.count=mesh.indices.length;
+      this.#gpuUploadMs=performance.now()-start;
+      this.#gpuUploadCount++;
+    }finally{
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER,null);
+    }
   }
 
   #ensureReady(){
@@ -359,19 +414,22 @@ export class HuntFluidSurfaceRenderer {
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
-    const uploadStart=performance.now();
+    const start=performance.now();
     const vao=gl.createVertexArray();
     if(!vao)throw new Error('Fluid VAO allocation failed');
-    const buffers=[];
+    const buffers=[],capacities=[];
     try{
       gl.bindVertexArray(vao);
-      const buffer=(type,data)=>{
+      const buffer=(target,data)=>{
         const handle=gl.createBuffer();
         if(!handle)throw new Error('Fluid GPU buffer allocation failed');
         buffers.push(handle);
         this.#gpuAllocations++;
-        gl.bindBuffer(type,handle);
-        gl.bufferData(type,data,gl.STATIC_DRAW);
+        gl.bindBuffer(target,handle);
+        const capacity=fluidCapacity(data.byteLength);
+        capacities.push(capacity);
+        gl.bufferData(target,capacity,gl.DYNAMIC_DRAW);
+        if(data.byteLength)gl.bufferSubData(target,0,data);
       };
       buffer(gl.ARRAY_BUFFER,this.#mesh.positions);
       gl.enableVertexAttribArray(0);
@@ -389,11 +447,14 @@ export class HuntFluidSurfaceRenderer {
       gl.enableVertexAttribArray(4);
       gl.vertexAttribPointer(4,1,gl.FLOAT,false,0,0);
       buffer(gl.ELEMENT_ARRAY_BUFFER,this.#mesh.indices);
-      this.#record={vao,buffers,count:this.#mesh.indices.length};
-      this.#gpuUploadMs=performance.now()-uploadStart;
+      this.#record={vao,buffers,capacities,count:this.#mesh.indices.length};
+      this.#gpuUploadMs=performance.now()-start;
       this.#gpuUploadCount++;
     }catch(error){
-      for(const handle of buffers)gl.deleteBuffer(handle);
+      for(const handle of buffers){
+        gl.deleteBuffer(handle);
+        this.#gpuDeletes++;
+      }
       gl.deleteVertexArray(vao);
       throw error;
     }finally{
