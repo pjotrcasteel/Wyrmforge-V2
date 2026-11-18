@@ -24,7 +24,7 @@ test('H08-01 Play Hunt consumes the SAME authored WorldGeneratorV2 output as the
   const hunt=generateWorldSite({...recipe});
 
   assert.equal(hunt.schema,'wyrmforge.generated-site.v2');
-  assert.equal(hunt.generatorVersion,'worldgen-v2.7.17');
+  assert.equal(hunt.generatorVersion,'worldgen-v2.7.18');
   assert.equal(hunt.definition.generatorVersion,hunt.generatorVersion);
   assert.equal(hunt.definition.schema,'voxel-v2.terrain-initialization.v2');
   assert.ok(hunt.layout.topology.reachable);

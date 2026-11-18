@@ -3,8 +3,15 @@
 import {siteNoise} from './map-kinds.mjs';
 import {protectedTerrainCells} from './protected-terrain.mjs';
 
-function retreatProfile(seed,tangent,y,foot,maximum) {
+export function retreatProfile(seed,tangent,y,foot,maximum) {
   const cuts=[];
+  // Retain the 10cm grid, but group retreats into fewer, uneven ledges.
+  // Thresholds depend on location, never on the parent voxel or current Y.
+  const ledges=[0];
+  for(let index=0;ledges.at(-1)<maximum;index++) {
+    const depth=2+Math.floor(siteNoise(seed,tangent,index,2.8,151)*4);
+    ledges.push(Math.min(maximum,ledges.at(-1)+depth));
+  }
   let start=0,cut=0,band=0;
   let span=.35+siteNoise(seed,tangent,band,1.7,141)*1.4;
   let strength=siteNoise(seed,tangent,band,1.2,142);
@@ -17,7 +24,10 @@ function retreatProfile(seed,tangent,y,foot,maximum) {
       strength=siteNoise(seed,tangent,band,1.2,142);
       rate=strength<.38?.12:.8+strength*4;
     }
-    cuts.push(Math.min(maximum,Math.floor(cut+Math.max(0,rise-start)*rate)));
+    const amount=Math.min(maximum,Math.floor(cut+Math.max(0,rise-start)*rate));
+    let ledge=0;
+    for(const threshold of ledges)if(threshold<=amount)ledge=threshold;
+    cuts.push(ledge);
   }
   return cuts;
 }
