@@ -78,7 +78,7 @@ const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
-const directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
+let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
@@ -231,6 +231,28 @@ if(playMode&&playQuery.get('contactShadowTest')==='1'){
       overlay:playWoodlandPaintStats.snapshot
     }),
     toggle:(enabled)=>{contactShadowsEnabled=Boolean(enabled);return contactShadowsEnabled;}
+  };
+}
+if(playMode&&playQuery.get('directionalShadowTest')==='1'){
+  // Explicit opt-in browser witness; World Objects and Voxel are untouched.
+  window.__WyrmforgeDirectionalShadowTest={
+    status:()=>{
+      const props=playStream?.trees?[...playStream.trees.objects.regions].flat().filter(p=>p.sprite):[];
+      const visible=props.filter(p=>{
+        if(!playView)return false;
+        const screen=projectVoxel(p.x,p.y,p.z,playView);
+        return screen.x>=-45&&screen.x<=playView.width+45&&
+          screen.y>=-45&&screen.y<=playView.height+45;
+      });
+      return {ready:Boolean(playStream?.trees&&playActor&&playView&&active?.port),
+        enabled:directionalShadowsEnabled,props:props.length,visibleProps:visible.length,
+        direction:playStream?.trees?.directionalShadowStatistics??null,
+        overlay:playWoodlandPaintStats.snapshot};
+    },
+    toggle:enabled=>{
+      directionalShadowsEnabled=Boolean(enabled);
+      return directionalShadowsEnabled;
+    }
   };
 }
 let playView=null;
