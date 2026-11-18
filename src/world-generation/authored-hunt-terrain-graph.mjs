@@ -4,7 +4,7 @@
 import {composeAuthoredHuntLayout} from './authored-hunt-layout.mjs';
 import {composeNorthSouthHuntConnector} from './connected-hunt-start.mjs';
 import {composeLateralHuntConnector} from './lateral-hunt-connector.mjs';
-import {clipHuntLandform} from './hunt-landform-footprint.mjs';
+import {clipHuntLandform,containsHuntLandform} from './hunt-landform-footprint.mjs';
 import {composeWetForestPlacement} from './wet-forest-placement.mjs';
 
 export class AuthoredHuntTerrainGraph {
@@ -46,8 +46,35 @@ export class AuthoredHuntTerrainGraph {
       chunkEdge:site.recipe.chunkEdge,generatorVersion:site.generatorVersion,
       ...clipHuntLandform(region,{runs:translate(site.definition.runs),
         surfaceTiles:translate(site.definition.surfaceTiles??[])})});
+    // Pass only the *authored* river course that survives the physical
+    // landform clip. WorldGen owns the channel: Water V2 only reads this
+    // descriptor after Voxel has published the matching resident region.
+    const translateChannel=channel=>{
+      const retained=point=>containsHuntLandform(region,
+        point.x+region.offsetX,point.z+region.offsetZ);
+      const floor=translate(channel.floor.filter(retained));
+      const nodes=translate(channel.nodes.filter(retained));
+      if(nodes.length<2||floor.length<2)return null;
+      return Object.freeze({
+        kind:channel.kind,
+        floor:Object.freeze(floor.map(Object.freeze)),
+        nodes:Object.freeze(nodes.map(Object.freeze)),
+        from:Object.freeze({x:nodes[0].x,z:nodes[0].z}),
+        to:Object.freeze({x:nodes.at(-1).x,z:nodes.at(-1).z})
+      });
+    };
+    const channels=(site.layout.riverChannels??[]).map(translateChannel).filter(Boolean);
+    const bounds=site.layout.footprint;
+    const fluidLayout=channels.length?Object.freeze({
+      footprint:Object.freeze({
+        minX:region.bounds.minX,maxX:region.bounds.maxX,
+        minZ:region.bounds.minZ,maxZ:region.bounds.maxZ,
+        minY:bounds.minY,maxY:bounds.maxY
+      }),
+      riverChannels:Object.freeze(channels)
+    }):null;
     return Object.freeze({id,kind:'region',role:region.role,bounds:region.bounds,
-      sourceHash:site.hash,definition});
+      sourceHash:site.hash,definition,fluidLayout});
   }
   link(id){
     const link=this.#layout.links.find(l=>l.id===id);
