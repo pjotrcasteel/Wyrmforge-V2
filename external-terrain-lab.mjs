@@ -57,6 +57,7 @@ import { analyzeCharacterReachability } from './src/character-reachability.mjs';
 import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import {findConnectedRiverBankTarget} from './src/diagnostics/hunt-connected-river-bank.mjs';
+import {exercisePublishedWaterJourney} from './src/diagnostics/hunt-water-mobile-journey.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
   spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,HUNT_PIXELS_PER_VOXEL,
@@ -812,6 +813,22 @@ function updatePlayStreaming(now) {
             playRiverRevision=-1;
             return {ticks:count,wetOutsideAuthored:wetOutsideAuthored(),
               totalDepth:playFluidStream.totalDepth};
+          },
+          journey(craterCell){
+            if(!playFluidStream||!stream.residency||streamingBusy()||
+                pendingMesh||pendingEdit||renderer.pendingUploads||playFireball){
+              throw new Error('Connected river journey requires a settled, published game');
+            }
+            const proof=exercisePublishedWaterJourney({
+              graph:stream.graph,world:active.world,port:active.port,
+              residency:stream.residency,fluid:playFluidStream,
+              fluidSave:stream.fluidSave,terrainSave:stream.terrainSave,
+              actor:playActor,craterCell
+            });
+            if(!persistStreamedWater()){
+              throw new Error('Connected river journey did not save final water state');
+            }
+            return proof;
           },
           save:()=>({
             ok:persistStreamedWater(),
