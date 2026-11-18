@@ -2,8 +2,9 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Lighting V2 entry seam L10-01 is complete; the visible local L10-02 preview needs player/device review. First review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
-**Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
+**Current focus:** **L10-03 — transient spell illumination and darker gameplay ambient ([#367](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/367))**. Materials current Fire Hunt scope remains DONE FOR NOW. L10-01 is complete; L10-02's visible direction was approved with contrast follow-up. Current spell-light/ambient preview needs player/device review. Parallel Water V2 retains fluid work. Overall lighting/release and earlier mobile lag acceptance remain open.
+**Latest visual direction:** Owner approved the L10-02 direction (`0c133cf` / `874b717`), then requested much darker gameplay and actual spell illumination. L10-03 implements that follow-up; device/experience acceptance remains pending.
+**Earlier movement baseline:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
 
@@ -578,3 +579,13 @@ Owner approved the direction and requested stronger contrast. Added a pure versi
 Ambient contrast validation: 810 combined tests pass with WAT-13 integrated; dependency audit (328 files / 1,182 dependencies) and diff check pass. Active-field GLES programs compile/link/render; neutral environment preserves every pixel in four fixtures. No phone visual or performance acceptance is claimed.
 
 Final ambient integration validation: 813 tests pass after WAT-14a `1c6952f` is included; dependency audit (329 files / 1,188 dependencies) and diff check pass. Existing fluid checkpoint and streamed channel work is preserved.
+
+### L10-03 — Transient spell illumination and darker gameplay ambient
+
+- **GitHub Issue:** [#367](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/367).
+- **Status:** NEEDS PLAYER REVIEW — owner requested actual magic illumination and a much darker game.
+- **Owner:** Spell/Hunt presentation publishes bounded generic light intent; Lighting evaluates irradiance; Rendering owns uniform uploads.
+- **Visible effect:** a moving Fireball lights nearby terrain, accepted impacts produce a fading level-scaled flash, and gameplay ambient exposure is .42 of the previous linear ambient.
+- **Boundary:** shared world-space projectile trajectory and frame time; at most two transient lights, no extra textures/queries, no persistent material emission, physics or fluid change. Static-field invalidation cannot suppress transient impact light.
+- **Validation:** 818 tests pass; targeted lifetime/renderer count checks pass. Actual GLES3 zero/two-light fixtures change no pixel outside their world-space radii. Dependency audit/diff checks pass. See [spell lighting contract/evidence and limits](SPELL-LIGHTING-V2.md).
+- **Gate:** review moving light, impact/fade, level scaling, darkness/readability, reset/expiry and mobile frame cost in the actual Hunt. First pass is terrain-only/unshadowed; sprite/prop/raised-fluid relighting and full occlusion are later scoped work. Full lighting and prior mobile performance acceptance are not closed by this preview.

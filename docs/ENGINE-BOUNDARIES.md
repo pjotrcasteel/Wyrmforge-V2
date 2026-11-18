@@ -56,3 +56,9 @@ Lighting environment v1 is immutable data owned by Lighting. The Hunt host
 supplies its existing daylight profile; Rendering binds ambient RGB. Neither
 Materials nor terrain/fluid authorities infer or mutate illumination state.
 See [ambient contract](LIGHTING-AMBIENT-CONTRAST.md).
+
+Transient spell lighting uses the generic light-set contract. Hunt composition
+samples spell presentation intent; Lighting has no spell/physics/fluid imports.
+Rendering uploads at most two transient sources. Cast/impact expiry never
+changes terrain material emission or saved fluid/terrain state. See
+[spell lighting](SPELL-LIGHTING-V2.md).

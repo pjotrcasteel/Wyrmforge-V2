@@ -1,3 +1,5 @@
+import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
+import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
 import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
 import {LocalLightField} from './src/lighting/local-light-field.mjs';
 import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
@@ -67,7 +69,7 @@ const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('l
 const playQuery=new URLSearchParams(location.search);
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 const playLightingEnvironment=defineLightingEnvironment({
-  daylight:routePreview?.stop.profile.corruption.daylight??1
+  daylight:routePreview?.stop.profile.corruption.daylight??1,exposure:playMode ? .42 : 1
 });
 const routeNav=document.querySelector('#play-route-nav');
 if(routePreview&&routeNav){
@@ -166,6 +168,8 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
+let playPresentationNow=null;
+let playSpellLights=null;
 let playLightingLiquid=null;
 const playLighting=new LocalLightField((x,z,y)=>active?.port.raycast({
   origin:[x,y+16,z],direction:[0,-1,0],maxDistance:32
@@ -649,13 +653,10 @@ function paintPlayActor(ctx,view) {
 // feedback only; the crater is always committed through the Voxel V2 port.
 function paintPlayFireball(ctx,view) {
   if(!playMode)return;
-  const now=performance.now();
+  const now=playPresentationNow??performance.now();
   if(playFireball) {
     const cast=playFireball;
-    const t=Math.min(1,Math.max(0,(now-cast.startedAt)/cast.duration));
-    const point=['x','y','z'].map(axis=>
-      cast.from[axis]+(cast.point[axis]-cast.from[axis])*t);
-    point[1]+=Math.sin(t*Math.PI)*0.75;
+    const point=huntFireballPosition(cast,now);
     const screen=projectVoxel(...point,view);
     const size=Math.max(3,view.scale*.18);
     ctx.fillStyle='#d94a15';
@@ -1109,6 +1110,7 @@ function resetSite() {
     detachPlayFluid=null;
     playFluid=null;
     playLightingLiquid=null;
+    playSpellLights=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
     playFluidLandingEnabled=true;
@@ -1780,10 +1782,15 @@ function frame(now) {
           center:playActor,liquid:playLightingLiquid,now});
         playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
       }
+      playPresentationNow=now;
+      playSpellLights=localLightingEnabled&&active?.port&&(playFireball||playImpact)?huntSpellLights({
+        cast:playFireball?.world===active.world?playFireball:null,impact:playImpact,now,
+        epoch:active.port.epoch,revision:active.port.revision,reducedMotion:reducedLavaMotion?.matches
+      }):null;
       const lightingField=localLightingEnabled&&playLighting.snapshot?.epoch===active?.port.epoch&&
         playLighting.snapshot?.revision===active?.port.revision?playLighting.snapshot:null;
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,lightingField,lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
+          camera===PLAY_HUNT_CAMERA,lightingField,transientLights:playSpellLights,lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
           huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
@@ -2110,7 +2117,7 @@ if(playMode) {
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       lighting:{enabled:localLightingEnabled,pending:playLighting.pending,
-        environment:playLightingEnvironment,
+        environment:playLightingEnvironment,transientEmitters:playSpellLights?.emitters??[],
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
