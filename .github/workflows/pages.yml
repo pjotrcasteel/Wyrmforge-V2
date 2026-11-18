@@ -55,13 +55,12 @@ jobs:
       - name: Stress World Generation V2 across authored kinds and seeded site variants
         run: node scripts/benchmark-world-generation.mjs > worldgen-stress.json
 
-  deploy:
+  # Packaging owns the single github-pages artifact for this run. Re-running
+  # a failed deploy job must NOT upload another identically named artifact.
+  package:
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -94,6 +93,18 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: .
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Allow completed Pages artifact to become visible to deployment API
+        run: sleep 12
       - id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify stable player routes, mobile HTTP responses, old-link fallback and CDN propagation
