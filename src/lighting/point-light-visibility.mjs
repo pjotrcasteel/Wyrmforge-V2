@@ -97,3 +97,40 @@ export class PointLightVisibility {
       ready:state.pending===0};
   }
 }
+
+export function writePointVisibility(field,lights,dest){
+  if(!(dest instanceof Float32Array)||dest.length!==POINT_VISIBILITY_FLOATS)
+    throw new TypeError('Expected fixed-sized point occlusion upload');
+  dest.fill(0);
+  const emitters=lights?.emitters??[];
+  if(!field?.ready||field.schema!==POINT_VISIBILITY_SCHEMA||
+      field.epoch!==lights.epoch||field.revision!==lights.revision||
+      field.lights.length!==emitters.length||
+      !(field.distances instanceof Float32Array)||
+      field.distances.length!==POINT_VISIBILITY_FLOATS)return false;
+  for(let i=0;i<emitters.length;i++){
+    const a=field.lights[i],b=emitters[i];
+    if(a.id!==b.id||Math.hypot(...a.position.map((n,j)=>n-b.position[j]))>.75||
+        a.radius!==b.radius)return false;
+  }
+  if(!field.distances.every(n=>Number.isFinite(n)&&n>=0&&n<=33))return false;
+  dest.set(field.distances);
+  return true;
+}
+
+export const POINT_VISIBILITY_GLSL=`
+uniform bool uPointVisibilityEnabled;
+uniform float uPointVisibilityDistances[48];
+float pointLightVisibility(int lightIndex,vec3 point,vec3 source){
+  if(!uPointVisibilityEnabled)return 1.0;
+  vec2 offset=point.xz-source.xz;
+  float radial=length(offset);
+  if(radial<.12)return 1.0;
+  float angle=atan(offset.y,offset.x);
+  int sector=int(mod(floor((angle+3.1415926536)/6.2831853072*12.0+.5),12.0));
+  int band=point.y>source.y+.25?1:0;
+  int index=lightIndex*24+band*12+sector;
+  float blockedAt=uPointVisibilityDistances[index];
+  return 1.0-smoothstep(blockedAt-.10,blockedAt+.24,radial);
+}
+`;

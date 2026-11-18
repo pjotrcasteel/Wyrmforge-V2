@@ -1,4 +1,5 @@
 import {LIGHT_SET_SCHEMA} from './light-contract.mjs';
+import {POINT_VISIBILITY_GLSL} from './point-light-visibility.mjs';
 export const MAX_TRANSIENT_LIGHTS=2;
 const EMPTY_LIGHTS=Object.freeze([]);
 export function writeTransientLights(set,positions,radiance){
@@ -28,6 +29,7 @@ export const TRANSIENT_LIGHTING_GLSL=`
 uniform int uTransientLightCount;
 uniform vec4 uTransientPositions[2];
 uniform vec3 uTransientRadiance[2];
+${POINT_VISIBILITY_GLSL}
 vec3 transientIrradiance(V2Surface surface,vec3 point){
   vec3 result=vec3(0.0);
   for(int i=0;i<2;i++){
@@ -39,7 +41,8 @@ vec3 transientIrradiance(V2Surface surface,vec3 point){
     float falloff=1.0-distanceToLight/radius;
     falloff*=falloff;
     float facing=.22+.78*max(0.0,dot(surface.normal,delta/max(distanceToLight,.001)));
-    result+=surface.albedo*uTransientRadiance[i]*falloff*facing;
+    float visibility=pointLightVisibility(i,point,uTransientPositions[i].xyz);
+    result+=surface.albedo*uTransientRadiance[i]*falloff*facing*visibility;
   }
   return result;
 }
