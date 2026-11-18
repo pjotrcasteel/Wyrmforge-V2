@@ -1,4 +1,5 @@
 import {writeTransientLights} from './lighting/transient-lighting.mjs';
+import {writePointVisibility,POINT_VISIBILITY_FLOATS} from './lighting/point-light-visibility.mjs';
 import {LIGHTING_ENVIRONMENT_SCHEMA} from './lighting/environment-contract.mjs';
 import {SURFACE_GLSL} from './materials/surface-contract.mjs';
 import {LIGHTING_CONTEXT_GLSL,BASELINE_LIGHTING_GLSL,validateLightingShader} from './lighting/baseline-lighting.mjs';
@@ -511,6 +512,7 @@ export class WebGLVoxelView {
   #labVolume = null;
   #transientPositions=new Float32Array(8);
   #transientRadiance=new Float32Array(6);
+  #pointVisibilityUpload=new Float32Array(POINT_VISIBILITY_FLOATS);
   #lightingTexture=null;
   #lightingSource=null;
   #huntLavaTexture = null;
@@ -902,6 +904,8 @@ export class WebGLVoxelView {
       transientCount:gl.getUniformLocation(this.#program,'uTransientLightCount'),
       transientPositions:gl.getUniformLocation(this.#program,'uTransientPositions[0]'),
       transientRadiance:gl.getUniformLocation(this.#program,'uTransientRadiance[0]'),
+      pointVisibilityEnabled:gl.getUniformLocation(this.#program,'uPointVisibilityEnabled'),
+      pointVisibilityDistances:gl.getUniformLocation(this.#program,'uPointVisibilityDistances[0]'),
       lightingOrigin:gl.getUniformLocation(this.#program,'uLightingFieldOrigin'),
       huntLavaEnabled: gl.getUniformLocation(this.#program,'uHuntLavaEnabled'),
       huntLavaOrigin: gl.getUniformLocation(this.#program,'uHuntLavaOrigin'),
@@ -1140,7 +1144,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null,transientLights=null }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null,transientLights=null,pointVisibility=null }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1222,6 +1226,9 @@ export class WebGLVoxelView {
       gl.uniform4fv(this.#uniforms.transientPositions,this.#transientPositions);
       gl.uniform3fv(this.#uniforms.transientRadiance,this.#transientRadiance);
     }
+    const visible=transientCount>0&&writePointVisibility(pointVisibility,transientLights,this.#pointVisibilityUpload);
+    gl.uniform1i(this.#uniforms.pointVisibilityEnabled,visible?1:0);
+    if(visible)gl.uniform1fv(this.#uniforms.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);

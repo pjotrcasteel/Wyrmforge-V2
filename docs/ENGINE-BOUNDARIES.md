@@ -62,3 +62,23 @@ samples spell presentation intent; Lighting has no spell/physics/fluid imports.
 Rendering uploads at most two transient sources. Cast/impact expiry never
 changes terrain material emission or saved fluid/terrain state. See
 [spell lighting](SPELL-LIGHTING-V2.md).
+
+
+## L10-07 generic lighting inputs and future object types
+
+Lighting depends on **generic public contracts**, never on tree/building/spell class names.
+Scene light producers publish `wyrmforge.light-set.v1`; all physical world-object
+systems implement the read-only `physicalOccluders(focus)` and
+`physicalRevision` provider contract. Play Hunt registers the provider once
+in `LightOccluderRegistry`. New objects/trees/buildings exposed through that
+provider then automatically block local light according to their existing
+physical AABB, and their removal/streaming invalidates cached rays. An art-only
+sprite does not silently cast physical shadows. Voxel public DDA remains the
+separate terrain source; Water remains fluid authority.
+
+The point-light visibility implementation is **not** a general directional
+caster yet. L10-08 #377 explicitly requires registered shadow silhouette or
+volume casters (buildings, new tree variants and moving props) through the same
+generic scene contract, rather than adding names to a hardcoded tree renderer.
+Lava's older height approximation must migrate during L10-07 and is not claimed
+fixed. See `docs/LIGHTING-GENERIC-OCCLUSION.md`.
