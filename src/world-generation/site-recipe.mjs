@@ -11,6 +11,12 @@ export function siteRadiusForKind(kind) {
   if(kind==='wyrm-lair')return WORLD_WYRM_LAIR_RADIUS;
   return WORLD_SITE_RADIUS;
 }
+ 
+// Authored Hunt regions must retain their existing 40m streaming footprint.
+// Standalone river destinations keep the wider 56m/64m presentation area.
+export function siteRadiusForRecipe(kind,river,huntRole){
+  return Math.min(32,siteRadiusForKind(kind)+(river&&!huntRole?8:0));
+}
 const HUNT_ROLES=new Set(['arrival','exploration','horde','investigation','discovery','flank','extraction']);
 const ID=/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/;
 
@@ -33,7 +39,7 @@ export function validateWorldSiteRecipe(recipe) {
       !Number.isSafeInteger(recipe.worldRevision) ||
       recipe.worldRevision<0 ||
       ![16,32].includes(recipe.chunkEdge) ||
-      recipe.radius!==Math.min(32,siteRadiusForKind(recipe.kind)+(recipe.river?8:0))) {
+      recipe.radius!==siteRadiusForRecipe(recipe.kind,recipe.river,recipe.huntRole)) {
     throw new RangeError('Invalid seed, revision, pitch, or bounded site extent');
   }
   if(!Number.isFinite(recipe.corruption) ||
@@ -66,7 +72,7 @@ export function createWorldSiteRecipe({
   regionId='starter-forest',siteId='site-forest-01',
   encounterId='hunt-001',kind='wet-forest',
   seed=7,worldRevision=0,chunkEdge=16,
-  corruption=0,lateralPorts,huntRole,river,radius=Math.min(32,siteRadiusForKind(kind)+(river?8:0))
+  corruption=0,lateralPorts,huntRole,river,radius=siteRadiusForRecipe(kind,river,huntRole)
 }={}) {
   return validateWorldSiteRecipe({
     schema:WORLD_SITE_RECIPE_SCHEMA,regionId,siteId,encounterId,kind,
