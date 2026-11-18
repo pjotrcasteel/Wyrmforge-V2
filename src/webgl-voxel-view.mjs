@@ -436,17 +436,24 @@ void main() {
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
   // Never treat the two types of albedo identically before lighting.
   vec3 linearAlbedo = layer >= 0.0 ? albedo : srgbToLinearColor(albedo);
-  if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
-    linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
-    if(uHuntGrassEdges)linearAlbedo=huntRootMoss(linearAlbedo,vWorld.xz);
+  // Mineral stone replaces albedo completely. Skip the grass, bank, fading
+  // and cut-face overlays whose result would otherwise be discarded.
+  // Keep shared normal/ORM lighting and lab material overrides unchanged.
+  if(uHuntGrassArt&&vMaterial==3.0){
+    linearAlbedo=stoneMineralSurface(linearAlbedo,uHuntCorruption.z);
+  }else{
+    if(uHuntGrassArt&&surfaceIndex==0&&layer>=0.0) {
+      linearAlbedo=huntGrassArt(linearAlbedo,vWorld.xz);
+      if(uHuntGrassEdges)linearAlbedo=huntRootMoss(linearAlbedo,vWorld.xz);
+    }
+    if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
+      linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
+    }
+    if(uHuntLavaEnabled)linearAlbedo=huntRiverBank(linearAlbedo);
+    if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
+    if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
+    if(uHuntGrassArt)linearAlbedo=fireTerrainSurface(linearAlbedo,int(vMaterial));
   }
-  if(uHuntGrassEdges&&vNormal.y>.5&&(vMaterial==1.0||vMaterial==2.0)) {
-    linearAlbedo=huntGrassShoulder(linearAlbedo,int(vMaterial));
-  }
-  if(uHuntLavaEnabled)linearAlbedo=huntRiverBank(linearAlbedo);
-  if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
-  if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
-  if(uHuntGrassArt)linearAlbedo=fireTerrainSurface(linearAlbedo,int(vMaterial));
 
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
