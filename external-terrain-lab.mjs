@@ -1,4 +1,6 @@
 import {sampleSurfaceIrradiance} from './src/lighting/surface-light-sample.mjs';
+import {PointLightVisibility} from './src/lighting/point-light-visibility.mjs';
+import {LightOccluderRegistry} from './src/lighting/occluder-registry.mjs';
 import {litSpriteColor} from './src/sprite-lighting-cache.mjs';
 import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
 import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
@@ -77,6 +79,8 @@ import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.m
 
 const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
+const pointOcclusionEnabled=localLightingEnabled&&
+  new URLSearchParams(location.search).get('pointOcclusion')!=='off';
 const playQuery=new URLSearchParams(location.search);
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
@@ -184,9 +188,16 @@ let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
 const playSpriteLighting={ambient:playLightingEnvironment.ambient,
-  sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights)};
+  sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights,
+    [0,1,0],pointOcclusionEnabled?playPointVisibility:null)};
 let playPresentationNow=null;
 let playSpellLights=null;
+let playPointVisibility=null;
+let playVisibilityTransport=null;
+let playVisibilityPort=null;
+let playOccluderObjects=null;
+let unregisterOccluders=null;
+const playOccluderRegistry=new LightOccluderRegistry();
 let playLightingLiquid=null;
 const playLighting=new LocalLightField((x,z,y)=>active?.port.raycast({
   origin:[x,y+16,z],direction:[0,-1,0],maxDistance:32
@@ -2019,10 +2030,33 @@ function frame(now) {
         cast:playFireball?.world===active.world?playFireball:null,impact:playImpact,now,
         epoch:active.port.epoch,revision:active.port.revision,reducedMotion:reducedLavaMotion?.matches
       }):null;
+      if(pointOcclusionEnabled&&active?.port){
+        if(playVisibilityPort!==active.port){
+          playVisibilityPort=active.port;
+          playVisibilityTransport=new PointLightVisibility(active.port);
+          unregisterOccluders?.();
+          unregisterOccluders=null;
+          playOccluderObjects=null;
+        }
+        const physical=playStream?.trees?.objects??null;
+        if(playOccluderObjects!==physical){
+          unregisterOccluders?.();
+          unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
+          playOccluderObjects=physical;
+        }
+        const focus=playSpellLights?.emitters[0]?.position??[playActor?.x??0,0,playActor?.z??0];
+        const occluders=playOccluderRegistry.snapshot({x:focus[0],z:focus[2]});
+        playPointVisibility=playSpellLights?.emitters.length
+          ?playVisibilityTransport.update(playSpellLights,occluders):null;
+      }else{
+        playPointVisibility=null;
+      }
       const lightingField=localLightingEnabled&&playLighting.snapshot?.epoch===active?.port.epoch&&
         playLighting.snapshot?.revision===active?.port.revision?playLighting.snapshot:null;
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,lightingField,transientLights:playSpellLights,lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
+          camera===PLAY_HUNT_CAMERA,lightingField,transientLights:playSpellLights,
+          pointVisibility:pointOcclusionEnabled?playPointVisibility:null,
+          lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
           huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
@@ -2355,6 +2389,9 @@ if(playMode) {
         spriteLighting:playStream?.trees?.lightingStatistics??null,
         contactShadows:{enabled:contactShadowsEnabled,...playStream?.trees?.contactShadowStatistics},
         directionalShadows:{enabled:directionalShadowsEnabled,...playStream?.trees?.directionalShadowStatistics},
+        pointOcclusion:{enabled:pointOcclusionEnabled,
+          ...playVisibilityTransport?.statistics,ready:playPointVisibility?.ready??false,
+          registeredPhysicalOccluders:playPointVisibility?.lights?.length??0},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
@@ -2473,6 +2510,9 @@ window.addEventListener('pagehide',()=>{
   playFluidVisual?.dispose();
   loader?.unload();
   renderer?.dispose();
+  unregisterOccluders?.();
+  playOccluderRegistry.clear();
+  playVisibilityTransport?.clear();
 });
 try {
   renderer=new WebGLVoxelView(canvas,{
