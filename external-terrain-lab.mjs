@@ -850,10 +850,18 @@ function updatePlayStreaming(now) {
             const cast={point:bank.hit.point,
               target:{...bank.hit.cell,radius:2.3,depth:2},
               worldRevision:bank.hit.worldRevision};
+            const beforeWetColumns=[];
+            for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){
+              if(Math.hypot(dx,dz)>3)continue;
+              const x=bank.shore.x+dx,z=bank.shore.z+dz;
+              if((playFluidStream.sample(x,z)?.depth??0)>0){
+                beforeWetColumns.push(x+','+z);
+              }
+            }
             beginPlayFireball(cast);
             return {target:bank.hit.cell,shore:bank.shore,river:bank.river,
               beforeRemoved:stream.terrainSave.removedCells.size,
-              beforeWetOutside:wetOutsideAuthored()};
+              beforeWetOutside:wetOutsideAuthored(),beforeWetColumns};
           },
           inspectCell(x,y,z){
             if(![x,y,z].every(Number.isSafeInteger))throw new TypeError('Whole voxel coordinates required');
