@@ -128,6 +128,20 @@ try{
   report.observations=observations;
   report.after=after;
   console.log('FLUID_BROWSER_MEASUREMENTS '+JSON.stringify({before,edits,observations,after}));
+  // The iPhone screenshot showed 3 adjacent waterfall jets because each
+  // metre used an independent ribbon with uncovered gaps. Require one
+  // physically connected wide sheet in the actual Hunt game, not merely
+  // unit-test geometry that never occurs with generated river terrain.
+  report.connectedFall={
+    physicalEdges:after.waterfallFaces,
+    groups:after.waterfallGroups,
+    widestColumns:after.maxWaterfallWidth
+  };
+  console.log('FLUID_BROWSER_CONNECTED_FALL '+JSON.stringify(report.connectedFall));
+  if(after.maxWaterfallWidth<2||after.waterfallGroups>=after.waterfallFaces){
+    throw new Error('Generated river still displays disconnected falling jets: '+
+      JSON.stringify(report.connectedFall));
+  }
   await page.screenshot({path:artifacts+'/forest-after.jpeg',type:'jpeg',quality:67});
   // Actual appearance gate: compare the *same game frame* with only the
   // waterfall ribbons enabled/disabled. Count changed pixels specifically
