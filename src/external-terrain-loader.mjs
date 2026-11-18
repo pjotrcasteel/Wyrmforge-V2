@@ -173,9 +173,6 @@ export class V2ExternalTerrainLoader {
     while(remaining>0&&this.#runIndex===this.#definition.runs.length&&this.#addedIndex<this.#addedCells.length){
       const {x,y,z,material,levels}=this.#addedCells[this.#addedIndex++];
       if(this.#world.get(x,y,z))throw new Error('Saved terrain addition overlaps authored occupancy');
-      if(levels&&(this.#world.get(x,y+1,z)||this.#addedKeys.has(x+','+(y+1)+','+z))){
-        throw new Error('Saved microvoxels require an exposed top voxel');
-      }
       this.#world.set(x,y,z,material);
       if(levels)this.#world.setMicroSurfaceTile(x,y,z,levels);
       remaining--;
@@ -186,7 +183,7 @@ export class V2ExternalTerrainLoader {
       while(remaining>0 &&
           this.#surfaceIndex<this.#definition.surfaceTiles.length) {
         const tile=this.#definition.surfaceTiles[this.#surfaceIndex++];
-        if(this.#world.get(tile.x,tile.y,tile.z)&&!this.#world.get(tile.x,tile.y+1,tile.z)&&
+        if(this.#world.get(tile.x,tile.y,tile.z)&&
             !this.#addedKeys.has(tile.x+','+tile.y+','+tile.z)){
           this.#world.setMicroSurfaceTile(tile.x,tile.y,tile.z,tile.levels);
         }

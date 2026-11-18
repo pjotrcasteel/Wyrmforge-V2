@@ -164,7 +164,7 @@ export class V2TerrainBandResidency {
   #restoreSurface(tile) {
     const {x,y,z,levels}=tile;
     const id=key(x,y,z);
-    if(!this.#world.get(x,y,z)||this.#world.get(x,y+1,z)||this.#additions.has(id))return;
+    if(!this.#world.get(x,y,z)||this.#additions.has(id))return;
     const actual=this.#surfaceOverrides.has(id)?this.#surfaceOverrides.get(id):levels;
     if(actual!==null) {
       this.#world.setMicroSurfaceTile(x,y,z,actual);
@@ -185,9 +185,6 @@ export class V2TerrainBandResidency {
       this.#world.set(x,y,z,0);
     }else{
       if(actual!==0)throw new Error('Added voxel would overwrite authoritative occupancy');
-      if(levels&&(this.#world.get(x,y+1,z)||this.#additions.has(key(x,y+1,z)))){
-        throw new Error('Saved microvoxels require an exposed top voxel');
-      }
       this.#world.set(x,y,z,material);
       if(levels)this.#world.setMicroSurfaceTile(x,y,z,levels);
     }

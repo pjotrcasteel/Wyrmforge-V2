@@ -138,7 +138,7 @@ test('every generated 10cm road step belongs to the exact material-painted cell'
             run.x<=tile.x&&run.x+run.length>tile.x);
           if(parent?.material===3&&!gradeMap.has(tile.x+','+tile.z)&&
               !inCirculation(tile.x,tile.z)) {
-            assert.ok(tile.levels.every(level=>level>=1&&level<=10),
+            assert.ok(tile.levels.every(level=>level>=0&&level<=10),
               'weathered stone rims retain valid physical microcell heights');
             continue;
           }

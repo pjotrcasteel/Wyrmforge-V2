@@ -34,7 +34,7 @@ function validateRay(origin, direction, maxDistance) {
   return normalize(direction);
 }
 
-// Refined top voxels are physically 10x10x10 occupied cells. Traverse only
+// Refined voxels are physically 10x10x10 occupied cells. Traverse only
 // those selected coarse cells at the ten-centimeter grid, preserving the
 // ordinary fast whole-voxel DDA everywhere else.
 function firstMicroContact(world,cell,origin,unit,start,end,entryNormal) {

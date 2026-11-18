@@ -23,11 +23,14 @@ function placementSeed(recipe,regionId){
 
 function surfaceColumns(definition,region){
   const columns=new Map();
+  const solidLayers=new Map();
   const tiles=new Map((definition.surfaceTiles??[]).map(tile=>
     [key(tile.x,tile.z)+','+tile.y,tile.levels]));
   for(const run of definition.runs){
     for(let x=run.x;x<run.x+run.length;x++){
       const id=key(x,run.z);
+      if(!solidLayers.has(id))solidLayers.set(id,new Set());
+      solidLayers.get(id).add(run.y);
       if(columns.get(id)?.y>=run.y)continue;
       const levels=tiles.get(id+','+run.y);
       columns.set(id,{y:run.y,material:run.material,
@@ -35,6 +38,23 @@ function surfaceColumns(definition,region){
         low:run.y*10+(levels?Math.min(...levels):10),
         high:run.y*10+(levels?Math.max(...levels):10)});
     }
+  }
+  // A tapered crest can have empty microcolumns over lower cliff layers.
+  // Placement must measure the actual highest solid, not the parent's box.
+  for(const [id,column] of columns) {
+    const topTile=tiles.get(id+','+column.y);
+    if(!topTile?.some(level=>level===0))continue;
+    const elevations=[];
+    for(let micro=0;micro<100;micro++) {
+      let top=-Infinity;
+      for(const y of solidLayers.get(id)) {
+        const levels=tiles.get(id+','+y);
+        const level=levels?levels[micro]:10;
+        if(level>0)top=Math.max(top,y*10+level);
+      }
+      elevations.push(top);
+    }
+    column.center=elevations[55];column.low=Math.min(...elevations);column.high=Math.max(...elevations);
   }
   return (x,z)=>columns.get(key(x-region.offsetX,z-region.offsetZ));
 }

@@ -1,7 +1,7 @@
 // Voxel V2: build *axis-aligned* 10cm cubic micro-geometry.
 // This is not vertex deformation. Every emitted quad bounds contiguous
 // occupied 10cm cells in the same authoritative VoxelWorld.
-// Coarse worker meshes are retained except faces of refined top voxels.
+// Coarse worker meshes are retained except faces of refined voxels.
 const dirs=[
   ['+x',1,0],['-x',-1,0],['+z',0,1],['-z',0,-1]
 ];
@@ -60,7 +60,9 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
       counts[name]++;
     }
     function face(name,x0,x1,y0,y1,z0,z1,material) {
-      const v=name==='+y'
+      const v=name==='-y'
+        ? [[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]]
+        : name==='+y'
         ? [[x0,y1,z0],[x0,y1,z1],[x1,y1,z1],[x1,y1,z0]]
         : name==='+x'
           ? [[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1]]
@@ -89,7 +91,7 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
       const x=Math.min(...xs)-(name==='+x'?1:0);
       const z=Math.min(...zs)-(name==='+z'?1:0);
       const y=Math.min(...ys)-(name==='+y'?1:0);
-      if(name!=='-y' && lookup.has(tileKey(x,y,z))) continue;
+      if(lookup.has(tileKey(x,y,z))) continue;
       const verts=[0,3,6,9].map(k=>[
         mesh.positions[i+k]+origin[0],
         mesh.positions[i+k+1]+origin[1],
@@ -109,22 +111,30 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
       const material=world.get(x,tile.y,z);
       return {level:material?10:0,owned:false,material};
     }
+    function columnAt(x,y,z,ix,iz) {
+      const other=lookup.get(tileKey(x,y,z));
+      return other?other.levels[iz*10+ix]:world.get(x,y,z)?10:0;
+    }
     for(const tile of tiles) {
       const material=world.get(tile.x,tile.y,tile.z);
       if(!material) continue;
       const used=new Uint8Array(100);
+      const topVisible=(ix,iz)=>{
+        const h=tile.levels[iz*10+ix];
+        return h>0&&(h<10||columnAt(tile.x,tile.y+1,tile.z,ix,iz)===0);
+      };
       // Greedy merging of flat microcell top quads avoids paying for
       // 100 distinct faces on each perfectly level 1m tile.
       for(let iz=0;iz<10;iz++)for(let ix=0;ix<10;ix++) {
         const at=iz*10+ix;
-        if(used[at])continue;
+        if(used[at]||!topVisible(ix,iz))continue;
         const h=tile.levels[at];
         let w=1,d=1;
-        while(ix+w<10 && !used[at+w] && tile.levels[at+w]===h)w++;
+        while(ix+w<10 && !used[at+w] && tile.levels[at+w]===h && topVisible(ix+w,iz))w++;
         outer:while(iz+d<10) {
           for(let dx=0;dx<w;dx++) {
             const j=(iz+d)*10+ix+dx;
-            if(used[j] || tile.levels[j]!==h)break outer;
+            if(used[j] || tile.levels[j]!==h || !topVisible(ix+dx,iz+d))break outer;
           }
           d++;
         }
@@ -141,6 +151,15 @@ export function buildPixelMicroSurfaceMeshes(world,meshes,{
         const level=tile.levels[iz*10+ix];
         const x0=tile.x+ix/10,x1=tile.x+(ix+1)/10;
         const z0=tile.z+iz/10,z1=tile.z+(iz+1)/10;
+        const below=columnAt(tile.x,tile.y-1,tile.z,ix,iz);
+        const above=columnAt(tile.x,tile.y+1,tile.z,ix,iz);
+        if(level>0&&below<10)face('-y',x0,x1,tile.y,tile.y,z0,z1,material);
+        if(level===0&&below>0&&!lookup.has(tileKey(tile.x,tile.y-1,tile.z))){
+          face('+y',x0,x1,tile.y,tile.y,z0,z1,world.get(tile.x,tile.y-1,tile.z));
+        }
+        if(level<10&&above>0&&!lookup.has(tileKey(tile.x,tile.y+1,tile.z))){
+          face('-y',x0,x1,tile.y+1,tile.y+1,z0,z1,world.get(tile.x,tile.y+1,tile.z));
+        }
         for(const [name,dx,dz] of dirs) {
           const neighbor=neighboring(tile,ix+dx,iz+dz);
           if(level===neighbor.level)continue;

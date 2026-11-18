@@ -1,7 +1,7 @@
 // Voxel V2: sparse 10x10x10 microvoxels, compressed as ten-centimeter
 // contiguous occupancy heights in each of 100 X/Z columns. A height of 7
 // represents seven *solid* 10 cm cells, not a bent triangle mesh.
-// Only top surface voxels opt in; ordinary 1m voxels remain unchanged.
+// Surface and stacked side voxels opt in; ordinary 1m voxels remain unchanged.
 export const MICRO_VOXEL_EDGE=10;
 export const MICRO_VOXEL_COUNT=100;
 export const MAX_MICRO_SURFACE_TILES=1024;
@@ -11,11 +11,11 @@ export function validateMicroSurfaceTile(tile) {
   if(!tile || ![tile.x,tile.y,tile.z].every(Number.isSafeInteger) ||
       !Array.isArray(tile.levels) && !(tile.levels instanceof Uint8Array) ||
       tile.levels.length!==MICRO_VOXEL_COUNT) {
-    throw new TypeError('Expected one signed top voxel and its 10x10 microcell heights');
+    throw new TypeError('Expected one signed solid voxel and its 10x10 microcell heights');
   }
   if(!Array.from(tile.levels).every(value=>
-    Number.isSafeInteger(value) && value>=1 && value<=10)) {
-    throw new RangeError('Microvoxel heights must contain 1–10 solid tenths');
+    Number.isSafeInteger(value) && value>=0 && value<=10) || !Array.from(tile.levels).some(value=>value>0)) {
+    throw new RangeError('Microvoxel heights must contain 0–10 solid tenths');
   }
   return Object.freeze({
     x:tile.x,y:tile.y,z:tile.z,
