@@ -217,6 +217,7 @@ let pendingMesh=null;
 let pendingEdit=null;
 let meshSource='worker';
 let generatedSite=null;
+let resettingLevel=false;
 let expeditionPlan=null;
 let expeditionSite=null;
 let reachabilityCache=null;
@@ -767,7 +768,9 @@ function streamingBusy() {
 
 // Checkpoint at terrain commits, graph eviction and infrequent fixed ticks.
 function persistStreamedWater(){
-  if(!playFluidStream||!playStream?.fluidSave)return false;
+  // pagehide/visibilitychange fire during window.location.reload(). Never
+  // resurrect a checkpoint that Reset level just removed from storage.
+  if(resettingLevel||!playFluidStream||!playStream?.fluidSave)return false;
   return playStream.fluidSave.saveFrom(playFluidStream);
 }
 
@@ -2511,18 +2514,25 @@ if(playMode) {
     // Clear the exact authored-world keys and reload the entire Voxel +
     // Water V2 authority from the WorldGen seed, not from a stale snapshot.
     try{
+      // Install the persistence fence BEFORE removing any keys: Safari
+      // pagehide/visibilitychange routinely write the old fluid snapshot.
+      resettingLevel=true;
       const result=resetHuntLevelSave(window.localStorage,{
         terrainIdentity:playStream.saveIdentity,
         worldIdentity:playStream.worldIdentity,
         seed:generatedSite.recipe.seed,
         worldRevision:generatedSite.recipe.worldRevision
       });
+      // Secondary defense: even a later direct save cannot access the
+      // previous Water V2 checkpoint object during page teardown.
+      playStream.fluidSave=null;
       playResetLevel.disabled=true;
       playResetLevel.textContent='Resetting…';
       previewMessage.textContent='Regenerating a clean Hunt from WorldGen · '+
         result.clearedKeys+' saved records cleared';
       window.location.reload();
     }catch(error){
+      resettingLevel=false;
       errorMessage='Unable to reset saved Hunt: '+error.message;
       updateStatus();
     }
