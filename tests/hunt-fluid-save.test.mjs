@@ -59,7 +59,7 @@ test('water checkpoint waits for exact authoritative terrain replay before reope
   terrain=-2;
   assert.throws(()=>returned.open('river',open),/same replayed physical terrain/);
   assert.deepEqual(returned.dormantIds,['river'],
-    'failed replay must not discard the player's liquid checkpoint');
+    "failed replay must not discard the player\'s liquid checkpoint");
   terrain=0;
   assert.equal(returned.open('river',open).totalDepth,40);
 });
