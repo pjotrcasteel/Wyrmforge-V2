@@ -1,0 +1,49 @@
+name: Water V2 desktop freeze and jitter diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/fluid/**'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/water-desktop-longrun.mjs'
+      - '.github/workflows/water-desktop-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('water-desktop-pr-{0}', github.event.pull_request.number) || 'water-desktop-manual' }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-longrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate real Hunt host and desktop benchmark JS
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check .github/witness/water-desktop-longrun.mjs
+      - name: Install desktop Chrome Playwright harness
+        run: |
+          command -v google-chrome
+          google-chrome --version
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
+      - name: Profile actual Play Hunt at 1280x720 for desktop stalls and water jitter
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/water-desktop-longrun.mjs
+      - name: Save PC diagnostics, paired jitter screenshots and timestamps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: water-v2-desktop-chrome-longrun
+          path: fluid-desktop-evidence/
+          if-no-files-found: warn
+          retention-days: 14
