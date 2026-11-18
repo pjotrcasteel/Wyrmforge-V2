@@ -1,0 +1,52 @@
+name: Water V2 connected-river lifecycle witness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/fluid/**'
+      - 'src/diagnostics/hunt-connected-river-bank.mjs'
+      - 'tests/hunt-water-full-lifecycle.test.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/water-streamed-lifecycle-browser.mjs'
+      - '.github/workflows/water-streamed-lifecycle.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('wat15a-lifecycle-pr-{0}', github.event.pull_request.number) || 'wat15a-lifecycle-manual' }}
+  cancel-in-progress: true
+
+jobs:
+  connected-river-fireball:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax-check the real game, browser witness and diagnostics
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check .github/witness/water-streamed-lifecycle-browser.mjs
+          node --check src/diagnostics/hunt-connected-river-bank.mjs
+      - name: Install headless Chrome harness
+        run: |
+          command -v google-chrome
+          google-chrome --version
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+      - name: Prove real bank Fireball, fluid breach and full browser reload
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/water-streamed-lifecycle-browser.mjs
+      - name: Save machine-readable real browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wat15a-connected-river-lifecycle
+          path: water-lifecycle-evidence/
+          if-no-files-found: warn
+          retention-days: 14
