@@ -8,6 +8,7 @@ import {
   WEBGL_V2_VERTEX_SHADER_SOURCE,
   WEBGL_V2_FRAGMENT_SHADER_SOURCE,assembleVoxelFragmentShader
 } from '../src/webgl-voxel-view.mjs';
+import {LOCAL_FIELD_LIGHTING_GLSL} from '../src/lighting/local-field-shader.mjs';
 import {UNLIT_LIGHTING_GLSL} from '../src/lighting/baseline-lighting.mjs';
 import {FLUID_VERTEX_GLSL,FLUID_FRAGMENT_GLSL} from '../src/fluid/hunt-fluid-surface-renderer.mjs';
 
@@ -17,6 +18,7 @@ try {
     ['voxel','vert',WEBGL_V2_VERTEX_SHADER_SOURCE],
     ['voxel','frag',WEBGL_V2_FRAGMENT_SHADER_SOURCE],
     ['voxel-unlit','frag',assembleVoxelFragmentShader(UNLIT_LIGHTING_GLSL)],
+    ['voxel-local-light','frag',assembleVoxelFragmentShader(LOCAL_FIELD_LIGHTING_GLSL)],
     ['fluid','vert',FLUID_VERTEX_GLSL],
     ['fluid','frag',FLUID_FRAGMENT_GLSL]
   ]) {

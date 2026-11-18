@@ -507,6 +507,8 @@ export class WebGLVoxelView {
   #gl;
   #grassImage = null;
   #labVolume = null;
+  #lightingTexture=null;
+  #lightingSource=null;
   #huntLavaTexture = null;
   #huntLavaSource = null;
   #labOrigin = null;
@@ -575,6 +577,8 @@ export class WebGLVoxelView {
       this.#program = null;
       this.#grassTexture = null;
       this.#labVolume = null;
+      this.#lightingTexture=null;
+      this.#lightingSource=null;
       this.#huntLavaTexture = null;
       this.#huntLavaSource = null;
       this.#terrainCache?.contextLost();
@@ -887,6 +891,10 @@ export class WebGLVoxelView {
       labForestStage: gl.getUniformLocation(this.#program,'uLabForestStage'),
       labTime: gl.getUniformLocation(this.#program,'uLabTime'),
       huntLava: gl.getUniformLocation(this.#program,'uHuntLava'),
+      lightingField:gl.getUniformLocation(this.#program,'uLightingField'),
+      lightingEnabled:gl.getUniformLocation(this.#program,'uLightingFieldEnabled'),
+      lightingWarm:gl.getUniformLocation(this.#program,'uLightingWarmEnabled'),
+      lightingOrigin:gl.getUniformLocation(this.#program,'uLightingFieldOrigin'),
       huntLavaEnabled: gl.getUniformLocation(this.#program,'uHuntLavaEnabled'),
       huntLavaOrigin: gl.getUniformLocation(this.#program,'uHuntLavaOrigin'),
       labOrigin: gl.getUniformLocation(this.#program,'uLabOrigin'),
@@ -1079,6 +1087,32 @@ export class WebGLVoxelView {
     this.#labOrigin=origin;
   }
 
+  #bindLightingField(field){
+    const gl=this.#gl;
+    gl.uniform1i(this.#uniforms.lightingField,6);
+    gl.uniform1i(this.#uniforms.lightingEnabled,field?1:0);
+    gl.uniform1i(this.#uniforms.lightingWarm,field?.hasEmission?1:0);
+    if(!field)return;
+    gl.activeTexture(gl.TEXTURE0+6);
+    this.#lightingTexture??=gl.createTexture();
+    if(!this.#lightingTexture)throw new Error('Could not allocate local light field');
+    gl.bindTexture(gl.TEXTURE_2D,this.#lightingTexture);
+    if(this.#lightingSource!==field){
+      if(field.schema!=='wyrmforge.local-light-field.v1'||
+          field.size?.[0]!==24||field.size?.[1]!==24||
+          !(field.data instanceof Float32Array)||field.data.length!==24*24*4||
+          !field.data.every(Number.isFinite)||field.origin?.length!==2||
+          !field.origin.every(Number.isSafeInteger))throw new TypeError('Invalid bounded light field');
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,24,24,0,gl.RGBA,gl.FLOAT,field.data);
+      this.#lightingSource=field;
+    }
+    gl.uniform2f(this.#uniforms.lightingOrigin,...field.origin);
+  }
+
   #bindHuntLava(surface){
     const gl=this.#gl;
     gl.uniform1i(this.#uniforms.huntLava,5);
@@ -1098,7 +1132,7 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1166,6 +1200,7 @@ export class WebGLVoxelView {
     }
     gl.uniform1f(this.#uniforms.labTime,labTime);
     this.#bindHuntLava(huntLava);
+    this.#bindLightingField(lightingField);
     gl.uniform2f(this.#uniforms.viewport, width, height);
     gl.uniform2f(this.#uniforms.pan, panX, panY);
     gl.uniform1f(this.#uniforms.scale, scale);
@@ -1199,6 +1234,8 @@ export class WebGLVoxelView {
     this.#grassTexture = null;
     if(this.#labVolume&&!this.#lost)this.#gl.deleteTexture(this.#labVolume);
     this.#labVolume=null;
+    if(this.#lightingTexture&&!this.#lost)this.#gl.deleteTexture(this.#lightingTexture);
+    this.#lightingTexture=null;this.#lightingSource=null;
     if(this.#huntLavaTexture&&!this.#lost)this.#gl.deleteTexture(this.#huntLavaTexture);
     this.#huntLavaTexture=null;
     this.#huntLavaSource=null;
