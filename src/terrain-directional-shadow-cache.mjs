@@ -31,10 +31,16 @@ function spriteMask(image,sprite){
 }
 export class TerrainDirectionalShadowCache{
   #masks=new Map();#entries=new Map();#pending=null;#epoch=null;
-  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];
+  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];#frame=0;
   constructor(maskFactory=spriteMask){this.maskFactory=maskFactory;}
-  beginFrame(){this.#queries=0;this.#drawn=0;}
-  endFrame(ms){this.#times.push(Math.max(0,ms));if(this.#times.length>120)this.#times.shift();}
+  beginFrame(){this.#frame++;this.#queries=0;this.#drawn=0;}
+  endFrame(ms){
+    // A caster partially built before a camera move must never starve new
+    // visible trees while it remains resident but outside the viewport.
+    if(this.#pending?.seenFrame!==this.#frame)this.#pending=null;
+    this.#times.push(Math.max(0,ms));
+    if(this.#times.length>120)this.#times.shift();
+  }
   get statistics(){
     const sorted=[...this.#times].sort((a,b)=>a-b);
     const q=n=>sorted.length?Number(sorted[Math.ceil((sorted.length-1)*n)].toFixed(2)):null;
@@ -81,9 +87,10 @@ export class TerrainDirectionalShadowCache{
       const xs=samples.map(s=>s.x),zs=samples.map(s=>s.z);
       const bounds={minX:Math.min(tree.x,...xs)-.6,maxX:Math.max(tree.x,...xs)+.6,
         minZ:Math.min(tree.z,...zs)-.6,maxZ:Math.max(tree.z,...zs)+.6};
-      this.#pending={id:tree.id,signature,bounds,samples,index:0,stamps:[]};
+      this.#pending={id:tree.id,signature,bounds,samples,index:0,stamps:[],seenFrame:this.#frame};
     }
     const job=this.#pending;
+    job.seenFrame=this.#frame;
     while(job.index<job.samples.length&&this.#queries<DIRECTIONAL_RAYS_PER_FRAME){
       const s=job.samples[job.index++];
       if(isPublished&&!isPublished(s.x,s.z))continue;
