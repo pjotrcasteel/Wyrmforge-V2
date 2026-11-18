@@ -193,6 +193,7 @@ const playSpriteLighting={ambient:playLightingEnvironment.ambient,
 let playPresentationNow=null;
 let playSpellLights=null;
 let playPointVisibility=null;
+let playOccluderCount=0;
 let playVisibilityTransport=null;
 let playVisibilityPort=null;
 let playOccluderObjects=null;
@@ -2044,10 +2045,18 @@ function frame(now) {
           unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
           playOccluderObjects=physical;
         }
-        const focus=playSpellLights?.emitters[0]?.position??[playActor?.x??0,0,playActor?.z??0];
-        const occluders=playOccluderRegistry.snapshot({x:focus[0],z:focus[2]});
-        playPointVisibility=playSpellLights?.emitters.length
-          ?playVisibilityTransport.update(playSpellLights,occluders):null;
+        if(playSpellLights?.emitters.length){
+          const focus=playSpellLights.emitters[0].position;
+          const occluders=playOccluderRegistry.snapshot({x:focus[0],z:focus[2]});
+          playOccluderCount=occluders.entries.length;
+          playPointVisibility=playVisibilityTransport.update(playSpellLights,occluders);
+        }else{
+          // When idle, never traverse colliders, raycast terrain, or keep
+          // obsolete shadow memory allocated just to draw the ambient scene.
+          playOccluderCount=0;
+          playPointVisibility=null;
+          playVisibilityTransport.clear();
+        }
       }else{
         playPointVisibility=null;
       }
@@ -2391,7 +2400,7 @@ if(playMode) {
         directionalShadows:{enabled:directionalShadowsEnabled,...playStream?.trees?.directionalShadowStatistics},
         pointOcclusion:{enabled:pointOcclusionEnabled,
           ...playVisibilityTransport?.statistics,ready:playPointVisibility?.ready??false,
-          registeredPhysicalOccluders:playPointVisibility?.lights?.length??0},
+          registeredPhysicalOccluders:playOccluderCount},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
