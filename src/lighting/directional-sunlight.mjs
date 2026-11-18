@@ -2,7 +2,7 @@
 // No imports from Voxel, World Objects, Water or Rendering.
 // Cast toward negative Z: the resulting sun comes from the visible side
 // of north-facing Hunt cliffs, rather than backlighting an invisible face.
-export const HUNT_SUN_CAST=Object.freeze({x:-.56,z:-.58});
+export const HUNT_SUN_CAST=Object.freeze({x:-.92,z:-.58});
 const castLength=Math.hypot(HUNT_SUN_CAST.x,1,HUNT_SUN_CAST.z);
 export const HUNT_SUN_RAY=Object.freeze([
   HUNT_SUN_CAST.x/castLength,-1/castLength,HUNT_SUN_CAST.z/castLength
