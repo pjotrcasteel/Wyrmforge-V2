@@ -118,10 +118,13 @@ test('Play Hunt preview deletes changed/evicted entries and never samples when l
   preview.paint(ctx,view,{x:0,y:5,z:0},()=>{},null,0,null);
   assert.equal(port.calls,1,'only object grounding, no shadow rays');
   const initialCalls=port.calls;
+  preview.update([],port);
+  // No props or sprite art in the inspection view: isolated off switch does
+  // not read terrain or invoke Canvas crop/tint APIs in the Node fixture.
+  const inspection={...view,camera:'inspection'};
   const lighting={ambient:[.42,.42,.42],sample:()=>[.42,.42,.42]};
-  preview.paint(ctx,view,{x:0,y:5,z:0},()=>{},null,10,lighting,false);
+  preview.paint(ctx,inspection,{x:0,y:5,z:0},()=>{},null,10,lighting,false);
   assert.equal(port.calls,initialCalls);
-  // Fake image cannot perform tint crop, so verify the renderer cache alone.
   preview.dispose();
   assert.equal(preview.contactShadowStatistics.entries,0);
 });
