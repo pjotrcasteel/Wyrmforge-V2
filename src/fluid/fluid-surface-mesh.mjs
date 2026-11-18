@@ -185,8 +185,13 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
       c.floorY>neighbor.floorY &&
       (activeFlightEdges.has(key(x,z)+'>'+key(x+side.dx,z+side.dz)) ||
         (neighbor.depth>0 &&
-          c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP-1e-6 &&
-          c.flowX===side.dx&&c.flowZ===side.dz)));
+          ((c.surfaceY-neighbor.surfaceY>=FLUID_FALL_MIN_DROP-1e-6 &&
+            c.flowX===side.dx&&c.flowZ===side.dz) ||
+            // A real WorldGen river current can carry liquid across a
+            // physical ledge at nearly equal water heads. Rendering must
+            // honor that actual conservative transfer, not hide its fall.
+            (c.currentX===side.dx&&c.currentZ===side.dz&&
+              c.surfaceY>=neighbor.surfaceY-.100001)))));
     const fallingIndex=DIRECTIONS.findIndex((side,i)=>isRealFall(side,neighbors[i]));
     const hasFallingEdge=fallingIndex>=0;
 
