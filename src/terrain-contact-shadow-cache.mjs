@@ -5,7 +5,9 @@ import {getCameraPreset,projectVoxel} from './camera-presets.mjs';
 import {describeContactShadow,CONTACT_SHADOW_SAMPLE_COUNT} from './lighting/contact-shadows.mjs';
 
 export const CONTACT_SHADOW_CACHE_LIMIT=96;
-export const CONTACT_SHADOW_RAY_BUDGET=64;
+// One cold prop per frame instead of two; avoid bursty 52-64-ray
+// microvoxel + visibility work during Hunt streaming.
+export const CONTACT_SHADOW_RAY_BUDGET=26;
 export const CONTACT_SHADOW_DRAW_BUDGET=1248;
 const CAMERA_DISTANCE=2.5;
 function towardsScene(camera){
