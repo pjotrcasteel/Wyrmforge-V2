@@ -1,5 +1,6 @@
 // Rendering owns Canvas resources and colour conversion; no world/solver imports.
 import {srgbToLinear,linearToSrgb} from './terrain-color-space.mjs';
+import {projectSpriteLightBands} from './sprite-light-bands.mjs';
 const DECODE=Float32Array.from({length:256},(_,i)=>srgbToLinear(i/255));
 export const SPRITE_LIGHT_CACHE_BYTES=8*1024*1024;
 export const SPRITE_LIGHT_FRAME_PIXELS=65536;
@@ -24,13 +25,30 @@ function canvasFor(width,height){
 }
 export class SpriteLightingCache {
   #factory;#image=null;#bases=new Map();#tints=new Map();#bytes=0;#baseBytes=0;#work=0;
-  #fallbackDraws=0;#untintedDraws=0;
+  #fallbackDraws=0;#untintedDraws=0;#bandedSprites=0;#bandDraws=0;
   constructor(factory=canvasFor){this.#factory=factory;}
-  beginFrame(){this.#work=0;this.#fallbackDraws=0;this.#untintedDraws=0;}
+  beginFrame(){this.#work=0;this.#fallbackDraws=0;this.#untintedDraws=0;this.#bandedSprites=0;this.#bandDraws=0;}
   get statistics(){return {bytes:this.#bytes,entries:this.#tints.size,
     framePixels:this.#work,fallbackDraws:this.#fallbackDraws,
-    untintedDraws:this.#untintedDraws};}
+    untintedDraws:this.#untintedDraws,bandedSprites:this.#bandedSprites,
+    bandDraws:this.#bandDraws};}
   clear(){this.#bases.clear();this.#tints.clear();this.#bytes=0;this.#baseBytes=0;this.#image=null;}
+  drawBanded(ctx,image,sprite,rect,sample,ambient,profile){
+    const bands=projectSpriteLightBands(sprite,rect,profile);
+    if(!bands||typeof sample!=='function'){
+      const position=profile?[profile.x,profile.y,profile.z]:null;
+      const fallback=position?sample(position):ambient;
+      this.draw(ctx,image,sprite,rect,fallback,ambient);
+      return false;
+    }
+    this.#bandedSprites++;
+    for(const band of bands){
+      const light=sample(band.position);
+      this.draw(ctx,image,band.crop,band.rect,light,ambient);
+      this.#bandDraws++;
+    }
+    return true;
+  }
   draw(ctx,image,sprite,rect,light,fallback=light){
     if(this.#image!==image){this.clear();this.#image=image;}
     const crop=[sprite.x,sprite.y,sprite.w,sprite.h].join(':');
