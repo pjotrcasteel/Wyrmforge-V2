@@ -139,7 +139,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
   const positions=[],normals=[],flows=[],faceModes=[],landingHeights=[],indices=[];
   let faceCount=0,topFaces=0,sideFaces=0,refinedShoreColumns=0;
   let waterfallFaces=0,fallLipFaces=0,fallRibbonFaces=0,landingSplashFaces=0;
-  let flightFaces=0;
+  let flightFaces=0,submergedFlightCount=0;
   const seen=new Set();
   // Translucent cap pixels are composited without depth writes. Queue
   // downstream foam until AFTER every pool cap so it cannot be painted over
@@ -322,9 +322,16 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
         Math.abs(dx)+Math.abs(dz)!==1||
         x<minX||x>maxX||toX<minX||toX>maxX||
         z<minZ||z>maxZ||toZ<minZ||toZ>maxZ||
-        units<1||units>10||progress<0||progress>1||
-        startY<=landingY){
+        units<1||units>10||progress<0||progress>1){
       throw new RangeError('Invalid physically traveling liquid parcel');
+    }
+    // A receiving pool can rise while an already-departed packet is airborne.
+    // The packet's *reserved volume* remains owned by the solver, but it is
+    // now below the visible water surface. Don't terminate Play Hunt for this
+    // perfectly legal hydrologic event; just cull submerged spray geometry.
+    if(startY<=landingY){
+      submergedFlightCount++;
+      continue;
     }
     const acrossX=-dz,acrossZ=dx;
     const forward=.05+.78*progress;
@@ -349,7 +356,8 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     schema:'wyrmforge.fluid-surface-mesh.v1',
     kind:surface.kind,step:surface.step,faceCount,topFaces,sideFaces,
     wetColumns:surface.cells.length,refinedShoreColumns,
-    waterfallFaces,fallLipFaces,fallRibbonFaces,landingSplashFaces,flightFaces,
+    waterfallFaces,fallLipFaces,fallRibbonFaces,landingSplashFaces,
+    flightFaces,submergedFlightCount,
     vertexCount:faceCount*4,triangleCount:faceCount*2,
     positions:new Float32Array(positions),
     normals:new Int8Array(normals),

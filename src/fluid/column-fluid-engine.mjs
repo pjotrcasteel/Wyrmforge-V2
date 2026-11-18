@@ -18,6 +18,17 @@ function integer(value,name){
   return value;
 }
 
+// Inlet and outlet levels may be 10cm increments: floor+0.4m is a valid
+// real surface, unlike the old integer-only floor+1m river filling rule.
+function waterLevelDeci(value,name){
+  const deci=Math.round(value*FLUID_DEPTH_UNITS);
+  if(!Number.isFinite(value)||!Number.isSafeInteger(deci)||
+      Math.abs(value*FLUID_DEPTH_UNITS-deci)>1e-6){
+    throw new TypeError(name+' must align with the 10cm fluid grid');
+  }
+  return deci;
+}
+
 export class ColumnFluidEngine {
   #bounds;
   #width;
@@ -87,24 +98,24 @@ export class ColumnFluidEngine {
     }
     for(const {x,z,surfaceY,rate=2} of sources){
       const index=this.#requiredIndex(x,z);
-      integer(surfaceY,'source surfaceY');
+      const surfaceDeci=waterLevelDeci(surfaceY,'source surfaceY');
       if(!Number.isSafeInteger(rate)||rate<1||rate>FLUID_DEPTH_UNITS){
         throw new RangeError('Invalid bounded source rate');
       }
-      this.#sources.set(index,Object.freeze({surfaceDeci:surfaceY*FLUID_DEPTH_UNITS,rate}));
+      this.#sources.set(index,Object.freeze({surfaceDeci,rate}));
     }
     this.#sourceManifest=[...this.#sources.entries()].sort(([a],[b])=>a-b)
       .map(([index,{surfaceDeci,rate}])=>Object.freeze({index,surfaceDeci,rate}));
     for(const {x,z,surfaceY,rate=2} of outlets){
       const index=this.#requiredIndex(x,z);
-      integer(surfaceY,'outlet surfaceY');
+      const surfaceDeci=waterLevelDeci(surfaceY,'outlet surfaceY');
       if(!Number.isSafeInteger(rate)||rate<1||rate>FLUID_DEPTH_UNITS){
         throw new RangeError('Invalid bounded outlet rate');
       }
       if(this.#sources.has(index))throw new RangeError('River inlet and outlet must be separate');
       if(this.#outlets.has(index))throw new RangeError('Duplicate physical outlet');
       this.#outlets.set(index,Object.freeze({
-        surfaceDeci:surfaceY*FLUID_DEPTH_UNITS,rate
+        surfaceDeci,rate
       }));
     }
     this.#outletManifest=[...this.#outlets.entries()].sort(([a],[b])=>a-b)
