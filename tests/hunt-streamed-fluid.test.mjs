@@ -81,7 +81,8 @@ test('water reload rejects missing authoritative terrain replay before mutating 
   const b=new HuntStreamedFluid({graph:f.graph,terrain:f.terrain,identity:'world-seven'});
   b.importCheckpoint(saved);
   f.floors.set('0,1',-1);
-  assert.throws(()=>b.syncResident(['r1']),/same replayed physical terrain/);
+  assert.throws(()=>b.syncResident(['r1']),
+    /Incompatible fluid snapshot|same replayed physical terrain/);
   assert.deepEqual(b.activeIds,[]);
   f.floors.delete('0,1');
   assert.equal(b.syncResident(['r1']),1);
