@@ -35,6 +35,12 @@ export class ColumnFluidEngine {
   #floors;
   #depths;
   #active=new Set();
+  // Terrain edits wake nearby wet columns immediately instead of waiting for
+  // the normal round-robin scan of a large resident river. This queue owns
+  // scheduling only; all water still moves via the same conservative solver.
+  #urgent=[];
+  #urgentSet=new Set();
+  #processingUrgent=false;
   #sources=new Map();
   #outlets=new Map();
   #currents=new Map();
@@ -221,6 +227,12 @@ export class ColumnFluidEngine {
     return moved;
   }
 
+  #wake(index){
+    if(index<0||!this.#depths[index]||this.#urgentSet.has(index))return;
+    this.#urgent.push(index);
+    this.#urgentSet.add(index);
+  }
+
   #exchange(from,to){
     const amount=this.#depths[from];
     if(!amount||this.#depths[to]+this.#incoming[to]>=MAX_DEPTH)return 0;
@@ -267,6 +279,13 @@ export class ColumnFluidEngine {
     if(!this.#depths[from]){
       this.#wet--;
       this.#active.delete(from);
+    }
+    // A fresh bank breach advances as a bounded hydraulic wave: revisit its
+    // donors and newly wetted receivers next tick, including downhill craters.
+    // The ordinary sweep still receives at least half of every frame budget.
+    if(this.#processingUrgent){
+      this.#wake(to);
+      this.#wake(from);
     }
     return moved;
   }
@@ -371,14 +390,35 @@ export class ColumnFluidEngine {
     const {injected,processed:sourcesProcessed}=this.#injectSources(sourceBudget);
     const {drained,processed:outletsProcessed}=this.#drainOutlets(outletBudget);
     const {landed,processed:flightsProcessed}=this.#landFlights(budget);
-    // Scan live liquid instead of ~4096 unrelated dry columns. Only up to
-    // the remaining budget is processed; the ascending index list and saved
-    // absolute cursor make the order deterministic across pauses/replays.
+    // A Fireball can open a riverbank late in a 4096-column footprint.
+    // Reserve at most half the remaining work for disturbed wet cells so
+    // the newly opened path reacts immediately, without starving old water.
+    const columnBudget=budget-sourcesProcessed-outletsProcessed;
+    const wakeBudget=Math.min(24,Math.floor(columnBudget/2),this.#urgent.length);
+    let transferred=0,urgentProcessed=0;
+    for(let i=0;i<wakeBudget;i++){
+      const index=this.#urgent.shift();
+      this.#urgentSet.delete(index);
+      if(!this.#depths[index])continue;
+      const x=this.#bounds.minX+index%this.#width;
+      const z=this.#bounds.minZ+Math.floor(index/this.#width);
+      this.#processingUrgent=true;
+      try{
+        for(const [dx,dz] of DIRECTIONS){
+          const neighbor=this.#index(x+dx,z+dz);
+          if(neighbor>=0)transferred+=this.#exchange(index,neighbor);
+        }
+      }finally{
+        this.#processingUrgent=false;
+      }
+      urgentProcessed++;
+    }
+    // Deterministic regular sweeps still visit the entire wet river, with a
+    // persistent absolute cursor. This is the same single shared budget.
     const active=[...this.#active].sort((a,b)=>a-b);
-    const count=Math.min(budget-sourcesProcessed-outletsProcessed,active.length);
+    const count=Math.min(columnBudget-urgentProcessed,active.length);
     let position=active.findIndex(index=>index>=this.#cursor);
     if(position<0)position=0;
-    let transferred=0;
     for(let i=0;i<count;i++){
       const index=active[(position+i)%active.length];
       this.#cursor=(index+1)%this.columnCount;
@@ -392,7 +432,8 @@ export class ColumnFluidEngine {
     }
     this.#steps++;
     return Object.freeze({
-      processed:count+sourcesProcessed+outletsProcessed,columnsProcessed:count,
+      processed:count+urgentProcessed+sourcesProcessed+outletsProcessed,
+      columnsProcessed:count+urgentProcessed,urgentProcessed,
       sourcesProcessed,outletsProcessed,flightsProcessed,
       transferred,injected,drained,landed,
       inFlight:this.#flights.length,wet:this.#wet
@@ -435,6 +476,10 @@ export class ColumnFluidEngine {
       if(floor===this.#floors[index])continue;
       this.#floors[index]=floor;
       changed++;
+      // Wake water at the changed physical floor and every shared face.
+      // An intact, higher bank remains dry: waking never creates liquid.
+      this.#wake(index);
+      for(const [dx,dz] of DIRECTIONS)this.#wake(this.#index(x+dx,z+dz));
     }
     return changed;
   }
@@ -510,6 +555,7 @@ export class ColumnFluidEngine {
       outletCursor:this.#outletCursor,drainedTotal:this.#drainedTotal,
       currents:this.#currentManifest.map(current=>({...current})),
       cursor:this.#cursor,steps:this.#steps,
+      urgent:[...this.#urgent],
       flights:this.#flights.map(packet=>({...packet})),
       flightCursor:this.#flightCursor
     };
@@ -545,6 +591,13 @@ export class ColumnFluidEngine {
     }
     // Old V1 snapshots without flight data remain valid: they contain no
     // suspended transfer. A new snapshot is validated before any mutation.
+    const urgent=state.urgent??[];
+    if(!Array.isArray(urgent)||urgent.length>this.columnCount||
+        urgent.some(index=>!Number.isSafeInteger(index)||
+          index<0||index>=this.columnCount||!state.depths[index])||
+        new Set(urgent).size!==urgent.length){
+      throw new TypeError('Invalid bounded terrain-disturbance queue');
+    }
     const packets=state.flights??[];
     const flightCursor=state.flightCursor??0;
     if(!Array.isArray(packets)||packets.length>MAX_FLUID_FLIGHTS||
@@ -585,6 +638,9 @@ export class ColumnFluidEngine {
     for(let i=0;i<this.columnCount;i++){
       if(this.#depths[i])this.#active.add(i);
     }
+    this.#urgent=[...urgent];
+    this.#urgentSet=new Set(urgent);
+    this.#processingUrgent=false;
     this.#cursor=state.cursor;
     this.#sourceCursor=sourceCursor;
     this.#outletCursor=outletCursor;
