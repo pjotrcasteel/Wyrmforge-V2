@@ -426,6 +426,51 @@ try{
   await page.screenshot({path:artifacts+'/streamed-hunt-water.jpeg',type:'jpeg',quality:67});
   console.log('FLUID_STREAMED_HUNT_PASS '+JSON.stringify(report.streamedHunt));
 
+  // Real game Fireball: aim using an authoritative raycast against a dry
+  // bank that borders a genuinely wet WorldGen channel. The witness does
+  // not call the terrain edit API or directly add fluid; the normal Hunt
+  // projectile flies and its existing collision + Voxel ledger commit.
+  const streamedBankBefore=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
+  const bankCast=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.castBank());
+  await page.waitForFunction(before=>{
+    const state=window.__WyrmforgeStreamWaterTest?.status();
+    return Boolean(state&&!state.error&&!state.busy&&
+      state.fireballs>before.fireballs&&
+      state.terrainRemovedCells>before.terrainRemovedCells&&
+      state.lastImpactRemoved>0);
+  },streamedBankBefore,{timeout:90000}).catch(async error=>{
+    const state=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest?.status()??null);
+    throw new Error('Real streamed-Hunt Fireball failed to carve the bank: '+
+      JSON.stringify({bankCast,state})+' | '+error.message);
+  });
+  const bankAdvance=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.advanceFluid(160));
+  report.streamedBank={
+    before:streamedBankBefore,cast:bankCast,advance:bankAdvance,
+    after:await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status())
+  };
+  if(report.streamedBank.after.wetOutsideAuthored<=streamedBankBefore.wetOutsideAuthored){
+    throw new Error('Real connected river did not flood newly carved, previously dry Voxel ground: '+
+      JSON.stringify(report.streamedBank));
+  }
+  const bankCell=await page.evaluate(cell=>
+    window.__WyrmforgeStreamWaterTest.inspectCell(cell.x,cell.y,cell.z),bankCast.target);
+  if(!bankCell.savedRemoved||bankCell.material!==0){
+    throw new Error('Real Fireball is not committed in Voxel terrain save: '+
+      JSON.stringify({bankCast,bankCell}));
+  }
+  report.streamedBank.cell=bankCell;
+  await page.screenshot({
+    path:artifacts+'/streamed-hunt-fireball-bank.jpeg',type:'jpeg',quality:67
+  });
+  console.log('FLUID_STREAMED_BANK_FIREBALL_PASS '+JSON.stringify({
+    removed:report.streamedBank.after.terrainRemovedCells-
+      streamedBankBefore.terrainRemovedCells,
+    newWetOutside:report.streamedBank.after.wetOutsideAuthored-
+      streamedBankBefore.wetOutsideAuthored,
+    advancedSolverTicks:bankAdvance.ticks,bank:bankCast.shore,
+    savedVoxel:bankCell.savedRemoved
+  }));
+
   // Actual browser storage boundary: checkpoint, reload the SAME page and
   // prove region-local solver steps resume rather than silently restarting.
   const savedRiver=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.save());
@@ -442,6 +487,13 @@ try{
       state.regionSteps.some(after=>after.id===before.id&&after.steps>=before.steps));
   },savedRiver.regionSteps,{timeout:90000});
   report.streamedReload=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
+  const restoredBankCell=await page.evaluate(cell=>
+    window.__WyrmforgeStreamWaterTest.inspectCell(cell.x,cell.y,cell.z),bankCast.target);
+  if(!restoredBankCell.savedRemoved||restoredBankCell.material!==0){
+    throw new Error('Connected river reload lost the Fireball-carved native Voxel: '+
+      JSON.stringify({before:bankCell,after:restoredBankCell}));
+  }
+  report.streamedReloadBankCell=restoredBankCell;
   await page.screenshot({path:artifacts+'/streamed-hunt-restored.jpeg',
     type:'jpeg',quality:67});
   console.log('FLUID_STREAMED_HUNT_RELOAD_PASS '+JSON.stringify({
