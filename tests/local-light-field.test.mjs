@@ -53,3 +53,11 @@ test('walking across a window boundary retains valid old lighting until the new 
   const moved=complete(field,{...input,center:{x:6,y:2,z:0}});
   assert.deepEqual(moved.origin,[-6,-12]);assert.notEqual(moved,previous);
 });
+
+test('tall bank tops do not extinguish illumination potential for the lower cliff face',()=>{
+  const liquid={kind:'lava',cells:[{x:1,z:0,surfaceY:.4,depth:4}]};
+  const lit=complete(new LocalLightField(x=>Math.floor(x)===0?6:0),{...input,liquid});
+  const index=(12*24+12)*4;
+  assert.ok(lit.data[index+2]>.75,'adjacent cliff can receive lava light at fragment height');
+  assert.ok(Math.abs(lit.data[index+1]-.4)<.00001,'source height is retained for per-fragment falloff');
+});

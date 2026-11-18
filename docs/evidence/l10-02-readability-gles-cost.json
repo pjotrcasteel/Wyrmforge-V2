@@ -1,0 +1,31 @@
+{
+  "renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "viewport": [
+    402,
+    604
+  ],
+  "drawsPerBatch": 12,
+  "results": [
+    {
+      "material": 3,
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "beforeMedianMs": 17.25914799999373,
+      "afterMedianMs": 19.445784000254207,
+      "changedBytes": 240307,
+      "beforeBatches": [
+        23.029516999940824,
+        17.25914799999373,
+        16.803455999706784
+      ],
+      "afterBatches": [
+        21.091191999857983,
+        17.155535999791027,
+        19.445784000254207
+      ]
+    }
+  ]
+}

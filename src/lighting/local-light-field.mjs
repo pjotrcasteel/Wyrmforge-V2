@@ -48,17 +48,23 @@ export class LocalLightField {
         const y=job.heights[i];let strength=0,sourceY=y;
         if(Number.isFinite(y)&&job.wet.size)for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){
           const sy=job.wet.get(key(x+dx,z+dz));if(sy===undefined)continue;
-          const distance=Math.hypot(dx,dz,(y-sy)*.65);
+          // Store horizontal irradiance potential. The shader evaluates vertical
+          // separation at the actual fragment, including faces BELOW this top.
+          const distance=Math.hypot(dx,dz);
           if(distance>=3.5)continue;
           // Conservative height-field occlusion along the path to the source.
           let blocked=false;
           for(const t of [.33,.66]){
             const sx=Math.floor(i%24+dx*t),sz=Math.floor(i/24+dz*t);
             if(sx<0||sx>=24||sz<0||sz>=24){blocked=true;break;}
+            // The receiving bank and source columns are not intervening blockers.
+            if((sx===i%24&&sz===Math.floor(i/24))||
+                (sx===i%24+dx&&sz===Math.floor(i/24)+dz))continue;
             if(job.heights[sz*24+sx]>y+(sy-y)*t+.65){blocked=true;break;}
           }
           if(blocked)continue;
-          const energy=(1-distance/3.5)**2;
+          const t=distance/3.5;
+          const energy=1-t*t*(3-2*t);
           if(energy>strength){strength=energy;sourceY=sy;}
         }
         job.data.set([Number.isFinite(y)?y:0,Number.isFinite(sourceY)?sourceY:0,strength,Number.isFinite(y)?1:0],i*4);
