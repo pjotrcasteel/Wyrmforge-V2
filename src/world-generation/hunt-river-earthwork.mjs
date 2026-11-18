@@ -78,7 +78,9 @@ function channelForBand(band,part,grade){
   });
   return Object.freeze({
     footprint:band.fluidLayout?.footprint??Object.freeze({
-      ...band.bounds,minY:Math.min(-4,grade-5),maxY:Math.max(grade+12,20)
+      ...band.bounds,
+      minY:Math.min(...band.definition.runs.map(run=>run.y)),
+      maxY:Math.max(grade,...band.definition.runs.map(run=>run.y+1))
     }),
     riverChannels:Object.freeze([channel]),
     corridorEarthwork:HUNT_RIVER_EARTHWORK_SCHEMA
