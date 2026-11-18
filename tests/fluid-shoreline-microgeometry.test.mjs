@@ -102,7 +102,8 @@ test('shallow river water cannot be smoothed below the top of a real stone lip',
     seed:[{x:0,z:0,depth:1},{x:1,z:0,depth:8}]
   });
   assert.equal(mesh.wetColumns,2);
-  assert.equal(mesh.sideFaces,0,'neighboring heads are close enough for interpolation');
+  assert.equal(mesh.sideFaces,1,
+    'a genuine downhill stone drop retains its physical waterfall side');
   const highStoneTop=2;
   const highCapHeights=[];
   const sharedEdgeHeights=[];
