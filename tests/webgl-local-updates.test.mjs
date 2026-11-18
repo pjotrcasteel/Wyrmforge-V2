@@ -1,3 +1,4 @@
+import {defineLightingEnvironment} from '../src/lighting/environment-contract.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoxelWorld } from '../src/voxel-world.mjs';
@@ -12,7 +13,7 @@ import {
 
 function fakeCanvas() {
   let nextId = 0;
-  const stats = { shaderSources: [], createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
+  const stats = { lightingAmbient: [], shaderSources: [], createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
   const events = new Map();
   const gl = {
     VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
@@ -47,6 +48,7 @@ function fakeCanvas() {
     createTexture: () => ({ id: ++nextId }), deleteTexture() {}, pixelStorei() {},
     texImage2D() { stats.textureUploads = (stats.textureUploads ?? 0) + 1; }, texParameteri() {},
     uniform3fv: (location, value) => {
+      if(location==='uLightingAmbient')stats.lightingAmbient.push([...value]);
       if (location.startsWith('uCamera')) stats.cameraUniforms.push({ location, value: [...value] });
     },
     drawElements: (...args) => stats.draws.push(args)
@@ -287,4 +289,13 @@ test('local lighting field uploads once per publication and restores after conte
   events.get('webglcontextlost')({preventDefault(){}});
   events.get('webglcontextrestored')();view.render(frame);
   assert.equal(stats.textureUploads,2);view.dispose();
+});
+
+test('renderer consumes explicit ambient data and rejects unsupported environment versions',()=>{
+  const {canvas,stats}=fakeCanvas();const view=new WebGLVoxelView(canvas);
+  const lightingEnvironment=defineLightingEnvironment({daylight:.45});
+  const frame={width:128,height:128,scale:16,panX:0,panY:0,lightingEnvironment};
+  view.render(frame);assert.deepEqual(stats.lightingAmbient.at(-1),lightingEnvironment.ambient);
+  assert.throws(()=>view.render({...frame,lightingEnvironment:{...lightingEnvironment,schema:'future'}}),/schema/);
+  view.dispose();
 });

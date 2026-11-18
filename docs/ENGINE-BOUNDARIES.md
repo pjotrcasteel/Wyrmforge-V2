@@ -51,3 +51,8 @@ Materials supplies linear surface values; Lighting evaluates illumination;
 Rendering owns texture/GPU resources and final output encoding. No light
 evaluation may write terrain, fluid state, props or gameplay. The baseline
 function and unlit diagnostic fallback are independent of those engines.
+
+Lighting environment v1 is immutable data owned by Lighting. The Hunt host
+supplies its existing daylight profile; Rendering binds ambient RGB. Neither
+Materials nor terrain/fluid authorities infer or mutate illumination state.
+See [ambient contract](LIGHTING-AMBIENT-CONTRAST.md).
