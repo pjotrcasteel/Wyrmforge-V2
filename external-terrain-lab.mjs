@@ -58,6 +58,7 @@ import {
 import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
+import {HuntStreamedFluid} from './src/fluid/hunt-streamed-fluid.mjs';
 import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.mjs';
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
@@ -65,6 +66,8 @@ const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
+// Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
+const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
 const routeNav=document.querySelector('#play-route-nav');
 if(routePreview&&routeNav){
   routeNav.hidden=false;
@@ -178,6 +181,7 @@ let reachabilityCache=null;
 let playActor=null;
 let playLava=null;
 let playFluid=null,detachPlayFluid=null,playFluidSurfaceStep=-1;
+let playFluidStream=null;
 let playFluidWitnessHold=false,playFluidRibbonsEnabled=true;
 let playFluidLandingEnabled=true;
 let playFluidParcelsEnabled=true;
@@ -686,6 +690,15 @@ function updatePlayStreaming(now) {
     }else stream.residency=new HuntGraphResidency(active.world,stream.graph,stream.initialIds,
       {removedCells:stream.terrainSave.removedCells});
     stream.phase='ready';
+    if(streamedWaterPreview&&!cellPreview){
+      playFluidStream=new HuntStreamedFluid({
+        graph:stream.graph,terrain:active.port,identity:stream.saveIdentity
+      });
+      playFluidStream.syncResident(stream.residency.metrics.residentRegions);
+      playFluidVisual??=new HuntFluidSurfaceRenderer(canvas);
+      playFluidSurfaceStep=-1;
+      playRiverRevision=-1;
+    }
   }
   const residency=stream.residency;
   if(!residency.metrics.transition) {
@@ -701,6 +714,12 @@ function updatePlayStreaming(now) {
       stream.respawnPending=false;
       resetPlayActor();
       return;
+    }
+    // Snapshot the independent liquid authority before Voxel writes evict a
+    // region. Never sample unloaded terrain or silently recreate a fresh pool.
+    if(job.action==='evict'&&playFluidStream?.evict(job.id)){
+      playFluidSurfaceStep=-1;
+      playRiverRevision=-1;
     }
     residency.begin(job);
     if(stream.horde.active)stream.hordeStreamingJobs++;
@@ -725,6 +744,13 @@ function updatePlayStreaming(now) {
   }
   if(stream.phase==='residency-meshing' && !pendingEdit && !renderer.pendingUploads) {
     residency.publish();
+    if(playFluidStream){
+      const opened=playFluidStream.syncResident(residency.metrics.residentRegions);
+      if(opened){
+        playFluidSurfaceStep=-1;
+        playRiverRevision=-1;
+      }
+    }
     playEvidence.publish(now);
     stream.elapsedMs=now-stream.startedAt;
     stream.phase='ready';
@@ -933,6 +959,7 @@ function updatePlayFrame(now) {
         // Bounded deterministic Water V2 work at the same fixed timestep as
         // gameplay. A terrain event already updated physical floor heights.
         if(playFluid&&!streamingBusy()&&!playFluidWitnessHold)playFluid.step({budget:96});
+        if(playFluidStream&&!streamingBusy())playFluidStream.step({budget:96});
         // The graph is not a rectangle. A clearance-checked union of
         // published regions and seams constrains horizontal movement.
         const residency=playStream?.residency;
@@ -1013,7 +1040,8 @@ function updatePlayFrame(now) {
         (active.world.allocatedVoxelBytes/1048576).toFixed(1)+' MiB':'—')+
       ' · GPU jobs '+(renderer?.pendingUploads??0)+
       '\nFireballs: '+playFireballCount+' · removed '+playRemovedVoxels+
-      (playFluid?'\nWater V2: '+playFluid.kind+' · '+playFluid.wetCount+' wet columns / '+playFluid.steps+' ticks · '+playFluid.inFlightCount+' falling parcels':'')+
+      (playFluid||playFluidStream?'\nWater V2: '+(playFluid?'route':'streamed')+' · '+(playFluid??playFluidStream).wetCount+
+         ' wet columns / '+(playFluid??playFluidStream).steps+' ticks · '+(playFluid??playFluidStream).inFlightCount+' falling parcels':'')+
       collapseLine+'\nJoystick / WASD · tap ground to cast';
   }
 }
@@ -1104,6 +1132,8 @@ function resetSite() {
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    playFluidStream?.dispose();
+    playFluidStream=null;
     playLightingLiquid=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
@@ -1191,7 +1221,9 @@ function resetSite() {
       const destinationKind=routePreview?.stop.kind??kind;
       const recipe=createWorldSiteRecipe({
         regionId:'starter-region',siteId:'preview-'+destinationKind,
-        encounterId:'preview-001',kind:destinationKind,river:routePreview?.stop.river,
+        encounterId:'preview-001',kind:destinationKind,
+        river:routePreview?.stop.river??(streamedWaterPreview?'water':undefined),
+        huntRole:streamedWaterPreview?'arrival':undefined,
         seed:Number(siteSeed.value),worldRevision:0,
         chunkEdge:Number(pitch.value),corruption:routePreview?.stop.profile.corruption.progress??Number(siteInfluence.value)/100
       });
@@ -1243,7 +1275,7 @@ function resetSite() {
         }):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
-        playStream={phase:'waiting',terrainSave,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
+        playStream={phase:'waiting',terrainSave,saveIdentity,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
           graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
@@ -1383,19 +1415,27 @@ let grassVolumeTrees=[];
 
 
 function updateHuntRiverSurface() {
-  if(!routePreview||!playActor||!active?.world||pendingMesh||pendingEdit||
-    renderer.pendingUploads||restoring)return;
+  if((!routePreview&&!playFluidStream)||!playActor||!active?.world||
+      pendingMesh||pendingEdit||renderer.pendingUploads||restoring)return;
   const world=active.world;
-  if(playFluid){
+  const fluid=playFluidStream??playFluid;
+  if(fluid){
     if(playRiverWorld===world&&playRiverRevision===world.revision&&
-        playFluid.steps-playFluidSurfaceStep<(playFluid.inFlightCount?4:8))return;
-    const state=playFluid.snapshotSurface();
-    playLightingLiquid=state;
-    playLava=huntFluidSurface(generatedSite.layout,world,state);
-    if(playFluidOverlayMode!=='no-mesh'){
-      playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
+        fluid.steps-playFluidSurfaceStep<(fluid.inFlightCount?4:8))return;
+    const state=fluid.snapshotSurface();
+    if(state){
+      playLightingLiquid=state;
+      const layout=playFluidStream?playFluidStream.presentationLayout():generatedSite.layout;
+      playLava=huntFluidSurface(layout,world,state);
+      if(playFluidOverlayMode!=='no-mesh'){
+        playFluidVisual?.update(state,(x,z)=>fluid.sample(x,z));
+      }
+    }else{
+      playLightingLiquid=null;
+      playLava=null;
+      playFluidVisual?.clear();
     }
-    playFluidSurfaceStep=playFluid.steps;
+    playFluidSurfaceStep=fluid.steps;
   }else{
     if(playRiverWorld===world&&playRiverRevision===world.revision)return;
     playLava=huntLavaSurface(generatedSite.layout,world);
@@ -2112,10 +2152,12 @@ if(playMode) {
           hasEmission:playLighting.snapshot.hasEmission}:null},
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels,
         visualPreviewLevel:huntFireballVisualLevel(playFireballLevel?.value)},
-      fluids:playFluid?{
-        schema:playFluid.schema,kind:playFluid.kind,
-        step:playFluid.steps,wetColumns:playFluid.wetCount,
-        totalDepthUnits:playFluid.totalDepth,residentColumns:playFluid.columnCount,
+      fluids:(playFluid??playFluidStream)?{
+        schema:playFluidStream?'wyrmforge.fluid-streamed-hunt.v1':playFluid.schema,kind:playFluidStream?'water':playFluid.kind,
+        step:(playFluid??playFluidStream).steps,wetColumns:(playFluid??playFluidStream).wetCount,
+        activeRegionIds:playFluidStream?.activeIds??null,
+        totalDepthUnits:(playFluid??playFluidStream).totalDepth,
+        residentColumns:(playFluid??playFluidStream).columnCount,
         renderedCells:playLava?.count??0,
         raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
@@ -2214,6 +2256,7 @@ window.addEventListener('pagehide',()=>{
   restoring?.unload();
   restoredSession?.unload();
   detachPlayFluid?.();
+  playFluidStream?.dispose();
   playFluidVisual?.dispose();
   loader?.unload();
   renderer?.dispose();
