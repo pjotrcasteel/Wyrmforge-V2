@@ -1,6 +1,6 @@
 # Lighting V2 — remaining milestones and continuation handover
 
-Updated 2026-11-18. Current technical focus: L10-07 #376 generic point-light occlusion (#396) with physical collider providers; static lava visibility still outstanding; deferred iPhone side-area regression #391 remains streaming-owned. Tracking: [L10-90 #381](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/381).
+Updated 2026-11-18. Current technical focus: L10-08 #377 mixed-consumer lighting and generic shadow casters (#401); the previous #396/#400 point/static visibility slices are merged, pending device acceptance; deferred iPhone side-area regression #391 remains streaming-owned. Tracking: [L10-90 #381](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/381).
 
 ## Outcome and current truth
 
@@ -26,7 +26,7 @@ These are linked milestone-tracking issues. They are not native GitHub Milestone
 | 1 | [L10-05 #374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374) — Ground trees and props with terrain-aware contact shadows | Trees, boulders and logs sit visibly on the ground instead of floating. | IN PROGRESS — reviewable contact-shadow implementation pending visual/device acceptance |
 | 2 | [L10-06 #375](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/375) — Directional tree-canopy and cliff shadows | Sun/sky direction casts canopy and real Voxel cliff-face shadows with camera occlusion; merged PR #395, player/device gates pending | IN PROGRESS after L10-05 |
 | 3 | [L10-07 #376](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/376) — Occlude Fireball and lava light against terrain | Generic physical occluder providers + shared terrain/Canvas point-light visibility in PR #396; static lava and device gates still outstanding | IN PROGRESS after L10-06 |
-| 4 | [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) — Coherent sprite, terrain and fluid lighting | Wizard, trees, rocks, cliffs, water and lava look like they inhabit the same lit scene. | L10-07; L10-04 #369 |
+| 4 | [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) — Coherent sprite, terrain and fluid lighting | First generic cast-volume/silhouette and walking-stability slice #401 merged; mixed lava-to-props, sprite relighting and mobile evidence remain | IN PROGRESS after L10-07 |
 | 5 | [L10-09 #378](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/378) — Biome atmosphere and combat readability | Calm uncorrupted forest transitions coherently through mountain and corruption stages into a dark, emissive Wyrm lair. | L10-08 |
 | 6 | [L10-10 #379](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/379) — Sustained smoothness and adaptive lighting quality | Smooth movement and responsive casting through dense forest, shadows, cliff destruction and emissive lair combat, including a deliberate lower-cost tier for slower devices.. | Starts measurement with L10-05; final gate after L10-09; coordinates with R10-02 and parallel Water diagnostics |
 | 7 | [L10-99 #380](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/380) — Lighting closure, coupling audit and next-engine handoff | Freeze a coherent, grounded, readable and smooth Lighting V2 slice so future chats can move to the next engine without losing known limits.. | L10-05 through L10-10 and existing L10-02/03/04 review gates |
@@ -66,7 +66,7 @@ Use bounded caster/receiver sets, cached work and measured quality tiers. Do not
 ## How another chat continues
 
 1. Read AGENTS.md, Delivery Tasks, this file and [#381](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/381). Fetch latest main and inspect concurrent PRs; preserve Water and other engine changes.
-2. Start **L10-05 #374**. Establish reproducible matched baseline and implement restrained terrain-aware tree/prop contact shadows in Play Hunt. Directional canopy shadows follow as L10-06, not an excuse to skip grounding.
+2. Current technical task **L10-08 #377**. L10-05 through L10-07 have merged code but retain named-device and player-review gates. Continue actual Hunt mixed-scene lighting and generic caster integration without reopening old milestone implementation work unless a verified blocker demands it.
 3. Use the chosen issue's acceptance gate. Ship a reviewable slice, run meaningful regression/dependency/actual shader checks, measure cost and update issue/docs with evidence and limitations.
 4. Merge through a normal PR; verify public build stamp, HTML and changed modules after Pages deployment. Provide the stable [Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html) link as the primary entry; immutable build copies can be useful only while verified available.
 5. Keep automated, desktop and named-device acceptance separate. User approval of direction does not imply sustained performance acceptance. Do not repeatedly ask the user to restate already recorded requirements.
@@ -76,3 +76,8 @@ Use bounded caster/receiver sets, cached work and measured quality tiers. Do not
 
 Optional global illumination, volumetrics, reflections, many shadowed lights and a full day/night cycle are not required for the current scoped handoff. Revisit an engine later when a concrete game requirement warrants it. Do not extend the roadmap indefinitely with effects that lack a player-visible purpose or measurable budget.
 
+
+
+## 2026-11-18 L10-08 walking-shadow stabilization checkpoint
+
+[PR #401](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/401) merged at `bd5e1e4`, preserving Water #399/#400 current main. The player reported shadows switching on/off while walking toward/farther from trees. Two verified code paths caused popping: shadow receivers were wrongly culled with caster sprites at screen edges, and FIFO receiver cache eviction churned warm casts. Receiver and sprite culling are now independent, hot shadow entries use bounded LRU (128 casters, same 16 rays/frame / 1,100 draw stamps/frame), and sprite tint misses reuse nearest warmed crop tint. True physical volume and sprite-cutout casters are both read-only generic descriptors; external object systems register a `shadowCasters(view)` provider once. All 894 tests, six shaders, and actual Hunt directional/contact browser witnesses passed on the PR head. **iPhone Safari walking and named-device cost approval remain outstanding**, as does full L10-08 lava-to-sprite/prop and material lighting consistency. See #377 and #375 for exact evidence; serve users the stable `/Wyrmforge-V2/play-hunt.html` link rather than an ephemeral build SHA.
