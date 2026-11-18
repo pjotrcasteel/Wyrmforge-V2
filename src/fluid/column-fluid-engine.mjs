@@ -7,6 +7,7 @@ export const MAX_FLUID_COLUMNS=4096;
 export const MAX_FLUID_FLIGHTS=256;
 export const MAX_FLUID_SOURCES=8;
 export const MAX_FLUID_OUTLETS=8;
+export const MAX_FLUID_CURRENTS=MAX_FLUID_COLUMNS;
 export const FLUID_DEPTH_UNITS=10; // 10 cm of water per column unit
 const MAX_DEPTH=160; // 16 m of resident liquid per 1 m2 column
 const DIRECTIONS=[[1,0],[0,1],[-1,0],[0,-1]];
@@ -25,6 +26,8 @@ export class ColumnFluidEngine {
   #active=new Set();
   #sources=new Map();
   #outlets=new Map();
+  #currents=new Map();
+  #currentManifest=[];
   // Units actually in the air, not already in the receiving pool. Each
   // destination capacity is reserved; in-flight volume remains conserved.
   #flights=[];
@@ -41,7 +44,7 @@ export class ColumnFluidEngine {
   #steps=0;
   #wet=0;
 
-  constructor({bounds,floorAt,kind='water',initial=[],sources=[],outlets=[]}={}){
+  constructor({bounds,floorAt,kind='water',initial=[],sources=[],outlets=[],currents=[]}={}){
     if(!bounds||typeof floorAt!=='function'||!Object.hasOwn(RATE,kind)) {
       throw new TypeError('Expected bounded terrain floors and water or lava');
     }
@@ -62,8 +65,12 @@ export class ColumnFluidEngine {
       const x=minX+i%width,z=minZ+Math.floor(i/width);
       this.#floors[i]=this.#readFloor(x,z);
     }
-    if(!Array.isArray(initial)||!Array.isArray(sources)||!Array.isArray(outlets)){
+    if(!Array.isArray(initial)||!Array.isArray(sources)||!Array.isArray(outlets)||
+        !Array.isArray(currents)){
       throw new TypeError('Expected bounded fluid seed and boundary arrays');
+    }
+    if(currents.length>MAX_FLUID_CURRENTS){
+      throw new RangeError('Fluid current channel exceeds resident column budget');
     }
     if(sources.length>MAX_FLUID_SOURCES)throw new RangeError('Too many bounded fluid inlet sources');
     if(outlets.length>MAX_FLUID_OUTLETS)throw new RangeError('Too many bounded fluid outlets');
@@ -102,6 +109,18 @@ export class ColumnFluidEngine {
     }
     this.#outletManifest=[...this.#outlets.entries()].sort(([a],[b])=>a-b)
       .map(([index,{surfaceDeci,rate}])=>Object.freeze({index,surfaceDeci,rate}));
+    for(const {x,z,dx,dz} of currents){
+      const from=this.#requiredIndex(x,z);
+      if(!Number.isSafeInteger(dx)||!Number.isSafeInteger(dz)||
+          Math.abs(dx)+Math.abs(dz)!==1){
+        throw new RangeError('River current direction must be one cardinal cell');
+      }
+      const to=this.#requiredIndex(x+dx,z+dz);
+      if(this.#currents.has(from))throw new RangeError('Duplicate river current cell');
+      this.#currents.set(from,to);
+    }
+    this.#currentManifest=[...this.#currents.entries()].sort(([a],[b])=>a-b)
+      .map(([from,to])=>Object.freeze({from,to}));
   }
 
   get schema(){return FLUID_STATE_SCHEMA;}
@@ -149,12 +168,22 @@ export class ColumnFluidEngine {
     if(headFrom<=floorTo)return 0; // intact bank or higher solid floor
     const headTo=floorTo+this.#depths[to]+this.#incoming[to];
     const difference=headFrom-headTo;
-    if(difference<2)return 0;
-    const moved=Math.min(RATE[this.#kind],Math.floor(difference/2),
-      amount,MAX_DEPTH-this.#depths[to]-this.#incoming[to]);
+    const current=this.#currents.get(from)===to &&
+      this.#floors[to]<=this.#floors[from]&&difference>=-1;
+    if(difference<2&&!current)return 0;
+    // The authored riverbed supplies downstream inertia on nearly level
+    // shelves. Without it, 10cm vertical quantization would demand a
+    // >=20cm hydraulic gradient at *every 1m cell*, drying a 30m river
+    // despite a valid upstream inlet. Never push uphill through a bank.
+    const reservedFilm=this.#currents.has(from)?1:0;
+    const available=Math.max(0,amount-reservedFilm);
+    const rate=current?Math.min(RATE[this.#kind],2):
+      Math.min(RATE[this.#kind],Math.floor(difference/2));
+    const moved=Math.min(rate,available,
+      MAX_DEPTH-this.#depths[to]-this.#incoming[to]);
     if(moved<1)return 0;
     const drop=this.#floors[from]-this.#floors[to];
-    const falling=drop>=1 && headFrom-headTo>=FLUID_DEPTH_UNITS;
+    const falling=drop>=1 && (current||difference>=FLUID_DEPTH_UNITS);
     if(falling&&this.#flights.length>=MAX_FLUID_FLIGHTS)return 0;
     if(!falling){
       if(!this.#depths[to])this.#wet++;
@@ -370,9 +399,23 @@ export class ColumnFluidEngine {
         flowX=dx;
         flowZ=dz;
       }
+      let currentX=0,currentZ=0;
+      const downstream=this.#currents.get(i);
+      if(downstream!==undefined&&this.#floors[downstream]<=this.#floors[i]){
+        const downstreamHead=this.#floors[downstream]*FLUID_DEPTH_UNITS+
+          this.#depths[downstream]+this.#incoming[downstream];
+        if(head>=downstreamHead-1){
+          currentX=downstream%this.#width-i%this.#width;
+          currentZ=Math.floor(downstream/this.#width)-
+            Math.floor(i/this.#width);
+          flowX=currentX;
+          flowZ=currentZ;
+        }
+      }
       cells.push(Object.freeze({
         x,z,kind:this.#kind,floorY:this.#floors[i],depth,
-        surfaceY:head/FLUID_DEPTH_UNITS,flowX,flowZ
+        surfaceY:head/FLUID_DEPTH_UNITS,flowX,flowZ,
+        currentX,currentZ
       }));
     }
     const flights=this.#flights.map(packet=>{
@@ -404,6 +447,7 @@ export class ColumnFluidEngine {
       sourceCursor:this.#sourceCursor,
       outlets:this.#outletManifest.map(outlet=>({...outlet})),
       outletCursor:this.#outletCursor,drainedTotal:this.#drainedTotal,
+      currents:this.#currentManifest.map(current=>({...current})),
       cursor:this.#cursor,steps:this.#steps,
       flights:this.#flights.map(packet=>({...packet})),
       flightCursor:this.#flightCursor
@@ -421,6 +465,7 @@ export class ColumnFluidEngine {
         state.floors.length!==this.columnCount||state.depths.length!==this.columnCount||
         JSON.stringify(state.sources)!==JSON.stringify(this.#sourceManifest)||
         JSON.stringify(state.outlets??[])!==JSON.stringify(this.#outletManifest)||
+        JSON.stringify(state.currents??[])!==JSON.stringify(this.#currentManifest)||
         !Number.isSafeInteger(outletCursor)||outletCursor<0||
         outletCursor>=Math.max(1,this.#outletManifest.length)||
         !Number.isSafeInteger(drainedTotal)||drainedTotal<0||
