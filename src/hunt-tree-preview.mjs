@@ -1,4 +1,5 @@
 import {SpriteLightingCache,litSpriteColor} from './sprite-lighting-cache.mjs';
+import {describeSpriteLightProfile} from './sprite-light-bands.mjs';
 import {TerrainContactShadowCache} from './terrain-contact-shadow-cache.mjs';
 import {TerrainDirectionalShadowCache,directionalShadowMayReachView} from './terrain-directional-shadow-cache.mjs';
 import {describeDirectionalCaster} from './lighting/shadow-caster-contract.mjs';
@@ -127,9 +128,15 @@ export class HuntTreePreview {
       contactCpuMs+=performance.now()-started;
       if(stamps.length)layers.push({depth:foot.depth+.0001,shadow:stamps});
     };
-    const draw=(sprite,rect,position)=>{
-      if(lighting)this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
-      else ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
+    const draw=(sprite,rect,position,profile=null)=>{
+      if(!lighting){
+        ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
+      }else if(profile){
+        this.#lightingCache.drawBanded(ctx,this.#image,sprite,rect,lighting.sample,
+          lighting.ambient,profile);
+      }else{
+        this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
+      }
     };
     const layers=[];
     for(const [id,fall] of this.#falls){
@@ -182,6 +189,7 @@ export class HuntTreePreview {
         }
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layer.lightPosition=[tree.x,tree.y+1,tree.z];
+        layer.lightProfile=describeSpriteLightProfile(tree,tree.sprite);
         addShadow(tree,projectVoxel(tree.x,tree.y,tree.z,view));
         layers.push(layer);
       }
@@ -214,7 +222,7 @@ export class HuntTreePreview {
         contactCpuMs+=performance.now()-started;
       }
       else if(sprite){
-        draw(sprite,[x,y,w,h],layer.lightPosition);
+        draw(sprite,[x,y,w,h],layer.lightPosition,layer.lightProfile);
         if(layer.damageFoot){
           ctx.fillStyle='#c89962';
           ctx.fillRect(Math.round(layer.damageFoot.x)-2,Math.round(layer.damageFoot.y),5,2);
