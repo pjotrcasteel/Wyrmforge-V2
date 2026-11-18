@@ -62,18 +62,22 @@ test('WorldGen materializes a real physical stone riverbed through the 8m link',
     const rawAt=(bands,x,y,z)=>bands.flatMap(b=>b.definition.runs)
       .find(run=>run.y===y&&run.z===z&&x>=run.x&&x<run.x+run.length)?.material??0;
     assert.equal(touched.size,earthwork.bands.reduce((n,b)=>n+b.earthwork.cellCount,0));
-    for(const point of proposal.points){
-      assert.equal(port.materialAt(point.x,earthwork.bedFloorY-1,point.z),3,
-        'actual WorldGen/Voxel stone bed is required at '+point.x+','+point.z+
-        ' raw='+rawAt(earthwork.bands,point.x,earthwork.bedFloorY-1,point.z));
-      assert.equal(port.materialAt(point.x,earthwork.bedFloorY,point.z),0,
-        'actual upper voxel must be AIR after earthwork at '+point.x+','+point.z);
-    }
     for(const band of earthwork.bands){
       const query=createFluidTerrainFloorQuery(band.fluidLayout.footprint,port);
+      const channel=new Map(band.fluidLayout.riverChannels[0].floor
+        .map(cell=>[cell.x+','+cell.z,cell]));
       for(const point of proposal.points.filter(p=>p.bandId===band.id)){
-        assert.equal(query(point.x,point.z),earthwork.bedFloorY,
-          'Water V2 reads the actual newly authored bed, not a fake floor');
+        const y=channel.get(point.x+','+point.z)?.y;
+        assert.ok(Number.isSafeInteger(y));
+        assert.ok(y===earthwork.bedFloorY||y===earthwork.bedFloorY+1,
+          'physical crossing is either recessed stream or authored 1m shallow ford');
+        assert.equal(port.materialAt(point.x,y-1,point.z),3,
+          'true WorldGen/Voxel stone bed required at '+point.x+','+point.z+
+          ' raw='+rawAt(earthwork.bands,point.x,y-1,point.z));
+        assert.equal(port.materialAt(point.x,y,point.z),0,
+          'actual upper voxel must be AIR after river earthwork');
+        assert.equal(query(point.x,point.z),y,
+          'Water V2 must read the real native Voxel bed, including the ford');
       }
     }
     // The terrain remains a real game Voxel world after the authored cut.
@@ -90,7 +94,11 @@ test('earthwork leaves every column outside the proposed bed exactly unchanged',
   const originalLoader=load(originals),editedLoader=load(earthwork.bands);
   try{
     const old=originalLoader.terrain.port,updated=editedLoader.terrain.port;
-    const touched=new Set(proposal.points.map(p=>p.x+','+p.z));
+    const touched=new Set([
+      ...proposal.points.map(p=>p.x+','+p.z),
+      ...earthwork.bands.flatMap(b=>b.fluidLayout.riverChannels[0].floor
+        .map(cell=>cell.x+','+cell.z))
+    ]);
     for(const band of earthwork.bands){
       for(let z=band.bounds.minZ;z<=band.bounds.maxZ;z+=3){
         for(let x=band.bounds.minX;x<=band.bounds.maxX;x+=3){
@@ -161,6 +169,54 @@ test('the Voxel actor can still cross the carved connector in both directions',(
       assert.ok(direction>0?position>=to:position<=to,
         'the newly authored riverbed must not block the real traversal corridor');
     }
+  }finally{
+    loader.unload();
+  }
+});
+
+
+test('the entire authored river, not just its connector, is visibly recessed in physical Voxel terrain',()=>{
+  const {graph,proposal}=fixture();
+  const prepared=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
+  const loader=load(prepared.bands);
+  try{
+    const port=loader.terrain.port;
+    const routeKeys=new Set(proposal.points.map(p=>p.x+','+p.z));
+    let existingCells=0,offRouteCells=0;
+    for(const band of prepared.bands){
+      const old=graph.materialize(band.id);
+      const oldFloor=old.fluidLayout?.riverChannels?.[0]?.floor??[];
+      const revised=new Map(band.fluidLayout.riverChannels[0].floor
+        .map(cell=>[cell.x+','+cell.z,cell]));
+      assert.ok(band.earthwork.recessedCells>0,
+        'each resident band must contain actual stone/air river excavation');
+      const fords=new Set(band.earthwork.fordCells);
+      for(const cell of oldFloor){
+        existingCells++;
+        const id=cell.x+','+cell.z;
+        const now=revised.get(id);
+        assert.ok(now,'original riverbed must not disappear from the connected river');
+        const shallowFord=fords.has(id);
+        if(shallowFord){
+          assert.ok(now.y<=cell.y,
+            'the physical shallow ford must not rise above the original stone: '+id);
+        }else{
+          assert.ok(now.y<=cell.y-1,
+            'ordinary riverbed must be cut at least 1m deeper at '+id);
+        }
+        assert.equal(port.materialAt(cell.x,now.y-1,cell.z),3,
+          'true Voxel stone, not a blue water decal, must support '+id);
+        assert.equal(port.materialAt(cell.x,now.y,cell.z),0,
+          'the former grass-level water column must be open air at '+id);
+        if(!shallowFord){
+          assert.ok(now.y+.4<=cell.y-.6+1e-6,
+            '40cm initial water must sit >=60cm below the original bed surface');
+          if(!routeKeys.has(id))offRouteCells++;
+        }
+      }
+    }
+    assert.ok(existingCells>20,'the full real river, not a connector-only strip, must be audited');
+    assert.ok(offRouteCells>10,'previously shallow non-ford river reaches must be recessed');
   }finally{
     loader.unload();
   }
