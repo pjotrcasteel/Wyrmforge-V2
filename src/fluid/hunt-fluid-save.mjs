@@ -4,6 +4,7 @@
 import {
   FluidRegionCheckpoints,FLUID_REGION_CHECKPOINT_SCHEMA
 } from './fluid-region-checkpoints.mjs';
+import {FLUID_SEAM_STATE_SCHEMA,MAX_FLUID_SEAM_LINKS} from './fluid-seam-links.mjs';
 
 export const HUNT_FLUID_SAVE_PREFIX='wyrmforge.hunt-water.v1:';
 export const MAX_HUNT_FLUID_SAVE_CHARS=2*1024*1024;
@@ -13,7 +14,24 @@ function validated(identity,checkpoint){
   // duplicate IDs, snapshot byte caps and WorldGen identity binding.
   const clean=new FluidRegionCheckpoints(identity);
   clean.importCheckpoint(checkpoint);
-  return clean.exportCheckpoint();
+  const state=clean.exportCheckpoint();
+  if(!Object.hasOwn(checkpoint,'seamState'))return state;
+  const seam=checkpoint.seamState;
+  const ids=seam?.linkIds;
+  const valid=Array.isArray(ids)&&ids.length>0&&ids.length<=MAX_FLUID_SEAM_LINKS&&
+    ids.every(id=>typeof id==='string'&&
+      /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/.test(id))&&
+    new Set(ids).size===ids.length&&
+    JSON.stringify(ids)===JSON.stringify([...ids].sort())&&
+    Number.isSafeInteger(seam.cursor)&&seam.cursor>=0&&seam.cursor<ids.length&&
+    Number.isSafeInteger(seam.visits)&&seam.visits>=0;
+  if(seam?.schema!==FLUID_SEAM_STATE_SCHEMA||!valid){
+    throw new TypeError('Invalid bounded Water V2 seam save');
+  }
+  return {...state,seamState:{
+    schema:FLUID_SEAM_STATE_SCHEMA,linkIds:[...ids],
+    cursor:seam.cursor,visits:seam.visits
+  }};
 }
 
 export class HuntFluidSave {

@@ -175,6 +175,61 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     schema:HUNT_RIVER_EARTHWORK_SCHEMA,
     linkId:link.id,kind:'water',status:'native-voxel-definitions-prepared',
     bedFloorY:grade,points:proposal.points,
+    upstreamRegionId:proposal.upstream,
     bands:Object.freeze(edits)
+  });
+}
+
+// Overlay only the three validated physical definitions on the original
+// immutable WorldGen graph. The rest of Hunt geography stays unmodified.
+export function composeHuntRiverEarthworkGraph(graph,earthwork,terrainAdapter){
+  if(earthwork?.schema!==HUNT_RIVER_EARTHWORK_SCHEMA||
+      earthwork.status!=='native-voxel-definitions-prepared'||
+      !Array.isArray(earthwork.bands)||earthwork.bands.length!==3||
+      typeof graph?.materialize!=='function'||typeof terrainAdapter!=='function'){
+    throw new TypeError('Expected published WorldGen river earthwork definitions');
+  }
+  const patches=new Map();
+  for(const band of earthwork.bands){
+    if(patches.has(band.id))throw new Error('Duplicate native water band');
+    const boundaryRole=band.id===earthwork.upstreamRegionId?'head':
+      band.id===earthwork.linkId?'through':'tail';
+    patches.set(band.id,Object.freeze({...band,
+      fluidLayout:Object.freeze({...band.fluidLayout,boundaryRole})}));
+  }
+  const crossings=[];
+  for(let i=1;i<earthwork.points.length;i++){
+    const before=earthwork.points[i-1],after=earthwork.points[i];
+    if(before.bandId===after.bandId)continue;
+    crossings.push(Object.freeze({
+      id:'river-'+earthwork.linkId+'-'+crossings.length,
+      from:Object.freeze({bandId:before.bandId,x:before.x,z:before.z}),
+      to:Object.freeze({bandId:after.bandId,x:after.x,z:after.z})
+    }));
+  }
+  if(crossings.length!==2){
+    throw new Error('Water corridor must contain exactly two physical region/link faces');
+  }
+  const fluidSeams=Object.freeze(crossings);
+  return Object.freeze({
+    layout:graph.layout,
+    fluidSeams,
+    placement:id=>graph.placement(id),
+    region:id=>patches.get(id)??graph.region(id),
+    link:id=>patches.get(id)??graph.link(id),
+    materialize:id=>patches.get(id)??graph.materialize(id),
+    initialTerrain(ids){
+      // Keep the original strict initial-neighborhood audit.
+      graph.initialTerrain(ids);
+      const bands=ids.map(id=>patches.get(id)??graph.materialize(id));
+      const definition=bands[0].definition;
+      return terrainAdapter({
+        siteId:'authored-graph-start',seed:definition.seed,
+        chunkEdge:definition.chunkEdge,
+        generatorVersion:definition.generatorVersion,
+        runs:bands.flatMap(b=>b.definition.runs),
+        surfaceTiles:bands.flatMap(b=>b.definition.surfaceTiles??[])
+      });
+    }
   });
 }

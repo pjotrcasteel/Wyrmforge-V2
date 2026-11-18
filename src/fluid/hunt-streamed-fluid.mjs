@@ -6,12 +6,15 @@ import {
   FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS,MAX_FLUID_FLIGHTS
 } from './column-fluid-engine.mjs';
 import {FluidRegionCheckpoints} from './fluid-region-checkpoints.mjs';
+import {FluidSeamLinks} from './fluid-seam-links.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './worldgen-fluid-adapter.mjs';
 
 export class HuntStreamedFluid {
   #graph;
   #terrain;
   #checkpoints;
+  #seams;
+  #seamTransferred=0;
   #active=new Map();
   #disposers=new Map();
   #layouts=new Map();
@@ -27,6 +30,7 @@ export class HuntStreamedFluid {
     this.#graph=graph;
     this.#terrain=terrain;
     this.#checkpoints=new FluidRegionCheckpoints(identity);
+    this.#seams=graph.fluidSeams?.length?new FluidSeamLinks(graph.fluidSeams):null;
   }
 
   get activeIds(){return [...this.#active.keys()];}
@@ -36,6 +40,8 @@ export class HuntStreamedFluid {
   get totalDepth(){return [...this.#active.values()].reduce((n,f)=>n+f.totalDepth,0);}
   get inFlightCount(){return [...this.#active.values()].reduce((n,f)=>n+f.inFlightCount,0);}
   get columnCount(){return [...this.#active.values()].reduce((n,f)=>n+f.columnCount,0);}
+  get seamLinks(){return this.#seams?.linkCount??0;}
+  get seamTransferred(){return this.#seamTransferred;}
 
   // Called before Voxel starts removing the region's solids.
   evict(id){
@@ -64,7 +70,7 @@ export class HuntStreamedFluid {
     let opened=0;
     for(const id of regionIds){
       if(this.#active.has(id))continue;
-      const band=this.#graph.region(id);
+      const band=this.#graph.materialize?.(id)??this.#graph.region(id);
       const layout=band.fluidLayout;
       if(!layout)continue;
       if(layout.riverChannels.length!==1||
@@ -83,9 +89,14 @@ export class HuntStreamedFluid {
   }
 
   step({budget=96}={}){
-    const result=this.#checkpoints.step({budget});
+    const seamBudget=this.#seams&&budget>=3?Math.min(2,budget-1):0;
+    const result=this.#checkpoints.step({budget:budget-seamBudget});
+    const seam=seamBudget?this.#seams.step(this.#active,{budget:seamBudget}):
+      {inspected:0,moved:0,held:0};
+    this.#seamTransferred+=seam.moved;
     if(result.regions)this.#steps++;
-    return result;
+    return Object.freeze({...result,seamInspected:seam.inspected,
+      seamTransferred:seam.moved,seamHeld:seam.held});
   }
 
   sample(x,z){
@@ -132,10 +143,25 @@ export class HuntStreamedFluid {
     });
   }
 
-  exportCheckpoint(){return this.#checkpoints.exportCheckpoint();}
+  exportCheckpoint(){
+    const state=this.#checkpoints.exportCheckpoint();
+    return this.#seams?{...state,seamState:this.#seams.snapshot()}:state;
+  }
   importCheckpoint(value){
     if(this.#active.size)throw new Error('Restore before publishing streamed water regions');
-    this.#checkpoints.importCheckpoint(value);
+    if(this.#seams){
+      const before=this.#seams.snapshot();
+      try{
+        this.#seams.restore(value?.seamState);
+        this.#checkpoints.importCheckpoint(value);
+      }catch(error){
+        this.#seams.restore(before);
+        throw error;
+      }
+    }else{
+      if(value?.seamState)throw new Error('Unexpected Water V2 seam state in an unlinked world');
+      this.#checkpoints.importCheckpoint(value);
+    }
   }
 
   dispose(){
