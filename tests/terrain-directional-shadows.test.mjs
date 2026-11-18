@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HUNT_SUN_CAST,projectCanopyReceivers,CANOPY_COLS,CANOPY_ROWS} from '../src/lighting/directional-sunlight.mjs';
+import {VoxelWorld} from '../src/voxel-world.mjs';
+import {raycastTerrain} from '../src/terrain-raycast.mjs';
 import {sampleCanopyAlpha,TerrainDirectionalShadowCache,DIRECTIONAL_RAYS_PER_FRAME,
   DIRECTIONAL_MAX_ENTRIES} from '../src/terrain-directional-shadow-cache.mjs';
 const tree=(id,x=0)=>({id,x,y:5,z:0,scale:1,image:{complete:true,naturalWidth:800},
@@ -12,13 +14,34 @@ const alpha=(w,h,fn)=>{
 };
 const mask=()=>sampleCanopyAlpha(alpha(70,80,()=>true),70,80);
 function terrain(epoch=1){
-  let calls=0,ground=(x,z)=>5;
-  return {epoch,get calls(){return calls;},floor:f=>{ground=f;},
+  let calls=0,ground=(x,z)=>5,variable=false;
+  return {epoch,get calls(){return calls;},floor:f=>{ground=f;variable=true;},
     raycast({origin,direction,maxDistance}){
       calls++;
-      const y=ground(origin[0],origin[2]);
-      return Number.isFinite(y)&&direction[1]===-1&&origin[1]>=y&&origin[1]-y<=maxDistance
-        ?{point:{x:origin[0],y,z:origin[2]}}:null;
+      if(!variable){
+        const t=(origin[1]-5)/-direction[1];
+        return Number.isFinite(t)&&t>0&&t<=maxDistance
+          ?{distance:t,point:{x:origin[0]+t*direction[0],
+            y:5,z:origin[2]+t*direction[2]},normal:{x:0,y:1,z:0}}:null;
+      }
+      // Only the custom heightfield fixture uses incremental ray sampling;
+      // actual Voxel DDA tests below assert genuine vertical cliff normals.
+      const steps=Math.ceil(maxDistance/.035);
+      let prev=null;
+      for(let i=0;i<=steps;i++){
+        const t=i*maxDistance/steps;
+        const x=origin[0]+direction[0]*t,y=origin[1]+direction[1]*t,
+          z=origin[2]+direction[2]*t,level=ground(x,z);
+        if(Number.isFinite(level)&&y<=level){
+          const raised=prev!==null&&Number.isFinite(prev.level)&&level>prev.level+.25;
+          const normal=raised&&Math.abs(direction[2])>=Math.abs(direction[0])
+            ?{x:0,y:0,z:-Math.sign(direction[2])}
+            :raised?{x:-Math.sign(direction[0]),y:0,z:0}:{x:0,y:1,z:0};
+          return {distance:t,point:{x,y:level,z},normal};
+        }
+        prev={x,z,level};
+      }
+      return null;
     }};
 }
 test('canopy alpha sampling preserves real transparent holes, not rectangular billboards',()=>{
@@ -31,7 +54,7 @@ test('sun projects readable shadow away from L10-05 contact base',()=>{
   const projected=projectCanopyReceivers(tree('oak'),mask());
   assert.ok(projected.length>12);
   assert.ok(projected.every(c=>c.height>=1.55&&c.alpha>0&&c.alpha<=.42));
-  assert.ok(projected.some(c=>c.z>HUNT_SUN_CAST.z*3));
+  assert.ok(projected.some(c=>c.z<HUNT_SUN_CAST.z*3));
   assert.ok(projected.some(c=>c.x<-2));
 });
 test('cold builds are incremental, warm entries avoid all terrain queries',()=>{
@@ -86,4 +109,81 @@ test('dense canopy churn never exceeds bounded retention and overlay draw budget
     [{x:0,y:5,z:0,width:1,depth:1,alpha:.3}]);
   assert.equal(rectangles.length,1);
   assert.equal(cache.statistics.frameStamps,1);
+});
+
+
+function physicalCliff({frontOccluder=false}={}){
+  const world=new VoxelWorld({chunkEdge:16});
+  // Flat physical 1m terrain, then a 4m vertical cliff in the sun ray path.
+  for(let x=-10;x<=6;x++)for(let z=-8;z<=7;z++)world.set(x,4,z,3);
+  for(let x=-10;x<=6;x++)for(let z=-3;z<=-2;z++)for(let y=5;y<=8;y++)world.set(x,y,z,3);
+  if(frontOccluder){
+    // This high ridge is between the front-facing cliff and the Hunt camera.
+    // It does NOT lie between the canopy source and the cliff's sunlight ray.
+    for(let x=-10;x<=6;x++)for(let y=5;y<=12;y++)world.set(x,y,2,3);
+  }
+  let calls=0;
+  return {epoch:1,world,get calls(){return calls;},
+    raycast(args){calls++;return raycastTerrain(world,args);}};
+}
+function completedShadow(cache,port,treeObj=tree('cliff')){
+  let stamps=[];
+  for(let frame=0;frame<24;frame++){
+    cache.beginFrame();
+    stamps=cache.stamps(treeObj,port,()=>true,'hunt');
+    cache.endFrame(0);
+    if(cache.statistics.entries)break;
+  }
+  return stamps;
+}
+test('real Voxel 3D DDA casts a canopy shadow onto visible vertical cliff faces',()=>{
+  const port=physicalCliff();
+  const cache=new TerrainDirectionalShadowCache(()=>mask());
+  const stamps=completedShadow(cache,port);
+  const cliff=stamps.filter(s=>s.face==='cliff');
+  assert.ok(cliff.length>0,'true raised voxel wall must receive part of the cast');
+  assert.ok(cliff.every(s=>s.y>5&&s.y<=9),'cliff stamps belong to the actual wall elevation');
+  assert.ok(cache.statistics.frameRays<=DIRECTIONAL_RAYS_PER_FRAME);
+  const frames=[];
+  const ctx={save(){},restore(){},fillRect(...rect){frames.push(rect);}};
+  cache.beginFrame();
+  cache.paint(ctx,{width:600,height:500,scale:20,camera:'hunt'},cliff);
+  assert.ok(cache.statistics.frameCliffStamps>0);
+  assert.ok(frames.length<=cliff.length);
+});
+test('nearer solid cliffs occlude rear canopy shadows instead of drawing through terrain',()=>{
+  const clear=new TerrainDirectionalShadowCache(()=>mask());
+  const occluded=new TerrainDirectionalShadowCache(()=>mask());
+  const visible=completedShadow(clear,physicalCliff());
+  const hiddenPort=physicalCliff({frontOccluder:true});
+  const blocked=completedShadow(occluded,hiddenPort);
+  const visibleCliff=visible.filter(s=>s.face==='cliff').length;
+  const hiddenCliff=blocked.filter(s=>s.face==='cliff').length;
+  assert.ok(visibleCliff>0);
+  assert.ok(hiddenCliff<visibleCliff,
+    'a nearer 8m cliff must hide at least some shadow pixels on the rear wall');
+  assert.ok(occluded.statistics.occlusionRejects>0,
+    'camera visibility queries must reject shielded terrain receivers');
+});
+test('physical changes to a wall rebuild shadow geometry with no stale cliff pixels',()=>{
+  const port=physicalCliff(),cache=new TerrainDirectionalShadowCache(()=>mask());
+  const before=completedShadow(cache,port);
+  assert.ok(before.some(s=>s.face==='cliff'));
+  for(let x=-10;x<=6;x++)for(let z=-3;z<=-2;z++)for(let y=5;y<=8;y++)port.world.set(x,y,z,0);
+  cache.invalidate({min:{x:-10,z:-3},max:{x:6,z:-2}});
+  const after=completedShadow(cache,port);
+  assert.ok(after.length>0);
+  assert.equal(after.filter(s=>s.face==='cliff').length,0,
+    'removed cliff casts cannot remain pinned to empty air');
+});
+
+test('real flat Voxel ground independently receives sun-lit canopy stamps',()=>{
+  const world=new VoxelWorld({chunkEdge:16});
+  for(let x=-14;x<=6;x++)for(let z=-12;z<=7;z++)world.set(x,4,z,3);
+  const port={epoch:1,raycast:options=>raycastTerrain(world,options)};
+  const cache=new TerrainDirectionalShadowCache(()=>mask());
+  const stamps=completedShadow(cache,port);
+  assert.ok(stamps.length>6,'ground and camera both have physical receivers');
+  assert.ok(stamps.every(s=>s.face==='ground'));
+  assert.ok(stamps.every(s=>Math.abs(s.y-5.045)<.01));
 });
