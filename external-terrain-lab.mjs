@@ -1,3 +1,4 @@
+import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
 import {LocalLightField} from './src/lighting/local-light-field.mjs';
 import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
 import {huntScreenMovement} from './src/hunt-movement-input.mjs';
@@ -68,6 +69,9 @@ const playQuery=new URLSearchParams(location.search);
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
+const playLightingEnvironment=defineLightingEnvironment({
+  daylight:routePreview?.stop.profile.corruption.daylight??1
+});
 const routeNav=document.querySelector('#play-route-nav');
 if(routePreview&&routeNav){
   routeNav.hidden=false;
@@ -1819,7 +1823,7 @@ function frame(now) {
       const lightingField=localLightingEnabled&&playLighting.snapshot?.epoch===active?.port.epoch&&
         playLighting.snapshot?.revision===active?.port.revision?playLighting.snapshot:null;
       if(renderer.render({...view,huntHeightContrast:playMode &&
-          camera===PLAY_HUNT_CAMERA,lightingField,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
+          camera===PLAY_HUNT_CAMERA,lightingField,lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
           huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
@@ -2146,6 +2150,7 @@ if(playMode) {
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
       lighting:{enabled:localLightingEnabled,pending:playLighting.pending,
+        environment:playLightingEnvironment,
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
