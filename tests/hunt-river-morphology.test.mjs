@@ -79,7 +79,11 @@ test('WAT-16: native one-metre connector becomes an authored multi-column wet ri
       }
       const latest=band.fluidLayout.riverChannels[0].floor.filter(cell=>
         !originalIds.has(key(cell.x,cell.z)));
-      assert.ok(latest.length>=band.earthwork.cellCount);
+      const plannedExtra=proposal.points.filter(point=>point.bandId===band.id&&
+        !originalIds.has(key(point.x,point.z))).length;
+      assert.equal(latest.length,
+        plannedExtra+band.earthwork.lateralWetCells,
+        'new water footprint must match truly added corridor and lateral Voxel cells');
     }
   }finally{
     loader.unload();
