@@ -44,8 +44,11 @@ test('a Fireball-opened bank receives real water immediately even near the end o
   const first=fluid.step({budget:12});
   assert.ok(first.urgentProcessed>0,'a real adjacent wet cell must wake immediately');
   assert.ok(first.processed<=12,'mobile budget cannot increase on impact');
-  assert.ok(fluid.sample(28,50).depth>0,
-    'newly connected crater edge should not wait for a full river sweep');
+  assert.ok(fluid.sample(28,50).pendingArrival>0,
+    'the breach must start a genuine falling parcel on the first hydraulic step');
+  assert.ok(fluid.inFlightCount>0,'downhill water must travel instead of teleporting into the crater');
+  assert.equal(fluid.sample(28,50).depth,0,
+    'a falling parcel cannot appear at its destination before landing');
   assert.equal(fluid.sample(27,50).depth,0,
     'water must not jump over the first physical crater cell');
   let injected=first.injected,drained=first.drained;
@@ -55,6 +58,8 @@ test('a Fireball-opened bank receives real water immediately even near the end o
     injected+=result.injected;
     drained+=result.drained;
   }
+  assert.ok(fluid.sample(28,50).depth>0,
+    'the first crater cell must contain genuine landed water after the fall');
   assert.ok(fluid.sample(27,50).depth>0,
     'the second crater cell must gradually receive real water across the breach');
   assert.equal(fluid.sample(27,51).depth,0,
