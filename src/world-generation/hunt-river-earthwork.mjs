@@ -115,11 +115,14 @@ function channelForBand(band,part,grade,changes){
     const next=part[Math.min(part.length-1,i+1)];
     const prev=part[Math.max(0,i-1)];
     cells.set(key(point.x,point.z),Object.freeze({
-      x:point.x,z:point.z,y:grade,
+      x:point.x,z:point.z,
+      y:changes.get(key(point.x,point.z))?.floorY??grade,
       flowX:next.x-prev.x,flowZ:next.z-prev.z
     }));
   }
-  const nodes=part.map(({x,z})=>Object.freeze({x,z,y:grade}));
+  const nodes=part.map(({x,z})=>Object.freeze({
+    x,z,y:changes.get(key(x,z))?.floorY??grade
+  }));
   const channel=Object.freeze({
     kind:'water',
     nodes:Object.freeze(nodes),
@@ -172,7 +175,9 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const changes=new Map();
     const region=graph.layout.regions.find(item=>item.id===band.id);
     const existingChannel=band.fluidLayout?.riverChannels?.[0];
-    const fords=riverFordCells(region,existingChannel);
+    const fords=riverFordCells(region,{floor:[
+      ...(existingChannel?.floor??[]),...points
+    ]});
     // An already-authored waterbed is Voxel terrain too. If we only carve
     // the linking centerline, the broad existing river sits on the surface
     // and looks like a blue overlay. Cut every actual WorldGen channel cell;
@@ -188,7 +193,12 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       const id=key(point.x,point.z);
       if(covered.has(id))throw new Error('Overlapping WorldGen channel bands');
       covered.add(id);
-      changes.set(id,{floorY:Math.min(grade,changes.get(id)?.floorY??grade)});
+      // Shallow rocky ford at a real authored east/west route crossing.
+      // Other channel cells are fully recessed. The ford uses the exact
+      // earlier passable physical grade, never an invented shader bridge.
+      const desired=fords.has(id)?grade+HUNT_RIVER_RECESS_METRES:grade;
+      changes.set(id,{floorY:Math.min(desired,
+        changes.get(id)?.floorY??desired)});
     }
     const heights=topFaces(band.definition.runs,changes);
     let maxCut=0,maxFill=0;
