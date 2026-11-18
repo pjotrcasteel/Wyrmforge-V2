@@ -1,3 +1,5 @@
+import {sampleSurfaceIrradiance} from './src/lighting/surface-light-sample.mjs';
+import {litSpriteColor} from './src/sprite-lighting-cache.mjs';
 import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
 import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
 import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
@@ -171,6 +173,8 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
+const playSpriteLighting={ambient:playLightingEnvironment.ambient,
+  sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights)};
 let playPresentationNow=null;
 let playSpellLights=null;
 let playLightingLiquid=null;
@@ -344,7 +348,8 @@ function paintEncounterGuide(view) {
     if(playMode&&playActor&&playStream?.trees){
       const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
-        extractionPortalLayer(view,playStream.extraction),started);
+        extractionPortalLayer(view,playStream.extraction),playPresentationNow??started,
+        localLightingEnabled?playSpriteLighting:null);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
@@ -612,6 +617,8 @@ function paintPlayActor(ctx,view) {
   const bodyWidth=Math.max(3,graphic.projectedHeight*0.3);
   const headRadius=Math.max(2,graphic.projectedHeight*0.11);
   const hatY=top.y-4*pixelRatio;
+  const irradiance=localLightingEnabled?playSpriteLighting.sample([playActor.x,playActor.y+.8,playActor.z]):null;
+  const lit=color=>irradiance?litSpriteColor(color,irradiance):color;
   ctx.save();
   const movingCells=(!pendingEdit&&!renderer.pendingUploads)
     ?playStream?.collapse?.renderCells??[]:[];
@@ -627,22 +634,22 @@ function paintPlayActor(ctx,view) {
     bodyWidth*.85,Math.max(2,bodyWidth*.33),0,0,Math.PI*2);
   ctx.fill();
   // Blocky charcoal-blue robes, hood, golden brim and simple staff.
-  ctx.fillStyle='#37466e';
+  ctx.fillStyle=lit('#37466e');
   ctx.fillRect(pixel(foot.x-bodyWidth/2),pixel(top.y+graphic.projectedHeight*.32),
     pixel(bodyWidth),pixel(graphic.projectedHeight*.68));
-  ctx.fillStyle='#647493';
+  ctx.fillStyle=lit('#647493');
   ctx.fillRect(pixel(foot.x-bodyWidth*.22),pixel(top.y+graphic.projectedHeight*.42),
     pixel(bodyWidth*.4),pixel(graphic.projectedHeight*.53));
-  ctx.fillStyle='#d8bb91';
+  ctx.fillStyle=lit('#d8bb91');
   ctx.fillRect(pixel(top.x-headRadius*.65),pixel(top.y+headRadius*1.3),
     pixel(headRadius*1.3),pixel(headRadius*1.3));
-  ctx.fillStyle='#263451';
+  ctx.fillStyle=lit('#263451');
   ctx.beginPath();
   ctx.moveTo(top.x,hatY);
   ctx.lineTo(top.x-bodyWidth*.48,top.y+headRadius*1.9);
   ctx.lineTo(top.x+bodyWidth*.48,top.y+headRadius*1.9);
   ctx.closePath();ctx.fill();
-  ctx.strokeStyle='#a98145';ctx.lineWidth=Math.max(1.4,1.7*pixelRatio);
+  ctx.strokeStyle=lit('#a98145');ctx.lineWidth=Math.max(1.4,1.7*pixelRatio);
   ctx.beginPath();
   ctx.moveTo(foot.x+bodyWidth*.7,foot.y);
   ctx.lineTo(top.x+bodyWidth*.8,top.y+headRadius*.25);
@@ -1864,8 +1871,10 @@ function frame(now) {
             reducedMotion:reducedLavaMotion?.matches,
             showRibbons:playFluidRibbonsEnabled,
             showLanding:playFluidLandingEnabled,
-            showParcels:playFluidParcelsEnabled});
-          if(paintForest)paintForest(forestContext,view);
+            showParcels:playFluidParcelsEnabled,
+            lightingEnvironment:localLightingEnabled?playLightingEnvironment:null,
+            transientLights:localLightingEnabled?playSpellLights:null});
+          if(paintForest)paintForest(forestContext,view,localLightingEnabled?playLightingEnvironment.ambient:null);
           const residency=playStream?.residency;
           if(residency&&!streamingBusy()&&!renderer.pendingUploads){
             const coverage=cellStream?{key:id=>cellStream.propRegionKey(id),
@@ -2177,6 +2186,7 @@ if(playMode) {
       },
       lighting:{enabled:localLightingEnabled,pending:playLighting.pending,
         environment:playLightingEnvironment,transientEmitters:playSpellLights?.emitters??[],
+        spriteLighting:playStream?.trees?.lightingStatistics??null,
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,

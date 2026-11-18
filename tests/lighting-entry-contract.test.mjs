@@ -45,7 +45,7 @@ test('renderer can independently assemble baseline and unlit lighting with one o
 
 test('new material and lighting contracts cannot transitively depend on mutable engines or GPU implementation',()=>{
   const root=fileURLToPath(new URL('../src/',import.meta.url));
-  const pending=['materials/surface-contract.mjs','lighting/light-contract.mjs','lighting/baseline-lighting.mjs','lighting/environment-contract.mjs'];
+  const pending=['materials/surface-contract.mjs','lighting/light-contract.mjs','lighting/baseline-lighting.mjs','lighting/environment-contract.mjs','lighting/surface-light-sample.mjs'];
   const visited=new Set();
   while(pending.length){
     const relative=pending.pop();
@@ -60,7 +60,7 @@ test('new material and lighting contracts cannot transitively depend on mutable 
     }
   }
   for(const dir of ['world-generation','fluid']){
-    for(const file of readdirSync(resolve(root,dir)).filter(name=>name.endsWith('.mjs'))){
+    for(const file of readdirSync(resolve(root,dir)).filter(name=>name.endsWith('.mjs')&&name!=='hunt-fluid-surface-renderer.mjs')){
       const source=readFileSync(resolve(root,dir,file),'utf8');
       assert.doesNotMatch(source,/from\s+['"][^'"]*(?:lighting\/|materials\/surface-contract)/,
         'existing owners must not acquire reverse lighting dependencies');

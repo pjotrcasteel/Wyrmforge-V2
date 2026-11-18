@@ -1,0 +1,78 @@
+{
+  "renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "fixture": "synthetic plane, actual fluid fragment shaders; software GLES, not mobile",
+  "viewport": [
+    402,
+    604
+  ],
+  "results": [
+    {
+      "lava": false,
+      "face": 0,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 728424,
+      "lightChangedBytes": 89607
+    },
+    {
+      "lava": false,
+      "face": 1,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 728424,
+      "lightChangedBytes": 89607
+    },
+    {
+      "lava": false,
+      "face": 4,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 728424,
+      "lightChangedBytes": 92107
+    },
+    {
+      "lava": false,
+      "face": 5,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 728424,
+      "lightChangedBytes": 97754
+    },
+    {
+      "lava": true,
+      "face": 0,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 0,
+      "lightChangedBytes": 0
+    },
+    {
+      "lava": true,
+      "face": 1,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 0,
+      "lightChangedBytes": 0
+    },
+    {
+      "lava": true,
+      "face": 4,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 0,
+      "lightChangedBytes": 0
+    },
+    {
+      "lava": true,
+      "face": 5,
+      "neutralExact": true,
+      "alphaExact": true,
+      "darkChangedBytes": 0,
+      "lightChangedBytes": 0
+    }
+  ],
+  "medianDrawMs": [
+    0.6750100833035807,
+    1.3538435833500746
+  ]
+}

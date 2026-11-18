@@ -1,3 +1,4 @@
+import {SpriteLightingCache,litSpriteColor} from './sprite-lighting-cache.mjs';
 import { projectVoxel } from './camera-presets.mjs';
 import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
@@ -8,15 +9,16 @@ const FALL_DURATION_MS=500;
 const MAX_VISIBLE_FALLS=24;
 const LOG_SPRITE={x:52,y:416,w:34,h:20,ax:17,ay:17};
 
-function paintProp(ctx,image,prop,view,foot){
+function paintProp(ctx,image,prop,view,foot,drawSprite=null){
   const sprite=prop.kind==='log'?LOG_SPRITE:
     prop.radius<.65?LUMP_SPRITE:BOULDER_SPRITE;
   const footprintWidth=2*(prop.radius+(prop.halfLength??0))*view.scale;
   const scale=footprintWidth/sprite.w;
   const x=Math.round(foot.x-sprite.ax*scale);
   const y=Math.round(foot.y-sprite.ay*scale);
-  ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,
-    Math.max(1,Math.round(sprite.w*scale)),Math.max(1,Math.round(sprite.h*scale)));
+  const rect=[x,y,Math.max(1,Math.round(sprite.w*scale)),Math.max(1,Math.round(sprite.h*scale))];
+  if(drawSprite)drawSprite(sprite,rect);
+  else ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
   if(prop.damaged){
     ctx.fillStyle='#392e28';
     ctx.fillRect(Math.round(foot.x)-1,Math.round(y+sprite.h*scale*.35),2,Math.max(2,Math.round(sprite.h*scale*.35)));
@@ -28,6 +30,7 @@ function paintProp(ctx,image,prop,view,foot){
 export class HuntTreePreview {
   objects;
   #image;
+  #lightingCache=new SpriteLightingCache();
   #scenery;
   #falls=new Map();
   constructor(graph,image,damage){
@@ -53,7 +56,13 @@ export class HuntTreePreview {
       this.#falls.set(tree.id,{tree,landingY,startedAt:now});
     }
   }
-  paint(ctx,view,actor,paintActor,feature=null,now=performance.now()){
+  get lightingStatistics(){return this.#lightingCache.statistics;}
+  paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null){
+    this.#lightingCache.beginFrame();
+    const draw=(sprite,rect,position)=>{
+      if(lighting)this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
+      else ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
+    };
     const layers=[];
     for(const [id,fall] of this.#falls){
       const progress=Math.min(1,Math.max(0,(now-fall.startedAt)/FALL_DURATION_MS));
@@ -74,8 +83,8 @@ export class HuntTreePreview {
         ctx.translate(Math.round(foot.x),Math.round(foot.y));
         ctx.rotate(angle);
         ctx.globalAlpha=Math.min(1,(1-progress)*5);
-        ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,
-          -sprite.ax*scale,-sprite.ay*scale,sprite.w*scale,sprite.h*scale);
+        draw(sprite,[-sprite.ax*scale,-sprite.ay*scale,sprite.w*scale,sprite.h*scale],
+          [tree.x,tree.y-drop*progress*progress+1,tree.z]);
         ctx.restore();
       }});
     }
@@ -99,6 +108,7 @@ export class HuntTreePreview {
           layer.depth=Math.max(layer.depth,feature.depth+.000001);
         }
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
+        layer.lightPosition=[tree.x,tree.y+1,tree.z];
         layers.push(layer);
       }
     }
@@ -111,7 +121,7 @@ export class HuntTreePreview {
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
       if(sprite){
-        ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,x,y,w,h);
+        draw(sprite,[x,y,w,h],layer.lightPosition);
         if(layer.damageFoot){
           ctx.fillStyle='#c89962';
           ctx.fillRect(Math.round(layer.damageFoot.x)-2,Math.round(layer.damageFoot.y),5,2);
@@ -120,7 +130,8 @@ export class HuntTreePreview {
       else if(layer.paint)layer.paint(ctx);
       else if(layer.prop){
         ctx.globalAlpha=layer.alpha;
-        paintProp(ctx,this.#image,layer.prop,view,layer.foot);
+        paintProp(ctx,this.#image,layer.prop,view,layer.foot,lighting?
+          (sprite,rect)=>draw(sprite,rect,[layer.prop.x,layer.prop.y+layer.prop.height*.5,layer.prop.z]):null);
         ctx.globalAlpha=1;
       }
       else paintActor();
@@ -133,9 +144,9 @@ export class HuntTreePreview {
 // Only forest floor belongs behind terrain. Every tree is drawn whole in
 // the same depth-sorted overlay; a terrain edge can never slice a bitmap crown.
 export function createForestBackdrop(){
-  return (ctx,view)=>{
+  return (ctx,view,ambient=null)=>{
     ctx.save();
-    ctx.fillStyle='#304732';
+    ctx.fillStyle=ambient?litSpriteColor('#304732',ambient):'#304732';
     ctx.fillRect(0,0,view.width,view.height);
     ctx.restore();
   };
