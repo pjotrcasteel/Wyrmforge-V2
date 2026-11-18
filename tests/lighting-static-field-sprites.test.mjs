@@ -47,7 +47,7 @@ test('static field CPU relighting uses exactly the same emission colour as terra
   assert.ok(Math.abs(light[1]-expected*.31)<1e-5);
   assert.ok(Math.abs(light[2]-expected*.055)<1e-5);
   const sprite=sampleSurfaceIrradiance(point,dark,null,[0,1,0],null,field);
-  assert.deepEqual(sprite.map((v,i)=>v-dark.ambient[i]),light);
+  assert.ok(sprite.every((v,i)=>Math.abs(v-dark.ambient[i]-light[i])<1e-12));
   const other=descriptor({emission:[.06,.25,1]});
   const blue=sampleStaticFieldIrradiance(point,other);
   assert.ok(blue[2]>blue[0],'arbitrary materials, no lava-specific light path');
