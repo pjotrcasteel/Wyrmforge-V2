@@ -122,6 +122,30 @@ export function createWorldGenFluidEngine(layout,terrain,{
       return ax*ax+az*az-(bx*bx+bz*bz)||a.z-b.z||a.x-b.x;
     })
     .slice(0,MAX_FLUID_SOURCES);
+  // The river grammar already publishes the physical downstream heading on
+  // each authored bed cell. Keep one bounded, cardinal current per cell,
+  // constrained to a real neighboring river cell at equal/lower solid height.
+  // Unauthored crater water remains governed by ordinary pressure exchange.
+  const currents=[];
+  const fallbackX=(sink?.x??source.x)-source.x;
+  const fallbackZ=(sink?.z??source.z)-source.z;
+  for(const cell of floorCells.values()){
+    const flowX=cell.flowX||fallbackX;
+    const flowZ=cell.flowZ||fallbackZ;
+    const currentFloor=floorAt(cell.x,cell.z);
+    const candidates=[[0,-1],[1,0],[0,1],[-1,0]]
+      .map(([dx,dz])=>{
+        const next=floorCells.get(signedKey(cell.x+dx,cell.z+dz));
+        if(!next||floorAt(next.x,next.z)>currentFloor)return null;
+        const alignment=dx*flowX+dz*flowZ;
+        return alignment>0?{dx,dz,alignment}:null;
+      })
+      .filter(Boolean)
+      .sort((a,b)=>b.alignment-a.alignment||a.dz-b.dz||a.dx-b.dx);
+    if(candidates.length)currents.push({
+      x:cell.x,z:cell.z,dx:candidates[0].dx,dz:candidates[0].dz
+    });
+  }
   // All water/lava starts with a finite volume, seeded against actual solid
   // terrain instead of pretending the WorldGen channel descriptor is current.
   const initial=[...floorCells.values()].map(({x,z})=>({x,z,depth:initialDepth}));
@@ -138,7 +162,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
       x,z,surfaceY:floorAt(x,z)+1,
       rate:Math.min(10,Math.max(sourceRate,
         Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
-    }))
+    })),
+    currents
   });
   return Object.freeze({
     schema:WORLDGEN_FLUID_SCHEMA,fluid,source:Object.freeze({
@@ -146,7 +171,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
     }),
     channelCellCount:floorCells.size,
     inletCellCount:mouth.length,
-    outletCellCount:exits.length
+    outletCellCount:exits.length,
+    currentCellCount:currents.length
   });
 }
 
