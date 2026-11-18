@@ -1,12 +1,12 @@
 import {TRANSIENT_LIGHTING_GLSL} from './transient-lighting.mjs';
 import {BASELINE_LIGHTING_GLSL} from './baseline-lighting.mjs';
-import {MOLTEN_PRESENTATION} from '../materials/molten-presentation.mjs';
 export const LOCAL_FIELD_LIGHTING_GLSL=BASELINE_LIGHTING_GLSL.replace('evaluateV2Lighting','evaluateBaselineLighting')+`
 uniform highp sampler2D uLightingField;
 uniform bool uLightingFieldEnabled;
 uniform bool uLightingWarmEnabled;
 uniform vec2 uLightingFieldOrigin;
 uniform vec3 uLightingAmbient;
+uniform vec3 uLightingEmissionColor;
 ${TRANSIENT_LIGHTING_GLSL}
 vec4 lightingColumn(ivec2 cell){
   ivec2 at=cell-ivec2(uLightingFieldOrigin);
@@ -51,7 +51,7 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context){
   float energy=mix(topEnergy,sideEnergy,sideWeight);
   float sourceY=mix(mix(a.g,b.g,f.x),mix(c.g,d.g,f.x),f.y);
   float warm=energy*1.65*fade*exp2(-abs(point.y-sourceY-.4)*.35);
-  vec3 emission=vec3(${MOLTEN_PRESENTATION.emission.join(',')});
+  vec3 emission=uLightingEmissionColor;
   // Local diffuse/indirect spill; not an additive screen-space halo.
   return base*mix(1.0,shade,fade)+surface.albedo*emission*warm+spellLight;
 }

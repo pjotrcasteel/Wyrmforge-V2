@@ -901,6 +901,7 @@ export class WebGLVoxelView {
       lightingEnabled:gl.getUniformLocation(this.#program,'uLightingFieldEnabled'),
       lightingWarm:gl.getUniformLocation(this.#program,'uLightingWarmEnabled'),
       lightingAmbient:gl.getUniformLocation(this.#program,'uLightingAmbient'),
+      lightingEmissionColor:gl.getUniformLocation(this.#program,'uLightingEmissionColor'),
       transientCount:gl.getUniformLocation(this.#program,'uTransientLightCount'),
       transientPositions:gl.getUniformLocation(this.#program,'uTransientPositions[0]'),
       transientRadiance:gl.getUniformLocation(this.#program,'uTransientRadiance[0]'),
@@ -1104,6 +1105,11 @@ export class WebGLVoxelView {
     gl.uniform1i(this.#uniforms.lightingField,6);
     gl.uniform1i(this.#uniforms.lightingEnabled,field?1:0);
     gl.uniform1i(this.#uniforms.lightingWarm,field?.hasEmission?1:0);
+    const emission=field?.emission??[0,0,0];
+    if(emission.length!==3||!emission.every(value=>Number.isFinite(value)&&value>=0&&value<=4)){
+      throw new TypeError('Invalid material emission descriptor');
+    }
+    gl.uniform3fv(this.#uniforms.lightingEmissionColor,emission);
     if(!field)return;
     gl.activeTexture(gl.TEXTURE0+6);
     this.#lightingTexture??=gl.createTexture();
