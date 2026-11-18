@@ -76,9 +76,17 @@ physical AABB, and their removal/streaming invalidates cached rays. An art-only
 sprite does not silently cast physical shadows. Voxel public DDA remains the
 separate terrain source; Water remains fluid authority.
 
-The point-light visibility implementation is **not** a general directional
-caster yet. L10-08 #377 explicitly requires registered shadow silhouette or
-volume casters (buildings, new tree variants and moving props) through the same
-generic scene contract, rather than adding names to a hardcoded tree renderer.
-Lava's older height approximation must migrate during L10-07 and is not claimed
-fixed. See `docs/LIGHTING-GENERIC-OCCLUSION.md`.
+L10-07 #376 now has both transient ray visibility (#396) and generic static
+emissive-surface ray visibility (#400). Authored and Water-published channel
+surfaces are adapted by Play Hunt; Lighting never mutates Water/terrain state.
+
+L10-08 #377 began with [PR #401](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/401).
+The directional shadow pipeline accepts an alpha-cutout silhouette or any
+physical 3D volume bounds via a read-only `describeDirectionalCaster`.
+World Objects/other owning object engines publish `shadowCasters(view)` once;
+Play Hunt registers that provider without branching on future tree species or
+building names. Caster sprite culling and receiver shadow culling differ:
+shadows stay while visible even if their sprite exits the camera. Bounded LRU
+caches retain warm casters during walking and invalidate real owner changes.
+Mixed sprite/terrain/fluid material response and mobile performance remain open.
+See `docs/LIGHTING-GENERIC-OCCLUSION.md` and #377.
