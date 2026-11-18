@@ -4,14 +4,14 @@ Updated 2026-11-18. Current technical focus: L10-08 #377 mixed-consumer lighting
 
 ## Outcome and current truth
 
-The goal is a grounded, beautiful, readable and smooth actual Hunt on mobile and desktop. Trees currently lack grounding/cast shadows. Basic lighting is implemented; the engine is not complete or performance-accepted.
+The goal is a grounded, beautiful, readable and smooth actual Hunt on mobile and desktop. Contact and directional shadows, physical local occlusion, and matched sprite/terrain emissive sampling are implemented previews. They are not yet accepted on sustained iPhone/Android play; the engine is not complete or performance-accepted.
 
 | Existing work | State and remaining limit |
 | --- | --- |
 | L10-01 #352 | Contract/renderer foundation DONE FOR NOW |
 | L10-02 #354 | Local cliff shading/lava spill implemented; height-field approximation and device gates remain |
 | L10-03 #367 | Dark ambient and moving/fading Fireball lights implemented; initially unshadowed |
-| L10-04 #369 | Water/foam and Canvas Wizard/props/trees consume ambient/transient lights; whole-sprite sampling, cold-cache fallback and no sprite lava-field response remain |
+| L10-04 #369 | Water/foam and Canvas Wizard/props/trees consume ambient/transient lights; sprite lava/static emission from the same 24x24 physically occluded terrain field was added in L10-08 #405. Multi-height sprite response and fluid receiver parity remain |
 
 Latest lighting implementation: PR #371, afdfe4ccc6df0df6ef9738defc534c2180c5748c; 825 combined tests, shader compilation and deployment passed. Main has subsequently incorporated WAT-14c. Fetch current main before working. Do not reset main to the lighting SHA.
 
@@ -26,7 +26,7 @@ These are linked milestone-tracking issues. They are not native GitHub Milestone
 | 1 | [L10-05 #374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374) — Ground trees and props with terrain-aware contact shadows | Trees, boulders and logs sit visibly on the ground instead of floating. | IN PROGRESS — reviewable contact-shadow implementation pending visual/device acceptance |
 | 2 | [L10-06 #375](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/375) — Directional tree-canopy and cliff shadows | Sun/sky direction casts canopy and real Voxel cliff-face shadows with camera occlusion; merged PR #395, player/device gates pending | IN PROGRESS after L10-05 |
 | 3 | [L10-07 #376](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/376) — Occlude Fireball and lava light against terrain | Generic physical occluder providers + shared terrain/Canvas point-light visibility in PR #396; static lava and device gates still outstanding | IN PROGRESS after L10-06 |
-| 4 | [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) — Coherent sprite, terrain and fluid lighting | First generic cast-volume/silhouette and walking-stability slice #401 merged; mixed lava-to-props, sprite relighting and mobile evidence remain | IN PROGRESS after L10-07 |
+| 4 | [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) — Coherent sprite, terrain and fluid lighting | Generic caster and walking-stability #401 plus shared terrain/sprite emissive field #405 merged; sprite height bands, fluid receiver parity and mobile evidence remain | IN PROGRESS after L10-07 |
 | 5 | [L10-09 #378](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/378) — Biome atmosphere and combat readability | Calm uncorrupted forest transitions coherently through mountain and corruption stages into a dark, emissive Wyrm lair. | L10-08 |
 | 6 | [L10-10 #379](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/379) — Sustained smoothness and adaptive lighting quality | Smooth movement and responsive casting through dense forest, shadows, cliff destruction and emissive lair combat, including a deliberate lower-cost tier for slower devices.. | Starts measurement with L10-05; final gate after L10-09; coordinates with R10-02 and parallel Water diagnostics |
 | 7 | [L10-99 #380](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/380) — Lighting closure, coupling audit and next-engine handoff | Freeze a coherent, grounded, readable and smooth Lighting V2 slice so future chats can move to the next engine without losing known limits.. | L10-05 through L10-10 and existing L10-02/03/04 review gates |
@@ -81,3 +81,10 @@ Optional global illumination, volumetrics, reflections, many shadowed lights and
 ## 2026-11-18 L10-08 walking-shadow stabilization checkpoint
 
 [PR #401](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/401) merged at `bd5e1e4`, preserving Water #399/#400 current main. The player reported shadows switching on/off while walking toward/farther from trees. Two verified code paths caused popping: shadow receivers were wrongly culled with caster sprites at screen edges, and FIFO receiver cache eviction churned warm casts. Receiver and sprite culling are now independent, hot shadow entries use bounded LRU (128 casters, same 16 rays/frame / 1,100 draw stamps/frame), and sprite tint misses reuse nearest warmed crop tint. True physical volume and sprite-cutout casters are both read-only generic descriptors; external object systems register a `shadowCasters(view)` provider once. All 894 tests, six shaders, and actual Hunt directional/contact browser witnesses passed on the PR head. **iPhone Safari walking and named-device cost approval remain outstanding**, as does full L10-08 lava-to-sprite/prop and material lighting consistency. See #377 and #375 for exact evidence; serve users the stable `/Wyrmforge-V2/play-hunt.html` link rather than an ephemeral build SHA.
+
+
+## 2026-11-18 L10-08 shared static emission integration
+
+[PR #405](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/405) merged to main as `f86d172`, based on Water WAT-16 #404. Lighting now carries a Materials-authored RGB emission descriptor in the same 24x24 geometry-occluded irradiance field. WebGL terrain and Canvas trees, props, rocks and wizard use that same completed, epoch/revision-qualified field in the same frame. The CPU sprite read is constant-time (four existing texels), with no added terrain rays, Voxel/Water writes or textures; `?spriteEmission=off` is a separate same-build negative control. Exact-head V2 CI [44407111133](https://github.com/pjotrcasteel/Wyrmforge-V2/actions/runs/44407111133) passed **902/902** tests and six shaders. Existing Hunt directional/contact browser witnesses and Water lifecycle remained green. [Design and limits](LIGHTING-SHARED-EMISSIVE-SPRITES.md).
+
+Owner's 26.8s iPhone recording on `e7ac51c` shows Wet Forest walking and streaming residency switching between 2–3 sites, with displayed p95 18–28 ms. This does not prove remaining flicker gone; named-device performance remains open. Continue L10-08 with multi-height tree/building lighting, fluid receivers, three-biome visual matching and device checks, then L10-09 atmosphere. Do not claim completion from CI alone.
