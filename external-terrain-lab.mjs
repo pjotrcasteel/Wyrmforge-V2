@@ -60,6 +60,7 @@ import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
 import {findConnectedRiverBankTarget} from './src/diagnostics/hunt-connected-river-bank.mjs';
 import {exercisePublishedWaterJourney} from './src/diagnostics/hunt-water-mobile-journey.mjs';
+import {resetHuntLevelSave} from './src/hunt-level-reset.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
   spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,HUNT_PIXELS_PER_VOXEL,
@@ -137,6 +138,7 @@ const playHudDetails=document.querySelector('#play-hud-details');
 const playHudSummary=document.querySelector('#play-hud-summary');
 const playCameraToggle=document.querySelector('#play-camera-toggle');
 const playRespawn=document.querySelector('#play-respawn');
+const playResetLevel=document.querySelector('#play-reset-level');
 const playRecover=document.querySelector('#play-recover');
 const playReport=document.querySelector('#play-report');
 const extractButton=document.querySelector('#play-extract');
@@ -1490,6 +1492,7 @@ function resetSite() {
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
         playStream={phase:'waiting',terrainSave,fluidSave,saveIdentity:terrainIdentity,
+          worldIdentity:saveIdentity,
           savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
           graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
@@ -2501,6 +2504,29 @@ if(playMode) {
     catch(error){errorMessage=error.message;updateStatus();}
   });
   playRespawn.addEventListener('click',resetPlayActor);
+  playResetLevel?.addEventListener('click',()=>{
+    if(!generatedSite||!playStream||playResetLevel.disabled)return;
+    if(!window.confirm('Reset this Hunt level? This deletes its saved craters, water, damaged trees, findings and extraction. You cannot undo this.'))return;
+    // Never call resetSite() first: it persists the CURRENT water again.
+    // Clear the exact authored-world keys and reload the entire Voxel +
+    // Water V2 authority from the WorldGen seed, not from a stale snapshot.
+    try{
+      const result=resetHuntLevelSave(window.localStorage,{
+        terrainIdentity:playStream.saveIdentity,
+        worldIdentity:playStream.worldIdentity,
+        seed:generatedSite.recipe.seed,
+        worldRevision:generatedSite.recipe.worldRevision
+      });
+      playResetLevel.disabled=true;
+      playResetLevel.textContent='Resetting…';
+      previewMessage.textContent='Regenerating a clean Hunt from WorldGen · '+
+        result.clearedKeys+' saved records cleared';
+      window.location.reload();
+    }catch(error){
+      errorMessage='Unable to reset saved Hunt: '+error.message;
+      updateStatus();
+    }
+  });
   playRecover?.addEventListener('click',recoverPlayActor);
   extractButton?.addEventListener('click',()=>{
     if(streamingBusy()||!playStream?.extraction.extract(playActor))return;
