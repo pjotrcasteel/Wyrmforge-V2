@@ -1,0 +1,10 @@
+{
+  "fixture": "actual seed 7 Play Hunt preview terrain/microvoxel mesh, bank camera; no actor/fluid presentation layers",
+  "visibleTerrainPixels": 242808,
+  "changedTerrainPixels": 91833,
+  "pixelsWithChannelChangeAtLeast12": 58467,
+  "priorWarmColumns": 285,
+  "updatedWarmColumns": 314,
+  "priorMeanWarmPotential": 0.5885033941719469,
+  "updatedMeanWarmPotential": 0.7673868353176079
+}

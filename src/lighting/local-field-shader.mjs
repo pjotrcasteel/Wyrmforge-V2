@@ -25,7 +25,7 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context){
     float block=neighbor.a>.5?smoothstep(.15,2.8,neighbor.r-point.y):0.0;
     occlusion+=block;
   }
-  float shade=1.0-min(.28,occlusion*.075);
+  float shade=1.0-min(.42,occlusion*.12);
   float edge=min(min(point.x-uLightingFieldOrigin.x,point.z-uLightingFieldOrigin.y),
     min(uLightingFieldOrigin.x+24.0-point.x,uLightingFieldOrigin.y+24.0-point.z));
   float fade=smoothstep(0.0,2.0,edge);
@@ -36,7 +36,7 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context){
   vec4 c=lightingColumn(grid+ivec2(0,1)),d=lightingColumn(grid+ivec2(1,1));
   float energy=mix(mix(a.b,b.b,f.x),mix(c.b,d.b,f.x),f.y);
   float sourceY=mix(mix(a.g,b.g,f.x),mix(c.g,d.g,f.x),f.y);
-  float warm=energy*.55*fade/(1.0+abs(point.y-sourceY-.35)*.35);
+  float warm=energy*1.65*fade*exp2(-abs(point.y-sourceY-.4)*.35);
   vec3 emission=vec3(${MOLTEN_PRESENTATION.emission.join(',')});
   // Local diffuse/indirect spill; not an additive screen-space halo.
   return base*mix(1.0,shade,fade)+surface.albedo*emission*warm;

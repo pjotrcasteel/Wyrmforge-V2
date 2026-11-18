@@ -824,7 +824,7 @@ function resetPlayActor() {
     bounds:footprint,origin:{x:0,z:0}
   };
   if(routePreview)playActor=spawnHuntRoutePreview(active.world,generatedSite.layout,
-    {nearRiver:['1','auto'].includes(playQuery.get('fluidTest'))});
+    {nearRiver:['1','auto'].includes(playQuery.get('fluidTest'))||playQuery.get('lightingTest')==='bank'});
   else playActor=spawnHuntExplorer(active.world,region,{
     direction:'south',at:startAt
   });
@@ -2105,6 +2105,11 @@ if(playMode) {
           movementPaused:awaitingPlayContext,lastRecovery:contextEvidence.snapshot}:null,
         note:'Observed RAF intervals and main thread CPU work; not GPU timing'
       },
+      lighting:{enabled:localLightingEnabled,pending:playLighting.pending,
+        reviewPreset:playQuery.get('lightingTest')??null,
+        field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
+          revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
+          hasEmission:playLighting.snapshot.hasEmission}:null},
       fireball:{casts:playFireballCount,removedVoxels:playRemovedVoxels,
         visualPreviewLevel:huntFireballVisualLevel(playFireballLevel?.value)},
       fluids:playFluid?{
