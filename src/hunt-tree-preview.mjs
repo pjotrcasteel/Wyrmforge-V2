@@ -131,9 +131,9 @@ export class HuntTreePreview {
     const draw=(sprite,rect,position,profile=null)=>{
       if(!lighting){
         ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
-      }else if(profile){
-        this.#lightingCache.drawBanded(ctx,this.#image,sprite,rect,lighting.sample,
-          lighting.ambient,profile);
+      }else if(profile&&typeof this.#lightingCache.drawBanded==='function'){
+        this.#lightingCache.drawBanded(ctx,this.#image,sprite,rect,
+          position=>lighting.sample(position),lighting.ambient,profile);
       }else{
         this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
       }
