@@ -218,7 +218,9 @@ if(playMode&&playQuery.get('contactShadowTest')==='1'){
       enabled:contactShadowsEnabled,
       actors:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null,
       residentProps:playStream?.trees?[...playStream.trees.objects.regions].flat().map(({id,kind,x,y,z,radius})=>({
-        id,kind:kind??'tree',x,y,z,radius,visible:playView?(()=>{
+        id,kind:kind??'tree',x,y,z,radius,
+        foot:playView?projectVoxel(x,y,z,playView):null,
+        visible:playView?(()=>{
           const p=projectVoxel(x,y,z,playView);
           return p.x>=0&&p.x<=playView.width&&p.y>=0&&p.y<=playView.height;
         })():false
