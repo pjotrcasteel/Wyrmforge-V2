@@ -69,7 +69,8 @@ import {
   fitWorldgenSiteView, clampWorldgenViewZoom
 } from './src/diagnostics/worldgen-viewport.mjs';
 
-import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
+import {huntLavaSurface,HUNT_CHANNEL_HEIGHT_OFFSET} from './src/hunt-lava-surface.mjs';
+import {collectEmissiveSurfaceCells} from './src/hunt-surface-emission.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
 import {HuntStreamedFluid} from './src/fluid/hunt-streamed-fluid.mjs';
@@ -81,6 +82,8 @@ const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const pointOcclusionEnabled=localLightingEnabled&&
   new URLSearchParams(location.search).get('pointOcclusion')!=='off';
+const staticOcclusionEnabled=localLightingEnabled&&
+  new URLSearchParams(location.search).get('staticOcclusion')!=='off';
 const playQuery=new URLSearchParams(location.search);
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
@@ -200,9 +203,12 @@ let playOccluderObjects=null;
 let unregisterOccluders=null;
 const playOccluderRegistry=new LightOccluderRegistry();
 let playLightingLiquid=null;
+let playStaticEmissiveCells=[];
 const playLighting=new LocalLightField((x,z,y)=>active?.port.raycast({
   origin:[x,y+16,z],direction:[0,-1,0],maxDistance:32
-})?.point.y??NaN);
+})?.point.y??NaN,{
+  geometry:{raycast:ray=>active?.port?.raycast(ray)??null}
+});
 let playFluidVisual=null;
 let meshBridge=null;
 let pendingMesh=null;
@@ -1331,6 +1337,7 @@ function resetSite() {
     playFluidStream?.dispose();
     playFluidStream=null;
     playLightingLiquid=null;
+    playStaticEmissiveCells=[];
     playSpellLights=null;
     playFluidWitnessHold=false;
     playFluidRibbonsEnabled=true;
@@ -1650,6 +1657,12 @@ function updateHuntRiverSurface() {
     if(playRiverWorld===world&&playRiverRevision===world.revision)return;
     playLava=huntLavaSurface(generatedSite.layout,world);
   }
+  // Presentation state is read-only; map its declared emissive channels to
+  // generic light-source cells, regardless of whether Water or WorldGen
+  // authored the surface. No Fluid simulation, Material or Lighting edits.
+  playStaticEmissiveCells=collectEmissiveSurfaceCells(playLava,{
+    heightOffset:HUNT_CHANNEL_HEIGHT_OFFSET,energyByChannel:{255:1}
+  });
   playRiverWorld=world;
   playRiverRevision=world.revision;
 }
@@ -2022,8 +2035,17 @@ function frame(now) {
       updateHuntGrassMaterialVolume();
       if(localLightingEnabled&&active?.port&&playActor&&!pendingMesh&&!pendingEdit&&!streamingBusy()){
         const lightingStarted=performance.now();
+        const physical=playStream?.trees?.objects??null;
+        if(playOccluderObjects!==physical){
+          unregisterOccluders?.();
+          unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
+          playOccluderObjects=physical;
+        }
+        const staticGeometry=staticOcclusionEnabled&&playStaticEmissiveCells.length>0
+          ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
         playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
-          center:playActor,liquid:playLightingLiquid,now});
+          center:playActor,emissionCells:playStaticEmissiveCells,
+          occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,now});
         playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
       }
       playPresentationNow=now;
@@ -2401,6 +2423,8 @@ if(playMode) {
         pointOcclusion:{enabled:pointOcclusionEnabled,
           ...playVisibilityTransport?.statistics,ready:playPointVisibility?.ready??false,
           registeredPhysicalOccluders:playOccluderCount},
+        staticOcclusion:{enabled:staticOcclusionEnabled,
+          sourceCells:playStaticEmissiveCells.length,...playLighting.statistics},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,
