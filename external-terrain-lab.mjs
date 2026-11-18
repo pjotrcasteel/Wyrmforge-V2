@@ -1,3 +1,4 @@
+import {huntScreenMovement} from './src/hunt-movement-input.mjs';
 import {createHuntFireballImpact,paintHuntFireballImpact,huntFireballVisualLevel} from './src/hunt-fireball-visuals.mjs';
 import {huntGrassMaterialVolume,HUNT_GRASS_VOLUME_STRIDE} from './src/hunt-grass-material-volume.mjs';
 import {HuntCollapseEvidence} from './src/diagnostics/hunt-collapse-evidence.mjs';
@@ -787,17 +788,7 @@ function playMovementInput() {
     (pressed('KeyW')||pressed('ArrowUp')?1:0);
   const right=Math.max(-1,Math.min(1,x+playPointer.x));
   const down=Math.max(-1,Math.min(1,z+playPointer.z));
-  if(playMode && viewCamera.value==='inspection') {
-    // WorldGen's real camera is rotated. The joystick acts in SCREEN
-    // directions, so "right" moves right on screen, not diagonally into
-    // the cliffs. Same transform for keyboard/WASD.
-    const diagonal=Math.SQRT1_2;
-    return {
-      moveX:(right+down)*diagonal,
-      moveZ:(down-right)*diagonal
-    };
-  }
-  return {moveX:right,moveZ:down};
+  return huntScreenMovement(right,down,playMode && viewCamera.value==='inspection');
 }
 function resetPlayInput() {
   playKeys.clear();

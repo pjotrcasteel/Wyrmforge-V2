@@ -1,3 +1,4 @@
+import {STONE_MINERAL_MATERIAL_GLSL} from './stone-mineral-material.mjs';
 // Materials owns volcanic surface appearance. WorldGen/Physics retain the
 // existing terrain columns, material IDs, routes and destructible strata.
 import {fireRockMotifGlsl} from './fire-rock-art.mjs';
@@ -11,10 +12,12 @@ export const FIRE_BASALT_PALETTE=Object.freeze([
 
 export const FIRE_TERRAIN_MATERIAL_GLSL=`
 ${fireRockMotifGlsl()}
+${STONE_MINERAL_MATERIAL_GLSL}
 const vec3 FIRE_BASALT_COLORS[4]=vec3[4](${FIRE_BASALT_PALETTE.map(color=>'vec3('+color.join(',')+')').join(',')});
 
 vec3 fireTerrainSurface(vec3 surface,int material) {
   float heat=uHuntCorruption.z;
+  if(material==3)return stoneMineralSurface(surface,heat);
   if(heat<=0.0)return surface;
   bool top=vNormal.y>.5;
   vec2 uv=abs(vNormal.y)>.5?vWorld.xz:abs(vNormal.x)>.5?vWorld.zy:vWorld.xy;
