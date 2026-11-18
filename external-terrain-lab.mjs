@@ -174,6 +174,7 @@ let playFluid=null,detachPlayFluid=null,playFluidSurfaceStep=-1;
 let playFluidWitnessHold=false,playFluidRibbonsEnabled=true;
 let playFluidLandingEnabled=true;
 let playFluidParcelsEnabled=true;
+let playFluidOverlayMode='on'; // witness-only: on, no-draw, no-mesh
 let playRiverWorld=null,playRiverRevision=-1;
 const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
 let playRecoveryCheckpoint=null;
@@ -1099,6 +1100,7 @@ function resetSite() {
     playFluidRibbonsEnabled=true;
     playFluidLandingEnabled=true;
     playFluidParcelsEnabled=true;
+    playFluidOverlayMode='on';
     playFluidVisual?.clear();
     playFluidSurfaceStep=-1;
     playRiverWorld=null;
@@ -1379,7 +1381,9 @@ function updateHuntRiverSurface() {
         playFluid.steps-playFluidSurfaceStep<(playFluid.inFlightCount?4:8))return;
     const state=playFluid.snapshotSurface();
     playLava=huntFluidSurface(generatedSite.layout,world,state);
-    playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
+    if(playFluidOverlayMode!=='no-mesh'){
+      playFluidVisual?.update(state,(x,z)=>playFluid.sample(x,z));
+    }
     playFluidSurfaceStep=playFluid.steps;
   }else{
     if(playRiverWorld===world&&playRiverRevision===world.revision)return;
@@ -1452,6 +1456,12 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
         ribbons(on){playFluidRibbonsEnabled=Boolean(on);},
         landing(on){playFluidLandingEnabled=Boolean(on);},
         parcels(on){playFluidParcelsEnabled=Boolean(on);},
+        overlay(mode){
+          if(!['on','no-draw','no-mesh'].includes(mode)){
+            throw new RangeError('Invalid diagnostic overlay mode');
+          }
+          playFluidOverlayMode=mode;
+        },
         flightSample(){
           return Object.freeze({
             step:playFluid.steps,count:playFluid.inFlightCount,
@@ -1570,7 +1580,14 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             landingSplashFaces:playFluidVisual?.stats.landingSplashFaces??0,
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
-            fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0
+            fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
+            overlayMode:playFluidOverlayMode,
+            fluidMeshBuildMs:playFluidVisual?.stats.meshUpdateMs??0,
+            fluidMeshUpdates:playFluidVisual?.stats.meshUpdateCount??0,
+            fluidGpuAllocations:playFluidVisual?.stats.gpuAllocations??0,
+            fluidGpuDeletes:playFluidVisual?.stats.gpuDeletes??0,
+            fluidGpuUploadMs:playFluidVisual?.stats.gpuUploadMs??0,
+            fluidGpuUploads:playFluidVisual?.stats.gpuUploadCount??0
           };
         },
         breach(){
@@ -1754,7 +1771,7 @@ function frame(now) {
             pendingTerrainPresentation=null;
           }
           playView=view;
-          if(playFluidVisual)playFluidVisual.render(view,{time:now/1000,
+          if(playFluidVisual&&playFluidOverlayMode==='on')playFluidVisual.render(view,{time:now/1000,
             reducedMotion:reducedLavaMotion?.matches,
             showRibbons:playFluidRibbonsEnabled,
             showLanding:playFluidLandingEnabled,

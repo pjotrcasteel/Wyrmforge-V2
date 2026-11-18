@@ -48,6 +48,8 @@ in vec2 vFlow;
 flat in int vFaceMode;
 in float vLandingY;
 uniform float uTime;
+uniform float uRippleFrame;
+uniform float uRippleFade;
 uniform float uLava;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
@@ -64,7 +66,10 @@ void main(){
   // Pixel-art glints anchored to real world coordinates; no new texture
   // assets. Palette follows the approved water/lava artwork in Hunt.
   vec2 pixel=floor(vWorld.xz*8.0);
-  float frame=floor(uTime*2.0);
+  // This fade is shared by all water pixels. JS computes it ONCE per draw,
+  // avoiding expensive per-fragment smoothstep work on weak GPUs/software GL.
+  float frame=uRippleFrame;
+  float rippleFade=uRippleFade;
   vec2 downstream=length(vFlow)>0.0?normalize(vFlow):vec2(0.0);
   ivec2 moving=ivec2(floor(pixel-downstream*frame));
   int col=int(mod(float(moving.x),32.0));
@@ -89,7 +94,7 @@ void main(){
     // into a wet lower pool. Sparse cap pixels travel with the flow rather
     // than stamping a bright circle across every waterfall or still basin.
     float stamp=fluidHash(floor(vWorld.xz*10.0)+vec2(19.0,73.0));
-    float pace=uLava<.5?2.4:.65;
+    float pace=uLava<.5?.9:.45;
     float tumble=fract(uTime*pace+stamp*.48);
     float sparkle=smoothstep(.08,.28,tumble)*
       (1.0-smoothstep(.68,.9,tumble));
@@ -106,16 +111,20 @@ void main(){
     vec3 deep=vec3(.075,.28,.32);
     vec3 shallow=vec3(.22,.49,.44);
     color=mix(deep,shallow,.36+.24*pool);
-    if(ripple==3)color=mix(color,vec3(.29,.55,.54),.25);
-    if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48);
-    if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72);
+    // Still pools do not blink; only a real moving downstream flow shifts
+    // water glints. Moving glints fade out at each 8px grid transition so
+    // they never teleport and look like water-surface jitter.
+    float movingGlint=length(downstream)>.001?rippleFade:.65;
+    if(ripple==3)color=mix(color,vec3(.29,.55,.54),.25*movingGlint);
+    if(ripple==1)color=mix(color,vec3(.35,.61,.58),.48*movingGlint);
+    if(ripple==2)color=mix(color,vec3(.45,.69,.64),.72*movingGlint);
     color*=mix(.87,1.0,top);
     if(vFaceMode==2) {
       // A real downstream wet column is lower. Vertical, pixel-quantized
       // light strokes follow the falling sheet, never a generic pool wall.
       vec2 across=vec2(-downstream.y,downstream.x);
       float strip=floor(dot(vWorld.xz,across)*10.0);
-      float phase=fract(uTime*1.3+
+      float phase=fract(uTime*.7+
         fluidHash(vec2(strip,91.0))*.75+.2*vWorld.y);
       float bead=smoothstep(.03,.17,phase)*
         (1.0-smoothstep(.42,.67,phase));
@@ -131,12 +140,12 @@ void main(){
         vec2(-downstream.y,downstream.x))*5.0);
       // Continuous phase anchored to world coordinates, not a different
       // random flash for each one-metre waterfall column on every frame.
-      float phase=fract(uTime*1.3+
+      float phase=fract(uTime*.7+
         fluidHash(vec2(acrossLane,37.0))*.6-.25*vWorld.y);
       float line=smoothstep(.08,.22,phase)*
         (1.0-smoothstep(.55,.78,phase));
       color=mix(color,vec3(.46,.67,.65),.33+.18*(1.0-fall));
-      color=mix(color,vec3(.67,.79,.73),line*.15);
+      color=mix(color,vec3(.67,.79,.73),line*.10);
     } else if(vFaceMode==3) {
       // Subtle broken glint at the lip, not a bright 1m-wide foam stripe.
       vec2 local=fract(vWorld.xz);
@@ -202,6 +211,43 @@ function program(gl){
   return result;
 }
 
+// Equal, non-animated GPU geometry does not need another upload. Compare
+// binary typed-array contents (including real 10cm heights and flow modes).
+const sameGeometry=(a,b)=>{
+  if(!a||!b)return false;
+  for(const name of ['positions','normals','flows','faceModes',
+    'landingHeights','indices']){
+    const left=a[name],right=b[name];
+    if(left.byteLength!==right.byteLength)return false;
+    const l=new Uint8Array(left.buffer,left.byteOffset,left.byteLength);
+    const r=new Uint8Array(right.buffer,right.byteOffset,right.byteLength);
+    for(let i=0;i<l.length;i++)if(l[i]!==r[i])return false;
+  }
+  return true;
+};
+
+// Advance the pixel-art ripple animation with a continuous brightness
+// envelope. Hoisted from GLSL so it is evaluated once per WebGL draw.
+export function fluidRippleTiming(time){
+  if(!Number.isFinite(time))throw new TypeError('Fluid animation time must be finite');
+  const cycle=time*.65;
+  const phase=cycle-Math.floor(cycle);
+  const smooth=(a,b,x)=>{
+    const f=Math.max(0,Math.min(1,(x-a)/(b-a)));
+    return f*f*(3-2*f);
+  };
+  return {
+    frame:Math.floor(cycle),
+    fade:smooth(0,.22,phase)*(1-smooth(.78,1,phase))
+  };
+}
+
+const fluidStreams=mesh=>[
+  mesh.positions,mesh.normals,mesh.flows,
+  mesh.faceModes,mesh.landingHeights,mesh.indices
+];
+const fluidCapacity=bytes=>Math.ceil(Math.max(4096,bytes*1.25)/4096)*4096;
+
 export class HuntFluidSurfaceRenderer {
   #gl;
   #program=null;
@@ -209,6 +255,12 @@ export class HuntFluidSurfaceRenderer {
   #record=null;
   #mesh=null;
   #visualHistory=new Map();
+  #meshUpdateMs=0;
+  #meshUpdateCount=0;
+  #gpuAllocations=0;
+  #gpuDeletes=0;
+  #gpuUploadMs=0;
+  #gpuUploadCount=0;
   #lost=false;
   #disposed=false;
   #onLost;
@@ -245,7 +297,15 @@ export class HuntFluidSurfaceRenderer {
         this.#mesh.faceModes.byteLength+this.#mesh.landingHeights.byteLength+
         this.#mesh.indices.byteLength:0,
       uploadedTriangles:this.#record?.count?this.#record.count/3:0,
-      surfaceStep:this.#mesh?.step??null
+      surfaceStep:this.#mesh?.step??null,
+      meshUpdateMs:this.#meshUpdateMs,
+      meshUpdateCount:this.#meshUpdateCount,
+      gpuAllocations:this.#gpuAllocations,
+      gpuDeletes:this.#gpuDeletes,
+      gpuUploadMs:this.#gpuUploadMs,
+      gpuUploadCount:this.#gpuUploadCount,
+      gpuAllocatedBytes:this.#record?.capacities.reduce(
+        (sum,bytes)=>sum+bytes,0)??0
     });
   }
 
@@ -299,7 +359,10 @@ export class HuntFluidSurfaceRenderer {
   #releaseBuffers(){
     if(this.#record&&!this.#lost&&!this.#gl.isContextLost()){
       this.#gl.deleteVertexArray(this.#record.vao);
-      for(const buffer of this.#record.buffers)this.#gl.deleteBuffer(buffer);
+      for(const buffer of this.#record.buffers){
+        this.#gl.deleteBuffer(buffer);
+        this.#gpuDeletes++;
+      }
     }
     this.#record=null;
   }
@@ -313,6 +376,7 @@ export class HuntFluidSurfaceRenderer {
 
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
+    const start=performance.now();
     const presented=stabilizeFluidSurface(surface,sampleAt,this.#visualHistory);
     const mesh=buildFluidSurfaceMesh(presented.surface,{
       sampleAt:presented.sampleAt
@@ -320,9 +384,43 @@ export class HuntFluidSurfaceRenderer {
     const bytes=mesh.positions.byteLength+mesh.normals.byteLength+mesh.flows.byteLength+
       mesh.faceModes.byteLength+mesh.landingHeights.byteLength+mesh.indices.byteLength;
     if(bytes>2*1024*1024)throw new RangeError('Fluid surface GPU upload exceeds 2MiB');
-    this.#releaseBuffers();
+    if(!sameGeometry(mesh,this.#mesh)&&this.#record&&
+        !this.#lost&&!this.#gl.isContextLost()){
+      this.#uploadReusableMesh(mesh);
+    }
     this.#mesh=mesh;
     this.#visualHistory=presented.history;
+    this.#meshUpdateMs=performance.now()-start;
+    this.#meshUpdateCount++;
+  }
+
+  #uploadReusableMesh(mesh){
+    const gl=this.#gl,record=this.#record;
+    if(!record)return;
+    const streams=fluidStreams(mesh);
+    const start=performance.now();
+    gl.bindVertexArray(record.vao);
+    try{
+      for(let i=0;i<streams.length;i++){
+        const target=i===streams.length-1?gl.ELEMENT_ARRAY_BUFFER:gl.ARRAY_BUFFER;
+        const data=streams[i];
+        gl.bindBuffer(target,record.buffers[i]);
+        if(data.byteLength>record.capacities[i]){
+          // Grow only when needed, never delete/recreate the VAO or buffers
+          // for a fluid snapshot. Capacity remains bounded by real mesh size.
+          const capacity=fluidCapacity(data.byteLength);
+          gl.bufferData(target,capacity,gl.DYNAMIC_DRAW);
+          record.capacities[i]=capacity;
+        }
+        if(data.byteLength)gl.bufferSubData(target,0,data);
+      }
+      record.count=mesh.indices.length;
+      this.#gpuUploadMs=performance.now()-start;
+      this.#gpuUploadCount++;
+    }finally{
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER,null);
+    }
   }
 
   #ensureReady(){
@@ -335,23 +433,30 @@ export class HuntFluidSurfaceRenderer {
         viewport:uniform('uViewport'),pan:uniform('uPan'),scale:uniform('uScale'),
         depthOrigin:uniform('uDepthOrigin'),
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
-        depth:uniform('uCameraDepth'),time:uniform('uTime'),lava:uniform('uLava'),
+        depth:uniform('uCameraDepth'),time:uniform('uTime'),
+        rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
+        lava:uniform('uLava'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
       };
     }
     if(this.#record||!this.#mesh.indices.length)return true;
+    const start=performance.now();
     const vao=gl.createVertexArray();
     if(!vao)throw new Error('Fluid VAO allocation failed');
-    const buffers=[];
+    const buffers=[],capacities=[];
     try{
       gl.bindVertexArray(vao);
-      const buffer=(type,data)=>{
+      const buffer=(target,data)=>{
         const handle=gl.createBuffer();
         if(!handle)throw new Error('Fluid GPU buffer allocation failed');
         buffers.push(handle);
-        gl.bindBuffer(type,handle);
-        gl.bufferData(type,data,gl.STATIC_DRAW);
+        this.#gpuAllocations++;
+        gl.bindBuffer(target,handle);
+        const capacity=fluidCapacity(data.byteLength);
+        capacities.push(capacity);
+        gl.bufferData(target,capacity,gl.DYNAMIC_DRAW);
+        if(data.byteLength)gl.bufferSubData(target,0,data);
       };
       buffer(gl.ARRAY_BUFFER,this.#mesh.positions);
       gl.enableVertexAttribArray(0);
@@ -369,9 +474,14 @@ export class HuntFluidSurfaceRenderer {
       gl.enableVertexAttribArray(4);
       gl.vertexAttribPointer(4,1,gl.FLOAT,false,0,0);
       buffer(gl.ELEMENT_ARRAY_BUFFER,this.#mesh.indices);
-      this.#record={vao,buffers,count:this.#mesh.indices.length};
+      this.#record={vao,buffers,capacities,count:this.#mesh.indices.length};
+      this.#gpuUploadMs=performance.now()-start;
+      this.#gpuUploadCount++;
     }catch(error){
-      for(const handle of buffers)gl.deleteBuffer(handle);
+      for(const handle of buffers){
+        gl.deleteBuffer(handle);
+        this.#gpuDeletes++;
+      }
       gl.deleteVertexArray(vao);
       throw error;
     }finally{
@@ -393,7 +503,11 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform3fv(u.right,basis.right);
     gl.uniform3fv(u.down,basis.down);
     gl.uniform3fv(u.depth,basis.depth);
-    gl.uniform1f(u.time,reducedMotion?0:time);
+    const animatedTime=reducedMotion?0:time;
+    gl.uniform1f(u.time,animatedTime);
+    const ripple=fluidRippleTiming(animatedTime);
+    gl.uniform1f(u.rippleFrame,ripple.frame);
+    gl.uniform1f(u.rippleFade,ripple.fade);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
