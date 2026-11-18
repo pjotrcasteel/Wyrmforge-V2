@@ -1546,6 +1546,15 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
           return {
             kind:playFluid.kind,steps:playFluid.steps,
             busy:Boolean(pendingEdit||pendingMesh||renderer.pendingUploads||streamingBusy()||errorMessage),
+            busyReasons:{
+              pendingEdit:Boolean(pendingEdit),
+              pendingMesh:Boolean(pendingMesh),
+              pendingUploads:Boolean(renderer.pendingUploads),
+              streaming:Boolean(streamingBusy()),
+              errorMessage:errorMessage||null,
+              awaitingPlayContext:Boolean(awaitingPlayContext),
+              restoring:Boolean(restoring)
+            },
             breachCount:witnessedBreaches.length,
             wetColumns:wet.length,
             wetBeyondChannel:wet.filter(c=>!authored.has(c.x+','+c.z)).length,
