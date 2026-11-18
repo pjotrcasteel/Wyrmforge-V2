@@ -71,6 +71,10 @@ export function createWorldGenFluidEngine(layout,terrain,{
     throw new RangeError('Expected bounded water-seeding settings');
   }
   const [channel]=channels;
+  const boundaryRole=layout.boundaryRole??'isolated';
+  if(!['isolated','head','through','tail'].includes(boundaryRole)){
+    throw new TypeError('Unknown authored Water V2 boundary role');
+  }
   const floorAt=createFluidTerrainFloorQuery(footprint,terrain);
   const floorCells=new Map();
   for(const cell of channel.floor){
@@ -161,14 +165,19 @@ export function createWorldGenFluidEngine(layout,terrain,{
     // Source/outlet heads are authored constants, not mutable replayed floors.
     // Otherwise Fireball edits to a mouth change its manifest on reload and
     // reject an otherwise valid checkpoint as an incompatible world.
-    sources:mouth.map(({x,z,y})=>({
-      x,z,surfaceY:y+initialDepth/10,rate:sourceRate
-    })),
-    outlets:exits.map(({x,z,y})=>({
-      x,z,surfaceY:y+initialDepth/10,
-      rate:Math.min(10,Math.max(sourceRate,
-        Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
-    })),
+    // A connected river has exactly one upstream inflow and one downstream
+    // terminal outflow. Internal region/link mouths are physical interfaces,
+    // NOT independently spawned fluid sources or sinks.
+    sources:['isolated','head'].includes(boundaryRole)?
+      mouth.map(({x,z,y})=>({
+        x,z,surfaceY:y+initialDepth/10,rate:sourceRate
+      })):[],
+    outlets:['isolated','tail'].includes(boundaryRole)?
+      exits.map(({x,z,y})=>({
+        x,z,surfaceY:y+initialDepth/10,
+        rate:Math.min(10,Math.max(sourceRate,
+          Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
+      })):[],
     currents
   });
   return Object.freeze({
