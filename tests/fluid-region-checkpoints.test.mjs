@@ -42,7 +42,7 @@ test('a region cannot restore before the matching voxel terrain has been replaye
 });
 
 test('checkpoint export/import survives a reload without leaking live references',()=>{
-  const original=new FluidRegionCheckpoints('plan-19-seed-42');
+  const original=new FluidRegionCheckpoints('plan-19:WorldGen-v2.7:seed-42');
   const a=original.open('a',()=>engine());
   original.open('b',()=>engine(2,'lava'));
   original.step({budget:3});
@@ -50,7 +50,7 @@ test('checkpoint export/import survives a reload without leaking live references
   const data=JSON.parse(JSON.stringify(original.exportCheckpoint()));
   assert.equal(data.schema,FLUID_REGION_CHECKPOINT_SCHEMA);
   assert.deepEqual(data.regions.map(r=>r.id),['a','b']);
-  const replay=new FluidRegionCheckpoints('plan-19-seed-42');
+  const replay=new FluidRegionCheckpoints('plan-19:WorldGen-v2.7:seed-42');
   replay.importCheckpoint(data);
   assert.deepEqual(replay.open('a',()=>engine()).snapshot(),a.snapshot());
   assert.equal(replay.open('b',()=>engine(2,'lava')).kind,'lava');
