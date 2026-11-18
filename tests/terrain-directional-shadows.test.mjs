@@ -259,7 +259,8 @@ test('actual Hunt overlay retains a tree cast while its sprite walks out of view
     placement:()=>({placements:[placement]})};
   const directionalCache=new TerrainDirectionalShadowCache(()=>mask());
   const preview=new HuntTreePreview(graph,image,undefined,{
-    directionalCache,scenery:{trees:()=>[]}
+    directionalCache,scenery:{trees:()=>[]},
+    lightingCache:{beginFrame(){},draw(){},clear(){},statistics:{bytes:0,entries:0}}
   });
   const port=terrain();
   preview.update(['one'],port);
