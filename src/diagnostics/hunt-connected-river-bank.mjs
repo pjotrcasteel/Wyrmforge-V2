@@ -33,15 +33,16 @@ export function findConnectedRiverBankTarget(graph,terrain,fluid,{
         origin:[x+.5,30,z+.5],direction:[0,-1,0],maxDistance:80
       });
       if(!hit?.cell)continue;
-      const bankTop=hit.cell.y+1,head=river.surfaceY;
-      // A Fireball crater can flood only if its ACTUAL new floor connects
-      // below the neighboring water head. Picking the first arbitrarily high
-      // bank (3m above the river) led to fake "wet somewhere" acceptance:
-      // it remained a dry, intact 1m stone wall after the shot.
-      // Prefer a shallow, dry, already physical bank. No terrain edits are
-      // performed here and no water is seeded or teleported.
-      const rise=bankTop-head;
-      if(rise<=0||rise>1.25)continue;
+      // Temporary upstream head can exceed the river's sustainable
+      // physical water level while the initial seed redistributes. Selecting
+      // a high bank from that transient head produced false breach targets:
+      // the 2m Fireball left solid stone above the settled river surface.
+      // A 2m genuine crater must reach the authored stone bed + up to 40cm
+      // of resident water, never the temporary high-water mark.
+      const bankTop=hit.cell.y+1;
+      const settledHead=cell.y+Math.min(.4,river.depth/10);
+      const rise=bankTop-settledHead;
+      if(rise<=0||rise>1.95)continue;
       if(!chosen||rise<chosen.rise){
         chosen={hit,shore:{x,z},river:{x:cell.x,z:cell.z,y:cell.y},rise};
       }
