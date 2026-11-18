@@ -37,8 +37,13 @@ test('contact attenuation is bounded and logs respect their elongated physical r
   const a=describeContactShadow(tree('tree'));
   const b=describeContactShadow({...tree('log',0,5,0,'log'),radius:.22,halfLength:.72});
   assert.equal(a.samples.length,CONTACT_SHADOW_SAMPLE_COUNT);
-  assert.ok(b.radiusX>b.radiusZ*3);
-  assert.ok(a.samples.every(s=>s.alpha>0&&s.alpha<.35));
+  assert.ok(b.radiusX>b.radiusZ*2,'logs retain a long narrow physical footprint');
+  assert.ok(a.radiusX>=.8&&a.radiusZ>=.7,'root grounding must be visible at Hunt scale');
+  assert.ok(a.samples.every(s=>s.alpha>0&&s.alpha<=.35));
+  const screenScale=24; // 402 CSS-pixel mobile Hunt at 1.5 render scale.
+  const center=a.samples[0],edge=a.samples.find(s=>s.x>a.x+.7);
+  assert.ok(center.halfX*2*screenScale>10,'contact receiver must span meaningful real pixels');
+  assert.ok((edge.x-a.x)*screenScale>15,'shadow reaches outside its painted trunk base');
   assert.equal(describeContactShadow({...tree('bad'),radius:-1}),null);
 });
 test('flat ground is sampled at authoritative contact receivers and cached without raycasts',()=>{
@@ -78,7 +83,10 @@ test('query and retained-entry budgets are hard bounded during dense-forest chur
 });
 test('local terrain edit invalidates only nearby cached receivers, not distant props',()=>{
   const port=terrain(),cache=new TerrainContactShadowCache();
-  cache.beginFrame();cache.stamps(tree('a'),port);cache.stamps(tree('b',20),port);
+  // The cold-start budget now deliberately admits one new 13-sample prop
+  // per frame. Construct the two caches over two render frames.
+  cache.beginFrame();cache.stamps(tree('a'),port);
+  cache.beginFrame();cache.stamps(tree('b',20),port);
   const before=port.calls;
   cache.invalidate({min:{x:-1,z:-1},max:{x:1,z:1}});
   assert.equal(cache.statistics.entries,1);
