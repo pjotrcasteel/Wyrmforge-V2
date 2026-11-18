@@ -24,9 +24,12 @@ function canvasFor(width,height){
 }
 export class SpriteLightingCache {
   #factory;#image=null;#bases=new Map();#tints=new Map();#bytes=0;#baseBytes=0;#work=0;
+  #fallbackDraws=0;#untintedDraws=0;
   constructor(factory=canvasFor){this.#factory=factory;}
-  beginFrame(){this.#work=0;}
-  get statistics(){return {bytes:this.#bytes,entries:this.#tints.size,framePixels:this.#work};}
+  beginFrame(){this.#work=0;this.#fallbackDraws=0;this.#untintedDraws=0;}
+  get statistics(){return {bytes:this.#bytes,entries:this.#tints.size,
+    framePixels:this.#work,fallbackDraws:this.#fallbackDraws,
+    untintedDraws:this.#untintedDraws};}
   clear(){this.#bases.clear();this.#tints.clear();this.#bytes=0;this.#baseBytes=0;this.#image=null;}
   draw(ctx,image,sprite,rect,light,fallback=light){
     if(this.#image!==image){this.clear();this.#image=image;}
@@ -50,7 +53,7 @@ export class SpriteLightingCache {
         const canvas=this.#factory(sprite.w,sprite.h),context=canvas.getContext('2d');
         const output=context.createImageData(sprite.w,sprite.h);
         output.data.set(tintSpritePixels(base,tint));context.putImageData(output,0,0);
-        cached={canvas,bytes:pixels*4};this.#work+=needed;
+        cached={canvas,bytes:pixels*4,light:tint};this.#work+=needed;
         while(this.#tints.size&&(this.#tints.size>=48||this.#bytes+cached.bytes>SPRITE_LIGHT_CACHE_BYTES)){
           const oldest=this.#tints.keys().next().value;this.#bytes-=this.#tints.get(oldest).bytes;this.#tints.delete(oldest);
         }
@@ -59,8 +62,28 @@ export class SpriteLightingCache {
     }
     if(!cached){
       cached=this.#tints.get(crop+':'+quantize(fallback).join(':'));
+      if(!cached){
+        // On a busy mobile frame, NEVER flash back to the original bright
+        // sprite when only the exact tint changed. Reuse the closest warmed
+        // variant for this crop until the bounded tint job can run.
+        let nearest=null,score=Infinity,nearestKey=null;
+        for(const [candidateKey,item] of this.#tints){
+          if(!candidateKey.startsWith(crop+':')||!item.light)continue;
+          const distance=item.light.reduce((sum,v,i)=>sum+(v-tint[i])**2,0);
+          if(distance<score){score=distance;nearest=item;nearestKey=candidateKey;}
+        }
+        cached=nearest;
+        if(nearestKey){
+          this.#tints.delete(nearestKey);
+          this.#tints.set(nearestKey,nearest);
+        }
+      }
+      if(cached)this.#fallbackDraws++;
     }
     if(cached)ctx.drawImage(cached.canvas,0,0,sprite.w,sprite.h,...rect);
-    else ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
+    else{
+      this.#untintedDraws++;
+      ctx.drawImage(image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
+    }
   }
 }
