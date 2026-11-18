@@ -138,7 +138,19 @@ export function exercisePublishedWaterJourney({
       profile:{...DEFAULT_TRAVERSAL_PROFILE,maxNavigableDrop:.55}
     });
     const path=audit.routeTo(goal.x,goal.z);
-    if(!path)fail('no native Voxel walking route inside '+band.id);
+    if(!path){
+      const diagnosticBand=graph.region(band.id);
+      fail('no native Voxel walking route '+JSON.stringify({
+        id:band.id,start:{x:Math.floor(currentActor.x),z:Math.floor(currentActor.z)},
+        goal,ports:band.ports.map(port=>({direction:port.direction,at:port.at})),
+        fords:diagnosticBand.earthwork?.fordCells??[],
+        riverBounds:(diagnosticBand.fluidLayout?.riverChannels?.[0]?.floor??[])
+          .reduce((out,cell)=>({
+            minX:Math.min(out.minX,cell.x),maxX:Math.max(out.maxX,cell.x),
+            minZ:Math.min(out.minZ,cell.z),maxZ:Math.max(out.maxZ,cell.z)
+          }),{minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity})
+      }));
+    }
     for(const cell of path)walk(cell.x+.5,cell.z+.5,band.id);
   };
   for(let i=1;i<route.length;i++){
