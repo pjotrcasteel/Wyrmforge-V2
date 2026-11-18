@@ -56,6 +56,7 @@ import { projectEncounterGuides } from './src/diagnostics/worldgen-combat-overla
 import { analyzeCharacterReachability } from './src/character-reachability.mjs';
 import { projectVoxel, PLAY_HUNT_CAMERA } from './src/camera-presets.mjs';
 import { projectRouteDummy } from './src/diagnostics/worldgen-dummy-actor.mjs';
+import {findConnectedRiverBankTarget} from './src/diagnostics/hunt-connected-river-bank.mjs';
 import { projectActorDiagnostic } from './src/diagnostics/actor-proxy.mjs';
 import {
   spawnHuntExplorer,stepHuntExplorer,recoverHuntExplorer,HuntPlayPerformance,HuntFollowCamera,HUNT_FIXED_STEP,HUNT_WALK_SPEED,HUNT_PIXELS_PER_VOXEL,
@@ -734,7 +735,12 @@ function updatePlayStreaming(now) {
       playFluidSurfaceStep=-1;
       playRiverRevision=-1;
       if(playQuery.get('fluidTest')==='auto'){
-        // Read-only browser acceptance for the real graph-streamed Hunt.
+        const authored=new Set(stream.initialIds.flatMap(id=>
+          (stream.graph.materialize(id).fluidLayout?.riverChannels??[]).flatMap(channel=>
+            channel.floor.map(cell=>cell.x+','+cell.z))));
+        const wetOutsideAuthored=()=>playFluidStream?.snapshotSurface()?.cells.filter(cell=>
+          cell.depth>0&&!authored.has(cell.x+','+cell.z)).length??0;
+        // Test-only controls use genuine Fireball, Voxel edits and solver methods.
         window.__WyrmforgeStreamWaterTest={
           status:()=>({
             activeRegions:playFluidStream?.activeIds??[],
@@ -749,8 +755,36 @@ function updatePlayStreaming(now) {
             topFaces:playFluidVisual?.stats.topFaces??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
             worldRevision:active?.world.revision??null,
+            fireballs:playFireballCount,
+            lastImpactRemoved,
+            terrainRemovedCells:stream.terrainSave?.removedCells.size??0,
+            terrainSaved:stream.terrainSave?.status??null,
+            wetOutsideAuthored:wetOutsideAuthored(),
+            residency:stream.residency?.metrics??null,
             error:errorMessage
           }),
+          castBank(){
+            if(!canCastPlayFireball())throw new Error('Real Hunt Fireball is currently blocked');
+            const bank=findConnectedRiverBankTarget(stream.graph,active.port,playFluidStream);
+            const cast={point:bank.hit.point,
+              target:{...bank.hit.cell,radius:2.3,depth:2},
+              worldRevision:bank.hit.worldRevision};
+            beginPlayFireball(cast);
+            return {target:bank.hit.cell,shore:bank.shore,river:bank.river,
+              beforeRemoved:stream.terrainSave.removedCells.size,
+              beforeWetOutside:wetOutsideAuthored()};
+          },
+          advanceFluid(count){
+            if(!Number.isSafeInteger(count)||count<1||count>180||
+                streamingBusy()||pendingEdit||renderer.pendingUploads||playFireball){
+              throw new Error('Streamed fluid fixed-step witness is not ready');
+            }
+            for(let n=0;n<count;n++)playFluidStream.step({budget:96});
+            playFluidSurfaceStep=-1;
+            playRiverRevision=-1;
+            return {ticks:count,wetOutsideAuthored:wetOutsideAuthored(),
+              totalDepth:playFluidStream.totalDepth};
+          },
           save:()=>({
             ok:persistStreamedWater(),
             regionSteps:playFluidStream?.exportCheckpoint().regions.map(entry=>({id:entry.id,steps:entry.state.steps}))??[]
@@ -835,6 +869,12 @@ function castPlayFireball(clientX,clientY,{guided=false}={}) {
     (clientX-rect.left)*playView.width/rect.width,
     (clientY-rect.top)*playView.height/rect.height,playStream?.trees.objects);
   if(!target)return;
+  beginPlayFireball(target);
+}
+function beginPlayFireball(target) {
+  // Same projectile flight and collision/ledger completion for player taps
+  // and the opt-in automated physical-riverbank witness.
+  if(!target||!canCastPlayFireball())return;
   const from={x:playActor.x,y:playActor.y+1.1,z:playActor.z};
   const distance=Math.hypot(target.point.x-from.x,
     target.point.y-from.y,target.point.z-from.z);
