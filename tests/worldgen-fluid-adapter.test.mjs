@@ -7,7 +7,7 @@ import {V2ExternalTerrainLoader} from '../src/external-terrain-loader.mjs';
 import {createWorldSiteRecipe} from '../src/world-generation/site-recipe.mjs';
 import {generateWorldSite} from '../src/world-generation/index.mjs';
 import {
-  WORLDGEN_FLUID_SCHEMA,createWorldGenFluidEngine,
+  WORLDGEN_FLUID_SCHEMA,DEFAULT_CHANNEL_DEPTH_UNITS,createWorldGenFluidEngine,
   createFluidTerrainFloorQuery,attachWorldGenFluid
 } from '../src/fluid/worldgen-fluid-adapter.mjs';
 
@@ -48,7 +48,14 @@ test('WorldGen water and volcanic channels seed the real authoritative floor',()
       assert.equal(result.fluid.kind,fluidKind);
       assert.equal(result.channelCellCount,channel.floor.length);
       assert.equal(result.fluid.wetCount,channel.floor.length);
-      assert.equal(result.fluid.totalDepth,channel.floor.length*10);
+      assert.equal(DEFAULT_CHANNEL_DEPTH_UNITS,4);
+      assert.equal(result.channelDepthUnits,4);
+      assert.equal(result.fluid.totalDepth,channel.floor.length*4);
+      assert.ok(result.fluid.snapshot().sources.every(source=>
+        source.surfaceDeci===result.fluid.snapshot().floors[source.index]*10+4),
+        'water/lava inflow stays at 40cm rather than refilling to 1 metre');
+      assert.ok(result.fluid.snapshot().outlets.every(outlet=>
+        outlet.surfaceDeci===result.fluid.snapshot().floors[outlet.index]*10+4));
       assert.equal(result.source.x,channel.nodes[0].x);
       assert.equal(result.source.z,channel.nodes[0].z);
       for(const cell of channel.floor){
@@ -110,4 +117,52 @@ test('WorldGen adapter rejects unsupported channels and invalid terrain contract
   assert.throws(()=>createFluidTerrainFloorQuery(layout.footprint,{}),/materialAt/);
   assert.throws(()=>attachWorldGenFluid(port,{}),/Water V2/);
   port.dispose();
+});
+
+test('shallow default river stays below an unbroken grass bank, but a cut bank can flood',()=>{
+  const tops=(x,z)=>z===1?0:1;
+  const layout={
+    footprint:{minX:0,maxX:6,minZ:0,maxZ:4,minY:-1,maxY:3},
+    riverChannels:[{
+      kind:'water',
+      floor:Array.from({length:7},(_,x)=>({x,z:1,y:0})),
+      nodes:Array.from({length:7},(_,x)=>({x,z:1,y:0})),
+      from:{x:0,z:1},to:{x:6,z:1}
+    }]
+  };
+  const terrain={materialAt:(x,y,z)=>y<tops(x,z)?3:0};
+  const {fluid}=createWorldGenFluidEngine(layout,terrain);
+  assert.equal(fluid.sample(3,1).surfaceY,.4);
+  const originalTotal=fluid.totalDepth;
+  assert.equal(originalTotal,7*4);
+  for(let i=0;i<200;i++){
+    const result=fluid.step({budget:28});
+    assert.ok(result.processed<=28);
+  }
+  assert.equal(fluid.sample(3,0).depth,0);
+  assert.equal(fluid.sample(3,2).depth,0,
+    'uncut grass banks must not disappear beneath an overfull river');
+  const snapshot=fluid.snapshot();
+  assert.ok(snapshot.sources.every(source=>
+    source.surfaceDeci-snapshot.floors[source.index]*10===4));
+  assert.ok(snapshot.outlets.every(outlet=>
+    outlet.surfaceDeci-snapshot.floors[outlet.index]*10===4));
+});
+
+test('channel depth override remains bounded and inlet/outlet targets follow its 10cm steps',()=>{
+  const tops=(_x,z)=>z===1?0:1;
+  const layout={
+    footprint:{minX:0,maxX:4,minZ:0,maxZ:2,minY:-1,maxY:3},
+    riverChannels:[{
+      kind:'water',
+      floor:Array.from({length:5},(_,x)=>({x,z:1,y:0})),
+      nodes:Array.from({length:5},(_,x)=>({x,z:1,y:0})),
+      from:{x:0,z:1},to:{x:4,z:1}
+    }]
+  };
+  const terrain={materialAt:(x,y,z)=>y<tops(x,z)?3:0};
+  const {fluid}=createWorldGenFluidEngine(layout,terrain,{initialDepth:7});
+  assert.equal(fluid.totalDepth,35);
+  assert.ok(fluid.snapshot().sources.every(source=>source.surfaceDeci===7));
+  assert.ok(fluid.snapshot().outlets.every(outlet=>outlet.surfaceDeci===7));
 });
