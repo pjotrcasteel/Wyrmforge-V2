@@ -264,7 +264,7 @@ export class ColumnFluidEngine {
         if(this.#steps%3===1&&nOutlets)outletBudget=1;
       }else{
         const boundarySlots=Math.min(nSources+nOutlets,
-          Math.max(1,Math.floor(budget/4)));
+          Math.max(nSources&&nOutlets?2:1,Math.floor(budget/4)));
         if(nSources&&nOutlets&&boundarySlots===1){
           if(this.#steps%2===0)sourceBudget=1;
           else outletBudget=1;
