@@ -5,6 +5,7 @@ export const FLUID_STATE_SCHEMA='wyrmforge.fluid-state.v1';
 export const FLUID_SURFACE_SCHEMA='wyrmforge.fluid-surface.v1';
 export const MAX_FLUID_COLUMNS=4096;
 export const MAX_FLUID_FLIGHTS=256;
+export const MAX_FLUID_SOURCES=8;
 export const FLUID_DEPTH_UNITS=10; // 10 cm of water per column unit
 const MAX_DEPTH=160; // 16 m of resident liquid per 1 m2 column
 const DIRECTIONS=[[1,0],[0,1],[-1,0],[0,-1]];
@@ -27,6 +28,7 @@ export class ColumnFluidEngine {
   #incoming;
   #flightCursor=0;
   #sourceManifest=[];
+  #sourceCursor=0;
   #floorAt;
   #kind;
   #cursor=0;
@@ -55,6 +57,7 @@ export class ColumnFluidEngine {
       this.#floors[i]=this.#readFloor(x,z);
     }
     if(!Array.isArray(initial)||!Array.isArray(sources))throw new TypeError('Expected fluid seed arrays');
+    if(sources.length>MAX_FLUID_SOURCES)throw new RangeError('Too many bounded fluid inlet sources');
     for(const {x,z,depth} of initial){
       const index=this.#requiredIndex(x,z);
       if(!Number.isSafeInteger(depth)||depth<0||depth>MAX_DEPTH){
@@ -170,27 +173,45 @@ export class ColumnFluidEngine {
     return {landed,processed};
   }
 
-  // Each step touches no more than "budget" columns and four neighbors.
-  // Cursor/iteration are saved, so the result is deterministic across pauses.
+  // Inlets are hydrologic boundary conditions, not ordinary map columns.
+  // The former cursor-only service could refill one source once per ~40 Hunt
+  // frames in a 4096-column region while downstream water drained every tick.
+  // Reserve a small slice of the SAME budget for real upstream inlet work.
+  #injectSources(budget){
+    if(!budget||!this.#sourceManifest.length)return {injected:0,processed:0};
+    let injected=0;
+    const processed=Math.min(budget,this.#sourceManifest.length);
+    for(let i=0;i<processed;i++){
+      const source=this.#sourceManifest[this.#sourceCursor];
+      this.#sourceCursor=(this.#sourceCursor+1)%this.#sourceManifest.length;
+      const {index,surfaceDeci,rate}=source;
+      const wanted=Math.min(MAX_DEPTH,
+        Math.max(0,surfaceDeci-this.#floors[index]*FLUID_DEPTH_UNITS));
+      const added=Math.min(rate,Math.max(0,wanted-this.#depths[index]));
+      if(!this.#depths[index]&&added)this.#wet++;
+      this.#depths[index]+=added;
+      injected+=added;
+    }
+    return {injected,processed};
+  }
+
+  // No more than "budget" source+column visits per step. Existing flights
+  // are independently capped and budgeted just as before this change.
   step({budget=128}={}){
     if(!Number.isSafeInteger(budget)||budget<1||budget>MAX_FLUID_COLUMNS){
       throw new RangeError('Invalid per-step fluid column budget');
     }
-    const count=Math.min(budget,this.columnCount);
+    const sourceBudget=this.#sourceManifest.length
+      ?budget===1?(this.#steps%2===0?1:0)
+        :Math.min(this.#sourceManifest.length,Math.max(1,Math.floor(budget/4)))
+      :0;
+    const {injected,processed:sourcesProcessed}=this.#injectSources(sourceBudget);
+    const count=Math.min(budget-sourcesProcessed,this.columnCount);
     const {landed,processed:flightsProcessed}=this.#landFlights(budget);
-    let transferred=0,injected=0;
+    let transferred=0;
     for(let i=0;i<count;i++){
       const index=this.#cursor;
       this.#cursor=(this.#cursor+1)%this.columnCount;
-      const source=this.#sources.get(index);
-      if(source){
-        const wanted=Math.min(MAX_DEPTH,
-          Math.max(0,source.surfaceDeci-this.#floors[index]*FLUID_DEPTH_UNITS));
-        const added=Math.min(source.rate,Math.max(0,wanted-this.#depths[index]));
-        if(!this.#depths[index]&&added)this.#wet++;
-        this.#depths[index]+=added;
-        injected+=added;
-      }
       if(!this.#depths[index])continue;
       const x=this.#bounds.minX+index%this.#width;
       const z=this.#bounds.minZ+Math.floor(index/this.#width);
@@ -201,7 +222,8 @@ export class ColumnFluidEngine {
     }
     this.#steps++;
     return Object.freeze({
-      processed:count,flightsProcessed,transferred,injected,landed,
+      processed:count+sourcesProcessed,columnsProcessed:count,
+      sourcesProcessed,flightsProcessed,transferred,injected,landed,
       inFlight:this.#flights.length,wet:this.#wet
     });
   }
@@ -297,6 +319,7 @@ export class ColumnFluidEngine {
       schema:FLUID_STATE_SCHEMA,kind:this.#kind,bounds:{...this.#bounds},
       floors:Array.from(this.#floors),depths:Array.from(this.#depths),
       sources:this.#sourceManifest.map(source=>({...source})),
+      sourceCursor:this.#sourceCursor,
       cursor:this.#cursor,steps:this.#steps,
       flights:this.#flights.map(packet=>({...packet})),
       flightCursor:this.#flightCursor
@@ -305,11 +328,14 @@ export class ColumnFluidEngine {
 
   restore(state){
     const bounds=state?.bounds;
+    const sourceCursor=state?.sourceCursor??0;
     if(state?.schema!==FLUID_STATE_SCHEMA||state.kind!==this.#kind||
         !bounds||Object.keys(this.#bounds).some(key=>bounds[key]!==this.#bounds[key])||
         !Array.isArray(state.floors)||!Array.isArray(state.depths)||
         state.floors.length!==this.columnCount||state.depths.length!==this.columnCount||
         JSON.stringify(state.sources)!==JSON.stringify(this.#sourceManifest)||
+        !Number.isSafeInteger(sourceCursor)||sourceCursor<0||
+        sourceCursor>=Math.max(1,this.#sourceManifest.length)||
         !Number.isSafeInteger(state.cursor)||state.cursor<0||state.cursor>=this.columnCount||
         !Number.isSafeInteger(state.steps)||state.steps<0){
       throw new TypeError('Incompatible fluid snapshot');
@@ -360,6 +386,7 @@ export class ColumnFluidEngine {
     this.#flightCursor=flightCursor;
     this.#wet=state.depths.reduce((count,depth)=>count+(depth>0?1:0),0);
     this.#cursor=state.cursor;
+    this.#sourceCursor=sourceCursor;
     this.#steps=state.steps;
   }
 }
