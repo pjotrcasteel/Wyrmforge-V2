@@ -1,0 +1,42 @@
+name: L10-06 actual Hunt directional shadows
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lighting/directional-sunlight.mjs'
+      - 'src/terrain-directional-shadow-cache.mjs'
+      - 'src/hunt-tree-preview.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/lighting-directional-hunt.mjs'
+      - '.github/workflows/lighting-directional-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('l10-06-pr-{0}',github.event.pull_request.number) || 'l10-06-manual' }}
+  cancel-in-progress: true
+jobs:
+  actual-hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install desktop Chromium witness
+        run: |
+          command -v google-chrome
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
+      - name: Verify actual Hunt directional on/off pixels
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/lighting-directional-hunt.mjs
+      - name: Upload exact same-scene evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighting-directional-hunt
+          path: lighting-directional-evidence/
+          if-no-files-found: warn
+          retention-days: 14

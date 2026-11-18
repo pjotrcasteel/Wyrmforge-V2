@@ -1,5 +1,6 @@
 import {SpriteLightingCache,litSpriteColor} from './sprite-lighting-cache.mjs';
 import {TerrainContactShadowCache} from './terrain-contact-shadow-cache.mjs';
+import {TerrainDirectionalShadowCache} from './terrain-directional-shadow-cache.mjs';
 import { projectVoxel } from './camera-presets.mjs';
 import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
@@ -33,6 +34,7 @@ export class HuntTreePreview {
   #image;
   #lightingCache=new SpriteLightingCache();
   #contacts=new TerrainContactShadowCache();
+  #canopyShadows=new TerrainDirectionalShadowCache();
   #terrain=null;
   #coverage=null;
   #scenery;
@@ -49,16 +51,19 @@ export class HuntTreePreview {
       this.objects.update(regionIds,terrain,coverage);
       const ids=new Set([...this.objects.regions].flatMap(props=>props.map(prop=>prop.id)));
       this.#contacts.prune(ids);
+      this.#canopyShadows.prune(ids);
     }
   }
   terrainChanged(bounds,terrain,isPublished,now,animate=true){
     this.#contacts.invalidate(bounds);
+    this.#canopyShadows.invalidate(bounds);
     this.#animate(this.objects.terrainChanged(bounds,terrain,isPublished),now,animate);
   }
   hitProp(id,terrain,isPublished,now,animate){
     const hit=this.objects.hitProp(id,terrain,isPublished);
     if(hit){
       this.#contacts.remove(id);
+      this.#canopyShadows.remove(id);
       this.#animate(hit.falls,now,animate);
     }
     return hit;
@@ -72,13 +77,17 @@ export class HuntTreePreview {
   }
   get lightingStatistics(){return this.#lightingCache.statistics;}
   get contactShadowStatistics(){return this.#contacts.statistics;}
+  get directionalShadowStatistics(){return this.#canopyShadows.statistics;}
   dispose(){
-    this.#contacts.clear();this.#lightingCache.clear();this.#falls.clear();
+    this.#contacts.clear();this.#canopyShadows.clear();this.#lightingCache.clear();this.#falls.clear();
     this.#terrain=null;this.#coverage=null;
   }
-  paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null,contactShadows=true){
+  paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null,contactShadows=true,directionalShadows=true){
     this.#lightingCache.beginFrame();
     this.#contacts.beginFrame();
+    this.#canopyShadows.beginFrame();
+    let directionalCpuMs=0;
+    const canopyReceivers=[];
     let contactCpuMs=0;
     const addShadow=(tree,foot)=>{
       if(!lighting||!contactShadows||!this.#terrain||tree.scenic)return;
@@ -139,6 +148,13 @@ export class HuntTreePreview {
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layer.lightPosition=[tree.x,tree.y+1,tree.z];
         addShadow(tree,projectVoxel(tree.x,tree.y,tree.z,view));
+        if(lighting&&directionalShadows&&this.#terrain&&!tree.scenic&&!this.#falls.has(tree.id)){
+          const started=performance.now();
+          const stamps=this.#canopyShadows.stamps({...tree,image:this.#image},
+            this.#terrain,this.#coverage?.has);
+          directionalCpuMs+=performance.now()-started;
+          if(stamps.length)canopyReceivers.push(stamps);
+        }
         layers.push(layer);
       }
     }
@@ -148,6 +164,11 @@ export class HuntTreePreview {
     layers.sort((a,b)=>b.depth-a.depth);
     ctx.save();
     ctx.imageSmoothingEnabled=false;
+    if(directionalShadows){
+      const started=performance.now();
+      for(const stamps of canopyReceivers)this.#canopyShadows.paint(ctx,view,stamps);
+      directionalCpuMs+=performance.now()-started;
+    }
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
       if(layer.shadow){
@@ -173,6 +194,7 @@ export class HuntTreePreview {
     }
     ctx.restore();
     this.#contacts.endFrame(contactCpuMs);
+    this.#canopyShadows.endFrame(directionalCpuMs);
   }
 }
 
