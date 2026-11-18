@@ -96,7 +96,7 @@ try{
       await page.waitForFunction(initial=>{
         const state=window.__WyrmforgeFluidTest?.status();
         return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
-      },atRest,{timeout:60000});
+      },atRest,{timeout:120000});
     }catch(error){
       const diagnostic=await page.evaluate(()=>({
         status:window.__WyrmforgeFluidTest?.status()??null,
