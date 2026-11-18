@@ -78,6 +78,33 @@ function carveRuns(runs,changes,heights,maxFillMetres){
   return result;
 }
 
+// A continuously deep bank can create an impassable trench across the Hunt.
+// Preserve short, genuinely shallower native Voxel fords along WorldGen's
+// authored port-to-port travel corridors. These are still ordinary real
+// riverbed solids and water columns; no phantom bridge, actor teleport or
+// Water-engine collision exception.
+function riverFordCells(region,existing){
+  if(!region||!existing?.floor?.length||region.ports.length<2)return new Set();
+  const portals=region.ports.map(port=>port.at);
+  const distance=(point,a,b)=>{
+    const dx=b.x-a.x,dz=b.z-a.z;
+    const fraction=Math.max(0,Math.min(1,
+      ((point.x-a.x)*dx+(point.z-a.z)*dz)/(dx*dx+dz*dz||1)));
+    return Math.hypot(point.x-a.x-dx*fraction,point.z-a.z-dz*fraction);
+  };
+  const result=new Set();
+  for(const cell of existing.floor){
+    for(let a=0;a<portals.length;a++){
+      for(let b=a+1;b<portals.length;b++){
+        if(distance(cell,portals[a],portals[b])<=2.5){
+          result.add(key(cell.x,cell.z));
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function channelForBand(band,part,grade,changes){
   const existing=band.fluidLayout?.riverChannels?.[0];
   const cells=new Map(existing?.floor?.map(cell=>[
@@ -143,12 +170,17 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const points=proposal.points.filter(p=>p.bandId===band.id);
     if(!points.length)throw new Error('Water corridor does not touch all three physical bands');
     const changes=new Map();
+    const region=graph.layout.regions.find(item=>item.id===band.id);
+    const existingChannel=band.fluidLayout?.riverChannels?.[0];
+    const fords=riverFordCells(region,existingChannel);
     // An already-authored waterbed is Voxel terrain too. If we only carve
     // the linking centerline, the broad existing river sits on the surface
     // and looks like a blue overlay. Cut every actual WorldGen channel cell;
     // NEVER modify nearby dry bank columns, paths or protected grass.
-    for(const cell of band.fluidLayout?.riverChannels?.[0]?.floor??[]){
-      changes.set(key(cell.x,cell.z),{
+    for(const cell of existingChannel?.floor??[]){
+      const id=key(cell.x,cell.z);
+      if(fords.has(id))continue; // original shallow ford remains a real walking route
+      changes.set(id,{
         floorY:cell.y-HUNT_RIVER_RECESS_METRES
       });
     }
@@ -184,7 +216,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     edits.push(Object.freeze({
       ...band,definition,fluidLayout:channelForBand(band,points,grade,changes),
       earthwork:Object.freeze({cellCount:points.length,recessedCells:changes.size,
-        maxCutMetres:maxCut,
+        fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
   }
