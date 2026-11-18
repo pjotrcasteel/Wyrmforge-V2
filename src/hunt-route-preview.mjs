@@ -40,14 +40,19 @@ export function spawnHuntRoutePreview(world,layout,{nearRiver=false}={}) {
       const wet=new Set(channel.floor.map(cell=>cell.x+','+cell.z));
       const center=channel.nodes[Math.floor(channel.nodes.length/2)];
       const bounds=layout.footprint;
-      for(const [dx,dz] of [[-3,0],[3,0],[-4,0],[4,0],[0,-3],[0,3],[-2,0],[2,0]]){
-        const x=center.x+dx,z=center.z+dz;
+      const offsets=[[-3,0],[3,0],[-4,0],[4,0],[0,-3],[0,3],[-2,0],[2,0]];
+      const banks=[center,...[...channel.floor].sort((a,b)=>
+        Math.hypot(a.x-center.x,a.z-center.z)-Math.hypot(b.x-center.x,b.z-center.z)).slice(0,15)];
+      for(const bank of banks)for(const [dx,dz] of offsets){
+        const x=bank.x+dx,z=bank.z+dz;
         if(x<bounds.minX+1||x>bounds.maxX-1||
             z<bounds.minZ+1||z>bounds.maxZ-1||wet.has(x+','+z))continue;
         const actor=spawnTerrainActor(world,{x:x+.5,z:z+.5,searchTopY:30,maxSearchDistance:64});
         // The actual riverbank can be a high cliff above a deep channel.
         // A supported dry spawn is valid even when its altitude differs.
-        if(actor)return Object.freeze({...actor});
+        if(actor&&!wet.has(Math.floor(actor.x)+','+Math.floor(actor.z))&&
+            channel.floor.some(cell=>Math.hypot(cell.x+.5-actor.x,cell.z+.5-actor.z)<=6))
+          return Object.freeze({...actor});
       }
     }
   }

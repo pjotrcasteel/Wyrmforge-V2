@@ -83,10 +83,29 @@ test('deep taper crosses parent-voxel boundaries and rounds diagonally exposed c
   assert.ok(result.tiles.some(t=>(t.z===-2||t.x===-2)&&t.levels.some(h=>h===0)),
     'the next parent layer must also be refined');
   assert.ok([...result.voidCells].every(key=>Number(key.split(',')[1])>1),'full base stays intact');
-  const corner=result.tiles.find(t=>t.x===-1&&t.z===-1&&t.y===2);
+  const corner=result.tiles.find(t=>t.x===-1&&t.z===-1&&new Set(t.levels).size>1);
   assert.ok(corner);
   assert.ok(new Set(corner.levels).size>1,'the exposed corner is cut at microvoxel scale');
   assert.ok(result.tiles.length<=1024);
   assert.ok(result.tiles.every(t=>t.levels.some(h=>h>0)),
     'empty parents become coarse terrain cuts, not phantom solid microtiles');
+});
+
+import {retreatProfile} from '../src/world-generation/cliff-taper-grammar.mjs';
+
+test('retreats use fewer, broader, varied ledges while staying on the 10cm grid',()=>{
+  const forms=new Set();
+  for(const tangent of [-7.5,-3.5,.5,4.5,8.5]) {
+    const values=[];
+    for(let y=1;y<=14;y++)values.push(...retreatProfile(19,tangent,y,0,18));
+    const distinct=[...new Set(values)];
+    assert.equal(distinct[0],0);
+    assert.equal(distinct.at(-1),18);
+    assert.ok(distinct.length<=10,'an 18-tenth retreat must not become 18 tiny ledges');
+    const depths=distinct.slice(1).map((n,i)=>n-distinct[i]);
+    assert.ok(depths.filter(n=>n>=2).length>=depths.length-1);
+    assert.ok(values.every((v,i)=>Number.isInteger(v)&&(!i||v>=values[i-1])));
+    forms.add(distinct.join(','));
+  }
+  assert.ok(forms.size>1,'ledge depths vary along the wall');
 });

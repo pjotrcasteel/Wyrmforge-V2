@@ -220,9 +220,9 @@ test('legacy single-site World Generation remains intact and independent',()=>{
   const existing=generateWorldSite(createWorldSiteRecipe({
     kind:'wet-forest',seed:7
   }));
-  assert.equal(existing.generatorVersion,'worldgen-v2.7.17');
+  assert.equal(existing.generatorVersion,'worldgen-v2.7.18');
   assert.equal(existing.recipe.radius,20);
-  assert.equal(existing.definition.generatorVersion,'worldgen-v2.7.17');
+  assert.equal(existing.definition.generatorVersion,'worldgen-v2.7.18');
   const source=readFileSync(new URL(
     '../src/world-generation/hunt-expedition-region.mjs',import.meta.url
   ),'utf8');
