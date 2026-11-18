@@ -32,7 +32,16 @@ const corridor=(graph)=>{
 test('Water V2 plans one bounded 1m-cardinal course through the actual native 8m link',()=>{
   const graph=setup(),link=corridor(graph);
   const proposal=planHuntRiverCorridor(graph,link.id);
-  assert.ok(proposal,'the two real Wet Forest riverbeds must have a candidate corridor');
+  const gap=cell=>Math.max(link.bounds.minX-cell.x,0,cell.x-link.bounds.maxX)+
+    Math.max(link.bounds.minZ-cell.z,0,cell.z-link.bounds.maxZ);
+  const describe=id=>{
+    const ch=graph.region(id).fluidLayout?.riverChannels?.[0];
+    const near=ch?.floor?.map(cell=>({...cell,gap:gap(cell)}))
+      .sort((a,b)=>a.gap-b.gap||a.z-b.z||a.x-b.x).slice(0,5);
+    return {id,cellCount:ch?.floor?.length??0,near};
+  };
+  assert.ok(proposal,'the two real Wet Forest riverbeds must have a candidate corridor: '+
+    JSON.stringify({linkBounds:link.bounds,from:describe(link.fromId),to:describe(link.toId)}));
   assert.equal(proposal.schema,HUNT_RIVER_CORRIDOR_PLAN_SCHEMA);
   assert.equal(proposal.status,'proposed-unapplied');
   assert.equal(proposal.linkId,link.id);
