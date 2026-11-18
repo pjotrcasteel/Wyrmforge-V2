@@ -47,12 +47,12 @@ function search(from,to,bands,maxLength){
 }
 
 export function planHuntRiverCorridor(graph,linkId,{
-  maxEndpointReach=9,maxLength=80
+  maxEndpointReach=40,maxLength=128
 }={}){
   if(!graph?.layout?.links||typeof graph.region!=='function'||
       !Number.isSafeInteger(maxEndpointReach)||maxEndpointReach<1||
-      maxEndpointReach>16||!Number.isSafeInteger(maxLength)||
-      maxLength<10||maxLength>128){
+      maxEndpointReach>48||!Number.isSafeInteger(maxLength)||
+      maxLength<10||maxLength>160){
     throw new TypeError('Expected a bounded authored WorldGen water-corridor query');
   }
   const link=graph.layout.links.find(item=>item.id===linkId);
@@ -80,6 +80,13 @@ export function planHuntRiverCorridor(graph,linkId,{
       fromRegionId:from.id,toRegionId:to.id,
       upstream: s.y>=e.y?from.id:to.id,
       sourceFloorY:s.y,targetFloorY:e.y,
+      // Planned earthwork includes the full inland approach to the connector.
+      // The current woodland river may terminate 32m away from its port.
+      proposedBedCells:path.length,
+      linkCells:path.filter(point=>point.bandId===link.id).length,
+      additionalRegionBedCells:path.filter(point=>
+        point.bandId===from.id&&!a.floor.some(cell=>cell.x===point.x&&cell.z===point.z)||
+        point.bandId===to.id&&!b.floor.some(cell=>cell.x===point.x&&cell.z===point.z)).length,
       points:path
     });
   }
