@@ -236,6 +236,7 @@ export class ColumnFluidEngine {
   #exchange(from,to){
     const amount=this.#depths[from];
     if(!amount||this.#depths[to]+this.#incoming[to]>=MAX_DEPTH)return 0;
+    const newlyWet=this.#depths[to]===0;
     const headFrom=this.#floors[from]*FLUID_DEPTH_UNITS+amount;
     const floorTo=this.#floors[to]*FLUID_DEPTH_UNITS;
     if(headFrom<=floorTo)return 0; // intact bank or higher solid floor
@@ -283,7 +284,8 @@ export class ColumnFluidEngine {
     // A fresh bank breach advances as a bounded hydraulic wave: revisit its
     // donors and newly wetted receivers next tick, including downhill craters.
     // The ordinary sweep still receives at least half of every frame budget.
-    if(this.#processingUrgent){
+    if(this.#processingUrgent &&
+        (newlyWet||this.#floors[to]<this.#floors[from])){
       this.#wake(to);
       this.#wake(from);
     }
@@ -555,7 +557,7 @@ export class ColumnFluidEngine {
       outletCursor:this.#outletCursor,drainedTotal:this.#drainedTotal,
       currents:this.#currentManifest.map(current=>({...current})),
       cursor:this.#cursor,steps:this.#steps,
-      urgent:[...this.#urgent],
+      urgent:this.#urgent.filter(index=>this.#depths[index]>0),
       flights:this.#flights.map(packet=>({...packet})),
       flightCursor:this.#flightCursor
     };
@@ -594,7 +596,7 @@ export class ColumnFluidEngine {
     const urgent=state.urgent??[];
     if(!Array.isArray(urgent)||urgent.length>this.columnCount||
         urgent.some(index=>!Number.isSafeInteger(index)||
-          index<0||index>=this.columnCount||!state.depths[index])||
+          index<0||index>=this.columnCount)||
         new Set(urgent).size!==urgent.length){
       throw new TypeError('Invalid bounded terrain-disturbance queue');
     }
