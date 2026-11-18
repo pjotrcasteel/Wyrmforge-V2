@@ -16,6 +16,7 @@ export class HuntWoodlandObjects {
   #treesFelled=0;
   #treesWithoutLanding=0;
   #recentTreeFalls=[];
+  #physicalRevision=0;
   get diagnostics(){
     const resident=[...this.regions].reduce((count,props)=>count+props.length,0);
     return {resident,peakResident:this.#peakResident,sweeps:this.#sweeps,
@@ -24,10 +25,36 @@ export class HuntWoodlandObjects {
   }
   constructor(graph,damage=new HuntWoodlandDamage()){this.#graph=graph;this.#damage=damage;}
   get regions(){return this.#regions.values();}
+  get physicalRevision(){return this.#physicalRevision;}
+  // Expose read-only physical collider snapshots, with no Lighting imports.
+  // Any future building/prop that publishes a 3D collider joins this stream
+  // automatically. An unregistered decorative sprite is NOT solid geometry.
+  physicalOccluders(focus={x:0,z:0},limit=64){
+    const result=[];
+    for(const instances of this.regions)for(const prop of instances){
+      if(prop.castsShadow===false)continue;
+      const collider=prop.collider?.bounds;
+      const extent=prop.radius+(prop.halfLength??0);
+      const min=collider?.min??[prop.x-extent,prop.y,prop.z-prop.radius];
+      const max=collider?.max??[prop.x+extent,prop.y+prop.height,prop.z+prop.radius];
+      if(!min?.every(Number.isFinite)||!max?.every(Number.isFinite))continue;
+      result.push({id:prop.id,min:[...min],max:[...max]});
+    }
+    result.sort((a,b)=>{
+      const sq=shape=>{
+        const x=(shape.min[0]+shape.max[0])*.5-focus.x;
+        const z=(shape.min[2]+shape.max[2])*.5-focus.z;
+        return x*x+z*z;
+      };
+      return sq(a)-sq(b)||a.id.localeCompare(b.id);
+    });
+    return result.slice(0,limit);
+  }
   update(regionIds,terrain,coverage=null){
     for(const id of this.#regions.keys()){
       if(!regionIds.includes(id)||coverage&&this.#regionKeys.get(id)!==coverage.key(id)){
         this.#regions.delete(id);
+        this.#physicalRevision++;
         this.#regionKeys.delete(id);
         if(!regionIds.includes(id))this.#placementCache.delete(id);
       }
@@ -68,6 +95,7 @@ export class HuntWoodlandObjects {
       }
     }
     this.#regions.set(next,instances);
+    this.#physicalRevision++;
     this.#peakResident=Math.max(this.#peakResident,this.diagnostics.resident);
   }
   #floor(terrain,x,z){
@@ -123,6 +151,7 @@ export class HuntWoodlandObjects {
         else byId.delete(item.id);
       }
       this.#regions.set(region,[...byId.values()]);
+      this.#physicalRevision++;
     }
     return falls;
   }
@@ -163,6 +192,7 @@ export class HuntWoodlandObjects {
         if(hits===2)updated.splice(index,1);
         else updated[index]={...prop,damaged:true};
         this.#regions.set(region,updated);
+        this.#physicalRevision++;
         return {hits,falls:[]};
       }
       const {x,z}=prop;
