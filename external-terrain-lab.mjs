@@ -1562,6 +1562,8 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             verticalFluidFaces:playFluidVisual?.stats.sideFaces??0,
             waterfallFaces:playFluidVisual?.stats.waterfallFaces??0,
             fallRibbonFaces:playFluidVisual?.stats.fallRibbonFaces??0,
+            waterfallGroups:playFluidVisual?.stats.waterfallGroups??0,
+            maxWaterfallWidth:playFluidVisual?.stats.maxWaterfallWidth??0,
             inFlightCount:playFluid.inFlightCount,
             inFlightUnits:playFluid.inFlightUnits,
             travelingFluidFaces:playFluidVisual?.stats.flightFaces??0,
