@@ -5,6 +5,7 @@
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
 
 export const HUNT_RIVER_EARTHWORK_SCHEMA='wyrmforge.hunt-river-earthwork.v1';
+export const HUNT_RIVER_RECESS_METRES=1; // additional true Voxel cut below the authored channel
 const key=(x,z)=>x+','+z;
 
 function topFaces(runs,cells){
@@ -77,9 +78,12 @@ function carveRuns(runs,changes,heights,maxFillMetres){
   return result;
 }
 
-function channelForBand(band,part,grade){
+function channelForBand(band,part,grade,changes){
   const existing=band.fluidLayout?.riverChannels?.[0];
-  const cells=new Map(existing?.floor?.map(cell=>[key(cell.x,cell.z),cell])??[]);
+  const cells=new Map(existing?.floor?.map(cell=>[
+    key(cell.x,cell.z),Object.freeze({...cell,
+      y:changes.get(key(cell.x,cell.z))?.floorY??cell.y})
+  ])??[]);
   for(const [i,point]of part.entries()){
     const next=part[Math.min(part.length-1,i+1)];
     const prev=part[Math.max(0,i-1)];
@@ -126,7 +130,11 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       proposal.points.length<3||proposal.points.length>160){
     throw new Error('WorldGen water earthwork link identity mismatch');
   }
-  const grade=Math.min(proposal.sourceFloorY,proposal.targetFloorY);
+  // The previous connector cut reached the original shallow river level,
+  // but the rest of the authored channel remained flush with the grass.
+  // Recess BOTH the existing river and the new path by a full physical
+  // voxel. This keeps water (initially 40cm) below the real dry bank top.
+  const grade=Math.min(proposal.sourceFloorY,proposal.targetFloorY)-HUNT_RIVER_RECESS_METRES;
   if(!Number.isSafeInteger(grade))throw new TypeError('Invalid authored river grade');
   const ids=[link.fromId,link.id,link.toId];
   const bands=ids.map(id=>graph.materialize(id));
@@ -135,11 +143,20 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const points=proposal.points.filter(p=>p.bandId===band.id);
     if(!points.length)throw new Error('Water corridor does not touch all three physical bands');
     const changes=new Map();
+    // An already-authored waterbed is Voxel terrain too. If we only carve
+    // the linking centerline, the broad existing river sits on the surface
+    // and looks like a blue overlay. Cut every actual WorldGen channel cell;
+    // NEVER modify nearby dry bank columns, paths or protected grass.
+    for(const cell of band.fluidLayout?.riverChannels?.[0]?.floor??[]){
+      changes.set(key(cell.x,cell.z),{
+        floorY:cell.y-HUNT_RIVER_RECESS_METRES
+      });
+    }
     for(const point of points){
       const id=key(point.x,point.z);
       if(covered.has(id))throw new Error('Overlapping WorldGen channel bands');
       covered.add(id);
-      changes.set(id,{floorY:grade});
+      changes.set(id,{floorY:Math.min(grade,changes.get(id)?.floorY??grade)});
     }
     const heights=topFaces(band.definition.runs,changes);
     let maxCut=0,maxFill=0;
@@ -165,8 +182,9 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       runs:raw,surfaceTiles
     });
     edits.push(Object.freeze({
-      ...band,definition,fluidLayout:channelForBand(band,points,grade),
-      earthwork:Object.freeze({cellCount:points.length,maxCutMetres:maxCut,
+      ...band,definition,fluidLayout:channelForBand(band,points,grade,changes),
+      earthwork:Object.freeze({cellCount:points.length,recessedCells:changes.size,
+        maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
   }
