@@ -115,6 +115,20 @@ try{
     savedVoxel:report.bankVoxel.savedRemoved,
     activeRegions:report.after.activeRegions
   }));
+  // Continue within the SAME actual browser Voxel+Water world after the
+  // Fireball, fast-forwarding the native fixed-step actor/graph residency
+  // sequence (no teleport and no second simulation). The independent
+  // screenshot suite and physical phone check own the rendered-frame gate.
+  report.journey=await page.evaluate(cell=>
+    window.__WyrmforgeStreamWaterTest.journey(cell),cast.target);
+  if(!report.journey.revisited||!report.journey.entryEvictions||
+      !report.journey.linkEvictions||report.journey.physicalSteps<1000||
+      !report.journey.savedCrater||report.journey.seamLinks!==2||
+      report.journey.sections.at(-1)!=='region-entry'){
+    throw new Error('Native in-browser Water V2 travel did not evict, revisit and preserve the crater: '+
+      JSON.stringify(report.journey));
+  }
+  console.log('WAT15B_SINGLE_BROWSER_JOURNEY_PASS '+JSON.stringify(report.journey));
   const saved=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.save());
   if(!saved.ok||saved.regionSteps.length<3){
     throw new Error('Three-band river failed its browser save checkpoint: '+JSON.stringify(saved));

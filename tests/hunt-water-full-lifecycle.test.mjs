@@ -16,6 +16,7 @@ import {HuntGraphResidency} from '../src/hunt-graph-residency.mjs';
 import {HuntStreamedFluid} from '../src/fluid/hunt-streamed-fluid.mjs';
 import {HuntFluidSave} from '../src/fluid/hunt-fluid-save.mjs';
 import {findConnectedRiverBankTarget} from '../src/diagnostics/hunt-connected-river-bank.mjs';
+import {exercisePublishedWaterJourney} from '../src/diagnostics/hunt-water-mobile-journey.mjs';
 import {HuntTerrainSave} from '../src/hunt-terrain-save.mjs';
 import {containsHuntLandform} from '../src/world-generation/hunt-landform-footprint.mjs';
 import {analyzeCharacterReachability} from '../src/character-reachability.mjs';
@@ -288,6 +289,44 @@ test('WAT-15a: physically disconnected dry-bank crater stays dry',()=>{
         'isolated real crater must not receive phantom Water V2 at '+
         (control.x+dx)+','+(control.z+dz));
     }
+  }finally{
+    state.fluid.dispose();
+    state.loader.unload();
+  }
+});
+
+
+test('WAT-15b: shared mobile browser journey uses real published Voxel and Water V2',()=>{
+  const storage=memory();
+  const state=setup(storage);
+  try{
+    const {graph,world,port,stream,fluid,fluidSave,terrainSave}=state;
+    for(let i=0;i<24;i++)fluid.step({budget:96});
+    const bank=findConnectedRiverBankTarget(graph,port,fluid);
+    const craterCell=bank.hit.cell;
+    const edit=port.apply({
+      id:'wat15b-published-browser-journey',type:'carve-crater',
+      ...craterCell,radius:2.3,depth:2,expectedRevision:world.revision
+    },{captureRemovedCells:true});
+    assert.ok(edit.removedVoxels>0);
+    terrainSave.commit(edit.removedCells);
+    const entry=graph.layout.regions.find(r=>r.id===graph.layout.entryRegionId);
+    const actor=spawnHuntExplorer(world,{bounds:entry.bounds,origin:{x:0,z:0}},
+      {direction:'south',at:state.entry.layout.topology.entry});
+    const journey=exercisePublishedWaterJourney({
+      graph,world,port,residency:stream,fluid,fluidSave,terrainSave,actor,craterCell
+    });
+    assert.equal(journey.schema,'wyrmforge.water-mobile-journey.v1');
+    assert.ok(journey.physicalSteps>1000);
+    assert.ok(journey.entryEvictions>0);
+    assert.ok(journey.linkEvictions>0);
+    assert.ok(journey.revisited);
+    assert.equal(journey.savedCrater,true);
+    assert.equal(journey.sections.at(-1),graph.layout.entryRegionId);
+    assert.ok(journey.peakRegions<=3);
+    assert.ok(journey.peakLinks<=2);
+    assert.equal(journey.seamLinks,2);
+    assert.ok(fluidSave.saveFrom(fluid));
   }finally{
     state.fluid.dispose();
     state.loader.unload();
