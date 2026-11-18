@@ -2,8 +2,8 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **L10-04 — shared water/sprite lighting ([#369](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/369))**. Owner approved L10-03's direction and asked to continue. Materials remains DONE FOR NOW. Parallel Water V2 owns fluid simulation; current integration preserves WAT-14b. Lighting and earlier mobile performance acceptance remain open.
-**Latest visual direction:** Darker gameplay and moving Fireball terrain illumination approved for continuation. Extend the same ambient/transient contract to water, Wizard and woodland sprites, with bounded rendering work and explicit approximation limits.
+**Current focus:** **L10-05 — ground trees and props with terrain-aware contact shadows ([#374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374)), READY**. Establish matched performance baselines during this first shadow slice. L10-04 is implemented; remaining device gates stay open. Parallel Water work retains its own state/solver ownership.
+**Lighting continuation roadmap:** [L10-90 #381](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/381) and [Lighting V2 milestones/handover](LIGHTING-V2-ROADMAP.md). Ordered shadow, occlusion, mixed-surface, atmosphere, performance and final coupling/closure gates are explicit. Owner wants grounded trees and smooth, impressive actual Hunt visuals; no FPS claim without device evidence.
 
 **Earlier movement baseline:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
@@ -22,7 +22,7 @@ World Generation has its own explicit terminal handoff, W08-99. Later gameplay, 
 3. Implement the smallest integrated slice that moves the player-visible Hunt forward. Existing V2 engines are dependencies, **not independent product destinations**. Keep labs for diagnosis only.
 4. Run unit/integration/regression/performance checks; deploy a dedicated playable route and collect **actual user/mobile evidence** when acceptance calls for it. **Apply the task-specific Done for now criterion; do not keep building an adequate engine.** Update evidence, blockers and status as part of the PR.
 5. At handover, report exactly: task IDs completed, current build/PR, playable link, measured metrics vs baseline, open defect, and next **one** task. A future chat may continue using just an ID and this file.
-   **Play Hunt release links must use the full commit-specific path** `https://pjotrcasteel.github.io/Wyrmforge-V2/builds/<full-40-character-sha>/play-hunt.html`, with the public HTML, module, build stamp and shader fetched/verified after deployment. A `?v=` query on the root Play Hunt page does **not** prove new JS modules were loaded.
+   **Play Hunt release links:** provide the verified stable root `https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html` as the primary playable entry. Also provide a full commit-specific `builds/<40-character-sha>/play-hunt.html` link when verified available, but disclose that future deployments may prune it. Fetch the public HTML, module graph, build stamp and shader after deployment. A `?v=` query alone does not prove that new JS loaded.
 6. **Add/split/reorder/retire tasks freely**, but keep old IDs immutable once used in a PR or chat. Mark obsolete tasks `SUPERSEDED by <ID>` with rationale; never recycle IDs. New IDs append within their milestone family.
 
 **Use task IDs in branch names, PR titles/descriptions and commits** (`H08-01: ...`) for traceability. GitHub Issues are optional mirrors; **this tracked file is the source of truth**, so context survives disconnected chats and branch merges. A branch or open PR is evidence of *work*, never evidence of acceptance.
@@ -600,3 +600,19 @@ Final ambient integration validation: 813 tests pass after WAT-14a `1c6952f` is 
 - **Bound:** two transient lights; sprite cache 8 MiB, 48 tint variants, 2 MiB source pixels and 65,536 processed pixels/frame; cached ambient fallback on cold misses. Reports expose retained bytes and frame work.
 - **Validation:** neutral/alpha CPU checks, cache work/reuse/eviction tests, actual fluid GLES fixtures and full regression suite. See [consumer evidence and limits](LIGHTING-CONSUMERS.md).
 - **Done for now gate:** review casting beside water, the Wizard and forest sprites, then sustained phone frame cost. Whole-sprite sampling is an approximation; static lava spill on sprites and shadowed light transport remain future work. No mobile acceptance is inferred from software GLES measurements.
+
+### Lighting V2 continuation milestones — owner request 2026-11-18
+
+Canonical detail, budgets and cross-chat instructions: [LIGHTING-V2-ROADMAP.md](LIGHTING-V2-ROADMAP.md), parent [#381](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/381).
+
+| ID | Scope | Status |
+| --- | --- | --- |
+| [L10-05 #374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374) | Terrain-aware tree/prop contact shadows and matched performance baseline | READY — next |
+| [L10-06 #375](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/375) | Directional canopy/trunk/cliff shadows | PLANNED after L10-05 |
+| [L10-07 #376](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/376) | Fireball/lava visibility; stop light leaking through solid terrain | PLANNED after L10-06 |
+| [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) | Coherent sprite/terrain/fluid response; sprite lava spill and cache artifacts | PLANNED after L10-07 |
+| [L10-09 #378](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/378) | Forest/mountain/corruption/lair atmosphere and combat readability | PLANNED after L10-08 |
+| [L10-10 #379](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/379) | Sustained smoothness, quality tiers and named-device evidence | Baselines start L10-05; final gate after L10-09 |
+| [L10-99 #380](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/380) | Coupling/resource audit, scope freeze and next-engine handoff | PLANNED after all gates |
+
+These are linked milestone issues, not native GitHub Milestone containers. No implementation or acceptance is implied by planning them. Existing L10-02/03/04 review and overall R10 release gates remain open. The separate desktop screenshot-timeout diagnostic is unresolved performance evidence; preserve parallel Water ownership. Measure every slice, not only the final milestone.
