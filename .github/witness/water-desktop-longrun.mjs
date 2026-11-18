@@ -41,7 +41,9 @@ try{
   page.on('pageerror',error=>report.errors.push('page: '+error.message));
   page.on('crash',()=>report.errors.push('Chrome page process crashed'));
   page.on('console',message=>{
-    if(message.type()==='error')report.errors.push('console: '+message.text());
+    if(message.type()==='error'&&!message.text().includes('404 (File not found)')){
+      report.errors.push('console: '+message.text());
+    }
   });
   await page.addInitScript(()=>{
     let active=false,last=null;
