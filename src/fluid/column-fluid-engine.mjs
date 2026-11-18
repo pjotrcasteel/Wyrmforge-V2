@@ -284,6 +284,7 @@ export class ColumnFluidEngine {
     // A fresh bank breach advances as a bounded hydraulic wave: revisit its
     // donors and newly wetted receivers next tick, including downhill craters.
     // The ordinary sweep still receives at least half of every frame budget.
+    if(newlyWet&&!falling)this.#wake(to);
     if(this.#processingUrgent &&
         (newlyWet||this.#floors[to]<this.#floors[from])){
       this.#wake(to);
@@ -304,6 +305,10 @@ export class ColumnFluidEngine {
         this.#incoming[to]-=units;
         this.#depths[to]+=units;
         this.#active.add(to);
+        // A freshly landed waterfall into an excavated crater becomes a
+        // NEW wet donor. Advance its neighboring cells on the next bounded
+        // solver step rather than waiting for the 4096-column sweep.
+        this.#wake(to);
         landed+=units;
         this.#flights.splice(this.#flightCursor,1);
         if(this.#flightCursor>=this.#flights.length)this.#flightCursor=0;
