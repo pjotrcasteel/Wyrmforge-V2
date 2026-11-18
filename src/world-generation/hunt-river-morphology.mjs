@@ -162,3 +162,34 @@ export function composeHuntRiverBankTiles({
     protectedTiles:untouched.length
   });
 }
+
+// Vegetation and rocks are authored BEFORE the extra river is excavated.
+// The WorldGen graph must exclude placements whose real reserved footprint
+// overlaps the new water or its immediate wet bank; render-only culling
+// would leave invisible tree/prop colliders blocking the Hunt actor.
+export function excludeHuntRiverPlacements(placement,channel,{
+  bankMargin=.35
+}={}){
+  if(!Array.isArray(placement?.placements)||!Array.isArray(channel?.floor)||
+      !Number.isFinite(bankMargin)||bankMargin<0||bankMargin>2){
+    throw new TypeError('Expected authored woodland placements and a published river channel');
+  }
+  const cells=channel.floor;
+  const overlaps=item=>{
+    const {x,z}=item.position??{};
+    const radius=item.footprint?.radius??0;
+    if(!Number.isFinite(x)||!Number.isFinite(z)||
+        !Number.isFinite(radius)||radius<0)return true;
+    for(const wet of cells){
+      const dx=Math.max(0,Math.abs(x-(wet.x+.5))-.5);
+      const dz=Math.max(0,Math.abs(z-(wet.z+.5))-.5);
+      if(dx*dx+dz*dz<(radius+bankMargin)**2)return true;
+    }
+    return false;
+  };
+  const retained=placement.placements.filter(item=>!overlaps(item));
+  return Object.freeze({...placement,
+    placements:Object.freeze(retained),
+    excludedForRiver:placement.placements.length-retained.length
+  });
+}
