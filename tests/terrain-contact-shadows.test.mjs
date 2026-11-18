@@ -83,7 +83,10 @@ test('query and retained-entry budgets are hard bounded during dense-forest chur
 });
 test('local terrain edit invalidates only nearby cached receivers, not distant props',()=>{
   const port=terrain(),cache=new TerrainContactShadowCache();
-  cache.beginFrame();cache.stamps(tree('a'),port);cache.stamps(tree('b',20),port);
+  // The cold-start budget now deliberately admits one new 13-sample prop
+  // per frame. Construct the two caches over two render frames.
+  cache.beginFrame();cache.stamps(tree('a'),port);
+  cache.beginFrame();cache.stamps(tree('b',20),port);
   const before=port.calls;
   cache.invalidate({min:{x:-1,z:-1},max:{x:1,z:1}});
   assert.equal(cache.statistics.entries,1);
