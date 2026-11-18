@@ -1,3 +1,7 @@
+import {SURFACE_GLSL} from '../materials/surface-contract.mjs';
+import {terrainColorTransferGlsl} from '../terrain-color-space.mjs';
+import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transient-lighting.mjs';
+import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
@@ -58,6 +62,18 @@ uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 ${MOLTEN_DISPLAY_GLSL}
+${terrainColorTransferGlsl()}
+${SURFACE_GLSL}
+${TRANSIENT_LIGHTING_GLSL}
+uniform vec3 uLightingAmbient;
+vec3 litFluidColor(vec3 color){
+  // Molten display colour already includes self emission; keep it unchanged.
+  if(uLava>.5)return color;
+  if(uTransientLightCount==0&&all(equal(uLightingAmbient,vec3(1.0))))return color;
+  vec3 albedo=srgbToLinearColor(color);
+  V2Surface surface=V2Surface(albedo,vNormal,vNormal,vec3(1.0,1.0,0.0),vec3(0.0),false,false);
+  return linearToSrgbColor(albedo*uLightingAmbient+transientIrradiance(surface,vWorld));
+}
 float fluidHash(vec2 point){
   return fract(sin(dot(point,vec2(127.1,311.7)))*43758.5453);
 }
@@ -88,7 +104,7 @@ void main(){
     vec3 drop=uLava<.5
       ?mix(vec3(.25,.53,.54),vec3(.63,.81,.76),.35+.35*variation)
       :mix(vec3(.77,.22,.02),vec3(1.0,.65,.17),.35+.35*variation);
-    outColor=vec4(drop,uLava<.5?.88:.95);
+    outColor=vec4(litFluidColor(drop),uLava<.5?.88:.95);
     return;
   }
   if(vFaceMode==5){
@@ -104,7 +120,7 @@ void main(){
     vec3 foam=uLava<.5
       ?mix(vec3(.40,.65,.64),vec3(.71,.83,.78),.35+.55*strong)
       :mix(vec3(.83,.32,.07),vec3(1.0,.74,.24),.35+.55*strong);
-    outColor=vec4(foam,(uLava<.5?.64:.78)*mix(.6,1.0,sparkle));
+    outColor=vec4(litFluidColor(foam),(uLava<.5?.64:.78)*mix(.6,1.0,sparkle));
     return;
   }
   vec3 color;
@@ -178,7 +194,7 @@ void main(){
     }
     opacity=.99;
   }
-  outColor=vec4(color,opacity);
+  outColor=vec4(litFluidColor(color),opacity);
 }
 `;
 
@@ -253,6 +269,8 @@ const fluidCapacity=bytes=>Math.ceil(Math.max(4096,bytes*1.25)/4096)*4096;
 export class HuntFluidSurfaceRenderer {
   #gl;
   #program=null;
+  #lightPositions=new Float32Array(8);
+  #lightRadiance=new Float32Array(6);
   #uniforms=null;
   #record=null;
   #mesh=null;
@@ -437,6 +455,8 @@ export class HuntFluidSurfaceRenderer {
         right:uniform('uCameraRight'),down:uniform('uCameraDown'),
         depth:uniform('uCameraDepth'),time:uniform('uTime'),
         rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
+        ambient:uniform('uLightingAmbient'),lightCount:uniform('uTransientLightCount'),
+        lightPositions:uniform('uTransientPositions[0]'),lightRadiance:uniform('uTransientRadiance[0]'),
         lava:uniform('uLava'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
@@ -494,7 +514,7 @@ export class HuntFluidSurfaceRenderer {
   }
 
   render(view,{time=0,reducedMotion=false,showRibbons=true,
-    showLanding=true,showParcels=true}={}){
+    showLanding=true,showParcels=true,lightingEnvironment=null,transientLights=null}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -510,6 +530,15 @@ export class HuntFluidSurfaceRenderer {
     const ripple=fluidRippleTiming(animatedTime);
     gl.uniform1f(u.rippleFrame,ripple.frame);
     gl.uniform1f(u.rippleFade,ripple.fade);
+    if(lightingEnvironment&&lightingEnvironment.schema!==LIGHTING_ENVIRONMENT_SCHEMA){
+      throw new TypeError('Unsupported fluid lighting environment');
+    }
+    const ambient=lightingEnvironment?.ambient??[1,1,1];
+    if(ambient.length!==3||!ambient.every(n=>Number.isFinite(n)&&n>=0&&n<=2))throw new TypeError('Invalid fluid ambient');
+    gl.uniform3fv(u.ambient,ambient);
+    const lightCount=writeTransientLights(transientLights,this.#lightPositions,this.#lightRadiance);
+    gl.uniform1i(u.lightCount,lightCount);
+    if(lightCount){gl.uniform4fv(u.lightPositions,this.#lightPositions);gl.uniform3fv(u.lightRadiance,this.#lightRadiance);}
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);

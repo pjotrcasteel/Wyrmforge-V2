@@ -2,8 +2,9 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** **L10-03 — transient spell illumination and darker gameplay ambient ([#367](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/367))**. Materials current Fire Hunt scope remains DONE FOR NOW. L10-01 is complete; L10-02's visible direction was approved with contrast follow-up. Current spell-light/ambient preview needs player/device review. Parallel Water V2 retains fluid work. Overall lighting/release and earlier mobile lag acceptance remain open.
-**Latest visual direction:** Owner approved the L10-02 direction (`0c133cf` / `874b717`), then requested much darker gameplay and actual spell illumination. L10-03 implements that follow-up; device/experience acceptance remains pending.
+**Current focus:** **L10-04 — shared water/sprite lighting ([#369](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/369))**. Owner approved L10-03's direction and asked to continue. Materials remains DONE FOR NOW. Parallel Water V2 owns fluid simulation; current integration preserves WAT-14b. Lighting and earlier mobile performance acceptance remain open.
+**Latest visual direction:** Darker gameplay and moving Fireball terrain illumination approved for continuation. Extend the same ambient/transient contract to water, Wizard and woodland sprites, with bounded rendering work and explicit approximation limits.
+
 **Earlier movement baseline:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -589,3 +590,13 @@ Final ambient integration validation: 813 tests pass after WAT-14a `1c6952f` is 
 - **Boundary:** shared world-space projectile trajectory and frame time; at most two transient lights, no extra textures/queries, no persistent material emission, physics or fluid change. Static-field invalidation cannot suppress transient impact light.
 - **Validation:** 818 tests pass; targeted lifetime/renderer count checks pass. Actual GLES3 zero/two-light fixtures change no pixel outside their world-space radii. Dependency audit/diff checks pass. See [spell lighting contract/evidence and limits](SPELL-LIGHTING-V2.md).
 - **Gate:** review moving light, impact/fade, level scaling, darkness/readability, reset/expiry and mobile frame cost in the actual Hunt. First pass is terrain-only/unshadowed; sprite/prop/raised-fluid relighting and full occlusion are later scoped work. Full lighting and prior mobile performance acceptance are not closed by this preview.
+
+### L10-04 — Shared water and sprite lighting
+
+- **GitHub Issue:** [#369](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/369).
+- **Status:** IMPLEMENTED; pending deployed player/device review.
+- **Visible effect:** water/foam, Wizard, woodland trees and props follow shared ambient and Fireball light; the forest backdrop follows ambient. Lava retains self-emission.
+- **Boundary:** Rendering consumes pure Lighting contracts. No fluid solver, mesh, collision, terrain mutation or depth-order changes. WAT-14b remains intact.
+- **Bound:** two transient lights; sprite cache 8 MiB, 48 tint variants, 2 MiB source pixels and 65,536 processed pixels/frame; cached ambient fallback on cold misses. Reports expose retained bytes and frame work.
+- **Validation:** neutral/alpha CPU checks, cache work/reuse/eviction tests, actual fluid GLES fixtures and full regression suite. See [consumer evidence and limits](LIGHTING-CONSUMERS.md).
+- **Done for now gate:** review casting beside water, the Wizard and forest sprites, then sustained phone frame cost. Whole-sprite sampling is an approximation; static lava spill on sprites and shadowed light transport remain future work. No mobile acceptance is inferred from software GLES measurements.
