@@ -92,10 +92,24 @@ try{
       throw new Error('Real Fireball-style bank edit '+(shot+1)+' removed no solid voxels');
     }
     edits.push(edit);
-    await page.waitForFunction(initial=>{
-      const state=window.__WyrmforgeFluidTest?.status();
-      return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
-    },atRest,{timeout:120000});
+    try{
+      await page.waitForFunction(initial=>{
+        const state=window.__WyrmforgeFluidTest?.status();
+        return Boolean(state&&state.steps>=initial.steps+65&&!state.busy);
+      },atRest,{timeout:60000});
+    }catch(error){
+      const diagnostic=await page.evaluate(()=>({
+        status:window.__WyrmforgeFluidTest?.status()??null,
+        hud:document.querySelector('#play-hud-details')?.textContent?.slice(0,900)??null
+      }));
+      console.error('FLUID_BROWSER_IMPACT_TIMEOUT '+JSON.stringify({
+        shot,atRest,edit,diagnostic,pageErrors:report.errors
+      }));
+      await page.screenshot({
+        path:artifacts+'/impact-stall-'+(shot+1)+'.jpeg',type:'jpeg',quality:66
+      });
+      throw error;
+    }
     const state=await page.evaluate(()=>window.__WyrmforgeFluidTest.status());
     if(state.fluidMeshBytes>2*1024*1024){
       throw new Error('Fluid GPU mesh exceeded the independent 2MiB budget');
