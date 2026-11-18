@@ -26,7 +26,7 @@ function scenario({kind='water',lowerWet=true,lowerFloor=0,upperFloor=2,lowerDep
 test('real wet-to-wet downhill flow creates exactly one waterfall and one lip',()=>{
   const {engine,mesh}=scenario();
   const state=engine.snapshotSurface();
-  assert.equal(FLUID_FALL_MIN_DROP,.75);
+  assert.equal(FLUID_FALL_MIN_DROP,.2);
   assert.deepEqual([state.cells[0].flowX,state.cells[0].flowZ],[1,0]);
   const surface=mesh();
   assert.equal(surface.wetColumns,2);
