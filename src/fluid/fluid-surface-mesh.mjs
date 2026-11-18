@@ -89,17 +89,23 @@ function microShoreCaps(x,z,shore,height){
 // water walls at every 1m tile seam. A real cliff/large drop stays vertical.
 function cornerHead(x,z,cell,at){
   const values=[];
+  let highestSolid=-Infinity;
   for(let dz=-1;dz<=0;dz++)for(let dx=-1;dx<=0;dx++){
     const near=at(x+dx,z+dz);
     if(near?.depth>0&&Number.isFinite(near.surfaceY)){
       values.push(near.surfaceY);
+      highestSolid=Math.max(highestSolid,near.floorY);
     }
   }
   if(!values.length)return cell.surfaceY;
   const min=Math.min(...values),max=Math.max(...values);
-  return max-min<=SMOOTH_HEAD_DIFFERENCE
-    ?values.reduce((sum,value)=>sum+value,0)/values.length
-    :cell.surfaceY;
+  if(max-min>SMOOTH_HEAD_DIFFERENCE)return cell.surfaceY;
+  // Never smooth liquid *inside* a neighboring wet stone roof. Previously a
+  // 2.1m / 1.8m shallow join averaged to 1.95m and the rock at 2m occluded
+  // the water. Shared corners use the same highest actual wet solid floor,
+  // keeping the surface continuous and visibly above the stone lip.
+  const average=values.reduce((sum,value)=>sum+value,0)/values.length;
+  return Math.max(average,highestSolid+0.1);
 }
 
 export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
