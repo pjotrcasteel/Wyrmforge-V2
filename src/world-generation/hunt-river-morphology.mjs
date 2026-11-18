@@ -10,6 +10,24 @@ const key=(x,z)=>x+','+z;
 const DIRECTIONS=[[1,0],[-1,0],[0,1],[0,-1]];
 const finiteCell=cell=>Number.isSafeInteger(cell?.x)&&Number.isSafeInteger(cell?.z);
 
+// A real Hunt path connects authored region ports. Width must NEVER be
+// gained by cutting the adjacent high walking approaches: the 1m stone ford
+// protects the old centerline, and this buffer protects its neighboring dry
+// shoulder from lateral river excavation.
+function withinAuthoredTravelShoulder(landform,x,z){
+  const ports=landform.ports;
+  if(!Array.isArray(ports)||ports.length<2)return false;
+  for(let a=0;a<ports.length;a++)for(let b=a+1;b<ports.length;b++){
+    const start=ports[a].at,end=ports[b].at;
+    const dx=end.x-start.x,dz=end.z-start.z;
+    const t=Math.max(0,Math.min(1,
+      ((x-start.x)*dx+(z-start.z)*dz)/(dx*dx+dz*dz||1)));
+    const distance=Math.hypot(x-start.x-t*dx,z-start.z-t*dz);
+    if(distance<=3.5)return true;
+  }
+  return false;
+}
+
 function seededHash(seed,x,z,side=0){
   let value=(seed^Math.imul(x,73856093)^Math.imul(z,19349663)^
     Math.imul(side+1,83492791))>>>0;
@@ -78,7 +96,8 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
         if(changes.has(id))continue;
         const top=columns.get(id);
         if(!top||top.material===2||top.topY<grade||
-            top.topY-grade>maxCutMetres){
+            top.topY-grade>maxCutMetres||
+            withinAuthoredTravelShoulder(landform,x,z)){
           break;
         }
         changes.set(id,{floorY:grade,lateral:true,flowX,flowZ});
