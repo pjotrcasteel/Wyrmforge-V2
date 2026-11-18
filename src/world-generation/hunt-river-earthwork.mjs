@@ -3,6 +3,9 @@
 // Voxel terrain runs. This does not mutate a live Voxel world or create water.
 // A host must still publish these exact definitions before opening Fluid V2.
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
+import {
+  expandHuntRiverCorridor,composeHuntRiverBankTiles,excludeHuntRiverPlacements
+} from './hunt-river-morphology.mjs';
 
 export const HUNT_RIVER_EARTHWORK_SCHEMA='wyrmforge.hunt-river-earthwork.v1';
 export const HUNT_RIVER_RECESS_METRES=1; // additional true Voxel cut below the authored channel
@@ -120,6 +123,13 @@ function channelForBand(band,part,grade,changes){
       flowX:next.x-prev.x,flowZ:next.z-prev.z
     }));
   }
+  for(const [id,change] of changes){
+    if(!change.lateral||cells.has(id))continue;
+    const [x,z]=id.split(',').map(Number);
+    cells.set(id,Object.freeze({
+      x,z,y:change.floorY,flowX:change.flowX,flowZ:change.flowZ
+    }));
+  }
   const nodes=part.map(({x,z})=>Object.freeze({
     x,z,y:changes.get(key(x,z))?.floorY??grade
   }));
@@ -200,6 +210,12 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       changes.set(id,{floorY:Math.min(desired,
         changes.get(id)?.floorY??desired)});
     }
+    // The original centerline is only 1m wide. These are additional, real
+    // Voxel river columns alongside it, not renderer-only blue quads.
+    const landform=region??graph.layout.links.find(item=>item.id===band.id);
+    const widened=expandHuntRiverCorridor(band,points,grade,changes,landform,{
+      maxCutMetres
+    });
     const heights=topFaces(band.definition.runs,changes);
     let maxCut=0,maxFill=0;
     for(const [id] of changes){
@@ -215,8 +231,10 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       }
     }
     const raw=carveRuns(band.definition.runs,changes,heights,maxFillMetres);
-    const surfaceTiles=(band.definition.surfaceTiles??[])
-      .filter(tile=>!changes.has(key(tile.x,tile.z)));
+    const shoreline=composeHuntRiverBankTiles({
+      band,part:points,changes,columns:widened.columns
+    });
+    const surfaceTiles=shoreline.tiles;
     const definition=terrainAdapter({
       siteId:band.definition.siteId,seed:band.definition.seed,
       chunkEdge:band.definition.chunkEdge,
@@ -226,6 +244,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     edits.push(Object.freeze({
       ...band,definition,fluidLayout:channelForBand(band,points,grade,changes),
       earthwork:Object.freeze({cellCount:points.length,recessedCells:changes.size,
+        lateralWetCells:widened.addedWetCells,bankMicroTiles:shoreline.bankTiles,
         fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
@@ -274,7 +293,11 @@ export function composeHuntRiverEarthworkGraph(graph,earthwork,terrainAdapter){
   return Object.freeze({
     layout:graph.layout,
     fluidSeams,
-    placement:id=>graph.placement(id),
+    placement(id){
+      const original=graph.placement(id);
+      const authored=patches.get(id)?.fluidLayout?.riverChannels?.[0];
+      return authored?excludeHuntRiverPlacements(original,authored):original;
+    },
     region:id=>patches.get(id)??graph.region(id),
     link:id=>patches.get(id)??graph.link(id),
     materialize:id=>patches.get(id)??graph.materialize(id),
