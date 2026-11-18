@@ -1,8 +1,9 @@
 // Renderer-owned bounded and cached terrain receiver projection.
 // Sprite alpha is read ONCE per variant, never during each frame.
 import {projectVoxel,getCameraPreset} from './camera-presets.mjs';
-import {CANOPY_COLS,CANOPY_ROWS,projectCanopyReceivers,HUNT_SUN_RAY,HUNT_SUN_RAY_LENGTH} from './lighting/directional-sunlight.mjs';
-export const DIRECTIONAL_MAX_ENTRIES=48;
+import {CANOPY_COLS,CANOPY_ROWS,projectDirectionalReceivers,HUNT_SUN_CAST,HUNT_SUN_RAY,HUNT_SUN_RAY_LENGTH}
+  from './lighting/directional-sunlight.mjs';
+export const DIRECTIONAL_MAX_ENTRIES=128;
 export const DIRECTIONAL_RAYS_PER_FRAME=16;
 export const DIRECTIONAL_DRAW_LIMIT=1100;
 const spriteKey=s=>s.name??[s.x,s.y,s.w,s.h].join(':');
@@ -44,6 +45,42 @@ function cameraSeesReceiver(terrain,point,normal,direction){
   return Boolean(seen?.point)&&
     Math.hypot(seen.point.x-point.x,seen.point.y-point.y,seen.point.z-point.z)<.20;
 }
+// Broad-phase projection independent of sprite visibility: a tree crown
+// can leave the right edge while its sunlight cast still falls ON screen.
+// No terrain queries are needed for this conservative AABB check.
+export function directionalShadowMayReachView(caster,view){
+  if(!caster||!view||![caster.x,caster.y,caster.z,view.width,view.height,
+      view.scale].every(Number.isFinite))return false;
+  const silhouette=caster.silhouette??caster.sprite;
+  const volume=caster.bounds;
+  if(!silhouette&&!volume)return false;
+  const scale=(caster.scale??1)/32;
+  const height=silhouette?
+    Math.max(0,silhouette.ay*scale):
+    Math.max(0,volume.max[1]-caster.y);
+  const minX=silhouette?caster.x-silhouette.ax*scale:volume.min[0];
+  const maxX=silhouette?caster.x+(silhouette.w-silhouette.ax)*scale:volume.max[0];
+  const minZ=volume?volume.min[2]:caster.z;
+  const maxZ=volume?volume.max[2]:caster.z;
+  const worldMinX=minX+height*Math.min(0,HUNT_SUN_CAST.x);
+  const worldMaxX=maxX+height*Math.max(0,HUNT_SUN_CAST.x);
+  const worldMinZ=minZ+height*Math.min(0,HUNT_SUN_CAST.z);
+  const worldMaxZ=maxZ+height*Math.max(0,HUNT_SUN_CAST.z);
+  let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+  for(const x of [worldMinX,worldMaxX]){
+    for(const z of [worldMinZ,worldMaxZ]){
+      for(const y of [caster.y-MAX_CLIFF_DROP,caster.y+MAX_CLIFF_DROP]){
+        const pixel=projectVoxel(x,y,z,view);
+        x0=Math.min(x0,pixel.x);x1=Math.max(x1,pixel.x);
+        y0=Math.min(y0,pixel.y);y1=Math.max(y1,pixel.y);
+      }
+    }
+  }
+  const margin=view.scale*.5;
+  return x1>=-margin&&x0<=view.width+margin&&
+    y1>=-margin&&y0<=view.height+margin;
+}
+
 export function sampleCanopyAlpha(data,width,height){
   if(!data||data.length<width*height*4||width<=0||height<=0)return [];
   const result=[],offsets=[[.22,.22],[.78,.22],[.22,.78],[.78,.78]];
@@ -69,7 +106,7 @@ function spriteMask(image,sprite){
 }
 export class TerrainDirectionalShadowCache{
   #masks=new Map();#entries=new Map();#pending=null;#epoch=null;
-  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];#frame=0;#cliffDrawn=0;#occluded=0;
+  #queries=0;#drawn=0;#hits=0;#built=0;#times=[];#frame=0;#cliffDrawn=0;#occluded=0;#evicted=0;#cold=0;
   constructor(maskFactory=spriteMask){this.maskFactory=maskFactory;}
   beginFrame(){this.#frame++;this.#queries=0;this.#drawn=0;this.#cliffDrawn=0;}
   endFrame(ms){
@@ -86,12 +123,12 @@ export class TerrainDirectionalShadowCache{
       approxBytes:this.#entries.size*CANOPY_COLS*CANOPY_ROWS*44+
         this.#masks.size*CANOPY_COLS*CANOPY_ROWS*4,
       frameRays:this.#queries,frameStamps:this.#drawn,frameCliffStamps:this.#cliffDrawn,
-      occlusionRejects:this.#occluded,cacheHits:this.#hits,
+      occlusionRejects:this.#occluded,cacheHits:this.#hits,cacheEvictions:this.#evicted,coldCasters:this.#cold,
       completed:this.#built,building:Boolean(this.#pending),
       p50CpuMs:q(.5),p95CpuMs:q(.95),p99CpuMs:q(.99),
       gpuTimerMs:null,gpuTimerStatus:'unavailable: Canvas2D shadow overlay'};
   }
-  clear(){this.#masks.clear();this.#entries.clear();this.#pending=null;this.#epoch=null;}
+  clear(){this.#masks.clear();this.#entries.clear();this.#pending=null;this.#epoch=null;this.#evicted=0;this.#cold=0;}
   prune(ids){
     for(const id of this.#entries.keys())if(!ids.has(id))this.#entries.delete(id);
     if(this.#pending&&!ids.has(this.#pending.id))this.#pending=null;
@@ -108,21 +145,38 @@ export class TerrainDirectionalShadowCache{
     if(overlap(this.#pending?.bounds))this.#pending=null;
   }
   stamps(tree,terrain,isPublished=null,camera='hunt'){
-    if(!tree?.sprite||!tree.id||!terrain||typeof terrain.raycast!=='function')return [];
+    const silhouette=tree?.silhouette??tree?.sprite;
+    if(!tree?.id||!terrain||typeof terrain.raycast!=='function'||
+       !silhouette&&!tree?.bounds)return [];
     if(this.#epoch!==terrain.epoch){
       this.#entries.clear();this.#pending=null;this.#epoch=terrain.epoch;
     }
-    const signature=[tree.id,tree.x,tree.y,tree.z,tree.scale,spriteKey(tree.sprite),camera].join(':');
+    const sourceSignature=silhouette?spriteKey(silhouette):
+      [...tree.bounds.min,...tree.bounds.max].join(',');
+    const signature=[tree.id,tree.x,tree.y,tree.z,tree.scale??1,sourceSignature,
+      tree.shadowRevision??0,camera].join(':');
     const cached=this.#entries.get(tree.id);
-    if(cached?.signature===signature){this.#hits++;return cached.stamps;}
+    if(cached?.signature===signature){
+      // Refresh recency only on a *visible* caller. FIFO eviction used to
+      // repeatedly discard the same foreground shadows while walking.
+      this.#entries.delete(tree.id);
+      this.#entries.set(tree.id,cached);
+      this.#hits++;
+      return cached.stamps;
+    }
     if(this.#queries>=DIRECTIONAL_RAYS_PER_FRAME)return [];
     if(this.#pending&&this.#pending.id!==tree.id)return [];
     if(!this.#pending||this.#pending.signature!==signature){
-      const maskKey=spriteKey(tree.sprite);
-      if(!this.#masks.has(maskKey)){
-        this.#masks.set(maskKey,this.maskFactory(tree.image,tree.sprite)??[]);
+      let mask=[];
+      if(silhouette){
+        const maskKey=spriteKey(silhouette);
+        if(!this.#masks.has(maskKey)){
+          this.#masks.set(maskKey,this.maskFactory(tree.image,silhouette)??[]);
+        }
+        mask=this.#masks.get(maskKey);
       }
-      const samples=projectCanopyReceivers(tree,this.#masks.get(maskKey));
+      const samples=projectDirectionalReceivers(tree,mask);
+      this.#cold++;
       const xs=samples.map(s=>s.x),zs=samples.map(s=>s.z);
       const bounds={minX:Math.min(tree.x,...xs)-.6,maxX:Math.max(tree.x,...xs)+.6,
         minZ:Math.min(tree.z,...zs)-.6,maxZ:Math.max(tree.z,...zs)+.6};
@@ -156,6 +210,7 @@ export class TerrainDirectionalShadowCache{
     if(job.index<job.samples.length)return [];
     while(this.#entries.size>=DIRECTIONAL_MAX_ENTRIES){
       this.#entries.delete(this.#entries.keys().next().value);
+      this.#evicted++;
     }
     this.#entries.set(tree.id,{signature,bounds:job.bounds,stamps:job.stamps});
     this.#built++;this.#pending=null;
