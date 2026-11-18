@@ -71,6 +71,7 @@ import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.m
 const playMode=document.body.dataset.playHunt==='true';
 const localLightingEnabled=playMode&&new URLSearchParams(location.search).get('lighting')!=='off';
 const playQuery=new URLSearchParams(location.search);
+const contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
@@ -350,7 +351,7 @@ function paintEncounterGuide(view) {
       const started=performance.now();
       playStream.trees.paint(ctx,view,playActor,()=>paintPlayActor(ctx,view),
         extractionPortalLayer(view,playStream.extraction),playPresentationNow??started,
-        localLightingEnabled?playSpriteLighting:null);
+        localLightingEnabled?playSpriteLighting:null,contactShadowsEnabled);
       playWoodlandPaintStats.recordFrame(Math.min(1000,performance.now()-started));
     }else paintPlayActor(ctx,view);
     paintPlayFireball(ctx,view);
@@ -1210,6 +1211,7 @@ function resetSite() {
     renderer.setMeshes([]);
     generatedSite=null;
     playConnected=null;
+    playStream?.trees?.dispose();
     playStream=null;
     playActor=null;
     playLava=null;
@@ -2222,6 +2224,7 @@ if(playMode) {
       lighting:{enabled:localLightingEnabled,pending:playLighting.pending,
         environment:playLightingEnvironment,transientEmitters:playSpellLights?.emitters??[],
         spriteLighting:playStream?.trees?.lightingStatistics??null,
+        contactShadows:{enabled:contactShadowsEnabled,...playStream?.trees?.contactShadowStatistics},
         reviewPreset:playQuery.get('lightingTest')??null,
         field:playLighting.snapshot?{epoch:playLighting.snapshot.epoch,
           revision:playLighting.snapshot.revision,origin:playLighting.snapshot.origin,

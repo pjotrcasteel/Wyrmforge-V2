@@ -23,7 +23,7 @@ These are linked milestone-tracking issues. They are not native GitHub Milestone
 
 | Order | Task | Player-visible result | Start gate |
 | --- | --- | --- | --- |
-| 1 | [L10-05 #374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374) — Ground trees and props with terrain-aware contact shadows | Trees, boulders and logs sit visibly on the ground instead of floating. | READY — next task |
+| 1 | [L10-05 #374](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/374) — Ground trees and props with terrain-aware contact shadows | Trees, boulders and logs sit visibly on the ground instead of floating. | IN PROGRESS — reviewable contact-shadow implementation pending visual/device acceptance |
 | 2 | [L10-06 #375](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/375) — Directional tree-canopy and cliff shadows | Sun/sky direction casts coherent canopy, trunk and cliff shadows across real terrain. | L10-05 |
 | 3 | [L10-07 #376](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/376) — Occlude Fireball and lava light against terrain | Fireballs and lava light nearby surfaces but stop leaking through solid cliffs and banks. | L10-06; L10-02 #354 and L10-03 #367 |
 | 4 | [L10-08 #377](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/377) — Coherent sprite, terrain and fluid lighting | Wizard, trees, rocks, cliffs, water and lava look like they inhabit the same lit scene. | L10-07; L10-04 #369 |

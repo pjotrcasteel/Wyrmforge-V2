@@ -1,4 +1,5 @@
 import {SpriteLightingCache,litSpriteColor} from './sprite-lighting-cache.mjs';
+import {TerrainContactShadowCache} from './terrain-contact-shadow-cache.mjs';
 import { projectVoxel } from './camera-presets.mjs';
 import {HuntWoodlandObjects} from './hunt-woodland-objects.mjs';
 import {ScenicForest,projectTreeSprite} from './hunt-scenic-forest.mjs';
@@ -31,6 +32,9 @@ export class HuntTreePreview {
   objects;
   #image;
   #lightingCache=new SpriteLightingCache();
+  #contacts=new TerrainContactShadowCache();
+  #terrain=null;
+  #coverage=null;
   #scenery;
   #falls=new Map();
   constructor(graph,image,damage){
@@ -39,14 +43,24 @@ export class HuntTreePreview {
     this.#scenery=new ScenicForest(graph.layout);
   }
   update(regionIds,terrain,coverage=null){
-    if(this.#image.complete&&this.#image.naturalWidth)this.objects.update(regionIds,terrain,coverage);
+    if(this.#image.complete&&this.#image.naturalWidth){
+      this.#terrain=terrain;
+      this.#coverage=coverage;
+      this.objects.update(regionIds,terrain,coverage);
+      const ids=new Set([...this.objects.regions].flatMap(props=>props.map(prop=>prop.id)));
+      this.#contacts.prune(ids);
+    }
   }
   terrainChanged(bounds,terrain,isPublished,now,animate=true){
+    this.#contacts.invalidate(bounds);
     this.#animate(this.objects.terrainChanged(bounds,terrain,isPublished),now,animate);
   }
   hitProp(id,terrain,isPublished,now,animate){
     const hit=this.objects.hitProp(id,terrain,isPublished);
-    if(hit)this.#animate(hit.falls,now,animate);
+    if(hit){
+      this.#contacts.remove(id);
+      this.#animate(hit.falls,now,animate);
+    }
     return hit;
   }
   #animate(falls,now,animate){
@@ -57,8 +71,22 @@ export class HuntTreePreview {
     }
   }
   get lightingStatistics(){return this.#lightingCache.statistics;}
-  paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null){
+  get contactShadowStatistics(){return this.#contacts.statistics;}
+  dispose(){
+    this.#contacts.clear();this.#lightingCache.clear();this.#falls.clear();
+    this.#terrain=null;this.#coverage=null;
+  }
+  paint(ctx,view,actor,paintActor,feature=null,now=performance.now(),lighting=null,contactShadows=true){
     this.#lightingCache.beginFrame();
+    this.#contacts.beginFrame();
+    let contactCpuMs=0;
+    const addShadow=(tree,foot)=>{
+      if(!lighting||!contactShadows||!this.#terrain||tree.scenic)return;
+      const started=performance.now();
+      const stamps=this.#contacts.stamps(tree,this.#terrain,this.#coverage?.has,view.camera);
+      contactCpuMs+=performance.now()-started;
+      if(stamps.length)layers.push({depth:foot.depth+.0001,shadow:stamps});
+    };
     const draw=(sprite,rect,position)=>{
       if(lighting)this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
       else ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
@@ -97,6 +125,7 @@ export class HuntTreePreview {
           if(foot.x>=-margin&&foot.x<=view.width+margin&&foot.y>=-margin&&foot.y<=view.height+margin){
             const fall=this.#falls.get(tree.id);
             const alpha=fall?Math.max(0,Math.min(1,((now-fall.startedAt)/FALL_DURATION_MS-.8)*5)):1;
+            addShadow(tree,foot);
             layers.push({depth:foot.depth,prop:tree,foot,alpha});
           }
           continue;
@@ -109,6 +138,7 @@ export class HuntTreePreview {
         }
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layer.lightPosition=[tree.x,tree.y+1,tree.z];
+        addShadow(tree,projectVoxel(tree.x,tree.y,tree.z,view));
         layers.push(layer);
       }
     }
@@ -120,7 +150,12 @@ export class HuntTreePreview {
     ctx.imageSmoothingEnabled=false;
     for(const layer of layers){
       const {sprite,x,y,w,h}=layer;
-      if(sprite){
+      if(layer.shadow){
+        const started=performance.now();
+        this.#contacts.paint(ctx,view,layer.shadow);
+        contactCpuMs+=performance.now()-started;
+      }
+      else if(sprite){
         draw(sprite,[x,y,w,h],layer.lightPosition);
         if(layer.damageFoot){
           ctx.fillStyle='#c89962';
@@ -137,6 +172,7 @@ export class HuntTreePreview {
       else paintActor();
     }
     ctx.restore();
+    this.#contacts.endFrame(contactCpuMs);
   }
 }
 
