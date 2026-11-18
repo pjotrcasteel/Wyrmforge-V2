@@ -2,7 +2,7 @@
 
 **Updated:** 2026-11-13 · **Owner's guiding decision:** every engine task must produce an observable improvement to a playable Wyrmforge Hunt and have a measured, regression-tested performance impact.
 **Canonical milestones:** [ROADMAP.md](ROADMAP.md) · **Hunt definition:** [ADR-0002](architecture/ADR-0002-hunt-expeditions-and-journey.md).
-**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Next is the Lighting V2 entry contract and renderer seam; first review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
+**Current focus:** Materials V2 current Fire Hunt scope is **DONE FOR NOW**, by owner direction on 2026-11-18. R10-01 integrated lighting/atmosphere acceptance remains open. Lighting V2 entry seam L10-01 is implemented; next is the bounded visible L10-02 slice after device/performance review. First review the [material handoff](MATERIALS-LIGHTING-HANDOFF.md) and [coupling review](ENGINE-COUPLING-REVIEW.md). Concurrent Water V2 retains fluid fixes. Reported mobile lag remains open; do not equate scope freeze with performance acceptance.
 **Latest player-reviewed Play Hunt candidate:** PR [#154](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/154), commit `560291e`, two connected authored sites; user approved continuation on 2026-11-14. The multi-region generator baseline is PR [#141](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/141), `27b1c02`.
 
 **#223 camera-cell preview · player accepted:** Build `395d495`, seed 7, iPhone Safari. All three ambush waves and extraction completed across 266.6 m. Zero camera holds, zero terrain-blocked movement steps, zero >33 ms hitches across 778 streaming frames, 17 ms rolling p95 and 96 peak retained definitions. This accepts the current preview and enemy load. The graph-band fallback stays available for future load comparisons.
@@ -531,7 +531,7 @@ Owner requested all three wrap-up items together: remove/measure redundant stone
 
 - **GitHub Issue:** [#352](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/352).
 
-- **Status:** READY — next scoped task after the Materials wrap-up and coupling review. No lighting effect is implemented by this handoff.
+- **Status:** DONE FOR NOW — baseline-preserving contract/renderer foundation implemented. No new lighting effect or mobile acceptance is claimed.
 - **Owner:** Lighting/Rendering, consuming Materials and Voxel public contracts.
 - **Visible effect:** preserve the current Hunt baseline while making illumination replaceable; the next slice adds bounded cliff shading and lava spill.
 - **Boundary:** surface values and emission belong to Materials; light transport and occlusion belong to Lighting; GPU lifecycle belongs to Rendering. No terrain, fluid or gameplay state mutation from light evaluation.
@@ -539,3 +539,20 @@ Owner requested all three wrap-up items together: remove/measure redundant stone
 - **Done for now:** explicit bounded surface/emitter descriptor and renderer light-evaluation hook, baseline appearance preserved, no new import cycle or reverse core dependency, independent fallback and measured render cost. Full mobile lighting acceptance belongs to the subsequent visible slice and R10-01/R10-02.
 
 Wrap-up validation: 782 combined tests pass after integrating WAT-10; dependency audit (313 files / 1,135 dependencies) and diff check pass. Actual assembled before/after fragment shaders compile/link/render through GLES3; measured evidence above is software-only.
+
+### L10-01 implementation — 2026-11-18
+
+Baseline Hunt illumination now crosses explicit `V2Surface` / `V2LightingContext` shader values into a pure Lighting function. Materials and Lighting publish bounded immutable CPU surface/emitter descriptors. Rendering retains texture decoding, GPU lifecycle and output encoding. A trusted constructor hook and separately compiled unlit fallback survive WebGL restoration. Existing face/detail-normal/ORM/height/grass shading is preserved, including the optimized stone path. No fluid, WorldGen, Voxel or actor implementation changes.
+
+See [Lighting V2 entry contracts and evidence](LIGHTING-V2-ENTRY.md). Actual GLES3 fallback and textured/normal/ORM fixtures preserve every RGBA byte; software timing and raw batches are recorded without a mobile claim. Core reverse-dependency guards and cycle inspection remain clean. Current material-lab shader ABI and duplicate lava evaluation are not all eliminated: L10-02 must integrate the explicit surface/emission adapter with the fluid presentation owner before adding its visible effects. Reported phone lag remains open pending fresh device evidence.
+
+### L10-02 — Bounded Hunt cliff shading and lava spill
+
+- **GitHub Issue:** [#354](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/354).
+- **Status:** READY for the next coordinated visible slice after L10-01.
+- **Owner:** Lighting/Rendering; Materials and Fluid presentation expose surface/emission inputs. Fluid amounts and transport remain Water V2 authority.
+- **Deliverable:** bounded cliff/crevice shading and warm lava spill in the actual Hunt, with committed-terrain-change invalidation.
+- **Gate:** shared molten surface/emission adapter coordinated with Water presentation, explicit measured light-count/radius/work budgets, epoch/revision correctness, diagnostic fallback, no reverse core dependencies and mobile appearance/frame review. The 32-emitter descriptor ceiling is not the mobile target.
+- **Open dependencies:** fresh device lag report after WAT-10/material optimization; F07-04 remains separate for generated overhangs.
+
+L10-01 validation: 787 tests pass; dependency audit (317 files / 1,149 dependencies), diff checks, actual GLES3 baseline/textured pixel comparisons and independent unlit render pass. CI now compiles both lighting variants. No phone performance or new lighting appearance acceptance is claimed.

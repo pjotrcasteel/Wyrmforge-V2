@@ -67,7 +67,7 @@ test('shader treats GPU sRGB texture samples as already linear, but decodes proc
   assert.match(shaderHost,/import \{ terrainColorTransferGlsl \} from '\.\/terrain-color-space\.mjs'/);
   assert.match(shaderHost,/\$\{terrainColorTransferGlsl\(\)\}/);
   assert.match(shaderHost,/vec3 linearAlbedo = layer >= 0\.0 \? albedo : srgbToLinearColor\(albedo\)/);
-  assert.match(shaderHost,/outColor = vec4\(linearToSrgbColor\(linearAlbedo \* lighting\), 1\.0\)/);
+  assert.match(shaderHost,/outColor=vec4\(linearToSrgbColor\(evaluateV2Lighting\(surface,context\)\),1\.0\)/);
   assert.doesNotMatch(shaderHost,/outColor = vec4\(albedo \* lighting, 1\.0\)/);
   assert.match(cache,/entry\.channel === 'albedo' \? gl\.SRGB8_ALPHA8 : gl\.RGBA8/,
     'only color imagery uses hardware sRGB decoding; normal and ORM remain raw');

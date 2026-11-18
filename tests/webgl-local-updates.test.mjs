@@ -4,6 +4,7 @@ import { VoxelWorld } from '../src/voxel-world.mjs';
 import { markDirtyForEditedVoxel } from '../src/chunk-dirty.mjs';
 import { buildExposedFaceMeshes } from '../src/exposed-face-mesher.mjs';
 import { WebGLVoxelView } from '../src/webgl-voxel-view.mjs';
+import {UNLIT_LIGHTING_GLSL} from '../src/lighting/baseline-lighting.mjs';
 import { V2ExternalTerrainLoader } from '../src/external-terrain-loader.mjs';
 import {
   createExternalSiteFixture, EXTERNAL_SITE_BREACH
@@ -11,7 +12,7 @@ import {
 
 function fakeCanvas() {
   let nextId = 0;
-  const stats = { createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
+  const stats = { shaderSources: [], createdArrays: [], deletedArrays: [], createdBuffers: [], deletedBuffers: [], draws: [], cameraUniforms: [] };
   const events = new Map();
   const gl = {
     VERTEX_SHADER: 35633, FRAGMENT_SHADER: 35632, COMPILE_STATUS: 35713, LINK_STATUS: 35714,
@@ -22,7 +23,7 @@ function fakeCanvas() {
     RGBA: 6408, REPEAT: 10497, LINEAR: 9729, TEXTURE_WRAP_S: 10242,
     TEXTURE_WRAP_T: 10243, TEXTURE_MIN_FILTER: 10241, TEXTURE_MAG_FILTER: 10240,
     UNPACK_FLIP_Y_WEBGL: 37440,
-    createShader: () => ({ id: ++nextId }), shaderSource() {}, compileShader() {},
+    createShader: () => ({ id: ++nextId }), shaderSource(shader,source) { stats.shaderSources.push(source); }, compileShader() {},
     getShaderParameter: () => true, getShaderInfoLog: () => '',
     deleteShader() {}, createProgram: () => ({ id: ++nextId }), attachShader() {},
     linkProgram() {}, getProgramParameter: () => true, deleteProgram() {},
@@ -260,5 +261,18 @@ test('Hunt lava shares one texture upload across animation frames and restores i
   events.get('webglcontextrestored')();
   assert.ok(view.render({...frame,labTime:3}));
   assert.equal(stats.textureUploads,2);
+  view.dispose();
+});
+
+test('injected lighting fallback is the compiled renderer path and survives context restoration',()=>{
+  const {canvas,stats,events}=fakeCanvas();
+  const view=new WebGLVoxelView(canvas,{lightingShader:UNLIT_LIGHTING_GLSL});
+  const fragments=()=>stats.shaderSources.filter(source=>source.includes('evaluateV2Lighting'));
+  assert.equal(fragments().length,1);
+  assert.ok(fragments()[0].includes(UNLIT_LIGHTING_GLSL));
+  events.get('webglcontextlost')({preventDefault(){}});
+  events.get('webglcontextrestored')();
+  assert.equal(fragments().length,2);
+  assert.equal(fragments()[0],fragments()[1]);
   view.dispose();
 });
