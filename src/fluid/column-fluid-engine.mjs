@@ -171,6 +171,56 @@ export class ColumnFluidEngine {
     });
   }
 
+  // Cross-band transfers must not destroy/recreate water via independent
+  // outlet/source manifests. Only an actually resident, touching 1m column
+  // pair may move units. A lower cross-band fall needs the separate bounded
+  // airborne-parcel protocol; do NOT teleport those units.
+  transferToAdjacent(receiver,{x,z,toX,toZ,maxUnits=2}={}){
+    if(!(receiver instanceof ColumnFluidEngine)||receiver===this||
+        receiver.#kind!==this.#kind){
+      throw new TypeError('Expected a distinct resident fluid engine of the same kind');
+    }
+    if(![x,z,toX,toZ].every(Number.isSafeInteger)||
+        Math.abs(x-toX)+Math.abs(z-toZ)!==1){
+      throw new RangeError('Water V2 seam columns must share one cardinal voxel face');
+    }
+    if(!Number.isSafeInteger(maxUnits)||maxUnits<1||
+        maxUnits>RATE[this.#kind]){
+      throw new RangeError('Invalid bounded seam transfer rate');
+    }
+    const from=this.#index(x,z),to=receiver.#index(toX,toZ);
+    if(from<0||to<0){
+      throw new RangeError('Water V2 seam requires both published fluid footprints');
+    }
+    const floor=this.#floors[from],targetFloor=receiver.#floors[to];
+    // A real water fall cannot be represented as an instantaneous jump.
+    // Fail closed until a cross-band falling-flight contract is installed.
+    if(floor!==targetFloor)return 0;
+    const sourceDepth=this.#depths[from];
+    const targetDepth=receiver.#depths[to];
+    const targetReserved=receiver.#incoming[to];
+    const difference=sourceDepth-targetDepth-targetReserved;
+    if(difference<2||!sourceDepth)return 0;
+    const film=this.#currents.has(from)?1:0;
+    const moved=Math.min(maxUnits,RATE[this.#kind],
+      Math.floor(difference/2),sourceDepth-film,
+      MAX_DEPTH-targetDepth-targetReserved);
+    if(moved<1)return 0;
+    // Both writes are synchronous. No storage/network operations or callback
+    // can observe half of the transfer. Source and receiver never overlap.
+    this.#depths[from]-=moved;
+    receiver.#depths[to]+=moved;
+    if(!this.#depths[from]){
+      this.#wet--;
+      this.#active.delete(from);
+    }
+    if(!targetDepth){
+      receiver.#wet++;
+      receiver.#active.add(to);
+    }
+    return moved;
+  }
+
   #exchange(from,to){
     const amount=this.#depths[from];
     if(!amount||this.#depths[to]+this.#incoming[to]>=MAX_DEPTH)return 0;
