@@ -57,8 +57,11 @@ test('a real physical bank breach progressively wets its connected crater',()=>{
   }),1);
   assert.equal(engine.sample(5,4).floorY,-2);
   tick(engine,2);
-  const early=engine.sample(5,4).depth;
-  assert.ok(early>0,'broken bank opens the path');
+  const early=engine.sample(5,4);
+  assert.ok(early.depth>0||early.pendingArrival>0,
+    'broken bank opens a real downhill route, including water still airborne');
+  assert.ok(early.pendingArrival>0,
+    'a newly breached lower crater should first receive a reserved falling parcel');
   tick(engine,80);
   assert.ok(engine.sample(5,5).depth>0,'new crater must receive water');
   assert.ok(engine.sample(5,6).depth>0,'water spreads into the crater');
