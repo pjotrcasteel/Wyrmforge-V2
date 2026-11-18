@@ -166,3 +166,27 @@ test('channel depth override remains bounded and inlet/outlet targets follow its
   assert.ok(fluid.snapshot().sources.every(source=>source.surfaceDeci===7));
   assert.ok(fluid.snapshot().outlets.every(outlet=>outlet.surfaceDeci===7));
 });
+
+
+test('a saved wet inlet remains restorable after authoritative Fireball floor replay',()=>{
+  const {world,port,layout}=synthetic();
+  const live=createWorldGenFluidEngine(layout,port).fluid;
+  const initial=live.snapshot();
+  assert.ok(initial.sources.length>0);
+  // Destroy real solid beneath the authored upstream river mouth.
+  for(let y=-3;y<0;y++)world.set(0,y,1,0);
+  assert.ok(live.onTerrainChange({
+    geometryChanged:true,
+    changedBounds:{min:{x:0,y:-3,z:1},max:{x:0,y:-1,z:1}}
+  })>0);
+  for(let i=0;i<15;i++)live.step({budget:32});
+  const after=live.snapshot();
+  assert.notDeepEqual(after.floors,initial.floors);
+  const reloaded=createWorldGenFluidEngine(layout,port).fluid;
+  assert.deepEqual(reloaded.snapshot().sources,initial.sources);
+  assert.deepEqual(reloaded.snapshot().outlets,initial.outlets);
+  assert.deepEqual(reloaded.snapshot().currents,initial.currents);
+  reloaded.restore(after);
+  assert.deepEqual(reloaded.snapshot(),after,
+    'replayed physical terrain plus the original authored flow contract must restore');
+});

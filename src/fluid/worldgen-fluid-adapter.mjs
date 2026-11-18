@@ -133,11 +133,13 @@ export function createWorldGenFluidEngine(layout,terrain,{
   for(const cell of floorCells.values()){
     const flowX=cell.flowX||fallbackX;
     const flowZ=cell.flowZ||fallbackZ;
-    const currentFloor=floorAt(cell.x,cell.z);
+    // The authored direction manifest is stable across replayed Voxel edits.
+    // The solver still checks CURRENT physical heights before transferring.
+    const currentFloor=cell.y;
     const candidates=[[0,-1],[1,0],[0,1],[-1,0]]
       .map(([dx,dz])=>{
         const next=floorCells.get(signedKey(cell.x+dx,cell.z+dz));
-        if(!next||floorAt(next.x,next.z)>currentFloor)return null;
+        if(!next||next.y>currentFloor)return null;
         const alignment=dx*flowX+dz*flowZ;
         return alignment>0?{dx,dz,alignment}:null;
       })
@@ -156,11 +158,14 @@ export function createWorldGenFluidEngine(layout,terrain,{
       minZ:footprint.minZ,maxZ:footprint.maxZ
     },
     floorAt,kind:channel.kind,initial,
-    sources:mouth.map(({x,z})=>({
-      x,z,surfaceY:floorAt(x,z)+initialDepth/10,rate:sourceRate
+    // Source/outlet heads are authored constants, not mutable replayed floors.
+    // Otherwise Fireball edits to a mouth change its manifest on reload and
+    // reject an otherwise valid checkpoint as an incompatible world.
+    sources:mouth.map(({x,z,y})=>({
+      x,z,surfaceY:y+initialDepth/10,rate:sourceRate
     })),
-    outlets:exits.map(({x,z})=>({
-      x,z,surfaceY:floorAt(x,z)+initialDepth/10,
+    outlets:exits.map(({x,z,y})=>({
+      x,z,surfaceY:y+initialDepth/10,
       rate:Math.min(10,Math.max(sourceRate,
         Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
     })),

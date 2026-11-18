@@ -416,6 +416,31 @@ try{
   report.streamedHunt=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
   await page.screenshot({path:artifacts+'/streamed-hunt-water.jpeg',type:'jpeg',quality:67});
   console.log('FLUID_STREAMED_HUNT_PASS '+JSON.stringify(report.streamedHunt));
+
+  // Actual browser storage boundary: checkpoint, reload the SAME page and
+  // prove region-local solver steps resume rather than silently restarting.
+  const savedRiver=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.save());
+  if(!savedRiver.ok||savedRiver.regionSteps.length<2){
+    throw new Error('Streamed Water V2 failed to persist native region checkpoints: '+
+      JSON.stringify(savedRiver));
+  }
+  await page.reload({waitUntil:'domcontentloaded',timeout:30000});
+  await page.waitForFunction(saved=>{
+    const state=window.__WyrmforgeStreamWaterTest?.status();
+    if(!state||state.error||!state.restored||state.activeRegions.length<2||
+        state.wetColumns<8||state.topFaces<1)return false;
+    return saved.every(before=>
+      state.regionSteps.some(after=>after.id===before.id&&after.steps>=before.steps));
+  },savedRiver.regionSteps,{timeout:90000});
+  report.streamedReload=await page.evaluate(()=>window.__WyrmforgeStreamWaterTest.status());
+  await page.screenshot({path:artifacts+'/streamed-hunt-restored.jpeg',
+    type:'jpeg',quality:67});
+  console.log('FLUID_STREAMED_HUNT_RELOAD_PASS '+JSON.stringify({
+    saved:savedRiver.regionSteps,
+    restored:report.streamedReload.regionSteps,
+    wetColumns:report.streamedReload.wetColumns,
+    restoredFromStorage:report.streamedReload.restored
+  }));
   if(report.errors.length)throw new Error('Game browser errors: '+report.errors.join('; ').slice(0,800));
   console.log('FLUID_BROWSER_PASS '+JSON.stringify({before,edit,after,streamedHunt:report.streamedHunt}));
 }catch(error){

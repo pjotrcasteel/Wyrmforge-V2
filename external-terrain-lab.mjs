@@ -64,6 +64,7 @@ import {huntLavaSurface} from './src/hunt-lava-surface.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
 import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
 import {HuntStreamedFluid} from './src/fluid/hunt-streamed-fluid.mjs';
+import {HuntFluidSave} from './src/fluid/hunt-fluid-save.mjs';
 import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.mjs';
 import {huntRoutePreview,spawnHuntRoutePreview} from './src/hunt-route-preview.mjs';
 
@@ -684,6 +685,12 @@ function streamingBusy() {
   return Boolean(playStream?.residency?.metrics.transition);
 }
 
+// Checkpoint at terrain commits, graph eviction and infrequent fixed ticks.
+function persistStreamedWater(){
+  if(!playFluidStream||!playStream?.fluidSave)return false;
+  return playStream.fluidSave.saveFrom(playFluidStream);
+}
+
 function updatePlayStreaming(now) {
   if(!playMode || !playStream || !active || !playActor || document.hidden ||
       errorMessage || !renderer?.ready || pendingMesh || restoring)return;
@@ -706,7 +713,17 @@ function updatePlayStreaming(now) {
       playFluidStream=new HuntStreamedFluid({
         graph:stream.graph,terrain:active.port,identity:stream.saveIdentity
       });
-      playFluidStream.syncResident(stream.residency.metrics.residentRegions);
+      // Restore only after Voxel has replayed committed terrain writes.
+      try{
+        stream.fluidRestored=stream.fluidSave?.restoreInto(playFluidStream)??false;
+        playFluidStream.syncResident(stream.residency.metrics.residentRegions);
+      }catch(error){
+        playFluidStream.dispose();
+        playFluidStream=null;
+        errorMessage='Water V2 checkpoint rejected: '+error.message;
+        updateStatus();
+        return;
+      }
       playFluidVisual??=new HuntFluidSurfaceRenderer(canvas);
       playFluidSurfaceStep=-1;
       playRiverRevision=-1;
@@ -715,6 +732,9 @@ function updatePlayStreaming(now) {
         window.__WyrmforgeStreamWaterTest={
           status:()=>({
             activeRegions:playFluidStream?.activeIds??[],
+            checkpointStatus:stream.fluidSave?.status??null,
+            restored:stream.fluidRestored??false,
+            regionSteps:playFluidStream?.exportCheckpoint().regions.map(entry=>({id:entry.id,steps:entry.state.steps}))??[],
             wetColumns:playFluidStream?.wetCount??0,
             solverTicks:playFluidStream?.steps??0,
             totalDepth:playFluidStream?.totalDepth??0,
@@ -722,6 +742,10 @@ function updatePlayStreaming(now) {
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
             worldRevision:active?.world.revision??null,
             error:errorMessage
+          }),
+          save:()=>({
+            ok:persistStreamedWater(),
+            regionSteps:playFluidStream?.exportCheckpoint().regions.map(entry=>({id:entry.id,steps:entry.state.steps}))??[]
           })
         };
       }
@@ -745,6 +769,7 @@ function updatePlayStreaming(now) {
     // Snapshot the independent liquid authority before Voxel writes evict a
     // region. Never sample unloaded terrain or silently recreate a fresh pool.
     if(job.action==='evict'&&playFluidStream?.evict(job.id)){
+      persistStreamedWater();
       playFluidSurfaceStep=-1;
       playRiverRevision=-1;
     }
@@ -776,6 +801,7 @@ function updatePlayStreaming(now) {
       if(opened){
         playFluidSurfaceStep=-1;
         playRiverRevision=-1;
+        persistStreamedWater();
       }
     }
     playEvidence.publish(now);
@@ -986,7 +1012,10 @@ function updatePlayFrame(now) {
         // Bounded deterministic Water V2 work at the same fixed timestep as
         // gameplay. A terrain event already updated physical floor heights.
         if(playFluid&&!streamingBusy()&&!playFluidWitnessHold)playFluid.step({budget:96});
-        if(playFluidStream&&!streamingBusy())playFluidStream.step({budget:96});
+        if(playFluidStream&&!streamingBusy()){
+          playFluidStream.step({budget:96});
+          if(playFluidStream.steps%600===0)persistStreamedWater();
+        }
         // The graph is not a rectangle. A clearance-checked union of
         // published regions and seams constrains horizontal movement.
         const residency=playStream?.residency;
@@ -1162,6 +1191,7 @@ function resetSite() {
     detachPlayFluid?.();
     detachPlayFluid=null;
     playFluid=null;
+    persistStreamedWater();
     playFluidStream?.dispose();
     playFluidStream=null;
     playLightingLiquid=null;
@@ -1294,9 +1324,12 @@ function resetSite() {
         const gravityFixture=gravityPreview&&!regionCollapse;
         const entry=regionCollapse?REGION_COLLAPSE_ENTRY:generatedSite.layout.topology.entry;
         const structuralGravity=gravityPreview||terrainGravity;
-        const terrainSave=new HuntTerrainSave(findingStorage,huntTerrainSaveIdentity(saveIdentity,gravityMode,{
+        const terrainIdentity=huntTerrainSaveIdentity(saveIdentity,gravityMode,{
           structuralGravity,defaultEnabled:defaultGravity
-        }));
+        });
+        const terrainSave=new HuntTerrainSave(findingStorage,terrainIdentity);
+        const fluidSave=streamedWaterPreview&&!cellPreview?
+          new HuntFluidSave(findingStorage,terrainIdentity):null;
         let evidenceStorage;
         try{evidenceStorage=window.sessionStorage;}catch{}
         const collapseEvidence=structuralGravity?new HuntCollapseEvidence(evidenceStorage,
@@ -1306,7 +1339,8 @@ function resetSite() {
         }):
           gravityFixture?huntCollapseScaffold(terrainSave):[];
         const savedAdditions=cellPreview?huntSavedAdditions(graph.layout,[...terrainSave.additions,...scaffold]):[];
-        playStream={phase:'waiting',terrainSave,saveIdentity,savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
+        playStream={phase:'waiting',terrainSave,fluidSave,saveIdentity:terrainIdentity,
+          savedAdditions,gravityPreview,gravityFixture,regionCollapse,structuralGravity,collapseEvidence,entry,
           graph,initialIds,initialFootprint,footprint,
           investigation,extraction,cellCatalog:cellPreview?new HuntCellCatalog(graph):null,
           hordeStreamingJobs:0,terrainReplay:[],cameraHeldFrames:0,
@@ -1372,6 +1406,7 @@ function impactSpan(targetOverride=null) {
     const collapseDirty=collapse?.acceptImpact(result,{defer:deferredSupport,multiple:terrainGravity||shapedCollapse})??[];
     if(collapseDirty.length)measureCollapseActivation(activationStart);
     if(playMode&&!collapse?.holdsFixture&&!collapse?.checkingSupport)playStream?.terrainSave.commit(result.removedCells);
+    if(playMode&&result.removedVoxels>0&&playFluidStream)persistStreamedWater();
     if(playMode&&result.removedVoxels>0&&playStream?.residency){
       const residency=playStream.residency;
       const isPublished=cellPreview?(x,z)=>residency.publishedAt(x,z):null;
@@ -2202,6 +2237,8 @@ if(playMode) {
         renderedCells:playLava?.count??0,
         raisedFluidGeometry:playFluidVisual?.stats??null,
         solverBudgetPerFixedStep:96,
+        save:{status:playStream?.fluidSave?.status??null,
+          error:playStream?.fluidSave?.error??null,restored:playStream?.fluidRestored??false},
         presentation:'independent simulated surface caps and sidewalls; 10cm high-bank shoreline details'
       }:null,
       terrain:{
@@ -2286,6 +2323,7 @@ if(playMode) {
 document.addEventListener('visibilitychange',()=>{
   meshBridge?.setPaused(document.hidden);
   if(document.hidden){
+    persistStreamedWater();
     if(playStream)playStream.cameraHoldStart=null;
     playStream?.collapseEvidence?.interrupt();
     resetPlayInput();
@@ -2293,6 +2331,7 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 window.addEventListener('pagehide',()=>{
+  persistStreamedWater();
   meshBridge?.close();
   restoring?.unload();
   restoredSession?.unload();
