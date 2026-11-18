@@ -40,9 +40,18 @@ test('the real native Hunt graph publishes a wet 8m link and one outer source/si
     assert.equal(graph.fluidSeams.length,2);
     assert.equal(earthwork.bands.length,3);
     const {port,world}=loader.terrain;
-    for(const p of earthwork.points){
-      assert.equal(port.materialAt(p.x,earthwork.bedFloorY-1,p.z),3);
-      assert.equal(port.materialAt(p.x,earthwork.bedFloorY,p.z),0);
+    for(const band of earthwork.bands){
+      const authored=new Map(band.fluidLayout.riverChannels[0].floor
+        .map(cell=>[cell.x+','+cell.z,cell.y]));
+      for(const p of earthwork.points.filter(point=>point.bandId===band.id)){
+        const y=authored.get(p.x+','+p.z);
+        assert.ok(Number.isSafeInteger(y),
+          'every physical river corridor cell must have a native WorldGen bed');
+        assert.equal(port.materialAt(p.x,y-1,p.z),3,
+          'the real lower Voxel floor must remain stone, including a shallow ford');
+        assert.equal(port.materialAt(p.x,y,p.z),0,
+          'the corresponding native fluid cell must be actual air');
+      }
     }
     const host=new HuntStreamedFluid({graph,terrain:port,identity});
     try{
