@@ -1447,8 +1447,9 @@ function updateHuntRiverSurface() {
     const state=fluid.snapshotSurface();
     if(state){
       playLightingLiquid=state;
-      const layout=playFluidStream?playFluidStream.presentationLayout():generatedSite.layout;
-      playLava=huntFluidSurface(layout,world,state);
+      playLava=playFluidStream?
+        huntFluidSurface(playFluidStream.presentationLayout(),world,state):
+        huntFluidSurface(generatedSite.layout,world,state);
       if(playFluidOverlayMode!=='no-mesh'){
         playFluidVisual?.update(state,(x,z)=>fluid.sample(x,z));
       }
