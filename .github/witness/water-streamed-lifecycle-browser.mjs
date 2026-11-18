@@ -108,10 +108,20 @@ try{
     throw new Error('Voxel crater missing from native terrain save: '+
       JSON.stringify(report.bankVoxel));
   }
+  // "New wet columns somewhere" is not enough. The exact dry shore chosen
+  // by the real Fireball helper must now hold landed Water V2 volume.
+  report.shoreWater=await page.evaluate(shore=>
+    window.__WyrmforgeStreamWaterTest.inspectCell(shore.x,0,shore.z),cast.shore);
+  if(report.shoreWater.depth<=0){
+    throw new Error('Real Fireball breach has no landed water at the opened shore: '+
+      JSON.stringify({shore:cast.shore,river:cast.river,
+        after:report.after,shoreWater:report.shoreWater}));
+  }
   console.log('WAT15A_REAL_FIREBALL_PASS '+JSON.stringify({
     removedVoxels:editStatus.lastImpactRemoved,
     newlyWetColumns:report.after.wetOutsideAuthored-
       report.before.wetOutsideAuthored,
+    waterAtBreach:report.shoreWater.depth,
     savedVoxel:report.bankVoxel.savedRemoved,
     activeRegions:report.after.activeRegions
   }));
