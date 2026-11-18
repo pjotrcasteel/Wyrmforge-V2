@@ -1,8 +1,8 @@
 # Optional Linux/Mesa GLES witness. Supply assembled before/after fragment
 # sources; this measures software-renderer draw cost, never mobile GPU time.
 import ctypes as C,os,time,statistics,json,sys
-if len(sys.argv)!=4:
- raise SystemExit('Usage: python scripts/benchmark-stone-overlay-cost.py before.frag after.frag evidence.json')
+if len(sys.argv) not in [4,5] or (len(sys.argv)==5 and sys.argv[4]!='--textured'):
+ raise SystemExit('Usage: python scripts/benchmark-stone-overlay-cost.py before.frag after.frag evidence.json [--textured]')
 os.environ['EGL_PLATFORM']='surfaceless'
 e=C.CDLL('libEGL.so.1');e.eglGetProcAddress.restype=C.c_void_p;e.eglGetProcAddress.argtypes=[C.c_char_p]
 def api(n,r,*a):
@@ -36,6 +36,13 @@ def setup(p,material,normal):
  u1(loc(p,b'uLabMaterials'),2)
  for n in ['uTerrainLayers','uTerrainNormalLayers','uTerrainOrmLayers','uTerrainSecondaryLayers','uTerrainSecondaryNormalLayers','uTerrainSecondaryOrmLayers']:u4(loc(p,n.encode()),-1,-1,-1,-1)
  u3(loc(p,b'uHuntCorruption'),1,1,1);uf(loc(p,b'uWitnessMaterial'),material);u3(loc(p,b'uWitnessNormal'),*normal);uf(loc(p,b'uHuntElevationReference'),8)
+if len(sys.argv)==5:
+ active=api('glActiveTexture',None,U);gen=api('glGenTextures',None,I,P);texbind=api('glBindTexture',None,U,U);tex3=api('glTexImage3D',None,U,I,I,I,I,I,I,U,U,P);param=api('glTexParameteri',None,U,U,I)
+ active(0x84C1);texture=U();gen(1,C.byref(texture));texbind(0x8C1A,texture);tex3(0x8C1A,0,0x8058,1,1,1,0,0x1908,0x1401,(C.c_ubyte*4)(128,192,240,255));param(0x8C1A,0x2801,0x2600);param(0x8C1A,0x2800,0x2600)
+ originalSetup=setup
+ def setup(p,material,normal):
+  originalSetup(p,material,normal)
+  for name in ['uTerrainLayers','uTerrainNormalLayers','uTerrainOrmLayers']:u4(loc(p,name.encode()),0,0,0,0)
 print('renderer',string(0x1F01).decode(),flush=True)
 results=[]
 for material,normal in [(3,(0,1,0)),(3,(1,0,0)),(1,(0,1,0)),(4,(1,0,0))]:

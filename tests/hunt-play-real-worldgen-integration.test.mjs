@@ -196,8 +196,8 @@ test('Hunt tap casting reuses terrain port, localized meshes and full renderer',
   assert.ok(host.includes("type:targetOverride?'carve-crater':'carve-sphere'"));
   assert.ok(host.includes('meshBridge.replace(active.world,dirty)'));
   assert.ok(host.includes('huntHeightContrast:playMode &&'));
-  assert.ok(shader.includes('vWorld.y-uHuntElevationReference'));
-  assert.ok(shader.includes('if (uHuntHeightContrast)'));
+  assert.ok(shader.includes('uHuntElevationReference,uLabEnabled&&labShallowGrassBank'));
+  assert.ok(shader.includes('V2LightingContext(vWorld,uHuntHeightContrast,'));
 });
 
 test('the streamed Hunt arrival contains a stone escarpment and a fissure off its main trail',()=>{

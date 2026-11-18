@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   WEBGL_V2_VERTEX_SHADER_SOURCE,
-  WEBGL_V2_FRAGMENT_SHADER_SOURCE
+  WEBGL_V2_FRAGMENT_SHADER_SOURCE,assembleVoxelFragmentShader
 } from '../src/webgl-voxel-view.mjs';
+import {UNLIT_LIGHTING_GLSL} from '../src/lighting/baseline-lighting.mjs';
 import {FLUID_VERTEX_GLSL,FLUID_FRAGMENT_GLSL} from '../src/fluid/hunt-fluid-surface-renderer.mjs';
 
 const temp=mkdtempSync(join(tmpdir(),'wyrmforge-glsl-'));
@@ -15,6 +16,7 @@ try {
   for(const [owner,stage,source] of [
     ['voxel','vert',WEBGL_V2_VERTEX_SHADER_SOURCE],
     ['voxel','frag',WEBGL_V2_FRAGMENT_SHADER_SOURCE],
+    ['voxel-unlit','frag',assembleVoxelFragmentShader(UNLIT_LIGHTING_GLSL)],
     ['fluid','vert',FLUID_VERTEX_GLSL],
     ['fluid','frag',FLUID_FRAGMENT_GLSL]
   ]) {

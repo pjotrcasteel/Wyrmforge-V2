@@ -1,3 +1,5 @@
+import {SURFACE_GLSL} from './materials/surface-contract.mjs';
+import {LIGHTING_CONTEXT_GLSL,BASELINE_LIGHTING_GLSL,validateLightingShader} from './lighting/baseline-lighting.mjs';
 import {FIRE_TERRAIN_MATERIAL_GLSL} from './fire-terrain-material.mjs';
 import {HUNT_LAVA_SURFACE_GLSL} from './hunt-lava-surface.mjs';
 import {FIRE_MATERIAL_LAB_UNIFORMS_GLSL,FIRE_MATERIAL_LAB_GLSL} from './fire-material-lab-shader.mjs';
@@ -42,7 +44,9 @@ void main() {
 }
 `;
 
-const FRAGMENT_SHADER = `#version 300 es
+export function assembleVoxelFragmentShader(lightingShader=BASELINE_LIGHTING_GLSL){
+  validateLightingShader(lightingShader);
+  return `#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vWorld;
@@ -75,6 +79,9 @@ out vec4 outColor;
 
 ${terrainMaterialGlsl()}
 ${terrainColorTransferGlsl()}
+${SURFACE_GLSL}
+${LIGHTING_CONTEXT_GLSL}
+${lightingShader}
 
 // Low-frequency, world-anchored soil detail. This is a first procedural dirt
 // material, not a final authored texture. No additional texture uploads.
@@ -390,13 +397,8 @@ void main() {
       albedo = primary;
     }
   }
-  float lighting = vNormal.y > 0.5 ? 1.0
-    : vNormal.y < -0.5 ? 0.43
-    : vNormal.x > 0.5 ? 0.74
-    : vNormal.z > 0.5 ? 0.62
-    : vNormal.x < -0.5 ? 0.55 : 0.50;
-  // Voxel-local material response: fixed, inexpensive directional illumination.
-  // This is not Lighting Engine V2 and introduces no dynamic lights or shadows.
+  vec3 detailedNormal=vNormal;
+  vec3 surfaceOrm=vec3(1.0,1.0,0.0);
   if (layer >= 0.0 && normalLayer >= 0.0) {
     vec3 tangentNormal = texture(uTerrainNormal,
       vec3(uv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
@@ -411,12 +413,9 @@ void main() {
     vec3 t = abs(n.y) > 0.5 ? vec3(1.0, 0.0, 0.0)
       : abs(n.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     vec3 b = normalize(cross(n, t));
-    vec3 detailedNormal = normalize(t * tangentNormal.x + b * tangentNormal.y +
+    detailedNormal = normalize(t * tangentNormal.x + b * tangentNormal.y +
       n * max(0.2, tangentNormal.z));
-    vec3 lightDirection = normalize(vec3(-0.4, 0.85, 0.3));
-    float baseDiffuse = max(dot(n, lightDirection), 0.0);
-    float detailedDiffuse = max(dot(detailedNormal, lightDirection), 0.0);
-    lighting *= clamp(1.0 + (detailedDiffuse - baseDiffuse) * 0.4, 0.75, 1.25);
+
   }
   if (layer >= 0.0 && ormLayer >= 0.0) {
     vec3 orm = texture(uTerrainOrm,
@@ -427,10 +426,7 @@ void main() {
         vec3(uv * uTerrainTilesPerVoxel, secondaryOrm)).rgb;
       orm = mix(orm, nextOrm, variantMix);
     }
-    // AO is local material micro-occlusion; roughness reduces broad highlights.
-    // Metalness is reserved for a future physically based renderer.
-    lighting *= mix(0.65, 1.0, orm.r);
-    lighting *= mix(0.96, 1.0, orm.g);
+    surfaceOrm=orm;
   }
   // SRGB8_ALPHA8 albedo arrays have already been decoded to linear RGB by
   // WebGL2. Procedural swatches and the legacy RGBA8 grass sampler have not.
@@ -457,21 +453,19 @@ void main() {
 
   if(uLabEnabled){
     linearAlbedo=labTerrainColor(linearAlbedo,materialUv);
-    if(labShallowGrassBank(int(round(vMaterial))))lighting=0.94;
+
   }
-  // The WebGL default canvas does not perform the sRGB output transfer.
-  // Encoding before writing fixes near-black textured terrain on iPhone Safari
-  // without changing the artist's PNG pixels or the underlying voxel world.
-  // Read actual physical elevation even where two adjacent surfaces share
-  // grass. Simple world-height tonal separation, not a shadow/lighting engine.
-  if (uHuntHeightContrast) {
-    float elevationTone=clamp(1.0+(vWorld.y-uHuntElevationReference)*0.28,0.50,1.48);
-    lighting*=elevationTone;
-    if (vNormal.y<0.5 && vNormal.y>-0.5) lighting*=0.66;
-  }
-  outColor = vec4(linearToSrgbColor(linearAlbedo * lighting), 1.0);
+  // Materials supply linear surface values. Lighting alone evaluates their
+  // response; Rendering encodes to the canvas exactly once.
+  V2Surface surface=V2Surface(linearAlbedo,detailedNormal,vNormal,surfaceOrm,
+    vec3(0.0),layer>=0.0&&normalLayer>=0.0,layer>=0.0&&ormLayer>=0.0);
+  V2LightingContext context=V2LightingContext(vWorld,uHuntHeightContrast,
+    uHuntElevationReference,uLabEnabled&&labShallowGrassBank(int(round(vMaterial))));
+  outColor=vec4(linearToSrgbColor(evaluateV2Lighting(surface,context)),1.0);
 }
 `;
+}
+const FRAGMENT_SHADER=assembleVoxelFragmentShader();
 
 // Public shader sources allow *real GLSL ES compiler validation* in CI.
 // Node syntax tests alone cannot detect reserved words inside GLSL strings.
@@ -491,9 +485,9 @@ function createShader(gl, type, source) {
   return shader;
 }
 
-function createProgram(gl) {
+function createProgram(gl,fragmentSource=FRAGMENT_SHADER) {
   const vertex = createShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER);
-  const fragment = createShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+  const fragment = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
   const program = gl.createProgram();
   if (!program) throw new Error('WebGL2 program allocation failed');
   gl.attachShader(program, vertex);
@@ -552,10 +546,13 @@ export class WebGLVoxelView {
   #onAvailabilityChange;
   #fastHuntMode;
   #transparentBackground;
+  #fragmentSource;
 
   constructor(canvas, {
-    onAvailabilityChange = () => {},fastHuntMode=false,transparentBackground=false
+    onAvailabilityChange = () => {},fastHuntMode=false,transparentBackground=false,
+    lightingShader=BASELINE_LIGHTING_GLSL
   } = {}) {
+    this.#fragmentSource=assembleVoxelFragmentShader(lightingShader);
     if(typeof fastHuntMode!=='boolean') {
       throw new TypeError('fastHuntMode must be a boolean');
     }
@@ -854,7 +851,7 @@ export class WebGLVoxelView {
 
   #initialize() {
     const gl = this.#gl;
-    this.#program = createProgram(gl);
+    this.#program = createProgram(gl,this.#fragmentSource);
     this.#uniforms = {
       origin: gl.getUniformLocation(this.#program, 'uOrigin'),
       viewport: gl.getUniformLocation(this.#program, 'uViewport'),
