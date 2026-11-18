@@ -403,15 +403,15 @@ H08-05 physical-object completion remain open.
 
 ### WAT-01 — River flow after terrain destruction
 - **GitHub Issue:** [#323](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/323)
-- **Status:** `IN PROGRESS — ISOLATED FOUNDATION` (draft PR [#334](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/334)); Play Hunt visual integration pending.
+- **Status:** `IN PROGRESS — MOBILE ACCEPTANCE FAILED`. Native Play Hunt Water V2 is integrated, but real iPhone Safari player rejected visible river movement/crater fill (2026-11-18). Active response PR [#411](https://github.com/pjotrcasteel/Wyrmforge-V2/pull/411); parent mobile gate [#366](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/366) remains open.
 - **Owner:** Water V2 / fluid behavior.
-- **Scheduling:** Owner initiated a small parallel Water V2 implementation (2026-11-17), while R10-01 Materials/Texture remains the active visual workstream. The approved water appearance is unchanged; the renderer handoff comes after the texture engine is ready.
+- **Scheduling:** Continue Water V2's actual river-flow mobile rejection independently of Lighting L10-08, and do not hand off to Lava until real iPhone Safari and Android Chrome acceptance. Desktop freeze #358 remains deferred.
 - **Player experience:** Fireballs open connected craters that receive water. Broken banks open new flow routes and affected pools drain. Lava follows the same connectivity at a slower material-specific rate.
 - **Technical boundary:** Voxel supplies solid occupancy and terrain-edit events. The fluid engine owns level, amount and flow. Materials and rendering consume its resulting surface. WorldGen supplies initial channels and sources.
 - **Gate:** connected craters fill progressively, sealed craters remain dry, bank breaches reroute flow, bounded work and deterministic replay survive reload and streamed revisits.
 - **Dependencies:** F07-02 terrain edits/replay, R10-01 surface handoff.
-- **Current surface preview:** the R10-01 map follows remaining ground within its authored footprint. Crater filling beyond that footprint is pending Play Hunt integration.
-- **Water foundation:** PR #334 adds the deterministic 10 cm-column solver, real WorldGen river/lava seeding, read-only Voxel floor queries, subscription to committed terrain edits, immutable fluid surface contract and replayable fluid state. An isolated breach lab and automated regression tests verify the initial contract; mobile stress, live Hunt rendering and streamed region ownership remain to do. No Materials/Texture shader files are touched.
+- **Current mobile failure:** real riverbank footage looks static and player-reported Fireball craters do not fill convincingly despite live Play Hunt solver integration. First browser checks measured newly wet off-channel cells but did not prove the actual shot crater filled; PR #411 adds a focused physically excavated, previously dry column witness.
+- **Water implementation:** PR #334 established 10cm-column fluid authority; follow-up Water V2 PRs implemented graph-streamed native Voxel riverbeds, continuous source/outlet hydraulics, Water surfaces, Fireball terrain events, bounded 96-work solver, save/reload and physical graph eviction. PR #406 added scoped Reset level. PR #411 prioritizes wet columns disturbed by a committed Fireball edit and newly landed falling parcels, retaining a single bounded budget and deterministic replay. Physical river geometry (#398/#402) and device appearance (#366) remain unaccepted; do not mark DONE FOR NOW from automated coverage alone.
 
 ### R10-02 — Full Hunt stress, crash and thermal acceptance
 - **GitHub Issue:** [#178](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/178)
