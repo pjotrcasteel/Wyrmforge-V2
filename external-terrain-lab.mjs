@@ -1517,7 +1517,7 @@ function resetSite() {
         const structuralGravity=gravityPreview||terrainGravity;
         const terrainIdentity=huntTerrainSaveIdentity(saveIdentity,gravityMode,{
           structuralGravity,defaultEnabled:defaultGravity
-        })+(streamedWaterPreview&&!cellPreview?':connected-water-v3-ribbon-bank':'');
+        })+(streamedWaterPreview&&!cellPreview?':connected-water-v4-breachable-banks':'');
         const terrainSave=new HuntTerrainSave(findingStorage,terrainIdentity);
         const fluidSave=streamedWaterPreview&&!cellPreview?
           new HuntFluidSave(findingStorage,terrainIdentity):null;
