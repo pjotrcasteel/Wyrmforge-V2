@@ -1,6 +1,7 @@
 // Renderer-owned bounded and cached terrain receiver projection.
 // Sprite alpha is read ONCE per variant, never during each frame.
 import {projectVoxel,getCameraPreset} from './camera-presets.mjs';
+import {paintSoftShadowStamp} from './shadow-stamp-texture.mjs';
 import {CANOPY_COLS,CANOPY_ROWS,projectDirectionalReceivers,HUNT_SUN_CAST,HUNT_SUN_RAY,HUNT_SUN_RAY_LENGTH}
   from './lighting/directional-sunlight.mjs';
 export const DIRECTIONAL_MAX_ENTRIES=128;
@@ -218,7 +219,7 @@ export class TerrainDirectionalShadowCache{
   }
   paint(ctx,view,stamps){
     if(!stamps?.length||this.#drawn>=DIRECTIONAL_DRAW_LIMIT)return;
-    ctx.save();ctx.imageSmoothingEnabled=false;ctx.fillStyle='#070d12';
+    ctx.save();ctx.imageSmoothingEnabled=true;
     for(const s of stamps){
       if(this.#drawn>=DIRECTIONAL_DRAW_LIMIT)break;
       const p=projectVoxel(s.x,s.y,s.z,view);
@@ -227,8 +228,7 @@ export class TerrainDirectionalShadowCache{
         ?Math.max(2,Math.round(Math.min(.7,s.depth)*view.scale*.64))
         :Math.max(1,Math.round(s.depth*view.scale*.77));
       if(p.x+w<0||p.x-w>view.width||p.y+h<0||p.y-h>view.height)continue;
-      ctx.globalAlpha=s.alpha;
-      ctx.fillRect(Math.round(p.x-w*.5),Math.round(p.y-h*.5),w,h);
+      paintSoftShadowStamp(ctx,Math.round(p.x-w*.5),Math.round(p.y-h*.5),w,h,s.alpha);
       this.#drawn++;
       if(s.face==='cliff')this.#cliffDrawn++;
     }
