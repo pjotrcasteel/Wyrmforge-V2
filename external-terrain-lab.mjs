@@ -1848,6 +1848,17 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             bottom:rect.top+bounds.bottom*rect.height/view.height
           }));
         },
+        capRects(){
+          const view=playView;
+          if(!view||!playFluidVisual)return [];
+          const rect=canvas.getBoundingClientRect();
+          return playFluidVisual.projectedCapBounds(view).map(bounds=>({
+            left:rect.left+bounds.left*rect.width/view.width,
+            right:rect.left+bounds.right*rect.width/view.width,
+            top:rect.top+bounds.top*rect.height/view.height,
+            bottom:rect.top+bounds.bottom*rect.height/view.height
+          }));
+        },
         ribbonRects(){
           const view=playView;
           if(!view||!playFluidVisual)return [];
@@ -1939,6 +1950,7 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
             fallLipFaces:playFluidVisual?.stats.fallLipFaces??0,
             refinedShoreColumns:playFluidVisual?.stats.refinedShoreColumns??0,
             fluidMeshBytes:playFluidVisual?.stats.cpuMeshBytes??0,
+            lavaAtlasBytes:playFluidVisual?.stats.lavaAtlasBytes??0,
             overlayMode:playFluidOverlayMode,
             fluidMeshBuildMs:playFluidVisual?.stats.meshUpdateMs??0,
             fluidMeshUpdates:playFluidVisual?.stats.meshUpdateCount??0,
