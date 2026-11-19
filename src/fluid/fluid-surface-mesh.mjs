@@ -100,12 +100,13 @@ function cornerHead(x,z,cell,at){
   if(!values.length)return cell.surfaceY;
   const min=Math.min(...values),max=Math.max(...values);
   if(max-min>SMOOTH_HEAD_DIFFERENCE)return cell.surfaceY;
-  // Never smooth liquid *inside* a neighboring wet stone roof. Previously a
-  // 2.1m / 1.8m shallow join averaged to 1.95m and the rock at 2m occluded
-  // the water. Shared corners use the same highest actual wet solid floor,
-  // keeping the surface continuous and visibly above the stone lip.
-  const average=values.reduce((sum,value)=>sum+value,0)/values.length;
-  return Math.max(average,highestSolid+0.1);
+  // Never let interpolation invent extra volume ABOVE any neighbor's
+  // solver-owned head. On the same continuous wet stone plane, use the
+  // shared lower corner head so independently emitted caps meet cleanly.
+  // A real stone step is different: smoothing the upper wet face down below
+  // the adjacent high bed would bury it inside Voxel and hide a waterfall.
+  if(highestSolid>=min-CELL_EPSILON)return cell.surfaceY;
+  return min;
 }
 
 export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
@@ -180,8 +181,11 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
 
     const x=c.x,z=c.z,flow=[c.flowX,c.flowZ];
     const neighbors=DIRECTIONS.map(side=>at(x+side.dx,z+side.dz));
+    // Clip a real dry bank edge at 10cm even when its floor is lower than
+    // the current water head. Otherwise low dry banks create full 1m square
+    // floating caps before the falling parcel physically lands.
     const shoreline=neighbors.map(neighbor=>
-      Boolean(neighbor&&neighbor.depth===0&&neighbor.floorY>=c.surfaceY));
+      Boolean(neighbor&&neighbor.depth===0));
     if(shoreline.some(Boolean))refinedShoreColumns++;
     // This is an existing physical lip with a lower, already wet receiving
     // column. Render a flowing fall only when Water V2 publishes that actual

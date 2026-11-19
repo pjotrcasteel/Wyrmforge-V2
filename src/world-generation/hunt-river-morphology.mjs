@@ -112,6 +112,68 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
 
 const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
 
+// Keep actual Water V2 head below the LOWEST adjacent dry 10cm grass
+// microbank. Simply recessing every channel 1m below its OLD riverbed was
+// insufficient: the original river could be HIGHER than neighboring grass.
+// This is a native WorldGen/Voxel floor adjustment, never a render offset.
+export function recessHuntRiverBelowGrass(band,changes,columns,fords=new Set()){
+  if(!band?.definition||!(changes instanceof Map)||
+      !(columns instanceof Map)||!(fords instanceof Set)){
+    throw new TypeError('Expected native WorldGen wet bank floor planning');
+  }
+  // Microtile surfaces are published as independent physical geometry.
+  // Their topmost run can be stone, grass or no longer present in the
+  // original coarse run map after native WorldGen composes the graph. Lookup
+  // by XY parent tile directly: inferring the rim from a coarse material
+  // category silently skipped the exact raised stone shoreline in seed 7.
+  const bankTiles=new Map();
+  for(const tile of band.definition.surfaceTiles??[]){
+    if(!Array.isArray(tile.levels)||tile.levels.length!==100)continue;
+    const id=key(tile.x,tile.z);
+    if(!bankTiles.has(id))bankTiles.set(id,[]);
+    bankTiles.get(id).push(tile);
+  }
+  let lowered=0;
+  for(const [id,bed] of [...changes]){
+    if(bed.dryBank)continue;
+    const [x,z]=id.split(',').map(Number);
+    let target=bed.floorY;
+    for(const [dx,dz] of DIRECTIONS){
+      const bx=x+dx,bz=z+dz,bankId=key(bx,bz);
+      if(changes.has(bankId))continue;
+      const bank=columns.get(bankId);
+      if(bank?.material===2)continue; // protected native walking roads
+      const tiles=bankTiles.get(bankId)??[];
+      if(!bank&&!tiles.length)continue;
+      let rim=bank?.topY??Infinity;
+      // A newly authored ramp can lower a dry bank edge by up to 50cm.
+      if(Number.isFinite(rim))rim-=.5;
+      for(const tile of tiles){
+        let lowest=10;
+        for(let t=0;t<10;t++){
+          const ix=dx===1?0:dx===-1?9:t;
+          const iz=dz===1?0:dz===-1?9:t;
+          lowest=Math.min(lowest,tile.levels[iz*10+ix]);
+        }
+        rim=Math.min(rim,tile.y+lowest/10);
+      }
+      // Crossings need the existing walkable <=55cm rises. Give only the
+      // explicitly mapped ford its former 50cm margin; non-ford shores
+      // need 90cm for their observed sustained 70-80cm pool head. Carve
+      // physical native Voxel beds, never a decorative shader offset.
+      const clearance=fords.has(id)?.5:.9;
+      if(Number.isFinite(rim)){
+        target=Math.min(target,Math.floor(rim-clearance+1e-6));
+      }
+    }
+    if(target<bed.floorY){
+      changes.set(id,{...bed,floorY:target});
+      lowered++;
+    }
+  }
+  return lowered;
+}
+
 // Riverbank crests can be 3-5m above a recessed 40cm stream. A normal 2m
 // Fireball then cannot physically connect a crater to Water V2. Make a FEW
 // natural, separated dry stone shelves near the authored river instead of
@@ -167,10 +229,12 @@ export function prepareHuntBreachableBankTerraces({
 // grass remains full-height; only the first 40cm at the shore is stepped.
 // We neither add decorative water nor rewrite the water-column solver floor.
 export function composeHuntRiverBankTiles({
-  band,part,changes,columns,maxTiles=MAX_RIVER_BANK_MICRO_TILES
+  band,part,changes,columns,fords=new Set(),
+  maxTiles=MAX_RIVER_BANK_MICRO_TILES
 }={}){
   if(!band?.definition?.runs||!Array.isArray(part)||
       !(changes instanceof Map)||!(columns instanceof Map)||
+      !(fords instanceof Set)||
       !Number.isSafeInteger(maxTiles)||maxTiles<0||maxTiles>MAX_RIVER_BANK_MICRO_TILES){
     throw new TypeError('Expected bounded real Voxel shoreline surface');
   }
@@ -193,7 +257,13 @@ export function composeHuntRiverBankTiles({
     .filter(tile=>!changes.has(key(tile.x,tile.z)));
   const existing=new Map(old.map(tile=>[tileKey(tile),tile]));
   const output=[],modified=new Set();
+  const fordApproach=point=>DIRECTIONS.some(([dx,dz])=>
+    point.sides.has(key(dx,dz))&&fords.has(key(point.x+dx,point.z+dz)));
   const ranked=[...candidates.values()].sort((a,b)=>{
+    // Travel approaches to recessed physical fords need real 10cm ramps
+    // before optional scenic bank detailing consumes the 64-tile budget.
+    const fordFirst=Number(fordApproach(b))-Number(fordApproach(a));
+    if(fordFirst)return fordFirst;
     const score=point=>Math.min(...part.map(p=>
       (p.x-point.x)**2+(p.z-point.z)**2));
     return score(a)-score(b)||a.z-b.z||a.x-b.x;
@@ -201,6 +271,7 @@ export function composeHuntRiverBankTiles({
   const seed=band.definition.seed??7;
   for(const item of ranked.slice(0,maxTiles)){
     const {x,z,bank,sides}=item,y=bank.topVoxelY;
+    const steppingApproach=fordApproach(item);
     const original=existing.get(tileKey({x,y,z}));
     const prior=original?.levels??Array(100).fill(10);
     if(prior.length!==100)throw new RangeError('Invalid parent Voxel microtile');
@@ -215,8 +286,16 @@ export function composeHuntRiverBankTiles({
       // Stable 10cm-gridded stone/dirt shoulders, not a flat 1m square
       // wall or procedural triangle. The edge varies by one 10cm step.
       const noise=seededHash(seed,x*10+ix,z*10+iz)%5===0?1:0;
-      const cut=distance<=1?4+noise:distance<=3?3:
+      const shallowCut=distance<=1?4+noise:distance<=3?3:
         distance<=5?1:0;
+      // A dry bank center was previously a 0.9–1.0m vertical climb from
+      // the newly recessed true ford, making the Hunt route impassable.
+      // A *native* 10cm micro-voxel 50cm bank approach is traversable by
+      // the existing 55cm automatic hop, and eases into full-height grass.
+      // Keep the river-facing edge at least 10cm above 40cm-deep water.
+      const cut=steppingApproach
+        ?Math.max(shallowCut,distance<=7?5:distance<=8?3:1)
+        :shallowCut;
       const height=Math.min(prior[iz*10+ix],10-cut);
       if(height!==prior[iz*10+ix])changed=true;
       levels.push(height);

@@ -5,7 +5,7 @@ import {VoxelWorld} from '../src/voxel-world.mjs';
 import {TerrainEditLedger} from '../src/terrain-edit-ledger.mjs';
 import {V2TerrainPort} from '../src/terrain-integration-port.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from '../src/fluid/worldgen-fluid-adapter.mjs';
-import {huntFluidSurface} from '../src/fluid/hunt-fluid-surface.mjs';
+import {huntFluidSurface,terrainChannelLayer} from '../src/fluid/hunt-fluid-surface.mjs';
 
 function fixture(kind='water'){
   const world=new VoxelWorld();
@@ -82,7 +82,20 @@ test('Play Hunt runs Water V2 at fixed-step budget, feeds the shader and cleans 
   assert.match(host,/attachWorldGenFluid\(terrain\.port,playFluid\)/);
   assert.match(host,/playFluid\.step\(\{budget:96\}\)/);
   assert.match(host,/huntFluidSurface\(generatedSite\.layout,world,state\)/);
-  assert.match(host,/huntLava:playLava/);
+  assert.match(host,/huntLava:terrainChannelLayer\(playLightingLiquid,playLava\)/);
   assert.match(host,/detachPlayFluid\?\.\(\)/);
   assert.match(shader,/#bindHuntLava\(huntLava\)/);
+});
+
+// Native Water V2 is drawn as true depth-tested caps; the earlier material
+// map is NOT a second painted water plane on the Voxel river floor.
+test('Water V2 keeps one visual water authority without removing native lava or legacy channels',()=>{
+  const water=fixture('water'),lava=fixture('lava');
+  const oldMaterial={size:[1,1],origin:[0,0],data:new Uint8Array(4)};
+  assert.equal(terrainChannelLayer(water.fluid.snapshotSurface(),oldMaterial),null);
+  assert.equal(terrainChannelLayer(lava.fluid.snapshotSurface(),oldMaterial),oldMaterial);
+  assert.equal(terrainChannelLayer(null,oldMaterial),oldMaterial,
+    'old Water/Lava WorldGen previews remain unchanged without native water');
+  water.port.dispose();
+  lava.port.dispose();
 });

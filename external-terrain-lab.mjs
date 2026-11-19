@@ -74,7 +74,7 @@ import {
 import {huntLavaSurface,HUNT_CHANNEL_HEIGHT_OFFSET} from './src/hunt-lava-surface.mjs';
 import {collectEmissiveSurfaceCells} from './src/hunt-surface-emission.mjs';
 import {createWorldGenFluidEngine,attachWorldGenFluid} from './src/fluid/worldgen-fluid-adapter.mjs';
-import {huntFluidSurface} from './src/fluid/hunt-fluid-surface.mjs';
+import {huntFluidSurface,terrainChannelLayer} from './src/fluid/hunt-fluid-surface.mjs';
 import {HuntStreamedFluid} from './src/fluid/hunt-streamed-fluid.mjs';
 import {HuntFluidSave} from './src/fluid/hunt-fluid-save.mjs';
 import {HuntFluidSurfaceRenderer} from './src/fluid/hunt-fluid-surface-renderer.mjs';
@@ -1518,7 +1518,7 @@ function resetSite() {
         const structuralGravity=gravityPreview||terrainGravity;
         const terrainIdentity=huntTerrainSaveIdentity(saveIdentity,gravityMode,{
           structuralGravity,defaultEnabled:defaultGravity
-        })+(streamedWaterPreview&&!cellPreview?':connected-water-v4-breachable-banks':'');
+        })+(streamedWaterPreview&&!cellPreview?':connected-water-v5-recessed-fords':'');
         const terrainSave=new HuntTerrainSave(findingStorage,terrainIdentity);
         const fluidSave=streamedWaterPreview&&!cellPreview?
           new HuntFluidSave(findingStorage,terrainIdentity):null;
@@ -2168,7 +2168,8 @@ function frame(now) {
           pointVisibility:pointOcclusionEnabled?playPointVisibility:null,
           lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
-          huntCorruption:routePreview?.stop.profile.corruption,huntLava:playLava,
+          huntCorruption:routePreview?.stop.profile.corruption,
+           huntLava:terrainChannelLayer(playLightingLiquid,playLava),
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&

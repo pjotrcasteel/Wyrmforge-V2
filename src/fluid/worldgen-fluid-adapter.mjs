@@ -4,6 +4,7 @@
 import {
   ColumnFluidEngine,MAX_FLUID_COLUMNS,MAX_FLUID_SOURCES
 } from './column-fluid-engine.mjs';
+import {WATER_SEAM_TRANSFER_UNITS} from './fluid-seam-links.mjs';
 
 export const WORLDGEN_FLUID_SCHEMA='wyrmforge.fluid-worldgen-adapter.v1';
 const MAX_VERTICAL_SCAN=128;
@@ -127,6 +128,21 @@ export function createWorldGenFluidEngine(layout,terrain,{
       return ax*ax+az*az-(bx*bx+bz*bz)||a.z-b.z||a.x-b.x;
     })
     .slice(0,MAX_FLUID_SOURCES);
+  // Graph-streamed head/tail sources MUST fit through one real 1m Voxel
+  // region/link seam. The old eight-inlet head could inject up to 24 units
+  // per tick while only TWO could cross each seam, visibly flooding dry
+  // microbanks after 240 steps. Preserve broad authored water geometry, but
+  // choose a small physical mouth with combined flux <= seam capacity.
+  const boundaryInlets=boundaryRole==='head'?
+    mouth.slice(0,WATER_SEAM_TRANSFER_UNITS):mouth;
+  const boundaryOutlets=boundaryRole==='tail'?
+    exits.slice(0,WATER_SEAM_TRANSFER_UNITS):exits;
+  const inletRate=boundaryRole==='head'?
+    Math.min(sourceRate,Math.ceil(WATER_SEAM_TRANSFER_UNITS/
+      Math.max(1,boundaryInlets.length))):sourceRate;
+  const outletRate=boundaryRole==='tail'?
+    Math.ceil(WATER_SEAM_TRANSFER_UNITS/
+      Math.max(1,boundaryOutlets.length)):sourceRate;
   // The river grammar already publishes the physical downstream heading on
   // each authored bed cell. Keep one bounded, cardinal current per cell,
   // constrained to a real neighboring river cell at equal/lower solid height.
@@ -169,14 +185,15 @@ export function createWorldGenFluidEngine(layout,terrain,{
     // terminal outflow. Internal region/link mouths are physical interfaces,
     // NOT independently spawned fluid sources or sinks.
     sources:['isolated','head'].includes(boundaryRole)?
-      mouth.map(({x,z,y})=>({
-        x,z,surfaceY:y+initialDepth/10,rate:sourceRate
+      boundaryInlets.map(({x,z,y})=>({
+        x,z,surfaceY:y+initialDepth/10,rate:inletRate
       })):[],
     outlets:['isolated','tail'].includes(boundaryRole)?
-      exits.map(({x,z,y})=>({
+      boundaryOutlets.map(({x,z,y})=>({
         x,z,surfaceY:y+initialDepth/10,
-        rate:Math.min(10,Math.max(sourceRate,
-          Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
+        rate:boundaryRole==='tail'?outletRate:
+          Math.min(10,Math.max(sourceRate,
+            Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
       })):[],
     currents
   });
@@ -185,8 +202,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
       x:source.x,z:source.z,kind:channel.kind
     }),
     channelCellCount:floorCells.size,
-    inletCellCount:mouth.length,
-    outletCellCount:exits.length,
+    inletCellCount:boundaryInlets.length,
+    outletCellCount:boundaryOutlets.length,
     currentCellCount:currents.length,
     channelDepthUnits:initialDepth
   });

@@ -69,8 +69,14 @@ test('WorldGen materializes a real physical stone riverbed through the 8m link',
       for(const point of proposal.points.filter(p=>p.bandId===band.id)){
         const y=channel.get(point.x+','+point.z)?.y;
         assert.ok(Number.isSafeInteger(y));
-        assert.ok(y===earthwork.bedFloorY||y===earthwork.bedFloorY+1,
-          'physical crossing is either recessed stream or authored 1m shallow ford');
+        // WAT-18 must recess some native river cells below the original
+        // connector grade to keep the sustained 70-80cm water head under
+        // real 10cm grass edges. The previous equality incorrectly forbade
+        // any real deeper stone bed. Preserve a bounded +/- physical grade
+        // here; the separate full actor-journey test checks that crossing the
+        // specifically protected shallow fords remains possible.
+        assert.ok(y>=earthwork.bedFloorY-2&&y<=earthwork.bedFloorY+1,
+          'physical stone crossing must stay within the authored 2m riverbed recess');
         assert.equal(port.materialAt(point.x,y-1,point.z),3,
           'true WorldGen/Voxel stone bed required at '+point.x+','+point.z+
           ' raw='+rawAt(earthwork.bands,point.x,y-1,point.z));

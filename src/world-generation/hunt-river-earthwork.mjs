@@ -4,8 +4,9 @@
 // A host must still publish these exact definitions before opening Fluid V2.
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
 import {
-  expandHuntRiverCorridor,prepareHuntBreachableBankTerraces,
-  composeHuntRiverBankTiles,excludeHuntRiverPlacements
+  expandHuntRiverCorridor,recessHuntRiverBelowGrass,
+  prepareHuntBreachableBankTerraces,composeHuntRiverBankTiles,
+  excludeHuntRiverPlacements
 } from './hunt-river-morphology.mjs';
 
 export const HUNT_RIVER_EARTHWORK_SCHEMA='wyrmforge.hunt-river-earthwork.v1';
@@ -152,6 +153,63 @@ function channelForBand(band,part,grade,changes){
   });
 }
 
+// A recessed pocket is not enough: Water V2 cannot sustain a river that
+// must climb one full metre back UP to its original outlet. The previous
+// local-only cut passed the initial bank-height test, but accumulated 1.2m
+// deep water after 240 fixed steps and overtopped grass again.
+//
+// Propagate newly lowered native stone beds only in the *authored downstream
+// current direction* until every selected outflow neighbor is level/lower.
+// This remains WorldGen ownership; no fluid values, new sources or shader
+// offsets are fabricated. Existing genuine upstream falls stay intact.
+function gradeHuntRiverDownstream(
+  band,part,grade,changes,{reverse=false,fords=new Set()}={}
+){
+  const prepared=channelForBand(band,part,grade,changes)
+    .riverChannels[0].floor.map(cell=>({...cell}));
+  const byId=new Map(prepared.map(cell=>[key(cell.x,cell.z),cell]));
+  const dirs=[[0,-1],[1,0],[0,1],[-1,0]];
+  const pathKeys=new Set(part.map(cell=>key(cell.x,cell.z)));
+  const deltaX=(part.at(-1).x-part[0].x)*(reverse?-1:1);
+  const deltaZ=(part.at(-1).z-part[0].z)*(reverse?-1:1);
+  let lowered=0;
+  // Requeue only cells whose native stone level was actually lowered.
+  // A descending 1m-to-1m step cannot form a hidden dam downstream.
+  const queue=[...prepared];
+  for(let cursor=0;cursor<queue.length;cursor++){
+    const cell=queue[cursor];
+    const authored=Number.isFinite(cell.flowX)&&
+      Number.isFinite(cell.flowZ)&&(cell.flowX!==0||cell.flowZ!==0);
+    // Original WorldGen river directions are already downstream; newly
+    // planned connector paths may be traversed in the reverse direction.
+    const factor=reverse&&pathKeys.has(key(cell.x,cell.z))?-1:1;
+    const vx=authored?cell.flowX*factor:deltaX;
+    const vz=authored?cell.flowZ*factor:deltaZ;
+    const targets=dirs.map(([dx,dz])=>{
+      const next=byId.get(key(cell.x+dx,cell.z+dz));
+      const alignment=dx*vx+dz*vz;
+      return next&&alignment>0?{next,alignment}:null;
+    }).filter(Boolean).sort((a,b)=>b.alignment-a.alignment||
+      a.next.z-b.next.z||a.next.x-b.next.x);
+    if(!targets.length)continue;
+    const next=targets[0].next;
+    if(next.y<=cell.y)continue;
+    const nkey=key(next.x,next.z);
+    const original=changes.get(nkey);
+    // Do not turn a WorldGen port-to-port ford into an impassable
+    // extra-metre excavation while downstream-grade corrections propagate.
+    if(!original||original.dryBank||fords.has(nkey))continue;
+    next.y=cell.y;
+    changes.set(nkey,{...original,floorY:next.y});
+    queue.push(next);
+    lowered++;
+    if(lowered>prepared.length*16){
+      throw new Error('WorldGen downstream river grading failed to converge');
+    }
+  }
+  return lowered;
+}
+
 // Requires a real WorldGen graph and one of its validated proposals.
 // Return separate changed **band definitions** for the same original graph;
 // no edit is applied to a live terrain port and no snapshot is silently reset.
@@ -189,13 +247,13 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const fords=riverFordCells(region,{floor:[
       ...(existingChannel?.floor??[]),...points
     ]});
-    // An already-authored waterbed is Voxel terrain too. If we only carve
-    // the linking centerline, the broad existing river sits on the surface
-    // and looks like a blue overlay. Cut every actual WorldGen channel cell;
-    // NEVER modify nearby dry bank columns, paths or protected grass.
+    // Water V2 MUST sit below the grass even at the crossing: leaving
+    // an existing authored ford at its old (grass-level) floor seeded 40cm
+    // of water ABOVE the adjacent 10cm microbank. Every actually wet channel
+    // gets a real Voxel excavation. Safe walking/crossing is regression
+    // checked separately; dry protected roads are not altered.
     for(const cell of existingChannel?.floor??[]){
       const id=key(cell.x,cell.z);
-      if(fords.has(id))continue; // original shallow ford remains a real walking route
       changes.set(id,{
         floorY:cell.y-HUNT_RIVER_RECESS_METRES
       });
@@ -204,10 +262,11 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       const id=key(point.x,point.z);
       if(covered.has(id))throw new Error('Overlapping WorldGen channel bands');
       covered.add(id);
-      // Shallow rocky ford at a real authored east/west route crossing.
-      // Other channel cells are fully recessed. The ford uses the exact
-      // earlier passable physical grade, never an invented shader bridge.
-      const desired=fords.has(id)?grade+HUNT_RIVER_RECESS_METRES:grade;
+      // The crossing remains a true solid stone bed with water above it,
+      // but can no longer keep a wet one-metre ford at grass elevation.
+      // A shorter bank step is handled by the native Voxel terrain, not by
+      // raising the liquid and painting a blue rectangle on the walking path.
+      const desired=grade;
       changes.set(id,{floorY:Math.min(desired,
         changes.get(id)?.floorY??desired)});
     }
@@ -217,6 +276,14 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const widened=expandHuntRiverCorridor(band,points,grade,changes,landform,{
       maxCutMetres
     });
+    // An old riverbed can sit ABOVE the adjacent dry bank. Recess each true
+    // wet bank contact using its original physical 10cm grass shoulder.
+    const lowerBankCount=recessHuntRiverBelowGrass(
+      band,changes,widened.columns,fords);
+    const downstreamGradeCount=gradeHuntRiverDownstream(
+      band,points,grade,changes,{
+        reverse:proposal.upstream!==proposal.fromRegionId,fords
+      });
     const wetCount=changes.size;
     // These are deliberately DRY, lower native Voxel banks. The water
     // footprint and the existing shallow traversal fords do not change.
@@ -243,7 +310,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     }
     const raw=carveRuns(band.definition.runs,changes,heights,maxFillMetres);
     const shoreline=composeHuntRiverBankTiles({
-      band,part:points,changes,columns:widened.columns
+      band,part:points,changes,columns:widened.columns,fords
     });
     const surfaceTiles=shoreline.tiles;
     const definition=terrainAdapter({
@@ -258,6 +325,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
         lateralWetCells:widened.addedWetCells,
         bankTerraceColumns:Object.freeze(terraces),bankTerraceCount:terraces.length,
         bankMicroTiles:shoreline.bankTiles,
+        lowerBankCount,downstreamGradeCount,
         fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
