@@ -112,6 +112,49 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
 
 const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
 
+// Keep actual Water V2 head below the LOWEST adjacent dry 10cm grass
+// microbank. Simply recessing every channel 1m below its OLD riverbed was
+// insufficient: the original river could be HIGHER than neighboring grass.
+// This is a native WorldGen/Voxel floor adjustment, never a render offset.
+export function recessHuntRiverBelowGrass(band,changes,columns){
+  if(!band?.definition||!(changes instanceof Map)||!(columns instanceof Map)){
+    throw new TypeError('Expected native WorldGen wet bank floor planning');
+  }
+  const tiles=new Map((band.definition.surfaceTiles??[]).map(tile=>
+    [tile.x+','+tile.z+','+tile.y,tile]));
+  let lowered=0;
+  for(const [id,bed] of [...changes]){
+    if(bed.dryBank)continue;
+    const [x,z]=id.split(',').map(Number);
+    let target=bed.floorY;
+    for(const [dx,dz] of DIRECTIONS){
+      const bx=x+dx,bz=z+dz,bankId=key(bx,bz);
+      if(changes.has(bankId))continue;
+      const bank=columns.get(bankId);
+      if(!bank||bank.material!==1)continue;
+      const tile=tiles.get(key(bx,bz)+','+bank.topVoxelY);
+      let rim=bank.topY-.5; // WAT-16 and dry ford ramp: max 50cm edge taper
+      if(tile?.levels?.length===100){
+        let lowest=10;
+        for(let t=0;t<10;t++){
+          const ix=dx===1?0:dx===-1?9:t;
+          const iz=dz===1?0:dz===-1?9:t;
+          lowest=Math.min(lowest,tile.levels[iz*10+ix]);
+        }
+        rim=Math.min(rim,tile.y+lowest/10);
+      }
+      // An integer Voxel water floor plus the seeded 40cm Water V2 head
+      // must remain >=10cm BELOW the actual dry rim at its worst pixel.
+      target=Math.min(target,Math.floor(rim-.5+1e-6));
+    }
+    if(target<bed.floorY){
+      changes.set(id,{...bed,floorY:target});
+      lowered++;
+    }
+  }
+  return lowered;
+}
+
 // Riverbank crests can be 3-5m above a recessed 40cm stream. A normal 2m
 // Fireball then cannot physically connect a crater to Water V2. Make a FEW
 // natural, separated dry stone shelves near the authored river instead of
