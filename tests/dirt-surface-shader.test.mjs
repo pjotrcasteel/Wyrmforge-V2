@@ -21,3 +21,14 @@ test('dirt appearance does not alter the authoritative material IDs or geometry'
   assert.doesNotMatch(shader, /world\.set\(/);
   assert.match(shader, /abs\(vMaterial - 2\.0\) < 0\.5/);
 });
+
+test('forest bank weathering is seamless and remains a pure material receiver',()=>{
+  assert.match(shader,/vec3 huntWoodlandBankSurface\(vec3 surface,int material\)/);
+  assert.match(shader,/uHuntGrassArt/);
+  assert.match(shader,/abs\(vNormal\.y\)>\.5/);
+  assert.match(shader,/uHuntCorruption\.z>\.25/);
+  assert.match(shader,/vWorld\.zy:vWorld\.xy/);
+  assert.match(shader,/mix\(bank,moss,coverage\*\.46\)/);
+  assert.match(shader,/linearAlbedo=huntWoodlandBankSurface\(linearAlbedo,int\(vMaterial\)\)/);
+  assert.doesNotMatch(shader,/materialAtPoint|world\.setMicroSurfaceTile/);
+});
