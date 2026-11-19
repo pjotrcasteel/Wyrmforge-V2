@@ -7,6 +7,7 @@ export const HUNT_RIVER_MORPHOLOGY_SCHEMA='wyrmforge.hunt-river-morphology.v1';
 export const MAX_RIVER_LATERAL_CELLS=256;
 export const MAX_RIVER_BANK_MICRO_TILES=64;
 export const MAX_RIVER_BREACHABLE_BANK_COLUMNS=12;
+export const MAX_RIVER_INTERIOR_ISLETS=24;
 const key=(x,z)=>x+','+z;
 const DIRECTIONS=[[1,0],[-1,0],[0,1],[0,-1]];
 const finiteCell=cell=>Number.isSafeInteger(cell?.x)&&Number.isSafeInteger(cell?.z);
@@ -108,6 +109,58 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
   }
   return Object.freeze({schema:HUNT_RIVER_MORPHOLOGY_SCHEMA,
     addedWetCells:created,columns});
+}
+
+// A single full-metre DRY Voxel surrounded by four truly wet riverbed
+// columns makes a black rectangular "hole" inside a broad blue pool. Close
+// only that accidental one-cell gap by excavating REAL stone and publishing
+// an additional wet channel cell. Never fake water over dry Voxel, remove
+// road material, erase a larger stone island, or modify a walking shoulder.
+// This is a one-pass bounded topology repair, not flood fill.
+export function closeHuntRiverInteriorIslets({
+  band,changes,landform,columns,
+  maxCells=MAX_RIVER_INTERIOR_ISLETS,maxCutMetres=3
+}={}){
+  if(!band?.definition?.runs||!(changes instanceof Map)||!landform||
+      !(columns instanceof Map)||!Number.isSafeInteger(maxCells)||
+      maxCells<0||maxCells>MAX_RIVER_INTERIOR_ISLETS||
+      !Number.isSafeInteger(maxCutMetres)||maxCutMetres<1||maxCutMetres>3){
+    throw new TypeError('Expected bounded native Voxel river islet inputs');
+  }
+  const wet=new Map((band.fluidLayout?.riverChannels?.[0]?.floor??[])
+    .map(cell=>[key(cell.x,cell.z),{
+      x:cell.x,z:cell.z,floorY:changes.get(key(cell.x,cell.z))?.floorY??cell.y,
+      flowX:cell.flowX??0,flowZ:cell.flowZ??0
+    }]));
+  for(const [id,change] of changes){
+    if(change.dryBank)continue;
+    const [x,z]=id.split(',').map(Number);
+    wet.set(id,{x,z,...change});
+  }
+  const candidates=new Map();
+  for(const cell of wet.values())for(const [dx,dz] of DIRECTIONS){
+    const x=cell.x+dx,z=cell.z+dz,id=key(x,z);
+    if(wet.has(id)||candidates.has(id)||!containsHuntLandform(landform,x,z)||
+        withinAuthoredTravelShoulder(landform,x,z))continue;
+    const solid=columns.get(id);
+    if(!solid||![1,3].includes(solid.material))continue;
+    const ring=DIRECTIONS.map(([rx,rz])=>wet.get(key(x+rx,z+rz)));
+    if(ring.some(neighbor=>!neighbor))continue;
+    const floors=ring.map(neighbor=>neighbor.floorY);
+    const minimum=Math.min(...floors),maximum=Math.max(...floors);
+    const cut=solid.topY-minimum;
+    if(maximum-minimum>1||cut<1||cut>maxCutMetres)continue;
+    const flow=ring.find(neighbor=>neighbor.flowX||neighbor.flowZ)??ring[0];
+    candidates.set(id,{x,z,floorY:minimum,flowX:flow.flowX??0,
+      flowZ:flow.flowZ??0,lateral:true,interiorIslet:true});
+  }
+  let repaired=0;
+  const ordered=[...candidates.values()].sort((a,b)=>a.z-b.z||a.x-b.x);
+  for(const candidate of ordered.slice(0,maxCells)){
+    changes.set(key(candidate.x,candidate.z),candidate);
+    repaired++;
+  }
+  return repaired;
 }
 
 const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
