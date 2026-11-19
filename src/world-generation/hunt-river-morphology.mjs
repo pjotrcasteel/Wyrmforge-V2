@@ -131,7 +131,11 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
       const bx=x+dx,bz=z+dz,bankId=key(bx,bz);
       if(changes.has(bankId))continue;
       const bank=columns.get(bankId);
-      if(!bank||bank.material!==1)continue;
+      // WAT-18 regression: the raised river borders authentic MICROVOXEL
+      // STONE (material 3), not only grass (1). Ignoring those solid stone
+      // shore tiles left water at 3.4m next to a 2.8m physical rim.
+      // Preserve authored roads (2) and sample both grass/stone dry banks.
+      if(!bank||![1,3].includes(bank.material))continue;
       const tile=tiles.get(key(bx,bz)+','+bank.topVoxelY);
       let rim=bank.topY-.5; // WAT-16 and dry ford ramp: max 50cm edge taper
       if(tile?.levels?.length===100){
