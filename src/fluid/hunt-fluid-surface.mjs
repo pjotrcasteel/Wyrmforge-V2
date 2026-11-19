@@ -36,3 +36,13 @@ export function huntFluidSurface(layout,world,surface){
     floor,from:channel.from,to:channel.to,kind:channel.kind
   }]},world);
 }
+
+// The physically simulated Water V2 surface is rendered by a depth-tested
+// independent mesh. Never also project the old channel material onto the
+// Voxel riverbed: that produced blue 1m paint squares over physical water.
+// Preserve the legacy WorldGen material and authored lava when no native
+// Water V2 mesh is active.
+export function terrainChannelLayer(fluidSurface,authoredChannelLayer){
+  return fluidSurface?.schema===FLUID_SURFACE_SCHEMA&&fluidSurface.kind==='water'
+    ?null:authoredChannelLayer;
+}
