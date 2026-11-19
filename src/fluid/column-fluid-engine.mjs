@@ -251,7 +251,12 @@ export class ColumnFluidEngine {
     // despite a valid upstream inlet. Never push uphill through a bank.
     const reservedFilm=this.#currents.has(from)?1:0;
     const available=Math.max(0,amount-reservedFilm);
-    const rate=current?Math.min(RATE[this.#kind],2):
+    // WorldGen injects at most 3 units per active inlet per step. Keeping
+    // a genuine downstream current at only 2 units formed permanent backwater
+    // above recessed banks after ~240 steps, even though the outlet remained
+    // open. Match the source rate on cardinal flowing channels; conservation
+    // and the same bounded column-work budget are unchanged.
+    const rate=current?Math.min(RATE[this.#kind],3):
       Math.min(RATE[this.#kind],Math.floor(difference/2));
     const moved=Math.min(rate,available,
       MAX_DEPTH-this.#depths[to]-this.#incoming[to]);
