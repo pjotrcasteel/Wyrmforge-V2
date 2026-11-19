@@ -4,7 +4,8 @@
 // A host must still publish these exact definitions before opening Fluid V2.
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
 import {
-  expandHuntRiverCorridor,recessHuntRiverBelowGrass,
+  expandHuntRiverCorridor,closeHuntRiverInteriorIslets,
+  recessHuntRiverBelowGrass,
   prepareHuntBreachableBankTerraces,composeHuntRiverBankTiles,
   excludeHuntRiverPlacements
 } from './hunt-river-morphology.mjs';
@@ -276,6 +277,13 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const widened=expandHuntRiverCorridor(band,points,grade,changes,landform,{
       maxCutMetres
     });
+    // Only fully enclosed, unprotected 1m stone holes are excavated.
+    // The new wet footprint exists in native Voxel and the fluid channel,
+    // not as a painted water patch over still-solid terrain.
+    const interiorIsletsClosed=closeHuntRiverInteriorIslets({
+      band,changes,landform,columns:widened.columns,
+      maxCutMetres:Math.min(3,maxCutMetres)
+    });
     // An old riverbed can sit ABOVE the adjacent dry bank. Recess each true
     // wet bank contact using its original physical 10cm grass shoulder.
     const lowerBankCount=recessHuntRiverBelowGrass(
@@ -322,7 +330,8 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     edits.push(Object.freeze({
       ...band,definition,fluidLayout:channelForBand(band,points,grade,changes),
       earthwork:Object.freeze({cellCount:points.length,recessedCells:wetCount,
-        lateralWetCells:widened.addedWetCells,
+        lateralWetCells:widened.addedWetCells+interiorIsletsClosed,
+        interiorIsletsClosed,
         bankTerraceColumns:Object.freeze(terraces),bankTerraceCount:terraces.length,
         bankMicroTiles:shoreline.bankTiles,
         lowerBankCount,downstreamGradeCount,

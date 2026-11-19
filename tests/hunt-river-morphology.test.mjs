@@ -112,7 +112,14 @@ test('WAT-16: sparse 10cm REAL dry-bank microsteps taper into the water',()=>{
       assert.ok(tile.levels.some(level=>level>=5&&level<=9),
         'the physical shoreline must contain submeter heights');
       assert.ok(tile.levels.every(level=>
-        Number.isSafeInteger(level)&&level>=1&&level<=10));
+        Number.isSafeInteger(level)&&level>=0&&level<=10));
+      const prior=old.get(tile.x+','+tile.y+','+tile.z);
+      for(let i=0;i<tile.levels.length;i++){
+        if(tile.levels[i]===0){
+          assert.equal(prior?.levels[i],0,
+            'sculpting stone must preserve pre-existing empty microcells, never create a new hole');
+        }
+      }
       const neighbor=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>
         wet.has(key(tile.x+dx,tile.z+dz)));
       assert.ok(neighbor,'micro shoreline must touch a REAL wet voxel');

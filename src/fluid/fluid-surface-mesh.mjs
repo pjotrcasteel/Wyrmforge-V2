@@ -1,7 +1,7 @@
-// Pure Water V2 presentation geometry. Voxel remains the only solid terrain
-// authority, and ColumnFluidEngine owns volume and 10cm vertical levels.
-// A thin 10cm horizontal silhouette is refined only beside *higher* dry banks:
-// water cannot secretly cross a bank or flood a dry Voxel column.
+// Pure Water V2 presentation geometry. Voxel owns solid terrain and
+// ColumnFluidEngine owns liquid volume and free-surface height. Dry-shore
+// contours and diagonal bank corners are quantized at 10cm; no visual
+// geometry can extend into an actually dry Voxel/Water V2 column.
 import {FLUID_SURFACE_SCHEMA,MAX_FLUID_COLUMNS} from './column-fluid-engine.mjs';
 
 export const FLUID_SHORE_MICRO_STEPS=10;
@@ -23,16 +23,23 @@ const DIRECTIONS=Object.freeze([
 ]);
 const key=(x,z)=>x+','+z;
 
-// Deterministic, nonperiodic pixel chips in world coordinates. Avoid smooth
-// triangles/warping and never carve the actual terrain's material or collision.
-function shoreCut(x,z,side,segment){
-  let hash=Math.imul(x,73856093)^Math.imul(z,19349663)^
-    Math.imul(side+1,83492791)^Math.imul(segment+1,2654435761);
+// Each full-metre water cell used to be almost entirely rectangular:
+// shoreline cuts were 0cm most of the time and never exceeded 20cm.
+// Sample a COHERENT, world-anchored 20-40cm physical-bank silhouette at
+// 10cm intervals. Narrow 1m streams retain >=60cm of visible water; broad
+// basins have a stronger natural margin. The exact fluid volume is unchanged.
+function shoreCut(x,z,side,segment,narrow){
+  const along=side<2?z*10+Math.floor(segment/2):
+    x*10+Math.floor(segment/2);
+  const across=side===0?x*10+10:side===1?x*10:
+    side===2?z*10+10:z*10;
+  let hash=Math.imul(along+1,73856093)^
+    Math.imul(across+1,19349663);
   hash=Math.imul(hash^(hash>>>16),2246822507);
   hash=Math.imul(hash^(hash>>>13),3266489909);
   const value=(hash^(hash>>>16))>>>0;
-  // Most pixels are flush, some inset 10cm and very few inset 20cm.
-  return value%11===0?2:value%3===0?1:0;
+  return narrow?1+(value%5===0?1:0):
+    2+(value%3===0?1:0)+(value%13===0?1:0);
 }
 
 function topQuad(x0,x1,z0,z1,height){
@@ -44,22 +51,30 @@ function topQuad(x0,x1,z0,z1,height){
   ];
 }
 
-// One compact top-face rectangle per span of adjacent 10cm pixels. Adjacent
-// rows with identical spans merge, so normal rivers keep one cap per column.
-function microShoreCaps(x,z,shore,height){
-  if(!shore.some(Boolean)){
+// One compact top-face rectangle per span of *actually wet* 10cm pixels.
+// Adjacent rows with equal spans merge, keeping mobile vertex counts bounded.
+// Diagonal dry bank cells matter too: a one-metre corner cannot remain a
+// visually square cutout merely because all four direct neighbors are wet.
+function microShoreCaps(x,z,shore,diagonal,height){
+  if(!shore.some(Boolean)&&!diagonal.some(Boolean)){
     return [topQuad(x,x+1,z,z+1,height)];
   }
+  const narrowX=shore[0]&&shore[1],narrowZ=shore[2]&&shore[3];
   const spans=[],previous=new Map();
   for(let row=0;row<FLUID_SHORE_MICRO_STEPS;row++){
     const next=new Map();
     let start=-1;
     for(let col=0;col<=FLUID_SHORE_MICRO_STEPS;col++){
-      const inside=col<FLUID_SHORE_MICRO_STEPS &&
-        (!shore[0]||col<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,0,row)) &&
-        (!shore[1]||col>=shoreCut(x,z,1,row)) &&
-        (!shore[2]||row<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,2,col)) &&
-        (!shore[3]||row>=shoreCut(x,z,3,col));
+      const diagCut=col<FLUID_SHORE_MICRO_STEPS&&(
+        (diagonal[0]&&col+row<3) ||
+        (diagonal[1]&&9-col+row<3) ||
+        (diagonal[2]&&col+9-row<3) ||
+        (diagonal[3]&&9-col+9-row<3));
+      const inside=col<FLUID_SHORE_MICRO_STEPS&&!diagCut &&
+        (!shore[0]||col<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,0,row,narrowX)) &&
+        (!shore[1]||col>=shoreCut(x,z,1,row,narrowX)) &&
+        (!shore[2]||row<FLUID_SHORE_MICRO_STEPS-shoreCut(x,z,2,col,narrowZ)) &&
+        (!shore[3]||row>=shoreCut(x,z,3,col,narrowZ));
       if(inside&&start<0)start=col;
       if((!inside||col===FLUID_SHORE_MICRO_STEPS)&&start>=0){
         const name=start+','+col;
@@ -186,7 +201,11 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     // floating caps before the falling parcel physically lands.
     const shoreline=neighbors.map(neighbor=>
       Boolean(neighbor&&neighbor.depth===0));
-    if(shoreline.some(Boolean))refinedShoreColumns++;
+    const diagonal=[[-1,-1],[1,-1],[-1,1],[1,1]].map(([dx,dz])=>{
+      const neighbor=at(x+dx,z+dz);
+      return Boolean(neighbor&&neighbor.depth===0);
+    });
+    if(shoreline.some(Boolean)||diagonal.some(Boolean))refinedShoreColumns++;
     // This is an existing physical lip with a lower, already wet receiving
     // column. Render a flowing fall only when Water V2 publishes that actual
     // downstream direction. A tall wall around a still pool is not a waterfall.
@@ -213,7 +232,7 @@ export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
     };
     // Left/right/south/north order is identical to DIRECTIONS. Cutting is
     // entirely inward from a wet column, never painted onto dry terrain.
-    const caps=microShoreCaps(x,z,shoreline,height);
+    const caps=microShoreCaps(x,z,shoreline,diagonal,height);
     for(const quad of caps)pushFace(quad,[0,1,0],flow,{
       mode:hasFallingEdge?3:0,
       landingY:hasFallingEdge?neighbors[fallingIndex].surfaceY:0

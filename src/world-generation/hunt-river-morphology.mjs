@@ -7,6 +7,7 @@ export const HUNT_RIVER_MORPHOLOGY_SCHEMA='wyrmforge.hunt-river-morphology.v1';
 export const MAX_RIVER_LATERAL_CELLS=256;
 export const MAX_RIVER_BANK_MICRO_TILES=64;
 export const MAX_RIVER_BREACHABLE_BANK_COLUMNS=12;
+export const MAX_RIVER_INTERIOR_ISLETS=24;
 const key=(x,z)=>x+','+z;
 const DIRECTIONS=[[1,0],[-1,0],[0,1],[0,-1]];
 const finiteCell=cell=>Number.isSafeInteger(cell?.x)&&Number.isSafeInteger(cell?.z);
@@ -79,10 +80,19 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
     const flowX=after.x-before.x,flowZ=after.z-before.z;
     if(!flowX&&!flowZ)continue;
     const sideways=Math.abs(flowZ)>=Math.abs(flowX)?[1,0]:[0,1];
-    // Always seek the first physical bank cell on both sides, with a sparse
-    // second outer column for natural, non-rectangular woodland width.
+    // Old widening put an identical +1m strip on BOTH sides of every
+    // point, then abruptly switched to the 1m seam: a rectangular blue
+    // patch joined to a narrow line. Taper naturally through 1m -> 2m ->
+    // uneven 2–4m woodland banks, using coarse world-anchored noise so
+    // neighboring rows do not independently flicker in width.
+    const endDistance=Math.min(i,part.length-1-i);
+    const coarseX=Math.floor(point.x/4),coarseZ=Math.floor(point.z/4);
+    const firstSide=seededHash(seed,coarseX,coarseZ)&1?1:-1;
     for(const sign of [-1,1]){
-      const reach=seededHash(seed,point.x,point.z,sign)%7===0?2:1;
+      const variation=seededHash(seed,coarseX,coarseZ,sign)%11;
+      const reach=endDistance===0?0:
+        endDistance===1?(sign===firstSide?1:0):
+        variation===0?0:variation>=6?2:1;
       for(let distance=1;distance<=reach&&created<maxCells;distance++){
         const x=point.x+sideways[0]*sign*distance;
         const z=point.z+sideways[1]*sign*distance;
@@ -108,6 +118,58 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
   }
   return Object.freeze({schema:HUNT_RIVER_MORPHOLOGY_SCHEMA,
     addedWetCells:created,columns});
+}
+
+// A single full-metre DRY Voxel surrounded by four truly wet riverbed
+// columns makes a black rectangular "hole" inside a broad blue pool. Close
+// only that accidental one-cell gap by excavating REAL stone and publishing
+// an additional wet channel cell. Never fake water over dry Voxel, remove
+// road material, erase a larger stone island, or modify a walking shoulder.
+// This is a one-pass bounded topology repair, not flood fill.
+export function closeHuntRiverInteriorIslets({
+  band,changes,landform,columns,
+  maxCells=MAX_RIVER_INTERIOR_ISLETS,maxCutMetres=3
+}={}){
+  if(!band?.definition?.runs||!(changes instanceof Map)||!landform||
+      !(columns instanceof Map)||!Number.isSafeInteger(maxCells)||
+      maxCells<0||maxCells>MAX_RIVER_INTERIOR_ISLETS||
+      !Number.isSafeInteger(maxCutMetres)||maxCutMetres<1||maxCutMetres>3){
+    throw new TypeError('Expected bounded native Voxel river islet inputs');
+  }
+  const wet=new Map((band.fluidLayout?.riverChannels?.[0]?.floor??[])
+    .map(cell=>[key(cell.x,cell.z),{
+      x:cell.x,z:cell.z,floorY:changes.get(key(cell.x,cell.z))?.floorY??cell.y,
+      flowX:cell.flowX??0,flowZ:cell.flowZ??0
+    }]));
+  for(const [id,change] of changes){
+    if(change.dryBank)continue;
+    const [x,z]=id.split(',').map(Number);
+    wet.set(id,{x,z,...change});
+  }
+  const candidates=new Map();
+  for(const cell of wet.values())for(const [dx,dz] of DIRECTIONS){
+    const x=cell.x+dx,z=cell.z+dz,id=key(x,z);
+    if(wet.has(id)||candidates.has(id)||!containsHuntLandform(landform,x,z)||
+        withinAuthoredTravelShoulder(landform,x,z))continue;
+    const solid=columns.get(id);
+    if(!solid||![1,3].includes(solid.material))continue;
+    const ring=DIRECTIONS.map(([rx,rz])=>wet.get(key(x+rx,z+rz)));
+    if(ring.some(neighbor=>!neighbor))continue;
+    const floors=ring.map(neighbor=>neighbor.floorY);
+    const minimum=Math.min(...floors),maximum=Math.max(...floors);
+    const cut=solid.topY-minimum;
+    if(maximum-minimum>1||cut<1||cut>maxCutMetres)continue;
+    const flow=ring.find(neighbor=>neighbor.flowX||neighbor.flowZ)??ring[0];
+    candidates.set(id,{x,z,floorY:minimum,flowX:flow.flowX??0,
+      flowZ:flow.flowZ??0,lateral:true,interiorIslet:true});
+  }
+  let repaired=0;
+  const ordered=[...candidates.values()].sort((a,b)=>a.z-b.z||a.x-b.x);
+  for(const candidate of ordered.slice(0,maxCells)){
+    changes.set(key(candidate.x,candidate.z),candidate);
+    repaired++;
+  }
+  return repaired;
 }
 
 const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
@@ -225,8 +287,9 @@ export function prepareHuntBreachableBankTerraces({
     Object.freeze({x,z,floorY,dryBank:true})));
 }
 
-// True, sparse 10cm micro-occupancy on EXISTING DRY grass. The inland
-// grass remains full-height; only the first 40cm at the shore is stepped.
+// True, sparse 10cm micro-occupancy on EXISTING DRY grass and exposed
+// stone outcrops. The inland landscape remains solid; only the first 40cm
+// at a real wet face is physically stepped.
 // We neither add decorative water nor rewrite the water-column solver floor.
 export function composeHuntRiverBankTiles({
   band,part,changes,columns,fords=new Set(),
@@ -246,7 +309,12 @@ export function composeHuntRiverBankTiles({
       const nx=x+dx,nz=z+dz,nid=key(nx,nz);
       if(changes.has(nid))continue;
       const bank=columns.get(nid);
-      if(!bank||bank.material!==1||bank.topY<=bed.floorY)continue;
+      // Real 1-2m STONE islands inside a pool also need chipped 10cm
+      // edges. The previous grass-only filter left full-size rectangular
+      // dark stone blocks in the iPhone river screenshot. Roads remain
+      // completely protected as authored solid walking terrain.
+      if(!bank||![1,3].includes(bank.material)||
+          bank.topY<=bed.floorY)continue;
       if(!candidates.has(nid)){
         candidates.set(nid,{x:nx,z:nz,bank,sides:new Set()});
       }
@@ -264,6 +332,12 @@ export function composeHuntRiverBankTiles({
     // before optional scenic bank detailing consumes the 64-tile budget.
     const fordFirst=Number(fordApproach(b))-Number(fordApproach(a));
     if(fordFirst)return fordFirst;
+    // Prefer exposed in-river stone over remote scenic grass when the
+    // bounded 64 microtile budget is tight. A natural rock is sculpted,
+    // not erased or flooded by a renderer-only fake.
+    const stoneFirst=Number(b.bank.material===3)-
+      Number(a.bank.material===3);
+    if(stoneFirst)return stoneFirst;
     const score=point=>Math.min(...part.map(p=>
       (p.x-point.x)**2+(p.z-point.z)**2));
     return score(a)-score(b)||a.z-b.z||a.x-b.x;
