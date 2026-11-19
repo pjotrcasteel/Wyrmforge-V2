@@ -64,8 +64,23 @@ test('Water V2 river stays at least 10cm below physically dry micro-grass edges 
             inspected++;
             const clearance=bankTop-water.surfaceY;
             if(clearance<.09999)violations.push({
+              bandId:band.id,
               x:tile.x,z:tile.z,waterX:channel.x,waterZ:channel.z,
-              bankTop,waterHead:water.surfaceY,clearance
+              bankTop,waterHead:water.surfaceY,clearance,
+              channelFloor:channel.y,actualWaterFloor:water.floorY,
+              physicalFloor:(()=>{
+                for(let y=15;y>=-20;y--){
+                  if(loader.terrain.port.materialAt(channel.x,y,channel.z))return y+1;
+                }
+                return null;
+              })(),
+              bankVoxelMaterial:loader.terrain.port.materialAt(tile.x,tile.y,tile.z),
+              prepared:band.earthwork.lowerBankCount,
+              allBands:earthwork.bands.map(b=>({
+                band:b.id,
+                channel:b.fluidLayout.riverChannels[0].floor.find(c=>
+                  c.x===channel.x&&c.z===channel.z)?.y??null
+              }))
             });
           }
         }
