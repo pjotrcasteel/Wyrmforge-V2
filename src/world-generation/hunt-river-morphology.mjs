@@ -80,10 +80,19 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
     const flowX=after.x-before.x,flowZ=after.z-before.z;
     if(!flowX&&!flowZ)continue;
     const sideways=Math.abs(flowZ)>=Math.abs(flowX)?[1,0]:[0,1];
-    // Always seek the first physical bank cell on both sides, with a sparse
-    // second outer column for natural, non-rectangular woodland width.
+    // Old widening put an identical +1m strip on BOTH sides of every
+    // point, then abruptly switched to the 1m seam: a rectangular blue
+    // patch joined to a narrow line. Taper naturally through 1m -> 2m ->
+    // uneven 2–4m woodland banks, using coarse world-anchored noise so
+    // neighboring rows do not independently flicker in width.
+    const endDistance=Math.min(i,part.length-1-i);
+    const coarseX=Math.floor(point.x/4),coarseZ=Math.floor(point.z/4);
+    const firstSide=seededHash(seed,coarseX,coarseZ)&1?1:-1;
     for(const sign of [-1,1]){
-      const reach=seededHash(seed,point.x,point.z,sign)%7===0?2:1;
+      const variation=seededHash(seed,coarseX,coarseZ,sign)%11;
+      const reach=endDistance===0?0:
+        endDistance===1?(sign===firstSide?1:0):
+        variation<2?0:variation===10?2:1;
       for(let distance=1;distance<=reach&&created<maxCells;distance++){
         const x=point.x+sideways[0]*sign*distance;
         const z=point.z+sideways[1]*sign*distance;
