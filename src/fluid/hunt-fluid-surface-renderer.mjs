@@ -366,6 +366,13 @@ export class HuntFluidSurfaceRenderer {
 
   // Pixel-based browser acceptance can isolate the waterfall ribbon and
   // its lower-pool landing separately, without changing the simulation.
+  // Browser visual QA only: the actual physical wet upper faces, never a
+  // hand-drawn region around the lava. Keep this out of the gameplay path.
+  projectedCapBounds(view){
+    return [...this.#projectedModeBounds(view,0),
+      ...this.#projectedModeBounds(view,3)];
+  }
+
   projectedRibbonBounds(view){
     return this.#projectedModeBounds(view,4);
   }
