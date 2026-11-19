@@ -1,0 +1,39 @@
+name: H08 real Hunt Wet Forest arrival geology
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/world-generation/map-kinds.mjs'
+      - 'src/world-generation/site-recipe.mjs'
+      - 'src/world-generation/world-generator.mjs'
+      - 'tests/wet-forest-arrival-erosion.test.mjs'
+      - '.github/witness/forest-arrival-geology.mjs'
+      - '.github/workflows/forest-arrival-geology.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-hunt-fissure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check physical WorldGen v2.7.19 and bounded erosion
+        run: node --test tests/wet-forest-arrival-erosion.test.mjs
+      - name: Install actual browser witness
+        run: npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+      - name: Show unchanged physical fissure from seeded real Hunt near the player's screenshot
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/forest-arrival-geology.mjs
+      - name: Retain north-west cliff screenshot with shadows both on and off
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: h08-forest-arrival-physical-geology
+          path: forest-arrival-erosion-evidence/
+          retention-days: 14
+          if-no-files-found: warn
