@@ -167,18 +167,31 @@ function addManeuverFlow(builder,kind) {
   }
 }
 
-// Two connected landforms beside the opening trail. The eastern face rises
-// abruptly out of the valley; the western stone cut narrows at both ends.
-// The normal route, encounter and escape grading still runs over this relief.
-function forestArrivalRelief(seed,x,z) {
+// Deep, connected geology beside the opening trail, rather than square
+// heightfield cutouts. Both formations retain their physical depth; only the
+// *boundaries* are gradually eroded. Old on/off thresholds dropped 4.6m at
+// one x/z coordinate and produced the brown, rectangular pits visible in the
+// seed-7 iPhone Hunt (shadow/normal-map changes could not fix that geometry).
+// Route/arena/escape grading still runs after the natural elevation pass.
+const smoothStep=(a,b,value)=>{
+  const t=Math.max(0,Math.min(1,(value-a)/(b-a)));
+  return t*t*(3-2*t);
+};
+export function forestArrivalRelief(seed,x,z) {
   const contour=siteNoise(seed,x,z,6,31)-.5;
   const shoulderX=7.1+.65*Math.sin((z+9)*.46)+contour;
   const shelf=Math.max(0,1-((x-9.3)/3.2)**2-((z+9)/4.3)**2);
-  const cliff=x>=shoulderX?8.4*Math.sqrt(shelf):0;
+  // Keep the tall physical stone escarpment, but erode the formerly abrupt
+  // west lip over 1.8m. The ellipse already limits the north/south ends.
+  const cliff=8.4*Math.sqrt(shelf)*
+    smoothStep(shoulderX-1.25,shoulderX+.55,x);
   const fissureX=-8.2+.85*Math.sin((z+15)*.67)+contour;
-  const fissureWidth=1.35*Math.max(0,1-((z+15)/2.9)**2);
-  const cut=Math.abs(x-fissureX)<fissureWidth?4.6:0;
-  return cliff-cut;
+  // Preserve a 4.6m central fissure, with smoothly tapering sides and ends.
+  // This creates real intermediate-height terrain, not a dark rectangle
+  // painted over an unchanged 4.6m cliff.
+  const across=1-smoothStep(.45,2.4,Math.abs(x-fissureX));
+  const along=1-smoothStep(1.5,3.8,Math.abs(z+15));
+  return cliff-4.6*across*along;
 }
 
 function forest(builder, context) {
@@ -195,7 +208,11 @@ function forest(builder, context) {
       return 2+broad+detail+relief+(profile?profile.relief(x,z):-wetHollow);
     },
     exposedStone: profile?.rock??0.94,
-    rockFaceThreshold:arrival?3:null
+    // The arrival's metre-scale fissure walls expose rock under a thin soil
+    // cap. Two thick dirt layers made the preserved cliff read as a brown
+    // rectangular slab; do not affect the other six forest region profiles.
+    soilDepth:arrival?1:2,
+    rockFaceThreshold:arrival?2:null
   });
   addNarrativePaths(builder,profile?.landmark??'forest-ruin','wet-forest',role==='horde'?8:7);
   addEscapeLayout(builder,'wet-forest');
