@@ -11,7 +11,7 @@ const server=spawn('python3',['-m','http.server',String(port),'--bind','127.0.0.
 });
 await mkdir(folder,{recursive:true});
 const report={schema:'wyrmforge.h08-forest-arrival-geology.v1',seed:7,
-  targetActor:[-4,-8],errors:[],screens:[],note:'Software Chromium, not device GPU acceptance'};
+  targetActor:[-1,-4],errors:[],screens:[],note:'Software Chromium, not device GPU acceptance'};
 let browser;
 try {
   let up=false;
@@ -38,7 +38,7 @@ try {
 window.__WyrmforgeEntryGeologyWitness={
   status:()=>({
     ready:Boolean(playActor&&active?.port&&renderer?.ready&&
-      renderer.statistics.triangles>1000&&!pendingMesh&&!pendingEdit),
+      renderer.statistics.triangles>1000&&!pendingMesh&&!pendingEdit&&!playActor.error),
     actor:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null,
     frame:playWoodlandPaintStats.snapshot.frames,
     triangles:renderer?.statistics.triangles??0,
@@ -47,12 +47,16 @@ window.__WyrmforgeEntryGeologyWitness={
   }),
   inspect:(x,z)=>{
     if(!playActor||!active?.port)return false;
-    const support=active.port.raycast({
-      origin:[x,32,z],direction:[0,-1,0],maxDistance:43
+    // Spawn through actual Voxel actor rules, not by mutating a running
+    // actor state with incompatible old-position/collision metadata.
+    const bounds=playConnected?.footprint??generatedSite?.layout?.footprint;
+    if(!bounds)return false;
+    const region={bounds,origin:{x:0,z:0}};
+    const actor=spawnHuntExplorer(active.world,region,{
+      direction:'south',at:{x:x-.5,z:z+2}
     });
-    if(!support?.point)return false;
-    // This is a local test-only spectator anchor. No Voxel or Water edits.
-    playActor={...playActor,x,z,y:support.point.y+.9,vy:0,grounded:true};
+    if(actor.error)return false;
+    playActor=actor;
     playFollowCamera.reset(playActor);
     resetPlayInput();
     return true;
@@ -71,12 +75,12 @@ window.__WyrmforgeEntryGeologyWitness={
   const initial=await page.evaluate(()=>window.__WyrmforgeEntryGeologyWitness.status());
   report.initial=initial;
   const moved=await page.evaluate(()=>
-    window.__WyrmforgeEntryGeologyWitness.inspect(-4,-8));
+    window.__WyrmforgeEntryGeologyWitness.inspect(-1,-4));
   if(!moved)throw Error('Cannot locate real bedrock for northern fissure spectator anchor');
   await page.waitForFunction(()=>{
     const status=window.__WyrmforgeEntryGeologyWitness.status();
-    return status.ready&&Math.abs(status.actor.x+4)<.2&&
-      Math.abs(status.actor.z+8)<.2&&status.foot&&
+    return status.ready&&Math.abs(status.actor.x+1)<.2&&
+      Math.abs(status.actor.z+4)<.2&&status.foot&&
       Math.abs(status.foot.x-201)<20;
   },null,{timeout:60000});
   const snap=async(name,enabled)=>{
