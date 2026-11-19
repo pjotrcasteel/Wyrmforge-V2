@@ -322,12 +322,15 @@ vec3 huntWoodlandBankSurface(vec3 surface,int material) {
   float grit=soilHash(floor(face*9.0)+vec2(13.0,41.0));
   float coverage=smoothstep(.26,.74,mossBed*.73+roots*.27);
   vec3 earth=srgbToLinearColor(vec3(.50,.375,.265));
-  vec3 moss=srgbToLinearColor(vec3(.34,.43,.245));
-  // Retain authored soil/stone look. No per-voxel material replacement,
-  // hard grid checkerboards, additional textures or per-fragment terrain rays.
-  vec3 bank=mix(surface,earth,.30);
-  bank=mix(bank,moss,coverage*.46);
-  return bank*(.94+.11*roots+.05*grit);
+  vec3 mineral=srgbToLinearColor(vec3(.54,.54,.47));
+  vec3 moss=srgbToLinearColor(vec3(.37,.48,.27));
+  // A genuinely exposed multi-metre soil bank should read as weathered
+  // mineral and rooted woodland, not an uninterrupted dark brown slab.
+  // Its authoritative dirt ID, destructibility and Voxel collision do not
+  // change. Small grass voxel edges retain more of their original earth.
+  vec3 bank=mix(surface,material==2?mineral:earth,material==2?.66:.32);
+  bank=mix(bank,moss,coverage*(material==2?.38:.56));
+  return bank*(.95+.10*roots+.05*grit);
 }
 
 void main() {
