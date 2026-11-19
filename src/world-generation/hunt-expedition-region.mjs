@@ -55,27 +55,19 @@ function naturalHeight(plan,region,x,z,seed) {
     x-bounds.minX,bounds.maxX-x,z-bounds.minZ,bounds.maxZ-z
   );
   const interior=smooth(clamp((fromEdge-2)/8,0,1));
-  const kind=plan.recipe.kind;
-  const forest=kind==='wet-forest';
-  // The calm Wet Forest must not generate deep, isolated 2-3m mud pits.
-  // Its old +/-2.8m height noise exposed rectangular brown soil walls next
-  // to the level six-metre walking lanes. Keep subtle one-metre landforms,
-  // while highlands, mountain cliffs and volcanic sites retain full relief.
-  const global=(forest?1.1:2)*(siteNoise(seed,x,z,20,11)-0.5);
+  const global=2*(siteNoise(seed,x,z,20,11)-0.5);
   const highlands=['forest-highland','mountain-pass','scorched-approach',
-    'mini-boss-arena','wyrm-lair'].includes(kind);
-  const rocky=['scorched-approach','mini-boss-arena','wyrm-lair'].includes(kind);
-  const amplitude=rocky?5:highlands?3.5:forest?1.5:2;
+    'mini-boss-arena','wyrm-lair'].includes(plan.recipe.kind);
+  const rocky=['scorched-approach','mini-boss-arena','wyrm-lair']
+    .includes(plan.recipe.kind);
+  const amplitude=rocky?5:highlands?3.5:2;
   const ridges=(siteNoise(seed,x,z,15,12)-0.5)*amplitude;
-  const spur=(siteNoise(seed,x,z,9,13)-0.5)*(forest?0.85:1.6);
-  const side=region.role==='flank'?(forest?0.7:1.2):
-    region.role==='investigation'?(forest?0.4:0.6):0;
+  const spur=(siteNoise(seed,x,z,9,13)-0.5)*1.6;
+  const side=region.role==='flank'?1.2:
+    region.role==='investigation'?0.6:0;
   const away=Math.min(1,Math.hypot(x-origin.x,z-origin.z)/12);
-  const natural=PORT_Y+global+interior*(ridges+spur+side*away);
-  // Quantized soil faces may rise a metre in forest; 2m+ rock cutouts
-  // belong to their authored mountain/volcanic strategies, not an arrival.
-  const bounded=forest?clamp(natural,PORT_Y-1.24,PORT_Y+1.24):natural;
-  return clamp(Math.round(bounded),2,18);
+  return clamp(Math.round(PORT_Y+global+
+    interior*(ridges+spur+side*away)),2,18);
 }
 function cellHeight(plan,region,x,z,ports,seed) {
   const nature=naturalHeight(plan,region,x,z,seed);
