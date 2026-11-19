@@ -10,6 +10,9 @@ export function shadowStampAlpha(x,y,size=SHADOW_STAMP_PIXELS){
   if(!Number.isInteger(size)||size<4||size>64){
     throw new RangeError('Invalid bounded shadow-stamp dimensions');
   }
+  // Transparent outer pixel ring prevents a visible tile seam at every
+  // 2D receiver boundary, even under nearest-neighbour sprite scaling.
+  if(x<=0||y<=0||x>=size-1||y>=size-1)return 0;
   const u=(x+.5-size*.5)/(size*.5);
   const v=(y+.5-size*.5)/(size*.5);
   const distance=Math.hypot(u,v);
