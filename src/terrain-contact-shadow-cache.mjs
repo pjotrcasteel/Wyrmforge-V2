@@ -3,6 +3,7 @@
 // World Objects, fluid state, occupancy or save truth.
 import {getCameraPreset,projectVoxel} from './camera-presets.mjs';
 import {describeContactShadow,CONTACT_SHADOW_SAMPLE_COUNT} from './lighting/contact-shadows.mjs';
+import {paintSoftShadowStamp} from './shadow-stamp-texture.mjs';
 
 export const CONTACT_SHADOW_CACHE_LIMIT=96;
 // One cold prop per frame instead of two; avoid bursty 52-64-ray
@@ -98,7 +99,7 @@ export class TerrainContactShadowCache {
   paint(ctx,view,stamps){
     if(!stamps?.length||this.#drawn>=CONTACT_SHADOW_DRAW_BUDGET)return;
     ctx.save();
-    ctx.fillStyle='#091016';
+    ctx.imageSmoothingEnabled=true;
     for(const sample of stamps){
       if(this.#drawn>=CONTACT_SHADOW_DRAW_BUDGET)break;
       const center=projectVoxel(sample.x,sample.y,sample.z,view);
@@ -106,8 +107,8 @@ export class TerrainContactShadowCache {
       const height=Math.max(1,Math.round(sample.halfZ*2*view.scale*.77));
       if(center.x+width<0||center.x-width>view.width||
           center.y+height<0||center.y-height>view.height)continue;
-      ctx.globalAlpha=sample.alpha;
-      ctx.fillRect(Math.round(center.x-width/2),Math.round(center.y-height/2),width,height);
+      paintSoftShadowStamp(ctx,Math.round(center.x-width/2),
+        Math.round(center.y-height/2),width,height,sample.alpha);
       this.#drawn++;
     }
     ctx.restore();
