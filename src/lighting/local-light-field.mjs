@@ -32,6 +32,8 @@ export class LocalLightField {
   #nextRefresh=0;
   #lastVisibilityRays=0;
   #lastProcessed=0;
+  #lastBudget=LIGHT_FIELD_WORK;
+  #resets=0;
   constructor(sampleHeight,{geometry=null}={}){
     if(typeof sampleHeight!=='function')throw new TypeError('Expected read-only height sampler');
     if(geometry&&typeof geometry.raycast!=='function'){
@@ -44,11 +46,20 @@ export class LocalLightField {
   get pending(){return Boolean(this.#pending);}
   get statistics(){
     return {pending:Boolean(this.#pending),lastVisibilityRays:this.#lastVisibilityRays,
-      lastProcessed:this.#lastProcessed,retainedBytes:this.#published?.data.byteLength??0,
-      geometryAware:Boolean(this.#geometry)};
+      lastProcessed:this.#lastProcessed,lastBudget:this.#lastBudget,
+      retainedBytes:this.#published?.data.byteLength??0,
+      geometryAware:Boolean(this.#geometry),
+      identity:this.#key,resets:this.#resets,
+      pendingStage:this.#pending?.stage??null,
+      pendingIndex:this.#pending?.index??null,
+      pendingSourceCount:this.#pending?.sources.size??0};
   }
   update({epoch,revision,center,emissionCells=[],emissionColor=[0,0,0],
-    occluders=null,occlusionEnabled=true,now=0}={}){
+    occluders=null,occlusionEnabled=true,now=0,workBudget=LIGHT_FIELD_WORK}={}){
+    if(!Number.isSafeInteger(workBudget)||workBudget<1||workBudget>LIGHT_FIELD_WORK){
+      throw new RangeError('Invalid bounded lighting work budget');
+    }
+    this.#lastBudget=workBudget;
     if(!Number.isSafeInteger(epoch)||epoch<1||!Number.isSafeInteger(revision)||revision<0||
       !center||![center.x,center.y,center.z,now].every(Number.isFinite)){
       throw new TypeError('Invalid local lighting identity or position');
@@ -67,6 +78,7 @@ export class LocalLightField {
     const identity=[epoch,revision,ox,oz,occlusionEnabled?occluders?.revision??0:0,
       occlusionEnabled?1:0,...emissionColor].join(':');
     if(identity!==this.#key){
+      this.#resets++;
       this.#key=identity;this.#pending=null;this.#nextRefresh=0;
       if(this.#published?.epoch!==epoch||this.#published?.revision!==revision){
         this.#published=null;
@@ -97,7 +109,7 @@ export class LocalLightField {
     if(!job){this.#lastVisibilityRays=0;this.#lastProcessed=0;return {processed:0,queries:0,visibilityRays:0};}
     let processed=0,queries=0,visibilityRays=0;
     const cellCount=LIGHT_FIELD_EDGE**2;
-    while(processed<LIGHT_FIELD_WORK&&
+    while(processed<workBudget&&
       job.index<(job.stage==='height'?cellCount:job.sources.size?cellCount*2:cellCount)){
       const slot=job.index++;
       const i=job.stage==='height'?slot:Math.floor(slot/2);

@@ -1770,6 +1770,28 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
       const witnessedBreaches=[];
       window.__WyrmforgeFluidTest={
         hold(on){playFluidWitnessHold=Boolean(on);},
+        // Read-only, opt-in actual Hunt mixed-scene witness. No test-created
+        // light, terrain, fluid state or presentation state.
+        lightingStatus:()=>Object.freeze({
+          enabled:localLightingEnabled,
+          fluidEmissionEnabled,
+          pointOcclusionEnabled,
+          fieldReady:Boolean(playVisibleLightingField?.hasEmission),
+          fieldPending:playLighting.pending,
+          fieldWork:playLighting.statistics.lastProcessed,
+          fieldDiagnostics:playLighting.statistics,
+          terrainRevision:active?.port?.revision??null,
+          objectRevision:playStream?.trees?.objects?.physicalRevision??null,
+          actorPosition:playActor?[playActor.x,playActor.y,playActor.z]:null,
+          fieldOrigin:playVisibleLightingField?.origin??null,
+          sourceCells:playStaticEmissiveCells.length,
+          transientEmitters:playSpellLights?.emitters?.length??0,
+          pointFieldReady:Boolean(playPointVisibility?.ready),
+          fluidPointVisibilityFrames:playFluidVisual?.stats.pointVisibilityFrames??0,
+          fluidPointVisibilityActive:playFluidVisual?.stats.pointVisibilityActive??false,
+          fieldBytes:playFluidVisual?.stats.lightingTextureBytes??0,
+          frameUploads:playFluidVisual?.stats.lightingUploads??0
+        }),
         ribbons(on){playFluidRibbonsEnabled=Boolean(on);},
         landing(on){playFluidLandingEnabled=Boolean(on);},
         parcels(on){playFluidParcelsEnabled=Boolean(on);},
@@ -1977,6 +1999,31 @@ function playContextState(){
     actor:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null};
 }
 
+function advanceHuntLighting(now){
+  // Lighting samples only public, revisioned Voxel geometry. Do not
+  // starve the pending field while WorldGen is streaming new regions:
+  // progressively finish at most six cells/frame during transitions.
+  // Committed terrain revisions still invalidate stale field snapshots.
+  if(localLightingEnabled&&active?.port&&playActor){
+    const lightingStarted=performance.now();
+    const workBudget=pendingEdit||pendingMesh||streamingBusy()||!renderer?.ready?6:24;
+    const physical=playStream?.trees?.objects??null;
+    if(playOccluderObjects!==physical){
+      unregisterOccluders?.();
+      unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
+      playOccluderObjects=physical;
+    }
+    const staticGeometry=staticOcclusionEnabled&&playStaticEmissiveCells.length>0
+      ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
+    playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
+      center:playActor,emissionCells:playStaticEmissiveCells,
+      emissionColor:MOLTEN_PRESENTATION.emission,
+      occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,
+      workBudget,now});
+    playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
+  }
+}
+
 function frame(now) {
   const playCpuBegin=playMode?performance.now():0;
   try {
@@ -2018,6 +2065,8 @@ function frame(now) {
     }
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
     resizeCanvas();
+    // Pure Lighting work must progress even when the presentation GPU is busy.
+    advanceHuntLighting(now);
     if(renderer?.ready&&!awaitingPlayContext) {
       // Follow the stabilized presentation target, not the actor's
       // ballistic height. Both projections retain the same voxel geometry.
@@ -2076,22 +2125,6 @@ function frame(now) {
       }
       updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
-      if(localLightingEnabled&&active?.port&&playActor&&!pendingMesh&&!pendingEdit&&!streamingBusy()){
-        const lightingStarted=performance.now();
-        const physical=playStream?.trees?.objects??null;
-        if(playOccluderObjects!==physical){
-          unregisterOccluders?.();
-          unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
-          playOccluderObjects=physical;
-        }
-        const staticGeometry=staticOcclusionEnabled&&playStaticEmissiveCells.length>0
-          ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
-        playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
-          center:playActor,emissionCells:playStaticEmissiveCells,
-          emissionColor:MOLTEN_PRESENTATION.emission,
-          occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,now});
-        playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
-      }
       playPresentationNow=now;
       playSpellLights=localLightingEnabled&&active?.port&&(playFireball||playImpact)?huntSpellLights({
         cast:playFireball?.world===active.world?playFireball:null,impact:playImpact,now,
@@ -2151,6 +2184,7 @@ function frame(now) {
             showParcels:playFluidParcelsEnabled,
             lightingEnvironment:localLightingEnabled?playLightingEnvironment:null,
             transientLights:localLightingEnabled?playSpellLights:null,
+            pointVisibility:pointOcclusionEnabled?playPointVisibility:null,
             lightingField:fluidEmissionEnabled?lightingField:null});
           if(paintForest)paintForest(forestContext,view,localLightingEnabled?playLightingEnvironment.ambient:null);
           const residency=playStream?.residency;

@@ -4,6 +4,7 @@ import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transien
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
 import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
+import {writePointVisibility,POINT_VISIBILITY_FLOATS} from '../lighting/point-light-visibility.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
 // Uses one small program/VAO. Never writes voxels or changes terrain textures.
@@ -284,6 +285,11 @@ export class HuntFluidSurfaceRenderer {
   #program=null;
   #lightPositions=new Float32Array(8);
   #lightRadiance=new Float32Array(6);
+  // The same completed 2-light, 2-height, 12-sector visibility snapshot as terrain.
+  // Uniform-only: no extra Voxel raycasts or visibility providers in Water.
+  #pointVisibilityUpload=new Float32Array(POINT_VISIBILITY_FLOATS);
+  #pointVisibilityActive=false;
+  #pointVisibilityFrames=0;
   #lightingTexture=null;
   #lightingSource=null;
   #lightingUploads=0;
@@ -309,8 +315,10 @@ export class HuntFluidSurfaceRenderer {
     if(!gl)throw new Error('Fluid surface requires the existing WebGL2 renderer');
     this.#gl=gl;
     this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
     this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
     canvas.addEventListener('webglcontextlost',this.#onLost);
     canvas.addEventListener('webglcontextrestored',this.#onRestored);
@@ -347,7 +355,9 @@ export class HuntFluidSurfaceRenderer {
         (sum,bytes)=>sum+bytes,0)??0,
       lightingTextureBytes:this.#lightingTexture?24*24*4*4:0,
       lightingUploads:this.#lightingUploads,
-      lightingUploadMs:this.#lightingUploadMs
+      lightingUploadMs:this.#lightingUploadMs,
+      pointVisibilityActive:this.#pointVisibilityActive,
+      pointVisibilityFrames:this.#pointVisibilityFrames
     });
   }
 
@@ -421,6 +431,8 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#releaseLightingTexture();
+    this.#pointVisibilityActive=false;
+    this.#pointVisibilityFrames=0;
     this.#mesh=null;
     this.#visualHistory.clear();
   }
@@ -487,6 +499,8 @@ export class HuntFluidSurfaceRenderer {
         depth:uniform('uCameraDepth'),time:uniform('uTime'),
         rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
         ambient:uniform('uLightingAmbient'),
+        pointVisibilityEnabled:uniform('uPointVisibilityEnabled'),
+        pointVisibilityDistances:uniform('uPointVisibilityDistances[0]'),
         lightingField:uniform('uLightingField'),
         lightingEnabled:uniform('uLightingFieldEnabled'),
         lightingWarm:uniform('uLightingWarmEnabled'),
@@ -586,7 +600,7 @@ export class HuntFluidSurfaceRenderer {
 
   render(view,{time=0,reducedMotion=false,showRibbons=true,
     showLanding=true,showParcels=true,lightingEnvironment=null,transientLights=null,
-    lightingField=null}={}){
+    pointVisibility=null,lightingField=null}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -611,6 +625,14 @@ export class HuntFluidSurfaceRenderer {
     const lightCount=writeTransientLights(transientLights,this.#lightPositions,this.#lightRadiance);
     gl.uniform1i(u.lightCount,lightCount);
     if(lightCount){gl.uniform4fv(u.lightPositions,this.#lightPositions);gl.uniform3fv(u.lightRadiance,this.#lightRadiance);}
+    // Mirror terrain's visibility gate exactly: unfinished, stale and expired
+    // fields fall back to unoccluded light until a valid bounded snapshot exists.
+    const visible=lightCount>0&&writePointVisibility(
+      pointVisibility,transientLights,this.#pointVisibilityUpload);
+    this.#pointVisibilityActive=visible;
+    if(visible)this.#pointVisibilityFrames++;
+    gl.uniform1i(u.pointVisibilityEnabled,visible?1:0);
+    if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
