@@ -1,12 +1,14 @@
-// LAVA-02 presentation only: grounded flowing basalt / crust / fracture art.
-// Consumes an actual fluid face, published horizontal velocity and fixed-step
-// animation time. It does not author heat, solid rocks, collisions or lava
-// volume. See docs/research/lava-v2-50-source-field-study.md (50 sources).
-//
-// Mobile rule: integer pixel grid, three small uint hashes, no sine noise,
-// iterative Voronoi, lighting raycasts, texture sampling or framebuffer passes.
-// Spatial plate motifs move together at 0.1m every ~1.8s in flowing cells.
+// LAVA-02: physically fed molten lava with slow, world-continuous crust.
+// Thin dark plates, iron-red fracture margins and bright new breakouts are
+// rooted in field imagery (see the 50-source annotated geology review).
+// This is Materials-owned presentation, not collidable solidification.
+// Keep mobile work bounded: two constant 32x24 pixel-mask reads, one uint
+// hash, no per-fragment sin/cos/noise, rays, lookups or dynamic buffers.
+import {lavaCrustMotifGlsl} from '../fire-lava-crust-art.mjs';
+
 export const LAVA_CRUST_FLOW_GLSL=`
+${lavaCrustMotifGlsl()}
+
 float lavaCrustHash(ivec2 pixel){
   uint h=uint(pixel.x)*1664525u^uint(pixel.y)*1013904223u;
   h^=h>>16u;
@@ -15,68 +17,58 @@ float lavaCrustHash(ivec2 pixel){
   return float(h&1023u)/1023.0;
 }
 
-vec3 nativeLavaCrust(vec3 world,vec2 actualFlow,int faceMode,
-    float landingY,float seconds){
-  bool isFall=faceMode==2||faceMode==4||faceMode==6;
-  bool isSplash=faceMode==5;
-  bool isLip=faceMode==3;
-  float moving=step(.5,length(actualFlow));
-  vec2 direction=moving>.5?normalize(actualFlow):vec2(.8,.6);
-  vec2 across=vec2(-direction.y,direction.x);
-  // Slow, synchronized downstream motion from the REAL solver direction.
-  // Reusing the same plate domain on each 10cm face prevents one-metre seams
-  // and random frame-to-frame "sparkle" jumps.
-  vec2 pixels=floor(world.xz*10.0);
-  pixels-=direction*floor(seconds*.55)*moving;
-  vec2 plateSpace=vec2(dot(pixels,direction),dot(pixels,across));
-  ivec2 plate=ivec2(floor(plateSpace/vec2(13.0,10.0)));
-  float stoneId=lavaCrustHash(plate);
-  float offset=lavaCrustHash(plate+ivec2(11,7));
-  vec2 local=fract((plateSpace+vec2(1.2*stoneId,1.6*offset))/
-    vec2(13.0,10.0));
-  // Plates are stretched along flow and staggered by their neighbours.
-  // Bright fissures reveal exposed melt where independent cooled plates meet.
-  float seamDistance=min(min(local.x,1.0-local.x),
-                         min(local.y,1.0-local.y));
-  float fracture=1.0-step(.082,seamDistance);
-  float smallGrain=lavaCrustHash(ivec2(floor(plateSpace/vec2(3.0,4.0))));
-  // Broad dark rafting over liquid; still eddies carry *more* visible crust
-  // than the newly exposed, actively moving central channel.
-  float plateCover=step(mix(.22,.43,moving),stoneId);
-  float plateShade=.65+.35*smallGrain;
-  vec3 cooled=vec3(.085,.071,.075)*plateShade+
-    vec3(.065,.026,.014)*(1.0-plateShade);
-  vec3 lowMelt=vec3(.42,.075,.022);
-  vec3 warmMelt=vec3(.83,.23,.027);
-  vec3 exposed=vec3(1.0,.61,.15);
-  vec3 melt=mix(lowMelt,warmMelt,.45+.35*smallGrain);
-  vec3 color=mix(melt,cooled,plateCover*.94);
-  // Dark iron-red hairline around glowing molten crack, with a rare
-  // incandescent center. No full-surface random orange polka dots.
-  float warmEdge=1.0-step(.20,seamDistance);
-  color=mix(color,vec3(.37,.065,.023),warmEdge*.60);
-  color=mix(color,vec3(.94,.30,.038),fracture*.88);
-  color=mix(color,exposed,fracture*step(.77,smallGrain)*.42);
-  // Flowing lava exposes fresh orange strips and can fold dark skin under.
-  // These are genuine top-face pixels, not hot source painted on dry rock.
-  float breakout=step(.92,smallGrain)*moving*(1.0-plateCover*.6);
-  color=mix(color,warmMelt,breakout*.46);
-  if(isLip){
-    color=mix(color,exposed,.38);
+int lavaCrustBand(ivec2 pixel){
+  // Original 4m x 3m hand-authored ropy/plate motif. Mirror neighboring
+  // tiles so the artwork does not reset at every metre or expose a grid.
+  ivec2 tile=ivec2(floor(vec2(pixel)/vec2(32.0,24.0)));
+  int x=int(mod(float(pixel.x),32.0));
+  int y=int(mod(float(pixel.y),24.0));
+  if((tile.x&1)!=0)x=31-x;
+  if((tile.y&1)!=0)y=23-y;
+  return int((FIRE_LAVA_CRUST[y][x/8]>>uint(3*(x%8)))&7u);
+}
+
+vec3 nativeLavaCrust(vec3 world,vec2 actualFlow,vec2 channelFlow,
+    int faceMode,float landingY,float seconds){
+  bool fall=faceMode==2||faceMode==4||faceMode==6;
+  bool splash=faceMode==5;
+  bool lip=faceMode==3;
+  // One stable direction from the real connected channel drives ALL
+  // adjacent pixels. Never reorient plates per 1m solver column: doing so
+  // gave the iPhone a checkerboard of orange square edges.
+  vec2 axis=length(channelFlow)>.5?normalize(channelFlow):vec2(0.0,1.0);
+  float current=step(.5,length(actualFlow));
+  vec2 pixels=floor(world.xz*8.0)-axis*floor(seconds*.55);
+  ivec2 p=ivec2(floor(pixels));
+  int outer=lavaCrustBand(p);
+  int inner=lavaCrustBand(p+ivec2(11,8));
+  float pigment=lavaCrustHash(ivec2(floor(vec2(p)/vec2(14.0,17.0))));
+  bool plate=outer==0||(inner==0&&outer!=3);
+  bool fracture=outer==1||(inner==1&&outer==2);
+  bool exposed=outer==3||(inner==3&&outer==2);
+  // Most of the surface is a dark rafts/iron-red melt, NOT a uniformly
+  // incandescent orange sheet. Thin fractures expose hot moving interior.
+  vec3 blackBasalt=mix(vec3(.068,.062,.071),vec3(.155,.116,.111),pigment);
+  vec3 redMelt=mix(vec3(.39,.065,.019),vec3(.75,.17,.023),
+      .30+.45*pigment+.14*current);
+  vec3 color=plate?blackBasalt:redMelt;
+  if(fracture)color=mix(color,vec3(.72,.15,.023),.83);
+  if(exposed)color=mix(color,vec3(1.0,.55,.095),.84);
+  if(outer==2&&inner==2&&pigment>.83){
+    color=mix(color,vec3(.96,.32,.045),.42);
   }
-  if(isFall){
-    // A real waterfall or in-flight packet is not cooled like a quiet
-    // horizontal lake. Give it a hot center with sparse dragged crust.
-    float fallingStripe=step(.73,smallGrain);
-    color=mix(vec3(.68,.15,.021),vec3(1.0,.45,.075),
-      .36+.42*fallingStripe);
+  if(lip){
+    color=mix(color,vec3(1.0,.45,.08),.30);
+  }
+  if(fall){
+    // Only real falling faces/in-flight units glow through a torn crust.
+    color=mix(vec3(.72,.14,.023),vec3(1.0,.51,.085),.36+.34*pigment);
     if(faceMode==4){
       float drop=clamp((world.y-landingY)/2.5,0.0,1.0);
-      color=mix(color,vec3(1.0,.68,.18),.13+.15*(1.0-drop));
+      color=mix(color,vec3(1.0,.68,.16),.10+.12*(1.0-drop));
     }
-  }else if(isSplash){
-    // Only physically landed molten parcels generate a visible hot tongue.
-    color=mix(warmMelt,exposed,.42+.2*smallGrain);
+  }else if(splash){
+    color=mix(vec3(.83,.20,.026),vec3(1.0,.63,.13),.42+.22*pigment);
   }
   return color;
 }
