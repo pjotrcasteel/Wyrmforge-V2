@@ -167,19 +167,22 @@ function gradeHuntRiverDownstream(band,part,grade,changes,{reverse=false}={}){
     .riverChannels[0].floor.map(cell=>({...cell}));
   const byId=new Map(prepared.map(cell=>[key(cell.x,cell.z),cell]));
   const dirs=[[0,-1],[1,0],[0,1],[-1,0]];
-  const fallback=reverse?-1:1;
-  const deltaX=(part.at(-1).x-part[0].x)*fallback;
-  const deltaZ=(part.at(-1).z-part[0].z)*fallback;
+  const pathKeys=new Set(part.map(cell=>key(cell.x,cell.z)));
+  const deltaX=(part.at(-1).x-part[0].x)*(reverse?-1:1);
+  const deltaZ=(part.at(-1).z-part[0].z)*(reverse?-1:1);
   let lowered=0;
   // Requeue only cells whose native stone level was actually lowered.
   // A descending 1m-to-1m step cannot form a hidden dam downstream.
   const queue=[...prepared];
   for(let cursor=0;cursor<queue.length;cursor++){
     const cell=queue[cursor];
-    const vx=Number.isFinite(cell.flowX)&&cell.flowX!==0
-      ?cell.flowX*fallback:deltaX;
-    const vz=Number.isFinite(cell.flowZ)&&cell.flowZ!==0
-      ?cell.flowZ*fallback:deltaZ;
+    const authored=Number.isFinite(cell.flowX)&&
+      Number.isFinite(cell.flowZ)&&(cell.flowX!==0||cell.flowZ!==0);
+    // Original WorldGen river directions are already downstream; newly
+    // planned connector paths may be traversed in the reverse direction.
+    const factor=reverse&&pathKeys.has(key(cell.x,cell.z))?-1:1;
+    const vx=authored?cell.flowX*factor:deltaX;
+    const vz=authored?cell.flowZ*factor:deltaZ;
     const targets=dirs.map(([dx,dz])=>{
       const next=byId.get(key(cell.x+dx,cell.z+dz));
       const alignment=dx*vx+dz*vz;
