@@ -92,7 +92,7 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
       const variation=seededHash(seed,coarseX,coarseZ,sign)%11;
       const reach=endDistance===0?0:
         endDistance===1?(sign===firstSide?1:0):
-        variation<2?0:variation===10?2:1;
+        variation===0?0:variation>=6?2:1;
       for(let distance=1;distance<=reach&&created<maxCells;distance++){
         const x=point.x+sideways[0]*sign*distance;
         const z=point.z+sideways[1]*sign*distance;
