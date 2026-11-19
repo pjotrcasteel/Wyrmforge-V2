@@ -127,3 +127,21 @@ test('collider revisions and explicit fallback rebuild without per-pixel raymarc
   assert.notEqual(changed,first);
   assert.equal(irradiance(changed,3,0),0);
 });
+
+test('streaming keeps a tiny bounded lighting slice progressing without waiting for the whole world',()=>{
+  const field=new LocalLightField(()=>2);
+  const args={...input,emissionCells:emitted(),workBudget:6};
+  let completed=false,frames=0;
+  for(;frames<300;frames++){
+    const work=field.update(args);
+    assert.ok(work.processed<=6&&work.visibilityRays<=6);
+    if(field.snapshot&&!field.pending){completed=true;break;}
+  }
+  assert.ok(completed,'stable public geometry must publish even with 6 cells/frame');
+  assert.equal(field.snapshot.hasEmission,true);
+  assert.equal(field.statistics.lastBudget,6);
+  assert.ok(field.statistics.resets<=1,'one source must not restart on every frame');
+  assert.throws(()=>field.update({...args,workBudget:0}),RangeError);
+  assert.throws(()=>field.update({...args,workBudget:25}),RangeError);
+  assert.throws(()=>field.update({...args,workBudget:1.5}),RangeError);
+});
