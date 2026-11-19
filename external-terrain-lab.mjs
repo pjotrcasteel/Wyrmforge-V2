@@ -2067,8 +2067,13 @@ function frame(now) {
       }
       updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
-      if(localLightingEnabled&&active?.port&&playActor&&!pendingMesh&&!pendingEdit&&!streamingBusy()){
+      // Lighting samples only public, revisioned Voxel geometry. Do not
+      // starve the pending field while WorldGen is streaming new regions:
+      // progressively finish at most six cells/frame during transitions.
+      // Committed terrain revisions still invalidate stale field snapshots.
+      if(localLightingEnabled&&active?.port&&playActor&&!pendingEdit){
         const lightingStarted=performance.now();
+        const workBudget=pendingMesh||streamingBusy()?6:24;
         const physical=playStream?.trees?.objects??null;
         if(playOccluderObjects!==physical){
           unregisterOccluders?.();
@@ -2080,7 +2085,8 @@ function frame(now) {
         playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
           center:playActor,emissionCells:playStaticEmissiveCells,
           emissionColor:MOLTEN_PRESENTATION.emission,
-          occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,now});
+          occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,
+          workBudget,now});
         playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
       }
       playPresentationNow=now;
