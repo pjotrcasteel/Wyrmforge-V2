@@ -45,17 +45,18 @@ test('only wet geometry beside a tall physical bank gets 10cm inward micro-conto
   );
 });
 
-test('waterfalls over lower dry terrain retain full solid fluid walls and no fake shore notch',()=>{
+test('wet lips over lower dry ground have irregular 10cm edges and a true fluid fall',()=>{
   const {mesh}=meshWith({
     width:2,height:1,
     materialFloor:x=>x===0?0:-2,
     seed:[{x:0,z:0,depth:10}]
   });
   assert.equal(mesh.wetColumns,1);
-  assert.equal(mesh.refinedShoreColumns,0);
-  assert.equal(mesh.topFaces,1);
+  assert.equal(mesh.refinedShoreColumns,1);
+  assert.ok(mesh.topFaces>1&&mesh.topFaces<45,
+    'a dry receiving bank cannot leave a full floating 1m square water lip');
   assert.equal(mesh.sideFaces,1);
-  assert.equal(mesh.faceCount,2);
+  assert.equal(mesh.faceCount,mesh.topFaces+mesh.sideFaces);
   const [x,y,z]=mesh.positions.slice(0,3);
   assert.equal(x,0);
   assert.equal(z,0);
@@ -75,7 +76,8 @@ test('adjacent shallow wet columns share sub-meter edge heads without vertical s
     .filter(i=>Math.abs(mesh.positions[i*3]-1)<.00001)
     .map(i=>mesh.positions[i*3+1]);
   assert.equal(nearX1.length,4);
-  for(const value of nearX1)assert.ok(Math.abs(value-.906)<.00001);
+  for(const value of nearX1)assert.ok(Math.abs(value-.806)<.00001,
+    'a shared wet corner must never be raised above the LOWER physical head');
 });
 
 test('bounded river with thousands of micro-shore edges cannot exceed Water V2 GPU budget',()=>{
@@ -116,6 +118,25 @@ test('shallow river water cannot be smoothed below the top of a real stone lip',
   assert.ok(highCapHeights.length>=4);
   assert.ok(highCapHeights.every(y=>y>highStoneTop+.09),
     'the whole upper water cap must cover the rock, not be depth-clipped behind it');
-  assert.ok(sharedEdgeHeights.every(y=>y>=2.10),
-    'both neighboring water columns share a visible, continuous high-stone corner');
+  assert.ok(sharedEdgeHeights.some(y=>y>2.10),
+    'high stone water cap must remain above its own real stone');
+  assert.ok(sharedEdgeHeights.some(y=>y<1.81),
+    'lower water cap must NOT be lifted 30cm above its own physical head');
+});
+
+// Regression from real iPhone: smoothing used to add a whole 10cm unit over
+// the neighboring wet stone, which was visibly higher than the grass edge.
+test('Water V2 render vertices cannot rise above their own solver head',()=>{
+  const {engine,mesh}=meshWith({
+    width:2,height:1,materialFloor:()=>0,
+    seed:[{x:0,z:0,depth:4},{x:1,z:0,depth:3}]
+  });
+  assert.equal(mesh.sideFaces,0);
+  for(let i=0;i<mesh.vertexCount;i++){
+    if(mesh.normals[i*3+1]!==1)continue;
+    const x=mesh.positions[i*3],y=mesh.positions[i*3+1];
+    const owningColumn=x<1?0:1;
+    assert.ok(y<=engine.sample(owningColumn,0).surfaceY+.00601,
+      'water graphics cannot invent extra liquid above the physical solver height');
+  }
 });
