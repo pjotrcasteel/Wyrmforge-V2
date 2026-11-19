@@ -25,8 +25,14 @@ test('terrain and every Water V2 surface consume one generic physical static emi
     'Water V2 caps, sides, foam, falls and parcels share the same Lighting function');
   assert.match(FLUID_VERTEX_GLSL,/vStaticIrradiance=staticFieldIrradiance\(world\)/);
   assert.match(FLUID_FRAGMENT_GLSL,/albedo\*\(uLightingAmbient\+vStaticIrradiance\)/);
-  assert.doesNotMatch(FLUID_FRAGMENT_GLSL,/texelFetch|lightingColumn/,
-    'never perform a four-texel field lookup for every ripple/foam fragment');
+  // Molten Materials may fetch ONE bounded crust texel. The generic
+  // 4-sample static Lighting field must still be vertex-only, never
+  // evaluated in every water ripple/foam or lava fragment.
+  assert.doesNotMatch(FLUID_FRAGMENT_GLSL,
+    /staticFieldIrradiance\s*\(|lightingColumn|texelFetch\s*\(\s*uLightingField/,
+    'static light-field sampling must remain vertex-only');
+  assert.match(FLUID_FRAGMENT_GLSL,/texelFetch\(uLavaCrustAtlas,pixel,0\)/,
+    'the single molten material atlas lookup is not a lighting-field fetch');
   assert.match(STATIC_FIELD_EMISSION_GLSL,/topEnergy/);
   assert.match(STATIC_FIELD_EMISSION_GLSL,/sideEnergy/);
   assert.match(STATIC_FIELD_EMISSION_GLSL,/topY-point\.y/);
