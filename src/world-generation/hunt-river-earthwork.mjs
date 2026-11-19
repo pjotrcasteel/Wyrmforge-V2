@@ -153,6 +153,56 @@ function channelForBand(band,part,grade,changes){
   });
 }
 
+// A recessed pocket is not enough: Water V2 cannot sustain a river that
+// must climb one full metre back UP to its original outlet. The previous
+// local-only cut passed the initial bank-height test, but accumulated 1.2m
+// deep water after 240 fixed steps and overtopped grass again.
+//
+// Propagate newly lowered native stone beds only in the *authored downstream
+// current direction* until every selected outflow neighbor is level/lower.
+// This remains WorldGen ownership; no fluid values, new sources or shader
+// offsets are fabricated. Existing genuine upstream falls stay intact.
+function gradeHuntRiverDownstream(band,part,grade,changes,{reverse=false}={}){
+  const prepared=channelForBand(band,part,grade,changes)
+    .riverChannels[0].floor.map(cell=>({...cell}));
+  const byId=new Map(prepared.map(cell=>[key(cell.x,cell.z),cell]));
+  const dirs=[[0,-1],[1,0],[0,1],[-1,0]];
+  const fallback=reverse?-1:1;
+  const deltaX=(part.at(-1).x-part[0].x)*fallback;
+  const deltaZ=(part.at(-1).z-part[0].z)*fallback;
+  let lowered=0;
+  // Requeue only cells whose native stone level was actually lowered.
+  // A descending 1m-to-1m step cannot form a hidden dam downstream.
+  const queue=[...prepared];
+  for(let cursor=0;cursor<queue.length;cursor++){
+    const cell=queue[cursor];
+    const vx=Number.isFinite(cell.flowX)&&cell.flowX!==0
+      ?cell.flowX*fallback:deltaX;
+    const vz=Number.isFinite(cell.flowZ)&&cell.flowZ!==0
+      ?cell.flowZ*fallback:deltaZ;
+    const targets=dirs.map(([dx,dz])=>{
+      const next=byId.get(key(cell.x+dx,cell.z+dz));
+      const alignment=dx*vx+dz*vz;
+      return next&&alignment>0?{next,alignment}:null;
+    }).filter(Boolean).sort((a,b)=>b.alignment-a.alignment||
+      a.next.z-b.next.z||a.next.x-b.next.x);
+    if(!targets.length)continue;
+    const next=targets[0].next;
+    if(next.y<=cell.y)continue;
+    const nkey=key(next.x,next.z);
+    const original=changes.get(nkey);
+    if(!original||original.dryBank)continue;
+    next.y=cell.y;
+    changes.set(nkey,{...original,floorY:next.y});
+    queue.push(next);
+    lowered++;
+    if(lowered>prepared.length*16){
+      throw new Error('WorldGen downstream river grading failed to converge');
+    }
+  }
+  return lowered;
+}
+
 // Requires a real WorldGen graph and one of its validated proposals.
 // Return separate changed **band definitions** for the same original graph;
 // no edit is applied to a live terrain port and no snapshot is silently reset.
@@ -223,6 +273,10 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     // wet bank contact using its original physical 10cm grass shoulder.
     const lowerBankCount=recessHuntRiverBelowGrass(
       band,changes,widened.columns);
+    const downstreamGradeCount=gradeHuntRiverDownstream(
+      band,points,grade,changes,{
+        reverse:proposal.upstream!==proposal.fromRegionId
+      });
     const wetCount=changes.size;
     // These are deliberately DRY, lower native Voxel banks. The water
     // footprint and the existing shallow traversal fords do not change.
@@ -264,7 +318,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
         lateralWetCells:widened.addedWetCells,
         bankTerraceColumns:Object.freeze(terraces),bankTerraceCount:terraces.length,
         bankMicroTiles:shoreline.bankTiles,
-        lowerBankCount,
+        lowerBankCount,downstreamGradeCount,
         fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
