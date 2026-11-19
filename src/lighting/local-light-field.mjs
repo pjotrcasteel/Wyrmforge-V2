@@ -32,6 +32,7 @@ export class LocalLightField {
   #nextRefresh=0;
   #lastVisibilityRays=0;
   #lastProcessed=0;
+  #resets=0;
   constructor(sampleHeight,{geometry=null}={}){
     if(typeof sampleHeight!=='function')throw new TypeError('Expected read-only height sampler');
     if(geometry&&typeof geometry.raycast!=='function'){
@@ -45,7 +46,11 @@ export class LocalLightField {
   get statistics(){
     return {pending:Boolean(this.#pending),lastVisibilityRays:this.#lastVisibilityRays,
       lastProcessed:this.#lastProcessed,retainedBytes:this.#published?.data.byteLength??0,
-      geometryAware:Boolean(this.#geometry)};
+      geometryAware:Boolean(this.#geometry),
+      identity:this.#key,resets:this.#resets,
+      pendingStage:this.#pending?.stage??null,
+      pendingIndex:this.#pending?.index??null,
+      pendingSourceCount:this.#pending?.sources.size??0};
   }
   update({epoch,revision,center,emissionCells=[],emissionColor=[0,0,0],
     occluders=null,occlusionEnabled=true,now=0}={}){
@@ -67,6 +72,7 @@ export class LocalLightField {
     const identity=[epoch,revision,ox,oz,occlusionEnabled?occluders?.revision??0:0,
       occlusionEnabled?1:0,...emissionColor].join(':');
     if(identity!==this.#key){
+      this.#resets++;
       this.#key=identity;this.#pending=null;this.#nextRefresh=0;
       if(this.#published?.epoch!==epoch||this.#published?.revision!==revision){
         this.#published=null;
