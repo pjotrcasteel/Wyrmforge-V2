@@ -167,10 +167,12 @@ export function prepareHuntBreachableBankTerraces({
 // grass remains full-height; only the first 40cm at the shore is stepped.
 // We neither add decorative water nor rewrite the water-column solver floor.
 export function composeHuntRiverBankTiles({
-  band,part,changes,columns,maxTiles=MAX_RIVER_BANK_MICRO_TILES
+  band,part,changes,columns,fords=new Set(),
+  maxTiles=MAX_RIVER_BANK_MICRO_TILES
 }={}){
   if(!band?.definition?.runs||!Array.isArray(part)||
       !(changes instanceof Map)||!(columns instanceof Map)||
+      !(fords instanceof Set)||
       !Number.isSafeInteger(maxTiles)||maxTiles<0||maxTiles>MAX_RIVER_BANK_MICRO_TILES){
     throw new TypeError('Expected bounded real Voxel shoreline surface');
   }
@@ -193,7 +195,13 @@ export function composeHuntRiverBankTiles({
     .filter(tile=>!changes.has(key(tile.x,tile.z)));
   const existing=new Map(old.map(tile=>[tileKey(tile),tile]));
   const output=[],modified=new Set();
+  const fordApproach=point=>DIRECTIONS.some(([dx,dz])=>
+    point.sides.has(key(dx,dz))&&fords.has(key(point.x+dx,point.z+dz)));
   const ranked=[...candidates.values()].sort((a,b)=>{
+    // Travel approaches to recessed physical fords need real 10cm ramps
+    // before optional scenic bank detailing consumes the 64-tile budget.
+    const fordFirst=Number(fordApproach(b))-Number(fordApproach(a));
+    if(fordFirst)return fordFirst;
     const score=point=>Math.min(...part.map(p=>
       (p.x-point.x)**2+(p.z-point.z)**2));
     return score(a)-score(b)||a.z-b.z||a.x-b.x;
@@ -201,6 +209,7 @@ export function composeHuntRiverBankTiles({
   const seed=band.definition.seed??7;
   for(const item of ranked.slice(0,maxTiles)){
     const {x,z,bank,sides}=item,y=bank.topVoxelY;
+    const steppingApproach=fordApproach(item);
     const original=existing.get(tileKey({x,y,z}));
     const prior=original?.levels??Array(100).fill(10);
     if(prior.length!==100)throw new RangeError('Invalid parent Voxel microtile');
@@ -215,8 +224,16 @@ export function composeHuntRiverBankTiles({
       // Stable 10cm-gridded stone/dirt shoulders, not a flat 1m square
       // wall or procedural triangle. The edge varies by one 10cm step.
       const noise=seededHash(seed,x*10+ix,z*10+iz)%5===0?1:0;
-      const cut=distance<=1?4+noise:distance<=3?3:
+      const shallowCut=distance<=1?4+noise:distance<=3?3:
         distance<=5?1:0;
+      // A dry bank center was previously a 0.9–1.0m vertical climb from
+      // the newly recessed true ford, making the Hunt route impassable.
+      // A *native* 10cm micro-voxel 50cm bank approach is traversable by
+      // the existing 55cm automatic hop, and eases into full-height grass.
+      // Keep the river-facing edge at least 10cm above 40cm-deep water.
+      const cut=steppingApproach
+        ?Math.max(shallowCut,distance<=7?5:distance<=8?3:1)
+        :shallowCut;
       const height=Math.min(prior[iz*10+ix],10-cut);
       if(height!==prior[iz*10+ix])changed=true;
       levels.push(height);
