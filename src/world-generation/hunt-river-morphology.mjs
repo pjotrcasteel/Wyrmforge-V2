@@ -287,8 +287,9 @@ export function prepareHuntBreachableBankTerraces({
     Object.freeze({x,z,floorY,dryBank:true})));
 }
 
-// True, sparse 10cm micro-occupancy on EXISTING DRY grass. The inland
-// grass remains full-height; only the first 40cm at the shore is stepped.
+// True, sparse 10cm micro-occupancy on EXISTING DRY grass and exposed
+// stone outcrops. The inland landscape remains solid; only the first 40cm
+// at a real wet face is physically stepped.
 // We neither add decorative water nor rewrite the water-column solver floor.
 export function composeHuntRiverBankTiles({
   band,part,changes,columns,fords=new Set(),
@@ -308,7 +309,12 @@ export function composeHuntRiverBankTiles({
       const nx=x+dx,nz=z+dz,nid=key(nx,nz);
       if(changes.has(nid))continue;
       const bank=columns.get(nid);
-      if(!bank||bank.material!==1||bank.topY<=bed.floorY)continue;
+      // Real 1-2m STONE islands inside a pool also need chipped 10cm
+      // edges. The previous grass-only filter left full-size rectangular
+      // dark stone blocks in the iPhone river screenshot. Roads remain
+      // completely protected as authored solid walking terrain.
+      if(!bank||![1,3].includes(bank.material)||
+          bank.topY<=bed.floorY)continue;
       if(!candidates.has(nid)){
         candidates.set(nid,{x:nx,z:nz,bank,sides:new Set()});
       }
@@ -326,6 +332,12 @@ export function composeHuntRiverBankTiles({
     // before optional scenic bank detailing consumes the 64-tile budget.
     const fordFirst=Number(fordApproach(b))-Number(fordApproach(a));
     if(fordFirst)return fordFirst;
+    // Prefer exposed in-river stone over remote scenic grass when the
+    // bounded 64 microtile budget is tight. A natural rock is sculpted,
+    // not erased or flooded by a renderer-only fake.
+    const stoneFirst=Number(b.bank.material===3)-
+      Number(a.bank.material===3);
+    if(stoneFirst)return stoneFirst;
     const score=point=>Math.min(...part.map(p=>
       (p.x-point.x)**2+(p.z-point.z)**2));
     return score(a)-score(b)||a.z-b.z||a.x-b.x;
