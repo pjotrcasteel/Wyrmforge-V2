@@ -162,7 +162,9 @@ function channelForBand(band,part,grade,changes){
 // current direction* until every selected outflow neighbor is level/lower.
 // This remains WorldGen ownership; no fluid values, new sources or shader
 // offsets are fabricated. Existing genuine upstream falls stay intact.
-function gradeHuntRiverDownstream(band,part,grade,changes,{reverse=false}={}){
+function gradeHuntRiverDownstream(
+  band,part,grade,changes,{reverse=false,fords=new Set()}={}
+){
   const prepared=channelForBand(band,part,grade,changes)
     .riverChannels[0].floor.map(cell=>({...cell}));
   const byId=new Map(prepared.map(cell=>[key(cell.x,cell.z),cell]));
@@ -194,7 +196,9 @@ function gradeHuntRiverDownstream(band,part,grade,changes,{reverse=false}={}){
     if(next.y<=cell.y)continue;
     const nkey=key(next.x,next.z);
     const original=changes.get(nkey);
-    if(!original||original.dryBank)continue;
+    // Do not turn a WorldGen port-to-port ford into an impassable
+    // extra-metre excavation while downstream-grade corrections propagate.
+    if(!original||original.dryBank||fords.has(nkey))continue;
     next.y=cell.y;
     changes.set(nkey,{...original,floorY:next.y});
     queue.push(next);
@@ -275,10 +279,10 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     // An old riverbed can sit ABOVE the adjacent dry bank. Recess each true
     // wet bank contact using its original physical 10cm grass shoulder.
     const lowerBankCount=recessHuntRiverBelowGrass(
-      band,changes,widened.columns);
+      band,changes,widened.columns,fords);
     const downstreamGradeCount=gradeHuntRiverDownstream(
       band,points,grade,changes,{
-        reverse:proposal.upstream!==proposal.fromRegionId
+        reverse:proposal.upstream!==proposal.fromRegionId,fords
       });
     const wetCount=changes.size;
     // These are deliberately DRY, lower native Voxel banks. The water
