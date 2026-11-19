@@ -167,18 +167,20 @@ function addManeuverFlow(builder,kind) {
   }
 }
 
-// Two connected landforms beside the opening trail. The eastern face rises
-// abruptly out of the valley; the western stone cut narrows at both ends.
-// The normal route, encounter and escape grading still runs over this relief.
+// Smooth, low woodland shoulders beside the arrival trail. The previous
+// hard x>=shoulder cutoff created an isolated 8m brown rectangular escarpment,
+// and an abrupt 4.6m fissure made dark square holes beside the starting path.
+// Both were physical WorldGen geometry, not any Lighting shadow. The authored
+// roads, encounter clearing and 10cm grade still take priority downstream.
 function forestArrivalRelief(seed,x,z) {
   const contour=siteNoise(seed,x,z,6,31)-.5;
-  const shoulderX=7.1+.65*Math.sin((z+9)*.46)+contour;
-  const shelf=Math.max(0,1-((x-9.3)/3.2)**2-((z+9)/4.3)**2);
-  const cliff=x>=shoulderX?8.4*Math.sqrt(shelf):0;
-  const fissureX=-8.2+.85*Math.sin((z+15)*.67)+contour;
-  const fissureWidth=1.35*Math.max(0,1-((z+15)/2.9)**2);
-  const cut=Math.abs(x-fissureX)<fissureWidth?4.6:0;
-  return cliff-cut;
+  const shoulderX=9.3+.5*contour+.35*Math.sin((z+9)*.46);
+  const ridge=Math.max(0,1-((x-shoulderX)/5.2)**2-((z+9)/6.2)**2);
+  const rise=1.65*ridge*ridge*(3-2*ridge);
+  const gullyX=-8.2+.55*Math.sin((z+15)*.48)+.4*contour;
+  const gully=Math.max(0,1-((x-gullyX)/2.9)**2-((z+15)/4.5)**2);
+  const dip=.85*gully*gully*(3-2*gully);
+  return rise-dip;
 }
 
 function forest(builder, context) {
