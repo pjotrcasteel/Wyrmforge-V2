@@ -36,15 +36,28 @@ try{
       result.errors.push('HTTP '+response.status()+' '+response.url());
     }
   });
-  await page.goto(base+'/play-hunt.html?terrainNormalTest=1',
+  await page.goto(base+'/play-hunt.html?terrainNormalTest=1&fluidTest=auto',
     {waitUntil:'domcontentloaded',timeout:30000});
+  // A GPU normal array is NOT proof that the physical scene was drawn.
+  // Wait for the same live WorldGen terrain and published Water geometry
+  // as the trusted L10-08 browser witness, not a partially loaded HUD.
   await page.waitForFunction(()=>{
     const st=window.__WyrmforgeTerrainNormalTest?.status();
+    const fluid=window.__WyrmforgeFluidTest?.status();
     return st?.ready===true&&st.activeLayers===4&&
-      st.uploadedTiles>=6&&st.pendingTiles===0;
+      st.uploadedTiles>=6&&st.pendingTiles===0&&
+      fluid?.kind==='water'&&fluid.raisedSurfaceFaces>0&&!fluid.busy;
   },null,{timeout:150000});
-  const diagnostics=await page.evaluate(()=>window.__WyrmforgeTerrainNormalTest.status());
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.hold(true));
+  await page.waitForTimeout(900);
+  const diagnostics=await page.evaluate(()=>({
+    normal:window.__WyrmforgeTerrainNormalTest.status(),
+    fluid:window.__WyrmforgeFluidTest.status()
+  }));
   result.diagnostics=diagnostics;
+  if(diagnostics.fluid.raisedSurfaceFaces<1){
+    throw new Error('Missing real drawn raised WorldGen surface');
+  }
   for(const [name,enabled] of [['off',false],['on',true]]){
     await page.evaluate(enabled=>{
       window.__WyrmforgeTerrainNormalTest.setEnabled(enabled);
@@ -60,7 +73,8 @@ try{
     }
     await writeFile(folder+'/wet-forest-seed7-normals-'+name+'.png',image);
     result.checks.push({name,enabled,imageBytes:image.length,
-      uploadedNormalTiles:diagnostics.uploadedTiles});
+      uploadedNormalTiles:diagnostics.normal.uploadedTiles,
+      raisedWorldSurfaceFaces:diagnostics.fluid.raisedSurfaceFaces});
   }
   const off=PNG.sync.read(await import('node:fs/promises').then(x=>
     x.readFile(folder+'/wet-forest-seed7-normals-off.png')));
@@ -78,7 +92,8 @@ try{
     'Real normal-texture toggle has no visible effect in Hunt ('+changed+' changed pixels)');
   if(result.errors.length)throw new Error('Browser errors '+result.errors.join('; '));
   console.log('HUNT_NORMAL_MAP_ON_OFF '+JSON.stringify({
-    uploaded:diagnostics.uploadedTiles,active:diagnostics.activeLayers,
+    uploaded:diagnostics.normal.uploadedTiles,active:diagnostics.normal.activeLayers,
+    raisedSurfaceFaces:diagnostics.fluid.raisedSurfaceFaces,
     changedPixels:changed,files:result.checks.map(x=>x.name)
   }));
 }catch(error){
