@@ -41,10 +41,11 @@ test('material shader samples normal and ORM arrays with explicit fallback', () 
   assert.match(source, /\['orm', 3/);
 });
 
-test('normal and ORM maps are sampled only when corresponding terrain layers are uploaded', () => {
+test('normal-only detail works with procedural albedo while ORM keeps its authored fallback', () => {
   assert.match(source, /sampler2DArray uTerrainNormal/);
   assert.match(source, /sampler2DArray uTerrainOrm/);
-  assert.match(source, /layer >= 0\.0 && normalLayer >= 0\.0/);
+  assert.match(source, /uTerrainNormalsEnabled && normalLayer >= 0\.0/);
+  assert.doesNotMatch(source, /layer >= 0\.0 && normalLayer >= 0\.0/);
   assert.match(source, /layer >= 0\.0 && ormLayer >= 0\.0/);
   assert.match(source, /detailedNormal = normalize/);
   assert.match(BASELINE_LIGHTING_GLSL, /lighting\*=mix\(\.65,1\.0,surface\.orm\.r\)/);
