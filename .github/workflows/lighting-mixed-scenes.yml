@@ -1,0 +1,46 @@
+name: L10-08 actual Hunt mixed-scene lighting review
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lighting/**'
+      - 'src/fluid/hunt-fluid-surface-renderer.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/lighting-mixed-scene-hunt.mjs'
+      - '.github/workflows/lighting-mixed-scenes.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('l10-08-pr-{0}',github.event.pull_request.number) || 'l10-08-manual' }}
+  cancel-in-progress: true
+jobs:
+  actual-hunt-mixed-scenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check mixed-scene witness and real Hunt syntax
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check .github/witness/lighting-mixed-scene-hunt.mjs
+      - name: Install desktop browser witness dependencies
+        run: |
+          command -v google-chrome
+          google-chrome --version
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
+      - name: Capture real forest, mountain and lava Hunt scenes
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/lighting-mixed-scene-hunt.mjs
+      - name: Attach exact scene PNGs and measured runtime facts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighting-l10-08-mixed-play-hunt
+          path: lighting-mixed-scene-evidence/
+          if-no-files-found: warn
+          retention-days: 14
