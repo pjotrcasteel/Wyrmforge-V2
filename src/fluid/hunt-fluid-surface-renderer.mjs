@@ -288,6 +288,8 @@ export class HuntFluidSurfaceRenderer {
   // The same completed 2-light, 2-height, 12-sector visibility snapshot as terrain.
   // Uniform-only: no extra Voxel raycasts or visibility providers in Water.
   #pointVisibilityUpload=new Float32Array(POINT_VISIBILITY_FLOATS);
+  #pointVisibilityActive=false;
+  #pointVisibilityFrames=0;
   #lightingTexture=null;
   #lightingSource=null;
   #lightingUploads=0;
@@ -313,8 +315,10 @@ export class HuntFluidSurfaceRenderer {
     if(!gl)throw new Error('Fluid surface requires the existing WebGL2 renderer');
     this.#gl=gl;
     this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
     this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;
+      this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
     canvas.addEventListener('webglcontextlost',this.#onLost);
     canvas.addEventListener('webglcontextrestored',this.#onRestored);
@@ -351,7 +355,9 @@ export class HuntFluidSurfaceRenderer {
         (sum,bytes)=>sum+bytes,0)??0,
       lightingTextureBytes:this.#lightingTexture?24*24*4*4:0,
       lightingUploads:this.#lightingUploads,
-      lightingUploadMs:this.#lightingUploadMs
+      lightingUploadMs:this.#lightingUploadMs,
+      pointVisibilityActive:this.#pointVisibilityActive,
+      pointVisibilityFrames:this.#pointVisibilityFrames
     });
   }
 
@@ -425,6 +431,8 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#releaseLightingTexture();
+    this.#pointVisibilityActive=false;
+    this.#pointVisibilityFrames=0;
     this.#mesh=null;
     this.#visualHistory.clear();
   }
@@ -621,6 +629,8 @@ export class HuntFluidSurfaceRenderer {
     // fields fall back to unoccluded light until a valid bounded snapshot exists.
     const visible=lightCount>0&&writePointVisibility(
       pointVisibility,transientLights,this.#pointVisibilityUpload);
+    this.#pointVisibilityActive=visible;
+    if(visible)this.#pointVisibilityFrames++;
     gl.uniform1i(u.pointVisibilityEnabled,visible?1:0);
     if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
