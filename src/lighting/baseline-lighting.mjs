@@ -25,13 +25,14 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context) {
   }
   if(context.shallowGrass)lighting=.94;
   if(context.heightContrast){
-    // Terrain depth must remain readable: the former 0.50 height floor
-    // multiplied by a 0.66 vertical-face penalty could leave dirt banks at
-    // just ~16% linear light, resembling giant black shadow rectangles.
-    // Real contact/directional shadows still darken actual occluded faces.
-    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.17,.72,1.36);
+    // Strong top-to-bottom relief is essential to the overhead Hunt view.
+    // Keep the lowered faces visibly darker than the crown without the old
+    // 0.50 * 0.66 compound floor that made west dirt walls nearly black.
+    // This remains a renderer-only response to existing physical geometry;
+    // actual shadow casters and visibility still provide occlusion.
+    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.25,.66,1.48);
     lighting*=tone;
-    if(normal.y<.5&&normal.y>-.5)lighting*=.84;
+    if(normal.y<.5&&normal.y>-.5)lighting*=.78;
   }
   return surface.albedo*lighting+surface.emission;
 }
