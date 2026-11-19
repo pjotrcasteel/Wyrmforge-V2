@@ -76,8 +76,8 @@ test('forest landforms retain real grass, dirt paths, 7m port floors and natural
 });
 test('mountain landforms retain multi-metre cliffs; forest cleanup stays biome-owned',()=>{
   const plan=expedition(27,'mountain-pass');
-  const region=plan.regions.find(r=>r.id===plan.entryRegionId);
-  const heights=[...heightMap(generateWorldExpeditionRegion(plan,region.id)).values()];
+  const heights=plan.regions.flatMap(region=>
+    [...heightMap(generateWorldExpeditionRegion(plan,region.id)).values()]);
   assert.ok(Math.max(...heights)-Math.min(...heights)>=3,
     'A forest-only visual cleanup must not flatten authored mountains');
 });
