@@ -13,7 +13,8 @@ export function describeSpriteLightProfile(instance,sprite){
   const statedHeight=instance.lightPresentation?.height??instance.height??0;
   if(!Number.isFinite(statedHeight)||statedHeight<0)return null;
   const metersPerPixel=Math.max(impliedHeight,statedHeight)/sprite.ay;
-  return Object.freeze({x:instance.x,y:instance.y,z:instance.z,metersPerPixel});
+  return Object.freeze({x:instance.x,y:instance.y,z:instance.z,
+    id:typeof instance.id==='string'?instance.id:null,metersPerPixel});
 }
 
 // Destination slices use consecutive integer edges (no gaps or overlap);
