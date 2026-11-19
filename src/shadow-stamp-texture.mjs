@@ -17,10 +17,11 @@ export function shadowStampAlpha(x,y,size=SHADOW_STAMP_PIXELS){
   const v=(y+.5-size*.5)/(size*.5);
   const distance=Math.hypot(u,v);
   if(distance>=1)return 0;
-  // C2 continuous edge attenuation. At the rim alpha is zero; at the
-  // center it remains bright enough for a rooted, legible pixel-art shadow.
+  // Smooth zero-alpha perimeter, but keep a broad enough attenuation
+  // footprint that a root still visibly grounds its trunk in mobile Hunt.
+  // Squaring t removed too many middle-distance pixels in the real browser.
   const t=1-distance*distance;
-  return Math.round(255*t*t);
+  return Math.round(255*Math.pow(t,1.25));
 }
 
 export function makeShadowStampPixels(size=SHADOW_STAMP_PIXELS){
