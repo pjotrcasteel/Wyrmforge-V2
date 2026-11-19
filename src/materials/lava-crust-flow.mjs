@@ -38,34 +38,41 @@ vec3 nativeLavaCrust(vec3 world,vec2 actualFlow,vec2 channelFlow,
   // gave the iPhone a checkerboard of orange square edges.
   vec2 axis=length(channelFlow)>.5?normalize(channelFlow):vec2(0.0,1.0);
   float current=step(.5,length(actualFlow));
-  vec2 pixels=floor(world.xz*8.0)-axis*floor(seconds*.55);
+  // Around 5 pixels/metre: large ~6m crust features rather than repeated
+  // 1m emoji-like orange islands. The whole river scrolls slowly together.
+  vec2 pixels=floor(world.xz*5.0)-axis*floor(seconds*.42);
   ivec2 p=ivec2(floor(pixels));
   int outer=lavaCrustBand(p);
   int inner=lavaCrustBand(p+ivec2(11,8));
   float pigment=lavaCrustHash(ivec2(floor(vec2(p)/vec2(14.0,17.0))));
-  bool plate=outer==0||(inner==0&&outer!=3);
+  bool plate=outer==0||inner==0||
+    (outer==2&&inner==2&&pigment<.64);
   bool fracture=outer==1||(inner==1&&outer==2);
   bool exposed=outer==3||(inner==3&&outer==2);
   // Most of the surface is a dark rafts/iron-red melt, NOT a uniformly
   // incandescent orange sheet. Thin fractures expose hot moving interior.
-  vec3 blackBasalt=mix(vec3(.068,.062,.071),vec3(.155,.116,.111),pigment);
-  vec3 redMelt=mix(vec3(.39,.065,.019),vec3(.75,.17,.023),
-      .30+.45*pigment+.14*current);
+  vec3 blackBasalt=mix(vec3(.095,.079,.081),vec3(.19,.13,.114),pigment);
+  vec3 redMelt=mix(vec3(.28,.052,.022),vec3(.67,.15,.026),
+      .28+.40*pigment+.08*current);
   vec3 color=plate?blackBasalt:redMelt;
-  if(fracture)color=mix(color,vec3(.72,.15,.023),.83);
-  if(exposed)color=mix(color,vec3(1.0,.55,.095),.84);
-  if(outer==2&&inner==2&&pigment>.83){
-    color=mix(color,vec3(.96,.32,.045),.42);
+  if(fracture)color=mix(color,vec3(.89,.24,.034),.72);
+  if(exposed)color=mix(color,vec3(1.0,.58,.11),.88);
+  if(outer==2&&inner==2&&pigment>.94){
+    color=mix(color,vec3(.92,.28,.04),.36);
   }
   if(lip){
     color=mix(color,vec3(1.0,.45,.08),.30);
   }
   if(fall){
     // Only real falling faces/in-flight units glow through a torn crust.
-    color=mix(vec3(.72,.14,.023),vec3(1.0,.51,.085),.36+.34*pigment);
+    // Dark flecks still ride on a hot falling sheet. The previous uniform
+    // orange vertical wall looked like a rectangular 1m material slab.
+    vec3 melt=mix(vec3(.72,.13,.025),vec3(1.0,.47,.072),
+      .36+.34*pigment);
+    color=mix(color,melt,.52);
     if(faceMode==4){
       float drop=clamp((world.y-landingY)/2.5,0.0,1.0);
-      color=mix(color,vec3(1.0,.68,.16),.10+.12*(1.0-drop));
+      color=mix(color,vec3(1.0,.64,.13),.08+.12*(1.0-drop));
     }
   }else if(splash){
     color=mix(vec3(.83,.20,.026),vec3(1.0,.63,.13),.42+.22*pigment);
