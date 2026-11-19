@@ -107,7 +107,7 @@ test('actual Hunt uses real uploaded normals even with procedural dirt albedo',(
   assert.match(fragment,/uTerrainNormalsEnabled&&normalLayer>=0\.0/);
   assert.match(fragment,/vec3 b = abs\(n\.y\) > 0\.5 \? vec3\(0\.0, 0\.0, 1\.0\) : vec3\(0\.0, 1\.0, 0\.0\)/);
   assert.match(fragment,/t \* tangentNormal\.x \+ b \* tangentNormal\.y/);
-  assert.match(LOCAL_FIELD_LIGHTING_GLSL,/baselineLighting\(surface,context\)/);
+  assert.match(LOCAL_FIELD_LIGHTING_GLSL,/evaluateBaselineLighting\(surface,context\)/);
   assert.match(TRANSIENT_LIGHTING_GLSL,/dot\(surface\.normal,delta/);
   assert.match(renderer,/get terrainNormalDiagnostics\(\)/);
   assert.match(renderer,/gl\.uniform1i\(this\.\#uniforms\.terrainNormalEnabled/);
