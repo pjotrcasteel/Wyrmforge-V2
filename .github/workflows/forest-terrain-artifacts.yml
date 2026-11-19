@@ -6,6 +6,8 @@ on:
       - 'src/world-generation/map-kinds.mjs'
       - 'src/world-generation/world-generator.mjs'
       - 'src/lighting/baseline-lighting.mjs'
+      - 'src/webgl-voxel-view.mjs'
+      - 'tests/dirt-surface-shader.test.mjs'
       - 'tests/terrain-bank-light-readability.test.mjs'
       - 'tests/wet-forest-authored-artifacts.test.mjs'
       - 'src/terrain-directional-shadow-cache.mjs'
