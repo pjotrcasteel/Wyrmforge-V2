@@ -208,7 +208,11 @@ function forest(builder, context) {
       return 2+broad+detail+relief+(profile?profile.relief(x,z):-wetHollow);
     },
     exposedStone: profile?.rock??0.94,
-    rockFaceThreshold:arrival?3:null
+    // The arrival's metre-scale fissure walls expose rock under a thin soil
+    // cap. Two thick dirt layers made the preserved cliff read as a brown
+    // rectangular slab; do not affect the other six forest region profiles.
+    soilDepth:arrival?1:2,
+    rockFaceThreshold:arrival?2:null
   });
   addNarrativePaths(builder,profile?.landmark??'forest-ruin','wet-forest',role==='horde'?8:7);
   addEscapeLayout(builder,'wet-forest');
