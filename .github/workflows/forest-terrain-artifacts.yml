@@ -5,6 +5,8 @@ on:
     paths:
       - 'src/world-generation/map-kinds.mjs'
       - 'src/world-generation/world-generator.mjs'
+      - 'src/lighting/baseline-lighting.mjs'
+      - 'tests/terrain-bank-light-readability.test.mjs'
       - 'tests/wet-forest-authored-artifacts.test.mjs'
       - 'src/terrain-directional-shadow-cache.mjs'
       - 'src/terrain-contact-shadow-cache.mjs'
