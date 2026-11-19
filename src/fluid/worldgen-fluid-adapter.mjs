@@ -9,7 +9,8 @@ import {WATER_SEAM_TRANSFER_UNITS} from './fluid-seam-links.mjs';
 export const WORLDGEN_FLUID_SCHEMA='wyrmforge.fluid-worldgen-adapter.v1';
 const MAX_VERTICAL_SCAN=128;
 const MAX_CHANNEL_CELLS=4096;
-const DEFAULT_SOURCE_RATE=3;
+export const DEFAULT_SOURCE_RATE=3;
+export const DEFAULT_LAVA_SOURCE_RATE=1; // viscosity: 10cm/step at a genuine molten inlet
 export const DEFAULT_CHANNEL_DEPTH_UNITS=4; // 40cm: water sits well below the grass bank
 
 function assertBounds(footprint){
@@ -57,7 +58,7 @@ export function createFluidTerrainFloorQuery(footprint,terrain){
 // The WorldGen endpoint closest to its first authored node is the upstream
 // source. No source is synthesized for empty or unsupported channel recipes.
 export function createWorldGenFluidEngine(layout,terrain,{
-  sourceRate=DEFAULT_SOURCE_RATE,initialDepth=DEFAULT_CHANNEL_DEPTH_UNITS
+  sourceRate,initialDepth=DEFAULT_CHANNEL_DEPTH_UNITS
 }={}){
   const footprint=assertBounds(layout?.footprint);
   const channels=layout?.riverChannels;
@@ -67,11 +68,16 @@ export function createWorldGenFluidEngine(layout,terrain,{
       channels[0].floor.length>MAX_CHANNEL_CELLS){
     throw new TypeError('Expected one authored WorldGen water or lava channel');
   }
+  const [channel]=channels;
+  // Share one real bounded fluid authority, but do not inject molten rock
+  // at Water's three-times-faster inlet rate. Explicit sourceRate remains
+  // available for authored high-pressure vents and test fixtures.
+  const inletRate=sourceRate??
+    (channel.kind==='lava'?DEFAULT_LAVA_SOURCE_RATE:DEFAULT_SOURCE_RATE);
   if(!Number.isSafeInteger(initialDepth)||initialDepth<1||initialDepth>10||
-      !Number.isSafeInteger(sourceRate)||sourceRate<1||sourceRate>10){
+      !Number.isSafeInteger(inletRate)||inletRate<1||inletRate>10){
     throw new RangeError('Expected bounded water-seeding settings');
   }
-  const [channel]=channels;
   const boundaryRole=layout.boundaryRole??'isolated';
   if(!['isolated','head','through','tail'].includes(boundaryRole)){
     throw new TypeError('Unknown authored Water V2 boundary role');
@@ -137,12 +143,12 @@ export function createWorldGenFluidEngine(layout,terrain,{
     mouth.slice(0,WATER_SEAM_TRANSFER_UNITS):mouth;
   const boundaryOutlets=boundaryRole==='tail'?
     exits.slice(0,WATER_SEAM_TRANSFER_UNITS):exits;
-  const inletRate=boundaryRole==='head'?
-    Math.min(sourceRate,Math.ceil(WATER_SEAM_TRANSFER_UNITS/
-      Math.max(1,boundaryInlets.length))):sourceRate;
+  const boundaryInletRate=boundaryRole==='head'?
+    Math.min(inletRate,Math.ceil(WATER_SEAM_TRANSFER_UNITS/
+      Math.max(1,boundaryInlets.length))):inletRate;
   const outletRate=boundaryRole==='tail'?
-    Math.ceil(WATER_SEAM_TRANSFER_UNITS/
-      Math.max(1,boundaryOutlets.length)):sourceRate;
+    Math.min(inletRate,Math.ceil(WATER_SEAM_TRANSFER_UNITS/
+      Math.max(1,boundaryOutlets.length))):inletRate;
   // The river grammar already publishes the physical downstream heading on
   // each authored bed cell. Keep one bounded, cardinal current per cell,
   // constrained to a real neighboring river cell at equal/lower solid height.
@@ -186,14 +192,14 @@ export function createWorldGenFluidEngine(layout,terrain,{
     // NOT independently spawned fluid sources or sinks.
     sources:['isolated','head'].includes(boundaryRole)?
       boundaryInlets.map(({x,z,y})=>({
-        x,z,surfaceY:y+initialDepth/10,rate:inletRate
+        x,z,surfaceY:y+initialDepth/10,rate:boundaryInletRate
       })):[],
     outlets:['isolated','tail'].includes(boundaryRole)?
       boundaryOutlets.map(({x,z,y})=>({
         x,z,surfaceY:y+initialDepth/10,
         rate:boundaryRole==='tail'?outletRate:
-          Math.min(10,Math.max(sourceRate,
-            Math.ceil(mouth.length*sourceRate/Math.max(1,exits.length))))
+          Math.min(10,Math.max(inletRate,
+            Math.ceil(mouth.length*inletRate/Math.max(1,exits.length))))
       })):[],
     currents
   });
@@ -205,7 +211,8 @@ export function createWorldGenFluidEngine(layout,terrain,{
     inletCellCount:boundaryInlets.length,
     outletCellCount:boundaryOutlets.length,
     currentCellCount:currents.length,
-    channelDepthUnits:initialDepth
+    channelDepthUnits:initialDepth,
+    inletRatePerSource:boundaryInletRate
   });
 }
 
