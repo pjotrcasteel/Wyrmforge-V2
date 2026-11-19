@@ -3,6 +3,7 @@ import {terrainColorTransferGlsl} from '../terrain-color-space.mjs';
 import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transient-lighting.mjs';
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
+import {LAVA_CRUST_FLOW_GLSL} from '../materials/lava-crust-flow.mjs';
 import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
 import {writePointVisibility,POINT_VISIBILITY_FLOATS} from '../lighting/point-light-visibility.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
@@ -69,6 +70,7 @@ uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 ${MOLTEN_DISPLAY_GLSL}
+${LAVA_CRUST_FLOW_GLSL}
 ${terrainColorTransferGlsl()}
 ${SURFACE_GLSL}
 ${TRANSIENT_LIGHTING_GLSL}
@@ -95,8 +97,16 @@ void main(){
   if(vFaceMode==4&&uRibbonEnabled<.5)discard;
   if(vFaceMode==5&&uLandingEnabled<.5)discard;
   if(vFaceMode==6&&uParcelsEnabled<.5)discard;
-  // Pixel-art glints anchored to real world coordinates; no new texture
-  // assets. Palette follows the approved water/lava artwork in Hunt.
+  if(uLava>.5){
+    // LAVA-02: hot channels carry floating dark crust plates with glowing
+    // moving fractures. All coordinates come from real solver-wet geometry.
+    // This EARLY branch skips the expensive water ripple lookup entirely,
+    // rather than doing water fragment work before drawing any lava.
+    vec3 molten=nativeLavaCrust(vWorld,vFlow,vFaceMode,vLandingY,uTime);
+    outColor=vec4(litFluidColor(molten),vFaceMode==5?.90:.995);
+    return;
+  }
+  // Only WATER below this point: pixel glints on real wet geometry.
   vec2 pixel=floor(vWorld.xz*8.0);
   // This fade is shared by all water pixels. JS computes it ONCE per draw,
   // avoiding expensive per-fragment smoothstep work on weak GPUs/software GL.
@@ -139,7 +149,7 @@ void main(){
   }
   vec3 color;
   float opacity;
-  if(uLava<0.5){
+  {
     vec3 deep=vec3(.075,.28,.32);
     vec3 shallow=vec3(.22,.49,.44);
     color=mix(deep,shallow,.36+.24*pool);
@@ -190,23 +200,6 @@ void main(){
     // Prevent the old terrain decal from showing through as hard dark
     // blocks at excavation boundaries, while keeping slight depth blending.
     opacity=mix(.975,.94,top);
-  }else{
-    float ember=fluidHash(pixel-vec2(frame,frame*.25)+79.0);
-    color=mix(MOLTEN_DARK,MOLTEN_HOT,.40+.45*pool);
-    color=mix(color,MOLTEN_CORE,step(.84,ember)*.5);
-    color*=mix(.72,1.0,top);
-    if(vFaceMode==4){
-      float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);
-      color=mix(color,vec3(1.0,.66,.20),.16+.12*(1.0-fall));
-    }
-    if(vFaceMode==2){
-      float streak=fluidHash(vec2(floor(vWorld.y*8.0+uTime*2.0),
-        floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0)));
-      color=mix(color,vec3(1.0,.63,.16),step(.68,streak)*.22);
-      float landing=1.0-smoothstep(.02,.4,vWorld.y-vLandingY);
-      color=mix(color,vec3(1.0,.75,.24),landing*.24);
-    }
-    opacity=.99;
   }
   outColor=vec4(litFluidColor(color),opacity);
 }
