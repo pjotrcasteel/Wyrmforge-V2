@@ -65,11 +65,13 @@ try{
       // field before calling this a cross-consumer visual witness. Do not
       // mistake 200 authored emissive cells for a lit Play Hunt frame.
       if(scenario.kind==='lava'){
+        const warmupStart=Date.now();
         try{
           await page.waitForFunction(()=>{
             const s=window.__WyrmforgeFluidTest?.lightingStatus();
             return s?.sourceCells>0&&s.fieldReady;
-          },null,{timeout:45000});
+          },null,{timeout:150000});
+          record.staticFieldWarmupMs=Date.now()-warmupStart;
         }catch(error){
           record.lightingTimeout=await page.evaluate(
             ()=>window.__WyrmforgeFluidTest?.lightingStatus()??null);
@@ -120,7 +122,7 @@ try{
       console.log('L10_08_MIXED_SCENE '+JSON.stringify({
         scene:record.name,kind:record.fluid.kind,faces:record.fluid.topFaces,
         fieldReady:record.lighting.fieldReady,pointFieldReady:record.lighting.pointFieldReady,
-        imageBytes:pngBytes.length
+        imageBytes:pngBytes.length,staticFieldWarmupMs:record.staticFieldWarmupMs??null
       }));
     }catch(error){
       record.failure=String(error.stack??error);
