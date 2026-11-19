@@ -228,7 +228,7 @@ export class TerrainDirectionalShadowCache{
         ?Math.max(2,Math.round(Math.min(.7,s.depth)*view.scale*.64))
         :Math.max(1,Math.round(s.depth*view.scale*.77));
       if(p.x+w<0||p.x-w>view.width||p.y+h<0||p.y-h>view.height)continue;
-      paintSoftShadowStamp(ctx,Math.round(p.x-w*.5),Math.round(p.y-h*.5),w,h,s.alpha);
+      paintSoftShadowStamp(ctx,Math.round(p.x-w*.5),Math.round(p.y-h*.5),w,h,s.alpha,'canopy');
       this.#drawn++;
       if(s.face==='cliff')this.#cliffDrawn++;
     }
