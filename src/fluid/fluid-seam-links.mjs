@@ -4,6 +4,10 @@
 export const FLUID_SEAM_STATE_SCHEMA='wyrmforge.fluid-seam-state.v1';
 export const MAX_FLUID_SEAM_LINKS=64;
 export const MAX_FLUID_SEAM_VISITS=8;
+// Real 1m WorldGen region/link interfaces can move at most 20cm of water
+// column per fixed step. A connected river's upstream boundary must not
+// inject more than this across the shared single-face bottleneck.
+export const WATER_SEAM_TRANSFER_UNITS=2;
 const ID=/^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
 
 const pointKey=(point)=>point.bandId+':'+point.x+','+point.z;
@@ -75,7 +79,7 @@ export class FluidSeamLinks {
       }
       moved+=from.transferToAdjacent(to,{
         x:link.from.x,z:link.from.z,
-        toX:link.to.x,toZ:link.to.z,maxUnits:from.kind==='lava'?1:2
+        toX:link.to.x,toZ:link.to.z,maxUnits:from.kind==='lava'?1:WATER_SEAM_TRANSFER_UNITS
       });
     }
     if(this.#links.length)this.#cursor=(this.#cursor+count)%this.#links.length;
