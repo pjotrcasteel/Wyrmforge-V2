@@ -6,6 +6,7 @@ import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
 import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
 import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
 import {describeHuntBiomeMood,progressAlongHunt} from './src/lighting/hunt-biome-mood.mjs';
+import {terrainCorruptionProfile} from './src/terrain-corruption-profile.mjs';
 import {LocalLightField} from './src/lighting/local-light-field.mjs';
 import {MOLTEN_PRESENTATION} from './src/materials/molten-presentation.mjs';
 import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
@@ -98,6 +99,7 @@ let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalSh
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
+let playCorruptionProfile=routePreview?.stop.profile.corruption??terrainCorruptionProfile(0);
 let playBiomeMood=describeHuntBiomeMood({
   kind:routePreview?.stop.kind??'wet-forest',
   progress:routePreview?.stop.profile.corruption.progress??0,
@@ -123,8 +125,9 @@ function updatePlayBiomeEnvironment(){
   if(step===playBiomeTravelStep)return;
   playBiomeTravelStep=step;
   const normalized=step/100;
+  playCorruptionProfile=terrainCorruptionProfile(normalized);
   playBiomeMood=describeHuntBiomeMood({
-    kind:'wet-forest',progress:normalized,daylight:1-normalized*.55
+    kind:'wet-forest',progress:normalized,daylight:playCorruptionProfile.daylight
   });
   playLightingEnvironment=playBiomeMood.environment;
 }
@@ -2217,7 +2220,7 @@ function frame(now) {
           pointVisibility:pointOcclusionEnabled?playPointVisibility:null,
           lightingEnvironment:playLightingEnvironment,huntElevationReference:playFollowCamera.smoothedGroundY,huntGrassArt:playMode,
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
-          huntCorruption:routePreview?.stop.profile.corruption,
+          huntCorruption:playCorruptionProfile,
            huntLava:terrainChannelLayer(playLightingLiquid,playLava),
           terrainNormalsEnabled,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
