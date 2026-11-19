@@ -1,0 +1,44 @@
+name: L10-08 normal maps in real Play Hunt
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/materials/hunt-terrain-normal-tiles.mjs'
+      - 'src/webgl-voxel-view.mjs'
+      - 'external-terrain-lab.mjs'
+      - 'tests/hunt-terrain-normal-maps.test.mjs'
+      - '.github/witness/terrain-normal-hunt.mjs'
+      - '.github/workflows/terrain-normal-hunt.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  normal-texel-receiver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate actual Play Hunt and normal-map sources
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check src/materials/hunt-terrain-normal-tiles.mjs
+          node --test tests/hunt-terrain-normal-maps.test.mjs
+      - name: Prepare bounded browser witness
+        run: |
+          command -v google-chrome
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
+      - name: Capture same seed-7 Hunt with actual normal textures ON and OFF
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/terrain-normal-hunt.mjs
+      - name: Keep exact screenshots, residency and pixel-delta evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l10-08-terrain-normals-on-off
+          path: terrain-normal-evidence/
+          if-no-files-found: warn
+          retention-days: 14
