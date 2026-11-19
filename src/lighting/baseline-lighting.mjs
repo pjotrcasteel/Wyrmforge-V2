@@ -30,9 +30,9 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context) {
     // 0.50 * 0.66 compound floor that made west dirt walls nearly black.
     // This remains a renderer-only response to existing physical geometry;
     // actual shadow casters and visibility still provide occlusion.
-    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.25,.66,1.48);
+    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.40,.61,1.60);
     lighting*=tone;
-    if(normal.y<.5&&normal.y>-.5)lighting*=.78;
+    if(normal.y<.5&&normal.y>-.5)lighting*=.76;
   }
   return surface.albedo*lighting+surface.emission;
 }
