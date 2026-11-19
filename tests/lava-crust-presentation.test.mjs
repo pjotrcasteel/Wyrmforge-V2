@@ -10,13 +10,15 @@ import {MOLTEN_PRESENTATION} from '../src/materials/molten-presentation.mjs';
 test('LAVA-02: native molten material uses grounded dark plates, hot cracks and slow real downstream motion',()=>{
   assert.match(LAVA_CRUST_FLOW_GLSL,/nativeLavaCrust/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/actualFlow/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(world\.xz\*10\.0\)/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(world\.xz\*8\.0\)/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(seconds\*\.55\)/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/float plateCover/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/float fracture/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/vec3 cooled=vec3\(\.085,\.071,\.075\)/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/bool isFall/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/bool isSplash/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/lavaCrustBand\(p\)/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/FIRE_LAVA_CRUST/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/bool fracture/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/one stable direction|ONE/i);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/vec3 blackBasalt=/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/bool fall/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/bool splash/);
   assert.doesNotMatch(LAVA_CRUST_FLOW_GLSL,/\bsin\s*\(|\bcos\s*\(|labNoise|soilHash/,
     'avoid random per-pixel trigonometric noise in weak mobile WebGL');
   assert.ok(MOLTEN_PRESENTATION.emission[0]>0);
@@ -27,7 +29,8 @@ test('LAVA-02: lava exits before water motif sampling and keeps actual fluid fac
   const water=FLUID_FRAGMENT_GLSL.indexOf('ivec2 moving=');
   assert.ok(molten>0&&water>molten,
     'the fast lava branch must not pay for every water ripple lookup');
-  assert.match(FLUID_FRAGMENT_GLSL,/nativeLavaCrust\(vWorld,vFlow,vFaceMode,vLandingY,uTime\)/);
+  assert.match(FLUID_FRAGMENT_GLSL,/nativeLavaCrust\(vWorld,vFlow,uLavaChannelFlow/);
+  assert.match(FLUID_FRAGMENT_GLSL,/uniform vec2 uLavaChannelFlow/);
   assert.match(FLUID_FRAGMENT_GLSL,/if\(vFaceMode==4&&uRibbonEnabled<\.5\)discard/);
   assert.match(FLUID_FRAGMENT_GLSL,/if\(vFaceMode==6&&uParcelsEnabled<\.5\)discard/);
   assert.match(FLUID_VERTEX_GLSL,/dot\(world,uCameraDepth\)-uDepthOrigin/);
