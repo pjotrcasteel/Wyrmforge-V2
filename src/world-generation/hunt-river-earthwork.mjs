@@ -4,7 +4,8 @@
 // A host must still publish these exact definitions before opening Fluid V2.
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
 import {
-  expandHuntRiverCorridor,composeHuntRiverBankTiles,excludeHuntRiverPlacements
+  expandHuntRiverCorridor,prepareHuntBreachableBankTerraces,
+  composeHuntRiverBankTiles,excludeHuntRiverPlacements
 } from './hunt-river-morphology.mjs';
 
 export const HUNT_RIVER_EARTHWORK_SCHEMA='wyrmforge.hunt-river-earthwork.v1';
@@ -216,16 +217,26 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const widened=expandHuntRiverCorridor(band,points,grade,changes,landform,{
       maxCutMetres
     });
+    const wetCount=changes.size;
+    // These are deliberately DRY, lower native Voxel banks. The water
+    // footprint and the existing shallow traversal fords do not change.
+    const terraces=prepareHuntBreachableBankTerraces({
+      band,changes,landform
+    });
+    for(const terrace of terraces){
+      changes.set(key(terrace.x,terrace.z),terrace);
+    }
     const heights=topFaces(band.definition.runs,changes);
     let maxCut=0,maxFill=0;
-    for(const [id] of changes){
+    for(const [id,change] of changes){
       const top=heights.get(id);
       if(!Number.isSafeInteger(top)){
         throw new Error('WorldGen water corridor cell has no physical supporting Voxel terrain: '+id);
       }
-      maxCut=Math.max(maxCut,top-grade);
-      maxFill=Math.max(maxFill,grade-top);
-      if(top-grade>maxCutMetres||grade-top>maxFillMetres){
+      const cut=top-change.floorY,fill=change.floorY-top;
+      maxCut=Math.max(maxCut,cut);
+      maxFill=Math.max(maxFill,fill);
+      if(cut>maxCutMetres||fill>maxFillMetres){
         throw new RangeError('WorldGen water corridor unsafe earthwork at '+id+
           ' (original '+top+', grade '+grade+')');
       }
@@ -243,8 +254,10 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     });
     edits.push(Object.freeze({
       ...band,definition,fluidLayout:channelForBand(band,points,grade,changes),
-      earthwork:Object.freeze({cellCount:points.length,recessedCells:changes.size,
-        lateralWetCells:widened.addedWetCells,bankMicroTiles:shoreline.bankTiles,
+      earthwork:Object.freeze({cellCount:points.length,recessedCells:wetCount,
+        lateralWetCells:widened.addedWetCells,
+        bankTerraceColumns:Object.freeze(terraces),bankTerraceCount:terraces.length,
+        bankMicroTiles:shoreline.bankTiles,
         fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
@@ -295,8 +308,15 @@ export function composeHuntRiverEarthworkGraph(graph,earthwork,terrainAdapter){
     fluidSeams,
     placement(id){
       const original=graph.placement(id);
-      const authored=patches.get(id)?.fluidLayout?.riverChannels?.[0];
-      return authored?excludeHuntRiverPlacements(original,authored):original;
+      const patched=patches.get(id);
+      const authored=patched?.fluidLayout?.riverChannels?.[0];
+      if(!authored)return original;
+      // A prop must not remain floating above a physically lowered dry shelf.
+      // These extra cells are used only for placement exclusion, never passed
+      // to the Water V2 solver or the authored channel.
+      const terraces=patched.earthwork?.bankTerraceColumns??[];
+      const collision={...authored,floor:[...authored.floor,...terraces]};
+      return excludeHuntRiverPlacements(original,collision);
     },
     region:id=>patches.get(id)??graph.region(id),
     link:id=>patches.get(id)??graph.link(id),

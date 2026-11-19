@@ -6,6 +6,7 @@ import {containsHuntLandform} from './hunt-landform-footprint.mjs';
 export const HUNT_RIVER_MORPHOLOGY_SCHEMA='wyrmforge.hunt-river-morphology.v1';
 export const MAX_RIVER_LATERAL_CELLS=256;
 export const MAX_RIVER_BANK_MICRO_TILES=64;
+export const MAX_RIVER_BREACHABLE_BANK_COLUMNS=12;
 const key=(x,z)=>x+','+z;
 const DIRECTIONS=[[1,0],[-1,0],[0,1],[0,-1]];
 const finiteCell=cell=>Number.isSafeInteger(cell?.x)&&Number.isSafeInteger(cell?.z);
@@ -111,6 +112,57 @@ export function expandHuntRiverCorridor(band,part,grade,changes,landform,{
 
 const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
 
+// Riverbank crests can be 3-5m above a recessed 40cm stream. A normal 2m
+// Fireball then cannot physically connect a crater to Water V2. Make a FEW
+// natural, separated dry stone shelves near the authored river instead of
+// teaching Water to cross intact higher solid. WorldGen alone authors these
+// native Voxel cuts; they are not part of the wet river channel.
+export function prepareHuntBreachableBankTerraces({
+  band,changes,landform,maxCells=MAX_RIVER_BREACHABLE_BANK_COLUMNS
+}={}){
+  if(!band?.definition?.runs||!(changes instanceof Map)||!landform||
+      !Number.isSafeInteger(maxCells)||maxCells<0||
+      maxCells>MAX_RIVER_BREACHABLE_BANK_COLUMNS){
+    throw new TypeError('Expected authored dry riverbank terrace inputs');
+  }
+  const columns=indexRiverTerrainColumns(band.definition.runs);
+  const seed=band.definition.seed??7;
+  const candidates=new Map();
+  for(const [id,bed] of changes){
+    if(bed.dryBank)continue;
+    const [x,z]=id.split(',').map(Number);
+    for(const [dx,dz] of DIRECTIONS){
+      const bx=x+dx,bz=z+dz,bankId=key(bx,bz);
+      if(changes.has(bankId)||!containsHuntLandform(landform,bx,bz)||
+          bx<=landform.bounds.minX+1||bx>=landform.bounds.maxX-1||
+          bz<=landform.bounds.minZ+1||bz>=landform.bounds.maxZ-1||
+          withinAuthoredTravelShoulder(landform,bx,bz))continue;
+      const existing=columns.get(bankId);
+      // Avoid roads and deep cliffs. Only low solid grass shelves bounded
+      // to 1-3m of actual excavation become safely breachable shore banks.
+      const floorY=bed.floorY+1;
+      const cut=(existing?.topY??0)-floorY;
+      if(existing?.material!==1||cut<1||cut>3)continue;
+      const candidate={x:bx,z:bz,floorY,cut,
+        rank:seededHash(seed,bx,bz)};
+      const previous=candidates.get(bankId);
+      if(!previous||candidate.cut<previous.cut)candidates.set(bankId,candidate);
+    }
+  }
+  const sorted=[...candidates.values()].sort((a,b)=>
+    a.rank-b.rank||a.z-b.z||a.x-b.x);
+  const selected=[];
+  for(const item of sorted){
+    if(selected.length>=maxCells)break;
+    // Breakable shoulders should not become an artificial straight trench.
+    if(selected.some(old=>
+      Math.abs(old.x-item.x)+Math.abs(old.z-item.z)<3))continue;
+    selected.push(item);
+  }
+  return Object.freeze(selected.map(({x,z,floorY})=>
+    Object.freeze({x,z,floorY,dryBank:true})));
+}
+
 // True, sparse 10cm micro-occupancy on EXISTING DRY grass. The inland
 // grass remains full-height; only the first 40cm at the shore is stepped.
 // We neither add decorative water nor rewrite the water-column solver floor.
@@ -124,6 +176,7 @@ export function composeHuntRiverBankTiles({
   }
   const candidates=new Map();
   for(const [id,bed] of changes){
+    if(bed.dryBank)continue;
     const [x,z]=id.split(',').map(Number);
     for(const [dx,dz] of DIRECTIONS){
       const nx=x+dx,nz=z+dz,nid=key(nx,nz);

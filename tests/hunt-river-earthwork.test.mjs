@@ -87,7 +87,7 @@ test('WorldGen materializes a real physical stone riverbed through the 8m link',
   }
 });
 
-test('earthwork leaves every column outside the proposed bed exactly unchanged',()=>{
+test('earthwork leaves every column outside the river and explicit dry terraces unchanged',()=>{
   const {graph,proposal}=fixture();
   const earthwork=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
   const originals=earthwork.bands.map(b=>graph.materialize(b.id));
@@ -97,6 +97,8 @@ test('earthwork leaves every column outside the proposed bed exactly unchanged',
     const touched=new Set([
       ...proposal.points.map(p=>p.x+','+p.z),
       ...earthwork.bands.flatMap(b=>b.fluidLayout.riverChannels[0].floor
+        .map(cell=>cell.x+','+cell.z)),
+      ...earthwork.bands.flatMap(b=>b.earthwork.bankTerraceColumns
         .map(cell=>cell.x+','+cell.z))
     ]);
     for(const band of earthwork.bands){
@@ -114,6 +116,39 @@ test('earthwork leaves every column outside the proposed bed exactly unchanged',
   }finally{
     originalLoader.unload();
     editedLoader.unload();
+  }
+});
+
+test('WAT-01: dry native shelves touch water but retain stone until a real Fireball opens them',()=>{
+  const {graph,proposal}=fixture();
+  const earthwork=prepareHuntRiverEarthwork(graph,proposal,toVoxelTerrainDefinition);
+  const loader=load(earthwork.bands);
+  try{
+    const {port}=loader.terrain;
+    const shelves=earthwork.bands.flatMap(b=>b.earthwork.bankTerraceColumns
+      .map(cell=>({...cell,bandId:b.id})));
+    assert.ok(shelves.length>0,
+      'the authored wet forest must contain physical 2m-Fireball-breachable banks');
+    for(const band of earthwork.bands){
+      const wet=new Map(band.fluidLayout.riverChannels[0].floor.map(c=>
+        [c.x+','+c.z,c]));
+      const query=createFluidTerrainFloorQuery(band.fluidLayout.footprint,port);
+      for(const shelf of band.earthwork.bankTerraceColumns){
+        assert.equal(wet.has(shelf.x+','+shelf.z),false,
+          'lowered shelves must stay DRY, not turn into invented river columns');
+        assert.equal(query(shelf.x,shelf.z),shelf.floorY,
+          'native Voxel stone must match the authored shelf top');
+        assert.equal(port.materialAt(shelf.x,shelf.floorY-1,shelf.z),3);
+        assert.equal(port.materialAt(shelf.x,shelf.floorY,shelf.z),0);
+        const neighbor=[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dz])=>{
+          const cell=wet.get((shelf.x+dx)+','+(shelf.z+dz));
+          return cell && shelf.floorY===cell.y+1;
+        });
+        assert.ok(neighbor,'a dry lowered bank must touch a true water channel face');
+      }
+    }
+  }finally{
+    loader.unload();
   }
 });
 

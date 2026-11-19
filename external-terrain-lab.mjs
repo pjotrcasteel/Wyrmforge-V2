@@ -851,16 +851,47 @@ function updatePlayStreaming(now) {
             const cast={point:bank.hit.point,
               target:{...bank.hit.cell,radius:2.3,depth:2},
               worldRevision:bank.hit.worldRevision};
+            const beforeWetColumns=[];
+            for(let dz=-3;dz<=3;dz++)for(let dx=-3;dx<=3;dx++){
+              if(Math.hypot(dx,dz)>3)continue;
+              const x=bank.shore.x+dx,z=bank.shore.z+dz;
+              if((playFluidStream.sample(x,z)?.depth??0)>0){
+                beforeWetColumns.push(x+','+z);
+              }
+            }
             beginPlayFireball(cast);
             return {target:bank.hit.cell,shore:bank.shore,river:bank.river,
               beforeRemoved:stream.terrainSave.removedCells.size,
-              beforeWetOutside:wetOutsideAuthored()};
+              beforeWetOutside:wetOutsideAuthored(),beforeWetColumns};
           },
           inspectCell(x,y,z){
             if(![x,y,z].every(Number.isSafeInteger))throw new TypeError('Whole voxel coordinates required');
+            const water=playFluidStream.sample(x,z);
             return {material:active.port.materialAt(x,y,z),
               savedRemoved:stream.terrainSave.removedCells.has(x+','+y+','+z),
-              depth:playFluidStream.sample(x,z)?.depth??0};
+              depth:water?.depth??0,floorY:water?.floorY??null,
+              surfaceY:water?.surfaceY??null,pendingArrival:water?.pendingArrival??0};
+          },
+          // QA-only: verify real water occupying columns physically excavated
+          // by the actual Fireball, not merely an arbitrary newly wet cell.
+          inspectBreach(shore,radius=3){
+            if(![shore?.x,shore?.z,radius].every(Number.isSafeInteger)||
+                radius<1||radius>4)throw new TypeError('Expected bounded shore crater');
+            const removed=new Set([...stream.terrainSave.removedCells].map(cell=>{
+              const [x,,z]=cell.split(',');return x+','+z;
+            }));
+            const physicallyRemoved=[],flooded=[],pending=[];
+            for(let z=shore.z-radius;z<=shore.z+radius;z++){
+              for(let x=shore.x-radius;x<=shore.x+radius;x++){
+                if(Math.hypot(x-shore.x,z-shore.z)>radius)continue;
+                if(!removed.has(x+','+z))continue;
+                const water=playFluidStream.sample(x,z);
+                physicallyRemoved.push({x,z,floorY:water?.floorY??null});
+                if((water?.depth??0)>0)flooded.push({x,z,depth:water.depth});
+                if((water?.pendingArrival??0)>0)pending.push({x,z,units:water.pendingArrival});
+              }
+            }
+            return {physicallyRemoved,flooded,pending};
           },
           advanceFluid(count){
             if(!Number.isSafeInteger(count)||count<1||count>180||
@@ -1487,7 +1518,7 @@ function resetSite() {
         const structuralGravity=gravityPreview||terrainGravity;
         const terrainIdentity=huntTerrainSaveIdentity(saveIdentity,gravityMode,{
           structuralGravity,defaultEnabled:defaultGravity
-        })+(streamedWaterPreview&&!cellPreview?':connected-water-v3-ribbon-bank':'');
+        })+(streamedWaterPreview&&!cellPreview?':connected-water-v4-breachable-banks':'');
         const terrainSave=new HuntTerrainSave(findingStorage,terrainIdentity);
         const fluidSave=streamedWaterPreview&&!cellPreview?
           new HuntFluidSave(findingStorage,terrainIdentity):null;
