@@ -10,8 +10,8 @@ import {MOLTEN_PRESENTATION} from '../src/materials/molten-presentation.mjs';
 test('LAVA-02: native molten material uses grounded dark plates, hot cracks and slow real downstream motion',()=>{
   assert.match(LAVA_CRUST_FLOW_GLSL,/nativeLavaCrust/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/actualFlow/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(world\.xz\*8\.0\)/);
-  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(seconds\*\.55\)/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(world\.xz\*5\.0\)/);
+  assert.match(LAVA_CRUST_FLOW_GLSL,/floor\(seconds\*\.42\)/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/lavaCrustBand\(p\)/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/FIRE_LAVA_CRUST/);
   assert.match(LAVA_CRUST_FLOW_GLSL,/bool fracture/);
