@@ -1739,6 +1739,21 @@ function showMeshedTerrain(terrain,kind,epoch,meshes,source='worker') {
       const witnessedBreaches=[];
       window.__WyrmforgeFluidTest={
         hold(on){playFluidWitnessHold=Boolean(on);},
+        // Read-only, opt-in actual Hunt mixed-scene witness. No test-created
+        // light, terrain, fluid state or presentation state.
+        lightingStatus:()=>Object.freeze({
+          enabled:localLightingEnabled,
+          fluidEmissionEnabled,
+          pointOcclusionEnabled,
+          fieldReady:Boolean(playVisibleLightingField?.hasEmission),
+          sourceCells:playStaticEmissiveCells.length,
+          transientEmitters:playSpellLights?.emitters?.length??0,
+          pointFieldReady:Boolean(playPointVisibility?.ready),
+          fluidPointVisibilityFrames:playFluidVisual?.stats.pointVisibilityFrames??0,
+          fluidPointVisibilityActive:playFluidVisual?.stats.pointVisibilityActive??false,
+          fieldBytes:playFluidVisual?.stats.lightingTextureBytes??0,
+          frameUploads:playFluidVisual?.stats.lightingUploads??0
+        }),
         ribbons(on){playFluidRibbonsEnabled=Boolean(on);},
         landing(on){playFluidLandingEnabled=Boolean(on);},
         parcels(on){playFluidParcelsEnabled=Boolean(on);},
