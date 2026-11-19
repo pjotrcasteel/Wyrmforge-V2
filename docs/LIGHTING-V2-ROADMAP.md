@@ -39,6 +39,10 @@ After build `462754d`, the owner identified that the Wet Forest still looks flat
 
 [Contract, scope and acceptance](LIGHTING-TERRAIN-NORMAL-MAPS.md): activate preliminary 64px grass/earth/rock tangent normals from existing materials, supply correct physical wall basis, shade sun/Fireball with detail normals, retain all actual shadow and geometry ownership, compare same-seed `terrainNormals=off` against default on, gate on real mobile cost and user aesthetic review. Do not claim art-approved normal maps or phone acceptance from a passing browser test.
 
+## 2026-11-19 — owner-requested visual finishing pass (#430)
+
+The owner still sees flickering trees/stones, round stamped canopy shadows and an overly gloomy uncorrupted Wet Forest on iPhone. The current [tracked visual finishing work](LIGHTING-V2-VISUAL-FINISH.md) separates physical rooted contact from elongated foliage silhouette casting, adds bounded per-prop temporal irradiance stability, and derives a **bright healthy forest → progressively corrupt Wyrm lair** Lighting-only atmosphere from World Map data. This extends L10-08/09 and begins the L10-10 mobile acceptance review. Green browser/unit tests do **not** mean an accepted lighting engine. Maintain L10-99 closure gate pending sustained iPhone and Android visual/performance review.
+
 ## Required quality and performance gates
 
 These are provisional design budgets, not achieved guarantees. If measurement demands a change, record the tradeoff explicitly instead of quietly moving a target.
