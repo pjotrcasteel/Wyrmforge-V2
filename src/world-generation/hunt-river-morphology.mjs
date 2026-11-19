@@ -116,8 +116,9 @@ const tileKey=tile=>tile.x+','+tile.y+','+tile.z;
 // microbank. Simply recessing every channel 1m below its OLD riverbed was
 // insufficient: the original river could be HIGHER than neighboring grass.
 // This is a native WorldGen/Voxel floor adjustment, never a render offset.
-export function recessHuntRiverBelowGrass(band,changes,columns){
-  if(!band?.definition||!(changes instanceof Map)||!(columns instanceof Map)){
+export function recessHuntRiverBelowGrass(band,changes,columns,fords=new Set()){
+  if(!band?.definition||!(changes instanceof Map)||
+      !(columns instanceof Map)||!(fords instanceof Set)){
     throw new TypeError('Expected native WorldGen wet bank floor planning');
   }
   // Microtile surfaces are published as independent physical geometry.
@@ -156,12 +157,13 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
         }
         rim=Math.min(rim,tile.y+lowest/10);
       }
-      // Preserve a shallow, physically walkable 40cm ford with at least
-      // 10cm of grass-bank clearance. Sustained overflow is handled by
-      // conservative depth-responsive downstream current transport, not
-      // by lowering the native crossing into an unwalkable 1m trench.
+      // Crossings need the existing walkable <=55cm rises. Give only the
+      // explicitly mapped ford its former 50cm margin; non-ford shores
+      // need 90cm for their observed sustained 70-80cm pool head. Carve
+      // physical native Voxel beds, never a decorative shader offset.
+      const clearance=fords.has(id)?.5:.9;
       if(Number.isFinite(rim)){
-        target=Math.min(target,Math.floor(rim-.5+1e-6));
+        target=Math.min(target,Math.floor(rim-clearance+1e-6));
       }
     }
     if(target<bed.floorY){
