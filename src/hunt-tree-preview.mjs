@@ -128,14 +128,15 @@ export class HuntTreePreview {
       contactCpuMs+=performance.now()-started;
       if(stamps.length)layers.push({depth:foot.depth+.0001,shadow:stamps});
     };
-    const draw=(sprite,rect,position,profile=null)=>{
+    const draw=(sprite,rect,position,profile=null,stableId=null)=>{
       if(!lighting){
         ctx.drawImage(this.#image,sprite.x,sprite.y,sprite.w,sprite.h,...rect);
       }else if(profile&&typeof this.#lightingCache.drawBanded==='function'){
         this.#lightingCache.drawBanded(ctx,this.#image,sprite,rect,
           position=>lighting.sample(position),lighting.ambient,profile);
       }else{
-        this.#lightingCache.draw(ctx,this.#image,sprite,rect,lighting.sample(position),lighting.ambient);
+        this.#lightingCache.draw(ctx,this.#image,sprite,rect,
+          lighting.sample(position),lighting.ambient,stableId);
       }
     };
     const layers=[];
@@ -189,6 +190,7 @@ export class HuntTreePreview {
         }
         if(tree.damaged)layer.damageFoot=projectVoxel(tree.x,tree.y+.5,tree.z,view);
         layer.lightPosition=[tree.x,tree.y+1,tree.z];
+        layer.stableLightId=tree.id;
         layer.lightProfile=describeSpriteLightProfile(tree,tree.sprite);
         addShadow(tree,projectVoxel(tree.x,tree.y,tree.z,view));
         layers.push(layer);
@@ -222,7 +224,7 @@ export class HuntTreePreview {
         contactCpuMs+=performance.now()-started;
       }
       else if(sprite){
-        draw(sprite,[x,y,w,h],layer.lightPosition,layer.lightProfile);
+        draw(sprite,[x,y,w,h],layer.lightPosition,layer.lightProfile,layer.stableLightId);
         if(layer.damageFoot){
           ctx.fillStyle='#c89962';
           ctx.fillRect(Math.round(layer.damageFoot.x)-2,Math.round(layer.damageFoot.y),5,2);
@@ -232,7 +234,8 @@ export class HuntTreePreview {
       else if(layer.prop){
         ctx.globalAlpha=layer.alpha;
         paintProp(ctx,this.#image,layer.prop,view,layer.foot,lighting?
-          (sprite,rect)=>draw(sprite,rect,[layer.prop.x,layer.prop.y+layer.prop.height*.5,layer.prop.z]):null);
+          (sprite,rect)=>draw(sprite,rect,[layer.prop.x,layer.prop.y+layer.prop.height*.5,layer.prop.z],
+            null,layer.prop.id):null);
         ctx.globalAlpha=1;
       }
       else paintActor();
