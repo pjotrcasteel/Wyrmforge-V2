@@ -4,6 +4,9 @@ import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transien
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
 import {LAVA_CRUST_FLOW_GLSL} from '../materials/lava-crust-flow.mjs';
+import {
+  buildLavaCrustAtlas,LAVA_CRUST_ATLAS_BYTES,LAVA_CRUST_ATLAS_SIZE
+} from '../materials/lava-crust-atlas.mjs';
 import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
 import {writePointVisibility,POINT_VISIBILITY_FLOATS} from '../lighting/point-light-visibility.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
@@ -286,6 +289,7 @@ export class HuntFluidSurfaceRenderer {
   #pointVisibilityActive=false;
   #pointVisibilityFrames=0;
   #lightingTexture=null;
+  #lavaAtlasTexture=null;
   #lightingSource=null;
   #lightingUploads=0;
   #lightingUploadMs=0;
@@ -313,7 +317,8 @@ export class HuntFluidSurfaceRenderer {
     this.#gl=gl;
     this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;
       this.#pointVisibilityActive=false;
-      this.#lightingTexture=null;this.#lightingSource=null;};
+      this.#lightingTexture=null;this.#lavaAtlasTexture=null;
+      this.#lightingSource=null;};
     this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;
       this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
@@ -351,6 +356,7 @@ export class HuntFluidSurfaceRenderer {
       gpuAllocatedBytes:this.#record?.capacities.reduce(
         (sum,bytes)=>sum+bytes,0)??0,
       lightingTextureBytes:this.#lightingTexture?24*24*4*4:0,
+      lavaAtlasBytes:this.#lavaAtlasTexture?LAVA_CRUST_ATLAS_BYTES:0,
       lightingUploads:this.#lightingUploads,
       lightingUploadMs:this.#lightingUploadMs,
       pointVisibilityActive:this.#pointVisibilityActive,
@@ -525,6 +531,7 @@ export class HuntFluidSurfaceRenderer {
         lightCount:uniform('uTransientLightCount'),
         lightPositions:uniform('uTransientPositions[0]'),lightRadiance:uniform('uTransientRadiance[0]'),
         lava:uniform('uLava'),lavaDirection:uniform('uLavaChannelFlow'),
+        lavaAtlas:uniform('uLavaCrustAtlas'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
       };
@@ -578,6 +585,29 @@ export class HuntFluidSurfaceRenderer {
       gl.bindBuffer(gl.ARRAY_BUFFER,null);
     }
     return true;
+  }
+
+  #bindLavaAtlas(){
+    const gl=this.#gl;
+    gl.uniform1i(this.#uniforms.lavaAtlas,6);
+    if(this.#mesh.kind!=='lava')return;
+    if(!this.#lavaAtlasTexture){
+      const texture=gl.createTexture();
+      if(!texture)throw new Error('Cannot create bounded molten-crust atlas');
+      gl.activeTexture(gl.TEXTURE0+6);
+      gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+      // A single 256KiB upload per context, NEVER one texture per tick.
+      // Pixel-art atlas generated in Materials without Voxel or Fluid edits.
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,LAVA_CRUST_ATLAS_SIZE,
+        LAVA_CRUST_ATLAS_SIZE,0,gl.RGBA,gl.UNSIGNED_BYTE,buildLavaCrustAtlas());
+      this.#lavaAtlasTexture=texture;
+    }
+    gl.activeTexture(gl.TEXTURE0+6);
+    gl.bindTexture(gl.TEXTURE_2D,this.#lavaAtlasTexture);
   }
 
   #bindLightingField(field){
@@ -650,6 +680,7 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform1i(u.pointVisibilityEnabled,visible?1:0);
     if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
+    this.#bindLavaAtlas();
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform2fv(u.lavaDirection,this.#lavaFlowAxis);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
@@ -676,6 +707,10 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#releaseLightingTexture();
+    if(this.#lavaAtlasTexture&&!this.#lost&&!this.#gl.isContextLost()){
+      this.#gl.deleteTexture(this.#lavaAtlasTexture);
+    }
+    this.#lavaAtlasTexture=null;
     if(this.#program&&!this.#lost)this.#gl.deleteProgram(this.#program);
     this.#program=null;
     this.#mesh=null;
