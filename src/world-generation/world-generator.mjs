@@ -58,11 +58,34 @@ function consolidateWoodlandCliffs(plan,heights,surfaces,roadGrades) {
     if(row.length>=3)heights[at(x,z)]=row[row.length>>1];
   }
 
-  // Keep the naturally graded one-metre banks. The old toe-deepening
-  // pass turned ordinary forest grass shoulders into continuous two-metre
-  // rectangular soil cutouts. WorldGen may author steep cliffs in mountain
-  // maps; forest arrival/exploration must not manufacture them from noise.
-  // Existing roads, combat floors and lateral ports remain untouched.
+  // Follow the existing one-metre scarps. Adjacent columns can bend the
+  // cliff by one row. Lower the foot of a connected face instead of adding
+  // a platform above the original hillside.
+  const smoothed=heights.slice();
+  const faceAt=(x,z)=>Math.abs(x)>=4&&surfaces[at(x,z)]!==2&&canShape(x,z+1)&&
+    smoothed[at(x,z)]>smoothed[at(x,z+1)];
+  const supports=(x,z)=>[-1,0,1].some(dz=>faceAt(x,z+dz));
+  const deepen=[];
+  for(let z=4;z<=12;z++)for(let x=-12;x<=12;x++){
+    if(!faceAt(x,z))continue;
+    const linked=supports(x-1,z)||supports(x+1,z);
+    if(!linked)continue;
+    const crest=smoothed[at(x,z)];
+    const toe=smoothed[at(x,z+1)];
+    if(crest-toe===1&&toe>0)deepen.push({x,z,target:toe-1});
+  }
+  // Use the snapshot's connected lip and extend the toe into the slope.
+  // Two cells at wide stretches and one at the ends avoid isolated pits.
+  for(const {x,z,target} of deepen){
+    const width=supports(x-1,z)&&supports(x+1,z)?2:1;
+    for(let step=1;step<=width;step++){
+      if(!canShape(x,z+step)||faceAt(x,z+step))break;
+      const i=at(x,z+step);
+      if(smoothed[i]>target+1)break;
+      heights[i]=Math.min(heights[i],target);
+    }
+  }
+
   const stoneUnderTurf=new Set();
   for(let z=3;z<=13;z++)for(let x=-13;x<=13;x++){
     if(Math.abs(x)<4)continue;
