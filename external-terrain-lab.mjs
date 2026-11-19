@@ -1968,6 +1968,31 @@ function playContextState(){
     actor:playActor?{x:playActor.x,y:playActor.y,z:playActor.z}:null};
 }
 
+function advanceHuntLighting(now){
+  // Lighting samples only public, revisioned Voxel geometry. Do not
+  // starve the pending field while WorldGen is streaming new regions:
+  // progressively finish at most six cells/frame during transitions.
+  // Committed terrain revisions still invalidate stale field snapshots.
+  if(localLightingEnabled&&active?.port&&playActor){
+    const lightingStarted=performance.now();
+    const workBudget=pendingEdit||pendingMesh||streamingBusy()||!renderer?.ready?6:24;
+    const physical=playStream?.trees?.objects??null;
+    if(playOccluderObjects!==physical){
+      unregisterOccluders?.();
+      unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
+      playOccluderObjects=physical;
+    }
+    const staticGeometry=staticOcclusionEnabled&&playStaticEmissiveCells.length>0
+      ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
+    playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
+      center:playActor,emissionCells:playStaticEmissiveCells,
+      emissionColor:MOLTEN_PRESENTATION.emission,
+      occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,
+      workBudget,now});
+    playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
+  }
+}
+
 function frame(now) {
   const playCpuBegin=playMode?performance.now():0;
   try {
@@ -2009,6 +2034,8 @@ function frame(now) {
     }
     if(renderer?.pendingUploads) renderer.flushQueuedUploads({budgetMs:2});
     resizeCanvas();
+    // Pure Lighting work must progress even when the presentation GPU is busy.
+    advanceHuntLighting(now);
     if(renderer?.ready&&!awaitingPlayContext) {
       // Follow the stabilized presentation target, not the actor's
       // ballistic height. Both projections retain the same voxel geometry.
@@ -2067,28 +2094,6 @@ function frame(now) {
       }
       updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
-      // Lighting samples only public, revisioned Voxel geometry. Do not
-      // starve the pending field while WorldGen is streaming new regions:
-      // progressively finish at most six cells/frame during transitions.
-      // Committed terrain revisions still invalidate stale field snapshots.
-      if(localLightingEnabled&&active?.port&&playActor&&!pendingEdit){
-        const lightingStarted=performance.now();
-        const workBudget=pendingMesh||streamingBusy()?6:24;
-        const physical=playStream?.trees?.objects??null;
-        if(playOccluderObjects!==physical){
-          unregisterOccluders?.();
-          unregisterOccluders=physical?playOccluderRegistry.register(physical):null;
-          playOccluderObjects=physical;
-        }
-        const staticGeometry=staticOcclusionEnabled&&playStaticEmissiveCells.length>0
-          ?playOccluderRegistry.snapshot({x:playActor.x,z:playActor.z}):null;
-        playLighting.update({epoch:active.port.epoch,revision:active.port.revision,
-          center:playActor,emissionCells:playStaticEmissiveCells,
-          emissionColor:MOLTEN_PRESENTATION.emission,
-          occluders:staticGeometry,occlusionEnabled:staticOcclusionEnabled,
-          workBudget,now});
-        playLightingStats.recordFrame(Math.min(1000,performance.now()-lightingStarted));
-      }
       playPresentationNow=now;
       playSpellLights=localLightingEnabled&&active?.port&&(playFireball||playImpact)?huntSpellLights({
         cast:playFireball?.world===active.world?playFireball:null,impact:playImpact,now,
