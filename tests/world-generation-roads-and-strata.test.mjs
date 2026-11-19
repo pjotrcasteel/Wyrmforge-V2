@@ -53,7 +53,7 @@ test('Roads remain continuous through the actual combat arena across biome kinds
     assert.equal(roads.routes[0].currentPhysicalCutVoxels,0);
     assert.equal(roads.routes[0].visualCutTenths,k+1);
     assert.equal(geology.continuousBedrockBelowStone,true);
-    assert.equal(geology.soilDepth,kind==='mountain-pass'?1:2);
+    assert.equal(geology.soilDepth,kind==='forest-highland'?2:1);
     assert.equal(generated.hash,generateWorldSite(recipe(kind,seed)).hash);
     assert.ok(generated.layout.escapeAudit.ready);
     assert.ok(generated.layout.combatFlow.ready);
