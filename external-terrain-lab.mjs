@@ -5,7 +5,7 @@ import {litSpriteColor} from './src/sprite-lighting-cache.mjs';
 import {huntSpellLights} from './src/hunt-spell-lighting.mjs';
 import {huntFireballPosition} from './src/hunt-fireball-flight.mjs';
 import {defineLightingEnvironment} from './src/lighting/environment-contract.mjs';
-import {describeHuntBiomeMood} from './src/lighting/hunt-biome-mood.mjs';
+import {describeHuntBiomeMood,progressAlongHunt} from './src/lighting/hunt-biome-mood.mjs';
 import {LocalLightField} from './src/lighting/local-light-field.mjs';
 import {MOLTEN_PRESENTATION} from './src/materials/molten-presentation.mjs';
 import {LOCAL_FIELD_LIGHTING_GLSL} from './src/lighting/local-field-shader.mjs';
@@ -98,18 +98,37 @@ let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalSh
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
 // Opt-in native 40m streamed-river acceptance; default terrain stays unchanged.
 const streamedWaterPreview=playMode&&!routePreview&&playQuery.get('water')==='1';
-const playBiomeMood=describeHuntBiomeMood({
+let playBiomeMood=describeHuntBiomeMood({
   kind:routePreview?.stop.kind??'wet-forest',
   progress:routePreview?.stop.profile.corruption.progress??0,
   daylight:routePreview?.stop.profile.corruption.daylight??1
 });
 // Same-build negative control; does not touch WorldGen/Water or saved terrain.
-const playLightingEnvironment=playMode&&playQuery.get('biomeLighting')!=='off'
+let playLightingEnvironment=playMode&&playQuery.get('biomeLighting')!=='off'
   ?playBiomeMood.environment
   :defineLightingEnvironment({
     daylight:routePreview?.stop.profile.corruption.daylight??1,
     exposure:playMode?.42:1
   });
+// Full planned geography does not change as cells stream in/out. Use it for
+// continuous northbound Wyrm influence, rather than the two resident sites.
+let playBiomeTravelStep=null;
+function updatePlayBiomeEnvironment(){
+  if(!playMode||routePreview||!playActor||!playStream?.graph?.layout?.regions||
+      playQuery.get('biomeLighting')==='off')return;
+  const progress=progressAlongHunt(playActor.z,playStream.graph.layout.regions);
+  // 100 stable perceptual steps over the entire expedition (not per frame
+  // or per chunk). One new immutable profile only after meaningful travel.
+  const step=Math.round(progress*100);
+  if(step===playBiomeTravelStep)return;
+  playBiomeTravelStep=step;
+  const normalized=step/100;
+  playBiomeMood=describeHuntBiomeMood({
+    kind:'wet-forest',progress:normalized,daylight:1-normalized*.55
+  });
+  playLightingEnvironment=playBiomeMood.environment;
+}
+
 const routeNav=document.querySelector('#play-route-nav');
 if(routePreview&&routeNav){
   routeNav.hidden=false;
@@ -208,7 +227,7 @@ let lastStatusAt=-Infinity;
 let errorMessage=null;
 let rendererErrorMessage=null;
 let renderer=null;
-const playSpriteLighting={ambient:playLightingEnvironment.ambient,
+const playSpriteLighting={get ambient(){return playLightingEnvironment.ambient;},
   sample:position=>sampleSurfaceIrradiance(position,playLightingEnvironment,playSpellLights,
     [0,1,0],pointOcclusionEnabled?playPointVisibility:null,
     spriteEmissionEnabled?playVisibleLightingField:null)};
@@ -2154,6 +2173,7 @@ function frame(now) {
       }
       updateHuntRiverSurface();
       updateHuntGrassMaterialVolume();
+      updatePlayBiomeEnvironment();
       playPresentationNow=now;
       playSpellLights=localLightingEnabled&&active?.port&&(playFireball||playImpact)?huntSpellLights({
         cast:playFireball?.world===active.world?playFireball:null,impact:playImpact,now,
