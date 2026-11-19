@@ -251,7 +251,13 @@ export class ColumnFluidEngine {
     // despite a valid upstream inlet. Never push uphill through a bank.
     const reservedFilm=this.#currents.has(from)?1:0;
     const available=Math.max(0,amount-reservedFilm);
-    const rate=current?Math.min(RATE[this.#kind],2):
+    // A deeper upstream column increases downstream current throughput.
+    // Ordinary 40cm rivers and newly breached Fireball banks still use the
+    // tested 2-unit current, while a 60cm+ backed-up river can move 3 units
+    // to its genuine next wet cell. This is a conservative transfer, never
+    // a source/sink or a rendered-height adjustment.
+    const currentRate=amount>=6&&this.#kind==='water'?3:2;
+    const rate=current?Math.min(RATE[this.#kind],currentRate):
       Math.min(RATE[this.#kind],Math.floor(difference/2));
     const moved=Math.min(rate,available,
       MAX_DEPTH-this.#depths[to]-this.#incoming[to]);
