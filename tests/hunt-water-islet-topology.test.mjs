@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {closeHuntRiverInteriorIslets,MAX_RIVER_INTERIOR_ISLETS}
+import {closeHuntRiverInteriorIslets,expandHuntRiverCorridor,MAX_RIVER_INTERIOR_ISLETS}
   from '../src/world-generation/hunt-river-morphology.mjs';
 
 const ring=[[2,3],[4,3],[3,2],[3,4]];
@@ -52,4 +52,31 @@ test('WAT-19: roads, high boulders, dry shoreline and multi-cell islands are nev
     ...input,landform,maxCells:0
   }),0);
   assert.equal(input.changes.has('3,3'),false);
+});
+
+test('WAT-19: real WorldGen river width tapers out of a 1m seam without a rectangular jump',()=>{
+  const part=Array.from({length:9},(_,i)=>({x:4,z:i+1}));
+  const changes=new Map(part.map(cell=>[id(cell.x,cell.z),{floorY:1}]));
+  const runs=Array.from({length:11},(_,z)=>({
+    x:0,z,y:2,length:9,material:1
+  }));
+  const shape={bounds:{minX:0,maxX:8,minZ:0,maxZ:10},
+    landform:Array.from({length:11},()=>[{start:0,end:9}]),ports:[]};
+  const band={definition:{runs,seed:7}};
+  const result=expandHuntRiverCorridor(band,part,1,changes,shape);
+  const sides=[...changes].filter(([coordinate,cell])=>
+    cell.lateral===true);
+  assert.equal(result.addedWetCells,sides.length);
+  assert.ok(sides.length>=6,'the woodland bank should actually widen the river');
+  assert.ok(sides.every(([coordinate,cell])=>cell.floorY===1));
+  for(const endZ of [1,9]){
+    assert.equal(sides.filter(([coordinate])=>
+      coordinate.endsWith(','+endZ)).length,0,
+      'the physical 1m region seam cannot instantly grow into a square pool');
+  }
+  for(const nearEndZ of [2,8]){
+    assert.ok(sides.filter(([coordinate])=>
+      coordinate.endsWith(','+nearEndZ)).length<=1,
+      'the first bank transition widens by at most one real Voxel column');
+  }
 });
