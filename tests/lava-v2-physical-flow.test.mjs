@@ -9,7 +9,7 @@ import {
 } from '../src/fluid/worldgen-fluid-adapter.mjs';
 import {buildFluidSurfaceMesh} from '../src/fluid/fluid-surface-mesh.mjs';
 import {huntFluidSurface,terrainChannelLayer} from '../src/fluid/hunt-fluid-surface.mjs';
-import {collectEmissiveSurfaceCells} from '../src/lighting/emissive-surface-cells.mjs';
+import {collectEmissiveSurfaceCells} from '../src/hunt-surface-emission.mjs';
 import {HUNT_CHANNEL_HEIGHT_OFFSET} from '../src/hunt-lava-surface.mjs';
 
 test('LAVA-01: real Wyrm Lair lava flows slowly on Voxel stone with native luminous meshes',()=>{
