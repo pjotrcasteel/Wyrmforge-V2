@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {closeHuntRiverInteriorIslets,expandHuntRiverCorridor,MAX_RIVER_INTERIOR_ISLETS}
+import {closeHuntRiverInteriorIslets,expandHuntRiverCorridor,
+  composeHuntRiverBankTiles,MAX_RIVER_INTERIOR_ISLETS}
   from '../src/world-generation/hunt-river-morphology.mjs';
 
 const ring=[[2,3],[4,3],[3,2],[3,4]];
@@ -79,4 +80,29 @@ test('WAT-19: real WorldGen river width tapers out of a 1m seam without a rectan
       coordinate.endsWith(','+nearEndZ)).length<=1,
       'the first bank transition widens by at most one real Voxel column');
   }
+});
+
+test('WAT-19: real exposed stone outcrops get microvoxel edges but stay dry rock',()=>{
+  const changes=new Map([['2,2',{floorY:1}]]);
+  const columns=new Map([
+    ['3,2',{x:3,z:2,material:3,topY:3,topVoxelY:2}],
+    ['1,2',{x:1,z:2,material:2,topY:3,topVoxelY:2}]
+  ]);
+  const band={definition:{runs:[],surfaceTiles:[],seed:7}};
+  const shore=composeHuntRiverBankTiles({
+    band,part:[{x:2,z:2}],changes,columns
+  });
+  assert.equal(shore.bankTiles,1);
+  const tile=shore.tiles[0];
+  assert.equal(id(tile.x,tile.z),'3,2');
+  assert.equal(tile.y,2);
+  assert.equal(tile.levels.length,100);
+  assert.ok(tile.levels.some(level=>level<=7),
+    'the exposed stone rim must not stay a rigid 1m rectangular block');
+  assert.ok(tile.levels.every(level=>Number.isSafeInteger(level)&&level>=1&&level<=10),
+    'rock remains solid at a real 10cm Voxel material level');
+  assert.equal(changes.size,1,'sculpting stone must not invent a wet column');
+  assert.equal(changes.has('3,2'),false);
+  assert.equal(shore.tiles.some(cell=>id(cell.x,cell.z)==='1,2'),false,
+    'authored material-2 walking road must never be sculpted');
 });
