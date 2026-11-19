@@ -2120,6 +2120,7 @@ function frame(now) {
             showParcels:playFluidParcelsEnabled,
             lightingEnvironment:localLightingEnabled?playLightingEnvironment:null,
             transientLights:localLightingEnabled?playSpellLights:null,
+            pointVisibility:pointOcclusionEnabled?playPointVisibility:null,
             lightingField:fluidEmissionEnabled?lightingField:null});
           if(paintForest)paintForest(forestContext,view,localLightingEnabled?playLightingEnvironment.ambient:null);
           const residency=playStream?.residency;
