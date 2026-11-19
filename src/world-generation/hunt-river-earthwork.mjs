@@ -244,7 +244,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     }
     const raw=carveRuns(band.definition.runs,changes,heights,maxFillMetres);
     const shoreline=composeHuntRiverBankTiles({
-      band,part:points,changes,columns:widened.columns
+      band,part:points,changes,columns:widened.columns,fords
     });
     const surfaceTiles=shoreline.tiles;
     const definition=terrainAdapter({
