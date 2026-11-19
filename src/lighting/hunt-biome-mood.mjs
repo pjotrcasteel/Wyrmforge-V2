@@ -40,3 +40,22 @@ export function describeHuntBiomeMood({kind='wet-forest',progress=0,daylight=1}=
     })
   });
 }
+
+
+/**
+ * Actual seamless 11-site Hunt progress: the planned graph is stable before
+ * streaming, so its full Z extent—not today's resident chunks—controls the
+ * gradual lighting journey. Streaming/eviction cannot reset the atmosphere.
+ */
+export function progressAlongHunt(z,regions){
+  if(!Number.isFinite(z)||!Array.isArray(regions)||regions.length<2||
+      !regions.every(region=>Number.isFinite(region?.bounds?.minZ)&&
+        Number.isFinite(region?.bounds?.maxZ)&&
+        region.bounds.minZ<region.bounds.maxZ)){
+    throw new RangeError('Expected finite actor coordinate and planned Hunt regions');
+  }
+  const minZ=Math.min(...regions.map(region=>region.bounds.minZ));
+  const maxZ=Math.max(...regions.map(region=>region.bounds.maxZ));
+  if(maxZ-minZ<1)throw new RangeError('Expected a nonzero northbound world extent');
+  return clamp((maxZ-z)/(maxZ-minZ));
+}
