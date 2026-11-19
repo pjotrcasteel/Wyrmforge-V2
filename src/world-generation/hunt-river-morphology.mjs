@@ -156,15 +156,12 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
         }
         rim=Math.min(rim,tile.y+lowest/10);
       }
-      // A perennial river rises ABOVE its 40cm initial fill when source
-      // and cross-band transfers are active. On the real Wet Forest seed
-      // the final pool reached ~70-80cm over stone after 240 steps. A 50cm
-      // headroom from the previous rule kept the initial river below grass,
-      // then flooded the bank. Author a 90cm physical bank clearance
-      // (including the 10cm visible air gap) before the downstream grade
-      // pass. Do not clamp water mass or shift visual geometry.
+      // Preserve a shallow, physically walkable 40cm ford with at least
+      // 10cm of grass-bank clearance. Sustained overflow is handled by
+      // conservative depth-responsive downstream current transport, not
+      // by lowering the native crossing into an unwalkable 1m trench.
       if(Number.isFinite(rim)){
-        target=Math.min(target,Math.floor(rim-.9+1e-6));
+        target=Math.min(target,Math.floor(rim-.5+1e-6));
       }
     }
     if(target<bed.floorY){
