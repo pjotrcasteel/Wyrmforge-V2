@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {describeHuntBiomeMood,HUNT_BIOME_MOODS}
+import {describeHuntBiomeMood,HUNT_BIOME_MOODS,progressAlongHunt}
   from '../src/lighting/hunt-biome-mood.mjs';
 import {huntRoutePreview} from '../src/hunt-route-preview.mjs';
 import {shadowStampAlpha,makeShadowStampPixels}
@@ -40,6 +40,22 @@ test('actual World Map highland route has monotonic darker progression',()=>{
   }
   assert.equal(HUNT_BIOME_MOODS['wyrm-lair'],1);
   assert.ok(route.stops.at(-1).profile.corruption.progress===1);
+});
+
+
+test('full eleven-site geography, not loaded chunk residency, sets seamless northbound corruption',()=>{
+  const all=[{bounds:{minZ:-40,maxZ:24}},
+    {bounds:{minZ:-104,maxZ:-41}},
+    {bounds:{minZ:-180,maxZ:-105}}];
+  const atEntry=progressAlongHunt(24,all);
+  const atMiddle=progressAlongHunt(-70,all);
+  const atLair=progressAlongHunt(-180,all);
+  assert.equal(atEntry,0);
+  assert.ok(atMiddle>.4&&atMiddle<.6);
+  assert.equal(atLair,1);
+  const changedResidency=[all[2],all[0],all[1]];
+  assert.equal(progressAlongHunt(-70,changedResidency),atMiddle);
+  assert.throws(()=>progressAlongHunt(0,[]),RangeError);
 });
 
 test('canopy caster is a directional irregular silhouette, not circular contact pool',()=>{
@@ -102,6 +118,10 @@ test('real Hunt wires stable object IDs and a reversible biome light comparison'
   const preview=readFileSync(new URL('../src/hunt-tree-preview.mjs',import.meta.url),'utf8');
   const caster=readFileSync(new URL('../src/terrain-directional-shadow-cache.mjs',import.meta.url),'utf8');
   assert.match(host,/describeHuntBiomeMood\(/);
+  assert.match(host,/progressAlongHunt\(playActor\.z,playStream\.graph\.layout\.regions\)/);
+  assert.match(host,/playCorruptionProfile=terrainCorruptionProfile\(normalized\)/);
+  assert.match(host,/huntCorruption:playCorruptionProfile/);
+  assert.match(host,/get ambient\(\)\{return playLightingEnvironment\.ambient;\}/);
   assert.match(host,/playQuery\.get\('biomeLighting'\)!=='off'/);
   assert.match(preview,/layer\.stableLightId=tree\.id/);
   assert.match(preview,/null,layer\.prop\.id/);
