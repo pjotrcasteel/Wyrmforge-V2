@@ -308,6 +308,31 @@ vec3 huntGrassShoulder(vec3 albedo,int material) {
   return mix(albedo,mix(soil,huntRootMoss(green,vWorld.xz),coverage),edgeWeight);
 }
 
+// Materials-owned native forest bank appearance. The large exposed soil
+// faces are geological Voxel solids, NOT cast shadows. Weathering prevents
+// 2m exposed banks from reading as flat dark brown rectangles while keeping
+// real sun/contact shadows and authored microvoxel faces untouched.
+// All sampling is continuous in world space, across chunks and voxel seams.
+vec3 huntWoodlandBankSurface(vec3 surface,int material) {
+  if(!uHuntGrassArt||abs(vNormal.y)>.5||material>2||
+      uHuntCorruption.z>.25)return surface;
+  vec2 face=abs(vNormal.x)>.5?vWorld.zy:vWorld.xy;
+  float mossBed=labNoise(face*.29+vec2(37.0,11.0));
+  float roots=labNoise(face*1.45+vec2(7.0,53.0));
+  float grit=soilHash(floor(face*9.0)+vec2(13.0,41.0));
+  float coverage=smoothstep(.26,.74,mossBed*.73+roots*.27);
+  vec3 earth=srgbToLinearColor(vec3(.50,.375,.265));
+  vec3 mineral=srgbToLinearColor(vec3(.54,.54,.47));
+  vec3 moss=srgbToLinearColor(vec3(.37,.48,.27));
+  // A genuinely exposed multi-metre soil bank should read as weathered
+  // mineral and rooted woodland, not an uninterrupted dark brown slab.
+  // Its authoritative dirt ID, destructibility and Voxel collision do not
+  // change. Small grass voxel edges retain more of their original earth.
+  vec3 bank=mix(surface,material==2?mineral:earth,material==2?.66:.32);
+  bank=mix(bank,moss,coverage*(material==2?.38:.56));
+  return bank*(.95+.10*roots+.05*grit);
+}
+
 void main() {
   vec3 lava;
   if(uHuntLavaEnabled&&huntLavaSurface(lava)){
@@ -451,6 +476,7 @@ void main() {
     if(uHuntLavaEnabled)linearAlbedo=huntRiverBank(linearAlbedo);
     if(uHuntGrassArt)linearAlbedo=huntFadingSurface(linearAlbedo,int(vMaterial));
     if(uHuntGrassEdges)linearAlbedo=huntCutTerrain(linearAlbedo,int(vMaterial));
+    if(uHuntGrassArt)linearAlbedo=huntWoodlandBankSurface(linearAlbedo,int(vMaterial));
     if(uHuntGrassArt)linearAlbedo=fireTerrainSurface(linearAlbedo,int(vMaterial));
   }
 

@@ -1,0 +1,43 @@
+name: Forest terrain vs shadow screenshot regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/world-generation/map-kinds.mjs'
+      - 'src/world-generation/world-generator.mjs'
+      - 'src/lighting/baseline-lighting.mjs'
+      - 'src/webgl-voxel-view.mjs'
+      - 'tests/dirt-surface-shader.test.mjs'
+      - 'tests/terrain-bank-light-readability.test.mjs'
+      - 'tests/wet-forest-authored-artifacts.test.mjs'
+      - 'src/terrain-directional-shadow-cache.mjs'
+      - 'src/terrain-contact-shadow-cache.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/forest-terrain-artifacts.mjs'
+      - '.github/workflows/forest-terrain-artifacts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser screenshot witness
+        run: npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+      - name: Compare identical actual-world images with shadows on and off
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/forest-terrain-artifacts.mjs
+      - name: Save exact four Hunt images and metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forest-terrain-shadow-visual-proof
+          path: forest-terrain-artifacts-evidence/
+          retention-days: 14
+          if-no-files-found: warn

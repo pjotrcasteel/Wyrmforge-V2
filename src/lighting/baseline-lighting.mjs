@@ -25,9 +25,13 @@ vec3 evaluateV2Lighting(V2Surface surface,V2LightingContext context) {
   }
   if(context.shallowGrass)lighting=.94;
   if(context.heightContrast){
-    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.28,.50,1.48);
+    // Terrain depth must remain readable: the former 0.50 height floor
+    // multiplied by a 0.66 vertical-face penalty could leave dirt banks at
+    // just ~16% linear light, resembling giant black shadow rectangles.
+    // Real contact/directional shadows still darken actual occluded faces.
+    float tone=clamp(1.0+(context.position.y-context.elevationReference)*.17,.72,1.36);
     lighting*=tone;
-    if(normal.y<.5&&normal.y>-.5)lighting*=.66;
+    if(normal.y<.5&&normal.y>-.5)lighting*=.84;
   }
   return surface.albedo*lighting+surface.emission;
 }
