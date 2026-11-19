@@ -247,6 +247,11 @@ if(playMode&&playQuery.get('terrainNormalTest')==='1'){
   window.__WyrmforgeTerrainNormalTest={
     status:()=>Object.freeze({
       ready:Boolean(renderer?.ready&&renderer.terrainNormalDiagnostics.activeLayers===4),
+      // The actual physical WorldGen scene, not merely a resident GPU tile.
+      worldReady:Boolean(playMode&&active?.port&&playActor&&
+        renderer?.statistics.triangles>0&&!pendingMesh&&!pendingEdit&&!streamingBusy()),
+      renderedTriangles:renderer?.statistics.triangles??0,
+      pendingGeometryJobs:renderer?.pendingUploads??0,
       ...renderer?.terrainNormalDiagnostics,
       enabled:terrainNormalsEnabled
     }),
