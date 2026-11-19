@@ -77,6 +77,7 @@ test('partial or expired visibility fields preserve unoccluded bounded fallback'
   assert.ok(upload.every(x=>x===0),'disabled path does not leak previous sectors');
   const completeField=complete(transport,lights);
   assert.equal(writePointVisibility(completeField,lights,upload),true);
-  assert.equal(writePointVisibility(completeField,null,upload),false);
+  const expired=defineLightSet({epoch:1,revision:world.revision,emitters:[]});
+  assert.equal(writePointVisibility(completeField,expired,upload),false);
   assert.ok(upload.every(x=>x===0),'expired lights clear the upload');
 });
