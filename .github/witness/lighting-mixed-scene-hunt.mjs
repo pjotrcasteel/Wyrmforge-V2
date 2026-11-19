@@ -61,6 +61,22 @@ try{
         const s=window.__WyrmforgeFluidTest?.status();
         return s&&s.kind===expected&&s.raisedSurfaceFaces>0&&!s.busy;
       },scenario.kind,{timeout:120000});
+      // The lava source must actually publish its complete geometry-aware
+      // field before calling this a cross-consumer visual witness. Do not
+      // mistake 200 authored emissive cells for a lit Play Hunt frame.
+      if(scenario.kind==='lava'){
+        try{
+          await page.waitForFunction(()=>{
+            const s=window.__WyrmforgeFluidTest?.lightingStatus();
+            return s?.sourceCells>0&&s.fieldReady;
+          },null,{timeout:45000});
+        }catch(error){
+          record.lightingTimeout=await page.evaluate(
+            ()=>window.__WyrmforgeFluidTest?.lightingStatus()??null);
+          throw new Error('Lava scene has emitted sources but no completed light field: '+
+            JSON.stringify(record.lightingTimeout)+' | '+error.message);
+        }
+      }
       // Suspend only solver stepping; real Voxel/Water geometry remains intact.
       await page.evaluate(()=>window.__WyrmforgeFluidTest.hold(true));
       await page.waitForTimeout(1500);
