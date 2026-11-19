@@ -3,7 +3,9 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'src/world-generation/hunt-expedition-region.mjs'
+      - 'src/world-generation/map-kinds.mjs'
+      - 'src/world-generation/world-generator.mjs'
+      - 'tests/wet-forest-authored-artifacts.test.mjs'
       - 'src/terrain-directional-shadow-cache.mjs'
       - 'src/terrain-contact-shadow-cache.mjs'
       - 'external-terrain-lab.mjs'
