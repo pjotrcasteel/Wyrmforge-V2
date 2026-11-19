@@ -89,13 +89,14 @@ test('Play Hunt runs Water V2 at fixed-step budget, feeds the shader and cleans 
 
 // Native Water V2 is drawn as true depth-tested caps; the earlier material
 // map is NOT a second painted water plane on the Voxel river floor.
-test('Water V2 keeps one visual water authority without removing native lava or legacy channels',()=>{
+test('native Water V2 and Lava V2 keep one physical mesh without losing legacy channel previews',()=>{
   const water=fixture('water'),lava=fixture('lava');
   const oldMaterial={size:[1,1],origin:[0,0],data:new Uint8Array(4)};
   assert.equal(terrainChannelLayer(water.fluid.snapshotSurface(),oldMaterial),null);
-  assert.equal(terrainChannelLayer(lava.fluid.snapshotSurface(),oldMaterial),oldMaterial);
+  assert.equal(terrainChannelLayer(lava.fluid.snapshotSurface(),oldMaterial),null,
+    'molten native mesh cannot coexist with a fake lava plane on solid stone');
   assert.equal(terrainChannelLayer(null,oldMaterial),oldMaterial,
-    'old Water/Lava WorldGen previews remain unchanged without native water');
+    'legacy WorldGen material remains when no fluid simulation is active');
   water.port.dispose();
   lava.port.dispose();
 });

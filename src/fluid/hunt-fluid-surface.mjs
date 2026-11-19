@@ -37,12 +37,13 @@ export function huntFluidSurface(layout,world,surface){
   }]},world);
 }
 
-// The physically simulated Water V2 surface is rendered by a depth-tested
-// independent mesh. Never also project the old channel material onto the
-// Voxel riverbed: that produced blue 1m paint squares over physical water.
-// Preserve the legacy WorldGen material and authored lava when no native
-// Water V2 mesh is active.
+// Both native Water and native Lava use a SINGLE depth-tested geometry
+// authority. The old solid-face channel material must never paint a second
+// fake water or lava plane underneath the physical fluid. Keep the authored
+// channel MAP separately for Lighting V2's genuine molten emission sources.
+// Legacy WorldGen previews without an active solver retain their material.
 export function terrainChannelLayer(fluidSurface,authoredChannelLayer){
-  return fluidSurface?.schema===FLUID_SURFACE_SCHEMA&&fluidSurface.kind==='water'
+  return fluidSurface?.schema===FLUID_SURFACE_SCHEMA &&
+    ['water','lava'].includes(fluidSurface.kind)
     ?null:authoredChannelLayer;
 }

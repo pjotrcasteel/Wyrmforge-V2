@@ -1,0 +1,50 @@
+name: Lava V2 physical Wyrm Lair browser witness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/fluid/**'
+      - 'src/hunt-lava-surface.mjs'
+      - 'src/hunt-surface-emission.mjs'
+      - 'external-terrain-lab.mjs'
+      - '.github/witness/lava-play-hunt-browser.mjs'
+      - '.github/workflows/lava-play-hunt-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('lava-browser-pr-{0}', github.event.pull_request.number) || 'lava-browser-manual' }}
+  cancel-in-progress: true
+
+jobs:
+  actual-wyrm-lair-lava:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Parse actual Hunt and Lava V2 witness
+        run: |
+          node --check external-terrain-lab.mjs
+          node --check .github/witness/lava-play-hunt-browser.mjs
+      - name: Install mobile-sized real WebGL browser dependencies
+        run: |
+          command -v google-chrome
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+      - name: Verify physical molten flow and light emission in the real Wyrm Lair
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node .github/witness/lava-play-hunt-browser.mjs
+      - name: Preserve exact Wyrm Lair screenshots and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lava-v2-real-wyrm-lair
+          path: lava-v2-browser-evidence/
+          if-no-files-found: warn
+          retention-days: 14
