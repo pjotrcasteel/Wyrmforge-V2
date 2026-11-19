@@ -57,6 +57,7 @@ flat in float vMaterial;
 uniform sampler2D uGrassTexture;
 uniform highp sampler2DArray uTerrainAlbedo;
 uniform highp sampler2DArray uTerrainNormal;
+uniform bool uTerrainNormalsEnabled;
 uniform highp sampler2DArray uTerrainOrm;
 uniform vec4 uTerrainNormalLayers;
 uniform vec4 uTerrainOrmLayers;
@@ -429,7 +430,8 @@ void main() {
   }
   vec3 detailedNormal=vNormal;
   vec3 surfaceOrm=vec3(1.0,1.0,0.0);
-  if (layer >= 0.0 && normalLayer >= 0.0) {
+  // Normal-only 64px art may decorate procedural albedo without replacing it.
+  if (uTerrainNormalsEnabled && normalLayer >= 0.0) {
     vec3 tangentNormal = texture(uTerrainNormal,
       vec3(uv * uTerrainTilesPerVoxel, normalLayer)).xyz * 2.0 - 1.0;
     float secondaryNormal = uTerrainSecondaryNormalLayers[surfaceIndex];
@@ -438,11 +440,12 @@ void main() {
         vec3(uv * uTerrainTilesPerVoxel, secondaryNormal)).xyz * 2.0 - 1.0;
       tangentNormal = normalize(mix(tangentNormal, nextNormal, variantMix));
     }
-    // Explicit face bases prevent top/wall normal maps from rotating incorrectly.
+    // Positive tangent-map V must mean physically UP on BOTH wall signs.
+    // cross(n,t) alone flipped V down on +X / -Z walls in the original
+    // sampler, so identical roots could be lit differently around corners.
     vec3 n = normalize(vNormal);
-    vec3 t = abs(n.y) > 0.5 ? vec3(1.0, 0.0, 0.0)
-      : abs(n.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-    vec3 b = normalize(cross(n, t));
+    vec3 t = abs(n.x) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 b = abs(n.y) > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
     detailedNormal = normalize(t * tangentNormal.x + b * tangentNormal.y +
       n * max(0.2, tangentNormal.z));
 
@@ -489,7 +492,7 @@ void main() {
   // Materials supply linear surface values. Lighting alone evaluates their
   // response; Rendering encodes to the canvas exactly once.
   V2Surface surface=V2Surface(linearAlbedo,detailedNormal,vNormal,surfaceOrm,
-    vec3(0.0),layer>=0.0&&normalLayer>=0.0,layer>=0.0&&ormLayer>=0.0);
+    vec3(0.0),uTerrainNormalsEnabled&&normalLayer>=0.0,layer>=0.0&&ormLayer>=0.0);
   V2LightingContext context=V2LightingContext(vWorld,uHuntHeightContrast,
     uHuntElevationReference,uLabEnabled&&labShallowGrassBank(int(round(vMaterial))));
   outColor=vec4(linearToSrgbColor(evaluateV2Lighting(surface,context)),1.0);
@@ -556,6 +559,7 @@ export class WebGLVoxelView {
   #terrainTileStagingBytes = 0;
   #terrainTileStagingMaxBytes = 32 * 1024 * 1024;
   #terrainTilesPerVoxel = 1;
+  #terrainNormalsEnabled = true;
   #grassTexture = null;
   #grassTexelsPerVoxel = 32;
   #contextLossExtension = null;
@@ -699,6 +703,26 @@ export class WebGLVoxelView {
       estimatedDecodedBytes: this.#terrainTileStagingBytes,
       pendingTiles: this.#pendingTerrainTiles.size,
       maxBytes: this.#terrainTileStagingMaxBytes });
+  }
+
+  get terrainNormalDiagnostics() {
+    const keys=['terrain/grass','terrain/grass-soil-side','terrain/dirt','terrain/stone'];
+    const active=keys.filter(key=>{
+      const variant=TERRAIN_SURFACE_LIBRARY[key].variants[0];
+      return this.#terrainCache?.getLayer('normal',variant.textures.normal)!==null &&
+        this.#terrainCache?.getLayer('normal',variant.textures.normal)!==undefined;
+    }).length;
+    const uploaded=this.#terrainManifest.assets.filter(asset=>asset.channel==='normal' &&
+      this.#terrainCache?.getLayer('normal',asset.key)!=null).length;
+    return Object.freeze({
+      enabled:this.#terrainNormalsEnabled,
+      activeLayers:active,
+      uploadedTiles:uploaded,
+      expectedLayers:keys.length,
+      pendingTiles:[...this.#pendingTerrainTiles.values()].filter(tile=>tile.channel==='normal').length,
+      gpuNormalBytesEstimate:this.#terrainCache?Math.floor(
+        this.#terrainManifest.estimatedBytes/3):0
+    });
   }
 
   setTerrainTextureScale(tilesPerVoxel) {
@@ -911,6 +935,7 @@ export class WebGLVoxelView {
       grassDensity: gl.getUniformLocation(this.#program, 'uGrassTexelsPerVoxel'),
       terrainAlbedo: gl.getUniformLocation(this.#program, 'uTerrainAlbedo'),
       terrainNormal: gl.getUniformLocation(this.#program, 'uTerrainNormal'),
+      terrainNormalEnabled: gl.getUniformLocation(this.#program, 'uTerrainNormalsEnabled'),
       terrainOrm: gl.getUniformLocation(this.#program, 'uTerrainOrm'),
       terrainNormalLayers: gl.getUniformLocation(this.#program, 'uTerrainNormalLayers'),
       terrainOrmLayers: gl.getUniformLocation(this.#program, 'uTerrainOrmLayers'),
@@ -1178,7 +1203,8 @@ export class WebGLVoxelView {
   }
 
   render({ width, height, scale, panX, panY, camera = 'inspection', huntHeightContrast = false, huntGrassArt = false, huntFadingStartZ = -1000, huntCorruption, huntElevationReference = 4, depthOrigin = 0,
-    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null,transientLights=null,pointVisibility=null }) {
+    labBlend=true,labTime=0,labGrassStyle=0,labForestStage=0,huntLava,lightingField=null,lightingEnvironment=null,transientLights=null,pointVisibility=null,
+    terrainNormalsEnabled=true }) {
     if (!this.ready || width <= 0 || height <= 0) return false;
     const gl = this.#gl;
     gl.viewport(0, 0, width, height);
@@ -1207,6 +1233,8 @@ export class WebGLVoxelView {
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#terrainCache?.getTexture('albedo') ?? null);
     gl.uniform1i(this.#uniforms.terrainAlbedo, 1);
     gl.uniform4fv?.(this.#uniforms.terrainLayers, layers);
+    this.#terrainNormalsEnabled=Boolean(terrainNormalsEnabled);
+    gl.uniform1i(this.#uniforms.terrainNormalEnabled,this.#terrainNormalsEnabled?1:0);
     for (const [channel, unit, sampler, locations] of [
       ['normal', 2, this.#uniforms.terrainNormal, this.#uniforms.terrainNormalLayers],
       ['orm', 3, this.#uniforms.terrainOrm, this.#uniforms.terrainOrmLayers]

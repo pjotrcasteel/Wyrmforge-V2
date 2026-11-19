@@ -33,6 +33,12 @@ These are linked milestone-tracking issues. They are not native GitHub Milestone
 
 Measure from the first task; performance is not a final polish step. L10-10 starts baseline collection during L10-05 and completes sustained acceptance after the visual slices. Each issue contains its own deliverable, boundary, dependencies, tests, performance gates and Done for now condition.
 
+## Current subtask: real Hunt terrain normals — [L10-08-NM #418](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/418)
+
+After build `462754d`, the owner identified that the Wet Forest still looks flatter than expected. Source inspection confirmed that normal-map samplers and lighting code exist but the playable Hunt uploads **no normal tiles**; moreover, procedural-albedo faces reject independently available normal tiles. This is a focused **L10-08** integration step before L10-09 atmosphere, not a new parallel engine.
+
+[Contract, scope and acceptance](LIGHTING-TERRAIN-NORMAL-MAPS.md): activate preliminary 64px grass/earth/rock tangent normals from existing materials, supply correct physical wall basis, shade sun/Fireball with detail normals, retain all actual shadow and geometry ownership, compare same-seed `terrainNormals=off` against default on, gate on real mobile cost and user aesthetic review. Do not claim art-approved normal maps or phone acceptance from a passing browser test.
+
 ## Required quality and performance gates
 
 These are provisional design budgets, not achieved guarantees. If measurement demands a change, record the tradeoff explicitly instead of quietly moving a target.
