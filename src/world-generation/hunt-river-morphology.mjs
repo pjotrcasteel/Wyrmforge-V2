@@ -120,8 +120,18 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
   if(!band?.definition||!(changes instanceof Map)||!(columns instanceof Map)){
     throw new TypeError('Expected native WorldGen wet bank floor planning');
   }
-  const tiles=new Map((band.definition.surfaceTiles??[]).map(tile=>
-    [tile.x+','+tile.z+','+tile.y,tile]));
+  // Microtile surfaces are published as independent physical geometry.
+  // Their topmost run can be stone, grass or no longer present in the
+  // original coarse run map after native WorldGen composes the graph. Lookup
+  // by XY parent tile directly: inferring the rim from a coarse material
+  // category silently skipped the exact raised stone shoreline in seed 7.
+  const bankTiles=new Map();
+  for(const tile of band.definition.surfaceTiles??[]){
+    if(!Array.isArray(tile.levels)||tile.levels.length!==100)continue;
+    const id=key(tile.x,tile.z);
+    if(!bankTiles.has(id))bankTiles.set(id,[]);
+    bankTiles.get(id).push(tile);
+  }
   let lowered=0;
   for(const [id,bed] of [...changes]){
     if(bed.dryBank)continue;
@@ -131,14 +141,13 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
       const bx=x+dx,bz=z+dz,bankId=key(bx,bz);
       if(changes.has(bankId))continue;
       const bank=columns.get(bankId);
-      // WAT-18 regression: the raised river borders authentic MICROVOXEL
-      // STONE (material 3), not only grass (1). Ignoring those solid stone
-      // shore tiles left water at 3.4m next to a 2.8m physical rim.
-      // Preserve authored roads (2) and sample both grass/stone dry banks.
-      if(!bank||![1,3].includes(bank.material))continue;
-      const tile=tiles.get(key(bx,bz)+','+bank.topVoxelY);
-      let rim=bank.topY-.5; // WAT-16 and dry ford ramp: max 50cm edge taper
-      if(tile?.levels?.length===100){
+      if(bank?.material===2)continue; // protected native walking roads
+      const tiles=bankTiles.get(bankId)??[];
+      if(!bank&&!tiles.length)continue;
+      let rim=bank?.topY??Infinity;
+      // A newly authored ramp can lower a dry bank edge by up to 50cm.
+      if(Number.isFinite(rim))rim-=.5;
+      for(const tile of tiles){
         let lowest=10;
         for(let t=0;t<10;t++){
           const ix=dx===1?0:dx===-1?9:t;
@@ -147,9 +156,11 @@ export function recessHuntRiverBelowGrass(band,changes,columns){
         }
         rim=Math.min(rim,tile.y+lowest/10);
       }
-      // An integer Voxel water floor plus the seeded 40cm Water V2 head
-      // must remain >=10cm BELOW the actual dry rim at its worst pixel.
-      target=Math.min(target,Math.floor(rim-.5+1e-6));
+      // The initial river's 40cm of native Water V2 plus a 10cm air gap
+      // must fit under the true lowest exposed microbank edge.
+      if(Number.isFinite(rim)){
+        target=Math.min(target,Math.floor(rim-.5+1e-6));
+      }
     }
     if(target<bed.floorY){
       changes.set(id,{...bed,floorY:target});
