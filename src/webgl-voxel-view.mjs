@@ -321,16 +321,18 @@ vec3 huntWoodlandBankSurface(vec3 surface,int material) {
   float roots=labNoise(face*1.45+vec2(7.0,53.0));
   float grit=soilHash(floor(face*9.0)+vec2(13.0,41.0));
   float coverage=smoothstep(.26,.74,mossBed*.73+roots*.27);
-  vec3 earth=srgbToLinearColor(vec3(.50,.375,.265));
-  vec3 mineral=srgbToLinearColor(vec3(.54,.54,.47));
-  vec3 moss=srgbToLinearColor(vec3(.37,.48,.27));
-  // A genuinely exposed multi-metre soil bank should read as weathered
-  // mineral and rooted woodland, not an uninterrupted dark brown slab.
-  // Its authoritative dirt ID, destructibility and Voxel collision do not
-  // change. Small grass voxel edges retain more of their original earth.
-  vec3 bank=mix(surface,material==2?mineral:earth,material==2?.66:.32);
-  bank=mix(bank,moss,coverage*(material==2?.38:.56));
-  return bank*(.95+.10*roots+.05*grit);
+  vec3 earth=srgbToLinearColor(vec3(.46,.34,.24));
+  vec3 mineral=srgbToLinearColor(vec3(.44,.46,.43));
+  vec3 moss=srgbToLinearColor(vec3(.30,.40,.23));
+  // Restore the physical cliff silhouette: walls must contrast with the
+  // brighter grass tops instead of becoming one uniform green-grey surface.
+  // Lighter mineral chips and rooted moss remain localized, not a dominant
+  // wash that obscures the one/two-metre ledges. Every input is world-anchored.
+  float mineralChips=smoothstep(.55,.81,mossBed*.45+grit*.55);
+  vec3 bank=mix(surface,earth,material==2?.54:.40);
+  bank=mix(bank,mineral,mineralChips*.26);
+  bank=mix(bank,moss,coverage*(material==2?.18:.26));
+  return bank*(.86+.19*roots+.07*grit);
 }
 
 void main() {
