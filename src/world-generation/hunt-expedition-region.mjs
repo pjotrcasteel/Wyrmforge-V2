@@ -65,7 +65,7 @@ function naturalHeight(plan,region,x,z,seed) {
   const highlands=['forest-highland','mountain-pass','scorched-approach',
     'mini-boss-arena','wyrm-lair'].includes(kind);
   const rocky=['scorched-approach','mini-boss-arena','wyrm-lair'].includes(kind);
-  const amplitude=rocky?5:highlands?3.5:1.5;
+  const amplitude=rocky?5:highlands?3.5:forest?1.5:2;
   const ridges=(siteNoise(seed,x,z,15,12)-0.5)*amplitude;
   const spur=(siteNoise(seed,x,z,9,13)-0.5)*(forest?0.85:1.6);
   const side=region.role==='flank'?(forest?0.7:1.2):
