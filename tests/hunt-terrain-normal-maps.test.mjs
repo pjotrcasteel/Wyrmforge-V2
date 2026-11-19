@@ -117,3 +117,13 @@ test('actual Hunt uses real uploaded normals even with procedural dirt albedo',(
   assert.match(host,/playQuery\.get\('terrainNormals'\)!=='off'/);
   assert.match(host,/window\.__WyrmforgeTerrainNormalTest=/);
 });
+
+test('browser screenshot witness refuses to compare a partially loaded HUD',()=>{
+  const witness=readFileSync(new URL('../.github/witness/terrain-normal-hunt.mjs',import.meta.url),'utf8');
+  assert.match(witness,/fluidTest=auto/);
+  assert.match(witness,/fluid\?\.kind==='water'/);
+  assert.match(witness,/fluid\.raisedSurfaceFaces>0/);
+  assert.match(witness,/!fluid\.busy/);
+  assert.match(witness,/__WyrmforgeFluidTest\.hold\(true\)/);
+  assert.match(witness,/st\.activeLayers===4/);
+});
