@@ -39,6 +39,8 @@ import {
 } from './src/diagnostics/external-site-fixture.mjs';
 import { buildExposedFaceMeshes } from './src/exposed-face-mesher.mjs';
 import { terrainArtKey } from './src/terrain-material-handoff.mjs';
+import {HUNT_NORMAL_STUDIES,createHuntNormalTileCanvas}
+  from './src/materials/hunt-terrain-normal-tiles.mjs';
 import { WebGLVoxelView } from './src/webgl-voxel-view.mjs';
 import { V2ExternalTerrainMeshBridge } from './src/external-terrain-mesh-bridge.mjs';
 import { V2TerrainEpochClock } from './src/terrain-world-epoch.mjs';
@@ -89,6 +91,7 @@ const staticOcclusionEnabled=localLightingEnabled&&
 const playQuery=new URLSearchParams(location.search);
 const spriteEmissionEnabled=localLightingEnabled&&playQuery.get('spriteEmission')!=='off';
 const fluidEmissionEnabled=localLightingEnabled&&playQuery.get('fluidEmission')!=='off';
+let terrainNormalsEnabled=playQuery.get('terrainNormals')!=='off';
 let contactShadowsEnabled=localLightingEnabled&&playQuery.get('contactShadows')!=='off';
 let directionalShadowsEnabled=localLightingEnabled&&playQuery.get('directionalShadows')!=='off';
 const routePreview=playMode?huntRoutePreview(playQuery.get('route'),Number(playQuery.get('stop'))):null;
@@ -239,6 +242,17 @@ const reducedLavaMotion=playMode?window.matchMedia('(prefers-reduced-motion: red
 let playRecoveryCheckpoint=null;
 let playConnected=null;
 let playStream=null;
+if(playMode&&playQuery.get('terrainNormalTest')==='1'){
+  // The same GPU world/scene, with and without detail normals.
+  window.__WyrmforgeTerrainNormalTest={
+    status:()=>Object.freeze({
+      ready:Boolean(renderer?.ready&&renderer.terrainNormalDiagnostics.activeLayers===4),
+      ...renderer?.terrainNormalDiagnostics,
+      enabled:terrainNormalsEnabled
+    }),
+    setEnabled:value=>{terrainNormalsEnabled=Boolean(value);}
+  };
+}
 if(playMode&&playQuery.get('contactShadowTest')==='1'){
   // Opt-in browser-only visualization witness, never a scene or terrain authority.
   window.__WyrmforgeContactShadowTest={
@@ -2170,6 +2184,7 @@ function frame(now) {
           huntFadingStartZ:(playConnected?.seam.minZ??-986)-14,
           huntCorruption:routePreview?.stop.profile.corruption,
            huntLava:terrainChannelLayer(playLightingLiquid,playLava),
+          terrainNormalsEnabled,
           labTime:playLava&&!reducedLavaMotion.matches?now/1000:0})) {
         if(playMode){
           if(pendingTerrainPresentation&&active?.port.epoch===pendingTerrainPresentation.terrainEpoch&&
@@ -2771,6 +2786,24 @@ try {
       for(const [key,image] of terrainTiles)renderer.setTerrainMaterialTile('albedo',key,image);
     } catch(error) {
       console.warn('Wet Forest terrain textures could not be loaded:',error);
+    }
+    // Prepare only once. One bounded 64px Materials preview per named slot,
+    // uploaded via the established WebGL2 one-texture-per-frame queue.
+    const normalTiles=await Promise.all(HUNT_NORMAL_STUDIES.map(async study=>{
+      try {
+        const image=new Image();
+        image.src=new URL('./art/fire-hunt-materials/'+study.source+'.png',import.meta.url);
+        await image.decode();
+        return [study,createHuntNormalTileCanvas(image,{slope:study.slope})];
+      } catch(error) {
+        console.warn('Terrain normal tile unavailable for '+study.slot,error);
+        return null;
+      }
+    }));
+    for(const entry of normalTiles){
+      if(!entry)continue;
+      const [study,image]=entry;
+      renderer.setTerrainMaterialTile('normal',terrainArtKey(study.slot,'normal'),image);
     }
   }
   resetSite();
