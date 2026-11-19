@@ -29,11 +29,14 @@ vec3 nativeLavaCrust(vec3 world,vec2 actualFlow,vec2 channelFlow,
     // Falling/airborne actual lava stays hotter than its horizontal crust.
     // Keep SOME dark-raft texture: uniform orange slabs looked like opaque
     // metre-wide walls, not molten rock.
-    vec3 hot=vec3(.86,.23,.035);
-    color=mix(color,hot,.48);
+    // Real falling sheets tear and expose warm cracks, but still carry
+    // cooled rafts. Strong orange overdraw made vertical walls look like
+    // opaque glowing 1m blocks rather than viscous rolling lava.
+    vec3 hot=vec3(.69,.16,.026);
+    color=mix(color,hot,.26);
     if(faceMode==4){
       float drop=clamp((world.y-landingY)/2.5,0.0,1.0);
-      color=mix(color,vec3(1.0,.59,.105),.08+.10*(1.0-drop));
+      color=mix(color,vec3(.98,.49,.085),.05+.08*(1.0-drop));
     }
   }else if(landing){
     color=mix(color,vec3(1.0,.53,.08),.64);
