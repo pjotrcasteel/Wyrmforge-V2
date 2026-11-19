@@ -64,6 +64,7 @@ uniform float uTime;
 uniform float uRippleFrame;
 uniform float uRippleFade;
 uniform float uLava;
+uniform vec2 uLavaChannelFlow;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
 uniform float uParcelsEnabled;
@@ -102,7 +103,8 @@ void main(){
     // moving fractures. All coordinates come from real solver-wet geometry.
     // This EARLY branch skips the expensive water ripple lookup entirely,
     // rather than doing water fragment work before drawing any lava.
-    vec3 molten=nativeLavaCrust(vWorld,vFlow,vFaceMode,vLandingY,uTime);
+    vec3 molten=nativeLavaCrust(vWorld,vFlow,uLavaChannelFlow,
+      vFaceMode,vLandingY,uTime);
     outColor=vec4(litFluidColor(molten),vFaceMode==5?.90:.995);
     return;
   }
@@ -290,6 +292,8 @@ export class HuntFluidSurfaceRenderer {
   #uniforms=null;
   #record=null;
   #mesh=null;
+  // Stable renderer-only direction: adjoining 1m cells share ONE flow axis.
+  #lavaFlowAxis=new Float32Array([0,1]);
   #visualHistory=new Map();
   #meshUpdateMs=0;
   #meshUpdateCount=0;
@@ -427,11 +431,30 @@ export class HuntFluidSurfaceRenderer {
     this.#pointVisibilityActive=false;
     this.#pointVisibilityFrames=0;
     this.#mesh=null;
+    this.#lavaFlowAxis[0]=0;
+    this.#lavaFlowAxis[1]=1;
     this.#visualHistory.clear();
   }
 
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
+    if(surface?.kind==='lava'&&this.#mesh?.kind!=='lava'){
+      // Sample actual molten channel direction ONCE. Using a different
+      // direction per 1m cap produced bright geometric checkerboard seams.
+      let x=0,z=0;
+      for(const cell of surface.cells){
+        x+=cell.currentX??cell.flowX??0;
+        z+=cell.currentZ??cell.flowZ??0;
+      }
+      if(x*x+z*z<.25){
+        const first=surface.cells.find(cell=>cell.flowX||cell.flowZ);
+        x=first?.flowX??0;
+        z=first?.flowZ??1;
+      }
+      const length=Math.hypot(x,z)||1;
+      this.#lavaFlowAxis[0]=x/length;
+      this.#lavaFlowAxis[1]=z/length;
+    }
     const start=performance.now();
     const presented=stabilizeFluidSurface(surface,sampleAt,this.#visualHistory);
     const mesh=buildFluidSurfaceMesh(presented.surface,{
@@ -501,7 +524,7 @@ export class HuntFluidSurfaceRenderer {
         lightingEmission:uniform('uLightingEmissionColor'),
         lightCount:uniform('uTransientLightCount'),
         lightPositions:uniform('uTransientPositions[0]'),lightRadiance:uniform('uTransientRadiance[0]'),
-        lava:uniform('uLava'),
+        lava:uniform('uLava'),lavaDirection:uniform('uLavaChannelFlow'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
       };
@@ -628,6 +651,7 @@ export class HuntFluidSurfaceRenderer {
     if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
+    gl.uniform2fv(u.lavaDirection,this.#lavaFlowAxis);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
     gl.uniform1f(u.parcels,showParcels?1:0);
