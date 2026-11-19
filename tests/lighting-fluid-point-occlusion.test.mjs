@@ -69,9 +69,13 @@ test('destruction reopens light without mutating fluid state or holding stale bl
 });
 test('partial or expired visibility fields preserve unoccluded bounded fallback',()=>{
   const world=new VoxelWorld({chunkEdge:16});
-  const lights=spell(world.revision),transport=new PointLightVisibility(port(world));
+  const first=spell(world.revision).emitters[0];
+  const lights=defineLightSet({epoch:1,revision:world.revision,emitters:[
+    first,{id:'second-fireball',position:[-3,2.5,.5],radius:6,radiance:[2,.5,.1]}
+  ]});
+  const transport=new PointLightVisibility(port(world));
   const pending=transport.update(lights);
-  assert.equal(pending.ready,false);
+  assert.equal(pending.ready,false,'two lights require two bounded 24-ray passes');
   const upload=new Float32Array(POINT_VISIBILITY_FLOATS);
   assert.equal(writePointVisibility(pending,lights,upload),false);
   assert.ok(upload.every(x=>x===0),'disabled path does not leak previous sectors');
