@@ -28,7 +28,9 @@ test('forest bank weathering is seamless and remains a pure material receiver',(
   assert.match(shader,/abs\(vNormal\.y\)>\.5/);
   assert.match(shader,/uHuntCorruption\.z>\.25/);
   assert.match(shader,/vWorld\.zy:vWorld\.xy/);
-  assert.match(shader,/mix\(bank,moss,coverage\*\(material==2\?\.38:\.56\)\)/);
+  assert.match(shader,/mix\(bank,moss,coverage\*\(material==2\?\.18:\.26\)\)/);
+  assert.match(shader,/float mineralChips=smoothstep/);
+  assert.match(shader,/mix\(surface,earth,material==2\?\.54:\.40\)/);
   assert.match(shader,/linearAlbedo=huntWoodlandBankSurface\(linearAlbedo,int\(vMaterial\)\)/);
   assert.doesNotMatch(shader,/materialAtPoint|world\.setMicroSurfaceTile/);
 });
