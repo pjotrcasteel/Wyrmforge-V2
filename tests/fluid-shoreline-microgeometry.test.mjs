@@ -140,3 +140,44 @@ test('Water V2 render vertices cannot rise above their own solver head',()=>{
       'water graphics cannot invent extra liquid above the physical solver height');
   }
 });
+
+test('WAT-19: a one-metre wet ribbon has a coherent 10cm shoreline, not an uncut square',()=>{
+  const {engine,mesh}=meshWith({
+    width:3,height:1,
+    materialFloor:(_x,_z)=>0,
+    seed:[{x:1,z:0,depth:4}]
+  });
+  assert.equal(mesh.wetColumns,1);
+  assert.equal(mesh.refinedShoreColumns,1);
+  const x=[...Array(mesh.vertexCount).keys()]
+    .filter(i=>mesh.normals[i*3+1]===1)
+    .map(i=>mesh.positions[i*3]);
+  assert.ok(Math.min(...x)>=1.0999,'dry western bank needs >=10cm inward contour');
+  assert.ok(Math.max(...x)<=1.9001,'dry eastern bank needs >=10cm inward contour');
+  assert.ok(Math.max(...x)-Math.min(...x)>=.59,
+    'a native narrow river cannot collapse into a decorative thin blue stripe');
+  assert.ok(mesh.topFaces>1&&mesh.topFaces<22,
+    'natural shore variation must remain compact enough for mobile');
+  assert.equal(engine.sample(0,0).depth,0,'presentation must not create water on dry stone');
+  assert.equal(engine.sample(2,0).depth,0,'opposite dry bank stays dry');
+  const again=buildFluidSurfaceMesh(engine.snapshotSurface(),{
+    sampleAt:(x,z)=>engine.sample(x,z)
+  });
+  assert.deepEqual(mesh.positions,again.positions,'world-anchored edge must never jitter');
+});
+
+test('WAT-19: a diagonal dry Voxel corner also gets a 10cm contour',()=>{
+  const seed=[{x:1,z:0,depth:4},{x:0,z:1,depth:4},{x:1,z:1,depth:4}];
+  const {engine,mesh}=meshWith({
+    width:2,height:2,materialFloor:()=>1,seed
+  });
+  assert.equal(mesh.wetColumns,3);
+  assert.equal(mesh.refinedShoreColumns,3,
+    'the diagonally adjacent wet tile must not keep a square corner');
+  assert.ok(mesh.topFaces>3);
+  assert.equal(engine.sample(0,0).depth,0);
+  const totalBytes=mesh.positions.byteLength+mesh.normals.byteLength+
+    mesh.flows.byteLength+mesh.faceModes.byteLength+
+    mesh.landingHeights.byteLength+mesh.indices.byteLength;
+  assert.ok(totalBytes<2*1024*1024);
+});
