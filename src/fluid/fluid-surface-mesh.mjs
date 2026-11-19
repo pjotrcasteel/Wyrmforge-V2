@@ -100,13 +100,13 @@ function cornerHead(x,z,cell,at){
   if(!values.length)return cell.surfaceY;
   const min=Math.min(...values),max=Math.max(...values);
   if(max-min>SMOOTH_HEAD_DIFFERENCE)return cell.surfaceY;
-  // Never let corner interpolation invent 10cm of extra water ABOVE a
-  // solver-owned column. The previous highestSolid + .1 artificially raised
-  // wet lips, exactly where a micro-Voxel grass bank looks submerged.
-  // Maintain a minimal 6mm depth separation from real wet stone, but always
-  // clamp to THIS column's physical free surface.
-  const average=values.reduce((sum,value)=>sum+value,0)/values.length;
-  return Math.min(cell.surfaceY,Math.max(average,highestSolid+CELL_EPSILON));
+  // Never let interpolation invent extra volume ABOVE any neighbor's
+  // solver-owned head. On the same continuous wet stone plane, use the
+  // shared lower corner head so independently emitted caps meet cleanly.
+  // A real stone step is different: smoothing the upper wet face down below
+  // the adjacent high bed would bury it inside Voxel and hide a waterfall.
+  if(highestSolid>=min-CELL_EPSILON)return cell.surfaceY;
+  return min;
 }
 
 export function buildFluidSurfaceMesh(surface,{sampleAt}={}){
