@@ -4,8 +4,9 @@
 // A host must still publish these exact definitions before opening Fluid V2.
 import {HUNT_RIVER_CORRIDOR_PLAN_SCHEMA} from './hunt-river-corridor-plan.mjs';
 import {
-  expandHuntRiverCorridor,prepareHuntBreachableBankTerraces,
-  composeHuntRiverBankTiles,excludeHuntRiverPlacements
+  expandHuntRiverCorridor,recessHuntRiverBelowGrass,
+  prepareHuntBreachableBankTerraces,composeHuntRiverBankTiles,
+  excludeHuntRiverPlacements
 } from './hunt-river-morphology.mjs';
 
 export const HUNT_RIVER_EARTHWORK_SCHEMA='wyrmforge.hunt-river-earthwork.v1';
@@ -218,6 +219,10 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const widened=expandHuntRiverCorridor(band,points,grade,changes,landform,{
       maxCutMetres
     });
+    // An old riverbed can sit ABOVE the adjacent dry bank. Recess each true
+    // wet bank contact using its original physical 10cm grass shoulder.
+    const lowerBankCount=recessHuntRiverBelowGrass(
+      band,changes,widened.columns);
     const wetCount=changes.size;
     // These are deliberately DRY, lower native Voxel banks. The water
     // footprint and the existing shallow traversal fords do not change.
@@ -259,6 +264,7 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
         lateralWetCells:widened.addedWetCells,
         bankTerraceColumns:Object.freeze(terraces),bankTerraceCount:terraces.length,
         bankMicroTiles:shoreline.bankTiles,
+        lowerBankCount,
         fordCells:Object.freeze([...fords]),maxCutMetres:maxCut,
         maxFillMetres:maxFill,bedFloorY:grade})
     }));
