@@ -21,7 +21,7 @@ export function shadowStampAlpha(x,y,size=SHADOW_STAMP_PIXELS){
   // footprint that a root still visibly grounds its trunk in mobile Hunt.
   // Squaring t removed too many middle-distance pixels in the real browser.
   const t=1-distance*distance;
-  return Math.round(255*Math.pow(t,1.25));
+  return Math.round(255*Math.pow(t,1.15));
 }
 
 export function makeShadowStampPixels(size=SHADOW_STAMP_PIXELS){
