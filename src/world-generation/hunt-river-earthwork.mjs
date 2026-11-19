@@ -189,13 +189,13 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
     const fords=riverFordCells(region,{floor:[
       ...(existingChannel?.floor??[]),...points
     ]});
-    // An already-authored waterbed is Voxel terrain too. If we only carve
-    // the linking centerline, the broad existing river sits on the surface
-    // and looks like a blue overlay. Cut every actual WorldGen channel cell;
-    // NEVER modify nearby dry bank columns, paths or protected grass.
+    // Water V2 MUST sit below the grass even at the crossing: leaving
+    // an existing authored ford at its old (grass-level) floor seeded 40cm
+    // of water ABOVE the adjacent 10cm microbank. Every actually wet channel
+    // gets a real Voxel excavation. Safe walking/crossing is regression
+    // checked separately; dry protected roads are not altered.
     for(const cell of existingChannel?.floor??[]){
       const id=key(cell.x,cell.z);
-      if(fords.has(id))continue; // original shallow ford remains a real walking route
       changes.set(id,{
         floorY:cell.y-HUNT_RIVER_RECESS_METRES
       });
@@ -204,10 +204,11 @@ export function prepareHuntRiverEarthwork(graph,proposal,terrainAdapter,{
       const id=key(point.x,point.z);
       if(covered.has(id))throw new Error('Overlapping WorldGen channel bands');
       covered.add(id);
-      // Shallow rocky ford at a real authored east/west route crossing.
-      // Other channel cells are fully recessed. The ford uses the exact
-      // earlier passable physical grade, never an invented shader bridge.
-      const desired=fords.has(id)?grade+HUNT_RIVER_RECESS_METRES:grade;
+      // The crossing remains a true solid stone bed with water above it,
+      // but can no longer keep a wet one-metre ford at grass elevation.
+      // A shorter bank step is handled by the native Voxel terrain, not by
+      // raising the liquid and painting a blue rectangle on the walking path.
+      const desired=grade;
       changes.set(id,{floorY:Math.min(desired,
         changes.get(id)?.floorY??desired)});
     }
