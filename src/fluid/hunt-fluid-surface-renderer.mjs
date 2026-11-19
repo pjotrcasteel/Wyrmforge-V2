@@ -4,6 +4,7 @@ import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transien
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
 import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
+import {writePointVisibility,POINT_VISIBILITY_FLOATS} from '../lighting/point-light-visibility.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
 // side faces at the solver's 10cm levels, depth-tested against Voxel geometry.
 // Uses one small program/VAO. Never writes voxels or changes terrain textures.
@@ -284,6 +285,9 @@ export class HuntFluidSurfaceRenderer {
   #program=null;
   #lightPositions=new Float32Array(8);
   #lightRadiance=new Float32Array(6);
+  // The same completed 2-light, 2-height, 12-sector visibility snapshot as terrain.
+  // Uniform-only: no extra Voxel raycasts or visibility providers in Water.
+  #pointVisibilityUpload=new Float32Array(POINT_VISIBILITY_FLOATS);
   #lightingTexture=null;
   #lightingSource=null;
   #lightingUploads=0;
@@ -487,6 +491,8 @@ export class HuntFluidSurfaceRenderer {
         depth:uniform('uCameraDepth'),time:uniform('uTime'),
         rippleFrame:uniform('uRippleFrame'),rippleFade:uniform('uRippleFade'),
         ambient:uniform('uLightingAmbient'),
+        pointVisibilityEnabled:uniform('uPointVisibilityEnabled'),
+        pointVisibilityDistances:uniform('uPointVisibilityDistances[0]'),
         lightingField:uniform('uLightingField'),
         lightingEnabled:uniform('uLightingFieldEnabled'),
         lightingWarm:uniform('uLightingWarmEnabled'),
@@ -586,7 +592,7 @@ export class HuntFluidSurfaceRenderer {
 
   render(view,{time=0,reducedMotion=false,showRibbons=true,
     showLanding=true,showParcels=true,lightingEnvironment=null,transientLights=null,
-    lightingField=null}={}){
+    pointVisibility=null,lightingField=null}={}){
     if(this.#disposed||!this.#ensureReady()||!this.#record)return false;
     const gl=this.#gl,u=this.#uniforms,basis=getCameraPreset(view.camera);
     gl.useProgram(this.#program);
@@ -611,6 +617,12 @@ export class HuntFluidSurfaceRenderer {
     const lightCount=writeTransientLights(transientLights,this.#lightPositions,this.#lightRadiance);
     gl.uniform1i(u.lightCount,lightCount);
     if(lightCount){gl.uniform4fv(u.lightPositions,this.#lightPositions);gl.uniform3fv(u.lightRadiance,this.#lightRadiance);}
+    // Mirror terrain's visibility gate exactly: unfinished, stale and expired
+    // fields fall back to unoccluded light until a valid bounded snapshot exists.
+    const visible=lightCount>0&&writePointVisibility(
+      pointVisibility,transientLights,this.#pointVisibilityUpload);
+    gl.uniform1i(u.pointVisibilityEnabled,visible?1:0);
+    if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
