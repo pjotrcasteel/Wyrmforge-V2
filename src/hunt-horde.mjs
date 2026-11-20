@@ -144,7 +144,7 @@ export class HuntHorde {
         limitHorizontal,traversalProfile});
       if(!next.error)this.#steering.observe(index,enemy,next,world.revision,dt,speed);
       else this.#steering.clear();
-      return next;
+      return {...next,archetypeId:enemy.archetypeId};
     }).filter(enemy=>!enemy.error);
   }
 }
