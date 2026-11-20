@@ -26,6 +26,11 @@ test('Horde Crossing spawns grounded enemies, runs three bounded waves and recor
     const before=horde.enemies[0];
     for(let i=0;i<20;i++)step();
     assert.notDeepEqual(horde.enemies[0],before);
+    assert.ok(horde.report.navigation.queries>0,'live Horde should sample real spatial LOS');
+    assert.ok(horde.report.navigation.peakQueriesPerStep<=3,
+      'ten active enemies must not exceed the spatial query budget');
+    assert.ok(horde.enemies.every(enemy=>enemy.archetypeId==='hollowed'),
+      'physical updates retain the creature locomotion identity');
     // Keep the stationary test fixture outside contact height once movement is verified.
     for(let i=0;i<1500;i++)step({...actor,y:actor.y+5});
     assert.equal(horde.report.phase,'complete');
