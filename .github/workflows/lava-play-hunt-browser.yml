@@ -35,7 +35,7 @@ jobs:
       - name: Install mobile-sized real WebGL browser dependencies
         run: |
           command -v google-chrome
-          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright-core@1.56.1 pngjs@7.0.0
       - name: Verify physical molten flow and light emission in the real Wyrm Lair
         env:
           CHROME_BIN: /usr/bin/google-chrome

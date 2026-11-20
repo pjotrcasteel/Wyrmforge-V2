@@ -4,6 +4,7 @@
 // Run locally: npm i --no-save playwright-core@1.56.1
 // node .github/witness/lava-play-hunt-browser.mjs
 import {chromium} from 'playwright-core';
+import {PNG} from 'pngjs';
 import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -84,6 +85,58 @@ try{
   await page.screenshot({
     path:folder+'/wyrm-lair-lava-flow.jpeg',type:'jpeg',quality:75
   });
+  // Compare actual projected native molten top faces with drawing enabled
+  // versus disabled, freezing only the fluid simulation. Terrain, lighting,
+  // world and camera remain unchanged, so dry rock cannot fake the signal.
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.hold(true));
+  await page.waitForTimeout(150);
+  const capRects=await page.evaluate(()=>window.__WyrmforgeFluidTest.capRects());
+  const on=PNG.sync.read(await page.screenshot({
+    type:'png',scale:'css',path:folder+'/lava-material-on.png'
+  }));
+  await page.evaluate(()=>window.__WyrmforgeFluidTest.overlay('no-draw'));
+  await page.waitForTimeout(150);
+  const off=PNG.sync.read(await page.screenshot({
+    type:'png',scale:'css',path:folder+'/lava-material-off.png'
+  }));
+  await page.evaluate(()=>{
+    window.__WyrmforgeFluidTest.overlay('on');
+    window.__WyrmforgeFluidTest.hold(false);
+  });
+  if(on.width!==off.width||on.height!==off.height||
+      capRects.length<10){
+    throw new Error('Real physical molten top-face mask unavailable');
+  }
+  const mask=new Uint8Array(on.width*on.height);
+  for(const {left,right,top,bottom} of capRects){
+    for(let y=Math.max(0,Math.floor(top));y<Math.min(on.height,Math.ceil(bottom));y++){
+      for(let x=Math.max(0,Math.floor(left));x<Math.min(on.width,Math.ceil(right));x++){
+        mask[y*on.width+x]=1;
+      }
+    }
+  }
+  let changed=0,dark=0,hot=0,covered=0;
+  for(let i=0;i<mask.length;i++){
+    if(!mask[i])continue;
+    covered++;
+    const j=i*4,r=on.data[j],g=on.data[j+1],b=on.data[j+2];
+    const difference=Math.abs(r-off.data[j])+
+      Math.abs(g-off.data[j+1])+Math.abs(b-off.data[j+2]);
+    if(difference<22)continue;
+    changed++;
+    if(r<105&&g<90&&b<90)dark++;
+    if(r>145&&r>g*1.4&&g>b*.9)hot++;
+  }
+  report.visualCrust={capRects:capRects.length,covered,changed,dark,hot,
+    darkRatio:changed?dark/changed:0,hotRatio:changed?hot/changed:0};
+  console.log('LAVA_V2_VISIBLE_CRUST '+JSON.stringify(report.visualCrust));
+  if(covered<500||changed<120||dark<35||hot<20){
+    throw new Error('Native lava lacks visible cold rafts and hot fractures: '+
+      JSON.stringify(report.visualCrust));
+  }
+  if(after.lavaAtlasBytes!==256*256*4){
+    throw new Error('Molten atlas missing or unbounded: '+after.lavaAtlasBytes);
+  }
   if(after.kind!=='lava'||after.steps<initial.status.steps+35||
       after.wetColumns<1||after.raisedSurfaceFaces<1||
       after.fluidGpuAllocations>initial.status.fluidGpuAllocations+2||

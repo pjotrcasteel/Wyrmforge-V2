@@ -3,6 +3,10 @@ import {terrainColorTransferGlsl} from '../terrain-color-space.mjs';
 import {TRANSIENT_LIGHTING_GLSL,writeTransientLights} from '../lighting/transient-lighting.mjs';
 import {LIGHTING_ENVIRONMENT_SCHEMA} from '../lighting/environment-contract.mjs';
 import {MOLTEN_DISPLAY_GLSL} from '../materials/molten-presentation.mjs';
+import {LAVA_CRUST_FLOW_GLSL} from '../materials/lava-crust-flow.mjs';
+import {
+  buildLavaCrustAtlas,LAVA_CRUST_ATLAS_BYTES,LAVA_CRUST_ATLAS_SIZE
+} from '../materials/lava-crust-atlas.mjs';
 import {STATIC_FIELD_EMISSION_GLSL} from '../lighting/static-field-shader.mjs';
 import {writePointVisibility,POINT_VISIBILITY_FLOATS} from '../lighting/point-light-visibility.mjs';
 // Independent Water V2 WebGL2 presentation: real liquid top caps and exposed
@@ -63,12 +67,14 @@ uniform float uTime;
 uniform float uRippleFrame;
 uniform float uRippleFade;
 uniform float uLava;
+uniform vec2 uLavaChannelFlow;
 uniform float uRibbonEnabled;
 uniform float uLandingEnabled;
 uniform float uParcelsEnabled;
 out vec4 outColor;
 ${waterRippleMotifGlsl()}
 ${MOLTEN_DISPLAY_GLSL}
+${LAVA_CRUST_FLOW_GLSL}
 ${terrainColorTransferGlsl()}
 ${SURFACE_GLSL}
 ${TRANSIENT_LIGHTING_GLSL}
@@ -95,8 +101,17 @@ void main(){
   if(vFaceMode==4&&uRibbonEnabled<.5)discard;
   if(vFaceMode==5&&uLandingEnabled<.5)discard;
   if(vFaceMode==6&&uParcelsEnabled<.5)discard;
-  // Pixel-art glints anchored to real world coordinates; no new texture
-  // assets. Palette follows the approved water/lava artwork in Hunt.
+  if(uLava>.5){
+    // LAVA-02: hot channels carry floating dark crust plates with glowing
+    // moving fractures. All coordinates come from real solver-wet geometry.
+    // This EARLY branch skips the expensive water ripple lookup entirely,
+    // rather than doing water fragment work before drawing any lava.
+    vec3 molten=nativeLavaCrust(vWorld,vFlow,uLavaChannelFlow,
+      vFaceMode,vLandingY,uTime);
+    outColor=vec4(litFluidColor(molten),vFaceMode==5?.90:.995);
+    return;
+  }
+  // Only WATER below this point: pixel glints on real wet geometry.
   vec2 pixel=floor(vWorld.xz*8.0);
   // This fade is shared by all water pixels. JS computes it ONCE per draw,
   // avoiding expensive per-fragment smoothstep work on weak GPUs/software GL.
@@ -139,7 +154,7 @@ void main(){
   }
   vec3 color;
   float opacity;
-  if(uLava<0.5){
+  {
     vec3 deep=vec3(.075,.28,.32);
     vec3 shallow=vec3(.22,.49,.44);
     color=mix(deep,shallow,.36+.24*pool);
@@ -190,23 +205,6 @@ void main(){
     // Prevent the old terrain decal from showing through as hard dark
     // blocks at excavation boundaries, while keeping slight depth blending.
     opacity=mix(.975,.94,top);
-  }else{
-    float ember=fluidHash(pixel-vec2(frame,frame*.25)+79.0);
-    color=mix(MOLTEN_DARK,MOLTEN_HOT,.40+.45*pool);
-    color=mix(color,MOLTEN_CORE,step(.84,ember)*.5);
-    color*=mix(.72,1.0,top);
-    if(vFaceMode==4){
-      float fall=clamp((vWorld.y-vLandingY)/2.5,0.0,1.0);
-      color=mix(color,vec3(1.0,.66,.20),.16+.12*(1.0-fall));
-    }
-    if(vFaceMode==2){
-      float streak=fluidHash(vec2(floor(vWorld.y*8.0+uTime*2.0),
-        floor(dot(vWorld.xz,vec2(-downstream.y,downstream.x))*10.0)));
-      color=mix(color,vec3(1.0,.63,.16),step(.68,streak)*.22);
-      float landing=1.0-smoothstep(.02,.4,vWorld.y-vLandingY);
-      color=mix(color,vec3(1.0,.75,.24),landing*.24);
-    }
-    opacity=.99;
   }
   outColor=vec4(litFluidColor(color),opacity);
 }
@@ -291,12 +289,15 @@ export class HuntFluidSurfaceRenderer {
   #pointVisibilityActive=false;
   #pointVisibilityFrames=0;
   #lightingTexture=null;
+  #lavaAtlasTexture=null;
   #lightingSource=null;
   #lightingUploads=0;
   #lightingUploadMs=0;
   #uniforms=null;
   #record=null;
   #mesh=null;
+  // Stable renderer-only direction: adjoining 1m cells share ONE flow axis.
+  #lavaFlowAxis=new Float32Array([0,1]);
   #visualHistory=new Map();
   #meshUpdateMs=0;
   #meshUpdateCount=0;
@@ -316,7 +317,8 @@ export class HuntFluidSurfaceRenderer {
     this.#gl=gl;
     this.#onLost=()=>{this.#lost=true;this.#record=null;this.#program=null;this.#uniforms=null;
       this.#pointVisibilityActive=false;
-      this.#lightingTexture=null;this.#lightingSource=null;};
+      this.#lightingTexture=null;this.#lavaAtlasTexture=null;
+      this.#lightingSource=null;};
     this.#onRestored=()=>{this.#lost=false;this.#record=null;this.#program=null;this.#uniforms=null;
       this.#pointVisibilityActive=false;
       this.#lightingTexture=null;this.#lightingSource=null;};
@@ -354,6 +356,7 @@ export class HuntFluidSurfaceRenderer {
       gpuAllocatedBytes:this.#record?.capacities.reduce(
         (sum,bytes)=>sum+bytes,0)??0,
       lightingTextureBytes:this.#lightingTexture?24*24*4*4:0,
+      lavaAtlasBytes:this.#lavaAtlasTexture?LAVA_CRUST_ATLAS_BYTES:0,
       lightingUploads:this.#lightingUploads,
       lightingUploadMs:this.#lightingUploadMs,
       pointVisibilityActive:this.#pointVisibilityActive,
@@ -363,6 +366,13 @@ export class HuntFluidSurfaceRenderer {
 
   // Pixel-based browser acceptance can isolate the waterfall ribbon and
   // its lower-pool landing separately, without changing the simulation.
+  // Browser visual QA only: the actual physical wet upper faces, never a
+  // hand-drawn region around the lava. Keep this out of the gameplay path.
+  projectedCapBounds(view){
+    return [...this.#projectedModeBounds(view,0),
+      ...this.#projectedModeBounds(view,3)];
+  }
+
   projectedRibbonBounds(view){
     return this.#projectedModeBounds(view,4);
   }
@@ -434,11 +444,30 @@ export class HuntFluidSurfaceRenderer {
     this.#pointVisibilityActive=false;
     this.#pointVisibilityFrames=0;
     this.#mesh=null;
+    this.#lavaFlowAxis[0]=0;
+    this.#lavaFlowAxis[1]=1;
     this.#visualHistory.clear();
   }
 
   update(surface,sampleAt){
     if(this.#disposed)throw new Error('Fluid renderer disposed');
+    if(surface?.kind==='lava'&&this.#mesh?.kind!=='lava'){
+      // Sample actual molten channel direction ONCE. Using a different
+      // direction per 1m cap produced bright geometric checkerboard seams.
+      let x=0,z=0;
+      for(const cell of surface.cells){
+        x+=cell.currentX??cell.flowX??0;
+        z+=cell.currentZ??cell.flowZ??0;
+      }
+      if(x*x+z*z<.25){
+        const first=surface.cells.find(cell=>cell.flowX||cell.flowZ);
+        x=first?.flowX??0;
+        z=first?.flowZ??1;
+      }
+      const length=Math.hypot(x,z)||1;
+      this.#lavaFlowAxis[0]=x/length;
+      this.#lavaFlowAxis[1]=z/length;
+    }
     const start=performance.now();
     const presented=stabilizeFluidSurface(surface,sampleAt,this.#visualHistory);
     const mesh=buildFluidSurfaceMesh(presented.surface,{
@@ -508,7 +537,8 @@ export class HuntFluidSurfaceRenderer {
         lightingEmission:uniform('uLightingEmissionColor'),
         lightCount:uniform('uTransientLightCount'),
         lightPositions:uniform('uTransientPositions[0]'),lightRadiance:uniform('uTransientRadiance[0]'),
-        lava:uniform('uLava'),
+        lava:uniform('uLava'),lavaDirection:uniform('uLavaChannelFlow'),
+        lavaAtlas:uniform('uLavaCrustAtlas'),
         ribbons:uniform('uRibbonEnabled'),landing:uniform('uLandingEnabled'),
         parcels:uniform('uParcelsEnabled')
       };
@@ -562,6 +592,29 @@ export class HuntFluidSurfaceRenderer {
       gl.bindBuffer(gl.ARRAY_BUFFER,null);
     }
     return true;
+  }
+
+  #bindLavaAtlas(){
+    const gl=this.#gl;
+    gl.uniform1i(this.#uniforms.lavaAtlas,6);
+    if(this.#mesh.kind!=='lava')return;
+    if(!this.#lavaAtlasTexture){
+      const texture=gl.createTexture();
+      if(!texture)throw new Error('Cannot create bounded molten-crust atlas');
+      gl.activeTexture(gl.TEXTURE0+6);
+      gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+      // A single 256KiB upload per context, NEVER one texture per tick.
+      // Pixel-art atlas generated in Materials without Voxel or Fluid edits.
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,LAVA_CRUST_ATLAS_SIZE,
+        LAVA_CRUST_ATLAS_SIZE,0,gl.RGBA,gl.UNSIGNED_BYTE,buildLavaCrustAtlas());
+      this.#lavaAtlasTexture=texture;
+    }
+    gl.activeTexture(gl.TEXTURE0+6);
+    gl.bindTexture(gl.TEXTURE_2D,this.#lavaAtlasTexture);
   }
 
   #bindLightingField(field){
@@ -634,7 +687,9 @@ export class HuntFluidSurfaceRenderer {
     gl.uniform1i(u.pointVisibilityEnabled,visible?1:0);
     if(visible)gl.uniform1fv(u.pointVisibilityDistances,this.#pointVisibilityUpload);
     this.#bindLightingField(lightingField);
+    this.#bindLavaAtlas();
     gl.uniform1f(u.lava,this.#mesh.kind==='lava'?1:0);
+    gl.uniform2fv(u.lavaDirection,this.#lavaFlowAxis);
     gl.uniform1f(u.ribbons,showRibbons?1:0);
     gl.uniform1f(u.landing,showLanding?1:0);
     gl.uniform1f(u.parcels,showParcels?1:0);
@@ -659,6 +714,10 @@ export class HuntFluidSurfaceRenderer {
     if(this.#disposed)return;
     this.#releaseBuffers();
     this.#releaseLightingTexture();
+    if(this.#lavaAtlasTexture&&!this.#lost&&!this.#gl.isContextLost()){
+      this.#gl.deleteTexture(this.#lavaAtlasTexture);
+    }
+    this.#lavaAtlasTexture=null;
     if(this.#program&&!this.#lost)this.#gl.deleteProgram(this.#program);
     this.#program=null;
     this.#mesh=null;
