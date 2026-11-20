@@ -43,7 +43,8 @@ export class HuntPursuitSteering{
     const [forwardX,forwardZ]=normalize(dx,dz);
     if(state.detourFor<=0||Math.hypot(dx,dz)<.65){
       state.detourFor=0;
-      return {moveX:forwardX,moveZ:forwardZ,detouring:false};
+      const approach=Math.min(1,Math.hypot(dx,dz));
+      return {moveX:forwardX*approach,moveZ:forwardZ*approach,detouring:false};
     }
     state.detourFor=Math.max(0,state.detourFor-dt);
     // The tangent is intentionally dominant: it clears the side of a
