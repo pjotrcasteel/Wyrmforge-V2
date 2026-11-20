@@ -83,12 +83,12 @@ test('local candidate preview is rejected at physical walls and region bounds',(
   const world=new VoxelWorld({chunkEdge:16});
   for(let x=-3;x<=3;x++)for(let z=-3;z<=3;z++)world.set(x,0,z,3);
   for(let y=1;y<=3;y++)world.set(1,y,0,3);
-  const enemy=spawnTerrainActor(world,{x:.5,z:.5});
+  const enemy=spawnTerrainActor(world,{x:.72,z:.5});
   const port=new HuntAISpatialPort();
   port.bind(world,null,()=>true);
   assert.equal(port.canMove(enemy,1,0,hollow),false);
   assert.equal(port.canMove(enemy,-1,0,hollow),true);
-  port.bind(world,null,(x)=>x>=.5);
+  port.bind(world,null,(x)=>x>=.72);
   assert.equal(port.canMove(enemy,-1,0,hollow),false,
     'navigation must honor published footprint limits');
 });
