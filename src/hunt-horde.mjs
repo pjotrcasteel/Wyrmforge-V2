@@ -1,5 +1,6 @@
 import {spawnTerrainActor,simulateTerrainActor,ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 import {containsHuntLandform} from './world-generation/hunt-landform-footprint.mjs';
+import {HuntPursuitSteering} from './ai/pursuit-steering.mjs';
 
 const WAVE_SIZES=[4,7,10];
 const WAVE_SECONDS=8;
@@ -17,6 +18,7 @@ export class HuntHorde {
   #cooldown=0;
   #spawned=0;
   #peak=0;
+  #steering=new HuntPursuitSteering();
 
   constructor(region){this.#region=region;}
   get enemies(){return this.#enemies;}
@@ -24,7 +26,8 @@ export class HuntHorde {
   get waiting(){return this.#phase==='waiting';}
   get report(){
     return {phase:this.#phase,wave:this.#wave,contacts:this.#contacts,
-      spawned:this.#spawned,peakActive:this.#peak,secondsRemaining:Math.max(0,Math.ceil(WAVE_SECONDS-this.#time))};
+      spawned:this.#spawned,peakActive:this.#peak,secondsRemaining:Math.max(0,Math.ceil(WAVE_SECONDS-this.#time)),
+      steering:this.#steering.statistics};
   }
 
   #within(x,z){
@@ -33,6 +36,7 @@ export class HuntHorde {
   }
 
   #spawn(world,actor,objects){
+    this.#steering.clear();
     const enemies=[];
     for(const [dx,dz] of SPAWN_OFFSETS){
       const x=this.#region.offsetX+dx+.5,z=this.#region.offsetZ+dz+.5;
@@ -59,6 +63,7 @@ export class HuntHorde {
         this.#phase='waiting';
         this.#wave=this.#contacts=this.#time=this.#cooldown=0;
         this.#enemies=[];
+        this.#steering.clear();
       }
       return;
     }
@@ -99,17 +104,18 @@ export class HuntHorde {
       }
     }
     const speed=1.85+(this.#wave-1)*.25;
-    this.#enemies=this.#enemies.map(enemy=>{
-      const dx=actor.x-enemy.x,dz=actor.z-enemy.z;
-      const length=Math.max(1,Math.hypot(dx,dz));
-      const moveX=dx/length,moveZ=dz/length;
+    this.#enemies=this.#enemies.map((enemy,index)=>{
+      const {moveX,moveZ}=this.#steering.direction(index,enemy,actor,world.revision,dt);
       const limitHorizontal=(position,axis,distance)=>{
         const x=position.x+(axis==='x'?distance:0);
         const z=position.z+(axis==='z'?distance:0);
         if(!this.#within(x,z))return 0;
         return objects?.limitTravel(position,axis,distance)??distance;
       };
-      return simulateTerrainActor(world,enemy,{moveX,moveZ,dt,moveSpeed:speed,limitHorizontal});
+      const next=simulateTerrainActor(world,enemy,{moveX,moveZ,dt,moveSpeed:speed,limitHorizontal});
+      if(!next.error)this.#steering.observe(index,enemy,next,world.revision,dt,speed);
+      else this.#steering.clear();
+      return next;
     }).filter(enemy=>!enemy.error);
   }
 }
