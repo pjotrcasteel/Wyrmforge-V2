@@ -1,6 +1,9 @@
 import {spawnTerrainActor,simulateTerrainActor,ACTOR_HALF_WIDTH,ACTOR_HEIGHT} from './terrain-actor.mjs';
 import {containsHuntLandform} from './world-generation/hunt-landform-footprint.mjs';
 import {HuntPursuitSteering} from './ai/pursuit-steering.mjs';
+import {HuntLocalNavigation} from './ai/local-navigation.mjs';
+import {HuntAISpatialPort} from './hunt-ai-spatial-port.mjs';
+import {locomotionFor} from './encounter/enemy-locomotion.mjs';
 
 const WAVE_SIZES=[4,7,10];
 const WAVE_SECONDS=8;
@@ -19,6 +22,11 @@ export class HuntHorde {
   #spawned=0;
   #peak=0;
   #steering=new HuntPursuitSteering();
+  #navigation=new HuntLocalNavigation();
+  #spatial=new HuntAISpatialPort();
+  #world=null;
+  #epoch=0;
+  #frame=0;
 
   constructor(region){this.#region=region;}
   get enemies(){return this.#enemies;}
@@ -27,7 +35,7 @@ export class HuntHorde {
   get report(){
     return {phase:this.#phase,wave:this.#wave,contacts:this.#contacts,
       spawned:this.#spawned,peakActive:this.#peak,secondsRemaining:Math.max(0,Math.ceil(WAVE_SECONDS-this.#time)),
-      steering:this.#steering.statistics};
+      steering:this.#steering.statistics,navigation:this.#navigation.statistics};
   }
 
   #within(x,z){
@@ -37,6 +45,8 @@ export class HuntHorde {
 
   #spawn(world,actor,objects){
     this.#steering.clear();
+    this.#navigation.clear();
+    this.#frame=0;
     const enemies=[];
     for(const [dx,dz] of SPAWN_OFFSETS){
       const x=this.#region.offsetX+dx+.5,z=this.#region.offsetZ+dz+.5;
@@ -47,7 +57,7 @@ export class HuntHorde {
         enemy.y<prop.y+prop.height&&enemy.y+ACTOR_HEIGHT>prop.y&&
         Math.hypot(enemy.x-prop.x,enemy.z-prop.z)<prop.radius+(prop.halfLength??0)+ACTOR_HALF_WIDTH));
       if(overlapsProp)continue;
-      enemies.push(enemy);
+      enemies.push({...enemy,archetypeId:'hollowed'});
       if(enemies.length===WAVE_SIZES[this.#wave-1])break;
     }
     this.#enemies=enemies;
@@ -58,12 +68,24 @@ export class HuntHorde {
 
   step({world,actor,section,objects,dt}){
     if(!this.#region||this.#phase==='complete')return;
+    if(this.#world!==world){
+      if(this.#world!==null){
+        this.#phase='waiting';
+        this.#wave=this.#contacts=this.#time=this.#cooldown=0;
+        this.#enemies=[];
+        this.#steering.clear();
+        this.#navigation.clear();
+      }
+      this.#world=world;
+      this.#epoch++;
+    }
     if(section!==this.#region.id){
       if(this.#phase==='active'||this.#phase==='failed'){
         this.#phase='waiting';
         this.#wave=this.#contacts=this.#time=this.#cooldown=0;
         this.#enemies=[];
         this.#steering.clear();
+        this.#navigation.clear();
       }
       return;
     }
@@ -104,15 +126,22 @@ export class HuntHorde {
       }
     }
     const speed=1.85+(this.#wave-1)*.25;
+    this.#spatial.bind(world,objects,(x,z)=>this.#within(x,z));
+    this.#navigation.beginFrame({frame:this.#frame++,epoch:this.#epoch,
+      terrainRevision:world.revision,objectsRevision:this.#spatial.objectsRevision});
     this.#enemies=this.#enemies.map((enemy,index)=>{
-      const {moveX,moveZ}=this.#steering.direction(index,enemy,actor,world.revision,dt);
+      const traversalProfile=locomotionFor(enemy.archetypeId??'hollowed');
+      const perception=this.#navigation.seek(index,enemy,actor,this.#spatial,traversalProfile);
+      const pursuitTarget=perception.target??enemy;
+      const {moveX,moveZ}=this.#steering.direction(index,enemy,pursuitTarget,world.revision,dt);
       const limitHorizontal=(position,axis,distance)=>{
         const x=position.x+(axis==='x'?distance:0);
         const z=position.z+(axis==='z'?distance:0);
         if(!this.#within(x,z))return 0;
         return objects?.limitTravel(position,axis,distance)??distance;
       };
-      const next=simulateTerrainActor(world,enemy,{moveX,moveZ,dt,moveSpeed:speed,limitHorizontal});
+      const next=simulateTerrainActor(world,enemy,{moveX,moveZ,dt,moveSpeed:speed,
+        limitHorizontal,traversalProfile});
       if(!next.error)this.#steering.observe(index,enemy,next,world.revision,dt,speed);
       else this.#steering.clear();
       return next;
