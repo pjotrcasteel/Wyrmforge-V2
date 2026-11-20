@@ -25,6 +25,17 @@ Lighting V2 remains implemented and live as PR #431 / `2c424d4`. Outstanding sha
 3. **A11-03**: enemy intents and archetypes (Hollowed, Ashling, Penitent) with telegraphed attacks and separation; Encounter retains timed wave/horde ownership. First on-screen combat experience drives tuning; not an arbitrary 50-type enemy roster.
 4. **A11-04 / A11-99**: Wyrm corruption escalates encounter patterns, bounded 10-minute mobile acceptance, replay/streaming and dependency/coupling audit. Finish a real seeded Hunt without enemy ghosting, unsignaled damage or gameplay stalls.
 
+## Extended enemy roster and phased encounter design (owner input, 2026-11-20)
+
+The next slices must support regular melee/ranged creatures with instinctive pursuit, tactical packs, fear/rout and retreat; rare affix variants of **every eligible regular enemy** at low configurable odds; separate optional Reliquary events, guardian Wardens and full multi-stage Wyrm bosses. All remain readable, deterministic, and mobile-first.
+
+**Canonical detailed architecture and source-backed V1 retrospective:** [Enemy AI/Encounter extensibility and V1 lessons](AI-ENCOUNTER-V2-EXTENSIBILITY-AND-V1-LESSONS.md) · [A11-ARCH #436](https://github.com/pjotrcasteel/Wyrmforge-V2/issues/436).
+
+- Keep **archetype/role**, **behavior sophistication/temperament**, **rarity variant**, **encounter category/phase**, and **world context/Wyrm tier** independent. Don't translate them into one "enemy tier."
+- AI consumes earned observations and emits actions only. Combat commits telegraphed attacks; Physics/Voxel/World Objects own movement, collision and edits; Encounter owns composition, rare rolls, pack roles and boss-phase restrictions.
+- Reuse V1's clear elite affixes, phase transitions and limited simultaneous combat pressure as **design lessons**, not runtime code. Explicitly avoid V1's species-state-heavy actor, all-seeing player position, input-reading Whitefang and effectively non-generalized pack grouping.
+- Continue **A11-02 #435 first**. A11-03 covers composable archetype/intent/attack contracts, A11-04 pack/morale/corruption escalation, proposed A11-05 generic rare variants, proposed A11-06 authored special encounters and phased Wyrms, then A11-99 acceptance. These future labels are planning, not completion claims.
+
 ## A11-01 acceptance
 
 - Real seeded Wet Forest horde still completes the existing 4/7/10 enemy schedule.
