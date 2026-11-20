@@ -2,6 +2,7 @@
 // World Objects remain the authority: AI never reads their mutable internals.
 import {raycastTerrain} from './terrain-raycast.mjs';
 import {simulateTerrainActor} from './terrain-actor.mjs';
+import {classifyTraversalHeight} from './character-traversal-policy.mjs';
 
 const finite=p=>p&&[p.x,p.y,p.z].every(Number.isFinite);
 const intersectsSegment=(shape,origin,direction,length)=>{
@@ -77,10 +78,25 @@ export class HuntAISpatialPort{
       if(!this.#accept(x,z))return 0;
       return this.#objects?.limitTravel(position,axis,distance)??distance;
     };
+    const length=Math.hypot(moveX,moveZ);
+    if(length<1e-6)return false;
+    // The forward ground sample uses authoritative Voxel raycast, not a
+    // separate AI heightmap. It rejects unwalkable rises and controlled
+    // drops beyond the creature's own capability; actual falls stay Physics.
+    const aheadX=enemy.x+moveX/length,aheadZ=enemy.z+moveZ/length;
+    if(!this.#accept(aheadX,aheadZ))return false;
+    const floor=raycastTerrain(this.#world,{
+      origin:[aheadX,enemy.y+1.4,aheadZ],
+      direction:[0,-1,0],maxDistance:5
+    });
+    if(!floor||!classifyTraversalHeight(enemy.y,floor.point.y,traversalProfile).passable){
+      return false;
+    }
     const next=simulateTerrainActor(this.#world,enemy,{
       moveX,moveZ,dt:1/20,moveSpeed:4,limitHorizontal,traversalProfile
     });
     return !next.error&&(!next.wallContact||next.autoHopStarted)&&
+      (!enemy.grounded||next.grounded||next.autoHopStarted)&&
       next.y>=enemy.y-.11;
   }
 }
