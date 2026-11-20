@@ -56,8 +56,11 @@ test('Hollowed and the mage cannot jump one full voxel (Wizard unchanged)',()=>{
     assert.ok(r.actor.x<2,species+' must route around the 1m obstacle');
     assert.ok(r.highest<1.6);
   }
-  assert.equal(locomotionFor('mage'),DEFAULT_TRAVERSAL_PROFILE);
+  assert.equal(locomotionFor('mage').autoHopHeight,DEFAULT_TRAVERSAL_PROFILE.autoHopHeight);
   assert.equal(classifyTraversalHeight(1,2,locomotionFor('hollowed')).passable,false);
+  assert.equal(classifyTraversalHeight(2,1,locomotionFor('hollowed')).passable,false,
+    'cautious creatures do not plan to hop down a full voxel');
+  assert.equal(classifyTraversalHeight(2,1,AGILE_HOP_PROFILE).passable,true);
 });
 
 test('agile profile still cannot jump a 2m wall or through an overhead ceiling',()=>{
