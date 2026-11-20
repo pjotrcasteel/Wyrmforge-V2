@@ -4,7 +4,7 @@
 // not yet a production player controller or a full rigid-body physics engine.
 import { raycastTerrain } from './terrain-raycast.mjs';
 import {
-  AUTO_STEP_HEIGHT,AUTO_HOP_HEIGHT,AUTO_HOP_UPWARD_SPEED,describeFallImpact
+  AUTO_STEP_HEIGHT,AUTO_HOP_HEIGHT,DEFAULT_TRAVERSAL_PROFILE,describeFallImpact
 } from './character-traversal-policy.mjs';
 
 export const ACTOR_PHYSICS_SCHEMA = 'voxel-v2.actor-physics.v1';
@@ -197,13 +197,13 @@ function groundProbe(world,position,dynamicCollision) {
   return sweepActorAxis(world,position,'y',-0.06,dynamicCollision).collided;
 }
 
-function moveHorizontal(world,position,axis,distance,canStep,dynamicCollision) {
+function moveHorizontal(world,position,axis,distance,canStep,dynamicCollision,traversalProfile) {
   const initial=sweepActorAxis(world,position,axis,distance,dynamicCollision);
   if(!initial.collided || !canStep || distance===0) {
     return {position:{...position,[axis]:initial.position},
       blocked:initial.collided,stepped:false};
   }
-  const risen=sweepActorAxis(world,position,'y',ACTOR_STEP_HEIGHT,dynamicCollision);
+  const risen=sweepActorAxis(world,position,'y',traversalProfile.autoHopHeight,dynamicCollision);
   if(risen.collided) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
@@ -215,14 +215,14 @@ function moveHorizontal(world,position,axis,distance,canStep,dynamicCollision) {
       blocked:true,stepped:false};
   }
   const reached={...elevated,[axis]:forward.position};
-  const landing=sweepActorAxis(world,reached,'y',-(ACTOR_STEP_HEIGHT+0.12),dynamicCollision);
+  const landing=sweepActorAxis(world,reached,'y',-(traversalProfile.autoHopHeight+0.12),dynamicCollision);
   if(!landing.collided || landing.position < position.y-0.11) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false};
   }
   // Only a short, physically plausible ledge may trigger a passive hop.
   // Never treat a full metre cliff as an ordinary player traversal.
-  if(landing.position-position.y>AUTO_STEP_HEIGHT+0.001) {
+  if(landing.position-position.y>traversalProfile.autoStepHeight+0.001) {
     return {position:{...position,[axis]:initial.position},
       blocked:true,stepped:false,hopCandidate:true};
   }
@@ -315,14 +315,22 @@ export function recoverTerrainActor(world,position,{
 }
 
 export function simulateTerrainActor(world,actor,{
-  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED,limitHorizontal=null,dynamicCollision=null
+  moveX=0,moveZ=0,dt=1/60,moveSpeed=ACTOR_MOVE_SPEED,limitHorizontal=null,dynamicCollision=null,
+  traversalProfile=DEFAULT_TRAVERSAL_PROFILE
 }={}) {
   validateWorld(world);
   validatePosition(actor);
   if (!Number.isFinite(dt) || dt<=0 || dt>1/20 ||
       !Number.isFinite(actor.vy) ||
       !Number.isFinite(moveSpeed) || moveSpeed<=0 || moveSpeed>6 ||
-      ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1)) {
+      ![moveX,moveZ].every(value=>Number.isFinite(value)&&Math.abs(value)<=1) ||
+      !traversalProfile || !Number.isFinite(traversalProfile.autoStepHeight) ||
+      !Number.isFinite(traversalProfile.autoHopHeight) ||
+      !Number.isFinite(traversalProfile.autoHopSpeed) ||
+      traversalProfile.autoStepHeight<0 || traversalProfile.autoHopHeight<0 ||
+      traversalProfile.autoHopHeight>1.25 ||
+      traversalProfile.autoStepHeight>traversalProfile.autoHopHeight ||
+      traversalProfile.autoHopSpeed<0 || traversalProfile.autoHopSpeed>ACTOR_MAX_UPWARD_SPEED) {
     throw new RangeError('Actor inputs or fixed-step delta outside supported bounds');
   }
   if (actorOverlapsTerrain(world,actor,dynamicCollision)) {
@@ -338,7 +346,7 @@ export function simulateTerrainActor(world,actor,{
   const canStep=initialSupport && actor.vy<=0;
   const advance=(position,axis,distance)=>{
     const travel=limitHorizontal?.(position,axis,distance)??distance;
-    const motion=moveHorizontal(world,position,axis,travel,canStep,dynamicCollision);
+    const motion=moveHorizontal(world,position,axis,travel,canStep,dynamicCollision,traversalProfile);
     if(travel!==distance)motion.blocked=true;
     return motion;
   };
@@ -348,9 +356,10 @@ export function simulateTerrainActor(world,actor,{
   const autoHopStarted=Boolean(canStep && (xMotion.hopCandidate || zMotion.hopCandidate) &&
     (actor.hopCooldown??0)<=0);
   const hopCooldown=autoHopStarted?0.32:Math.max(0,(actor.hopCooldown??0)-dt);
-  // The player has NO jump command. A real obstacle found by the swept
-  // collider starts a ballistic automatic hop, never a 1m position snap.
-  const requestedVy=autoHopStarted ? AUTO_HOP_UPWARD_SPEED : actor.vy;
+  // Each actor uses an explicit capability profile. The Wizard's default
+  // remains unchanged; agile creatures may *ballistically* clear 1m ledges.
+  // This is always triggered by a real swept collision, never an AI teleport.
+  const requestedVy=autoHopStarted ? traversalProfile.autoHopSpeed : actor.vy;
   const vy=Math.max(-ACTOR_MAX_FALL_SPEED,
     Math.min(ACTOR_MAX_UPWARD_SPEED,requestedVy-ACTOR_GRAVITY*dt));
   // Sweep both ascending AND descending travel. The first hit on an upward
