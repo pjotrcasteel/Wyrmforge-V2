@@ -1,60 +1,99 @@
 # Wyrmforge V2 — Native Mobile Engine Map
 
-**Status:** PROPOSED ARCHITECTURE, not approved/implemented.  
+**Status:** PROPOSED ARCHITECTURE, updated for owner-confirmed C# backend + swappable Pages/native presentation; not implemented.  
 **Date:** 2026-11-22.  
-**Scope:** native iOS and Android Wyrmforge V2; modular game engines inside a single application runtime.  
+**Scope:** shared C# game/simulation core, Blazor WASM/Pages development frontend, and future native iOS/Android presentation hosts; independently replaceable engines and frontends.  
 **Relationship:** This is a **platform migration and component inventory**, not a competing gameplay roadmap. Continue to use docs/ROADMAP.md and docs/DELIVERY-TASKS.md for historical work; open a separately reviewed native implementation track.  
-**Existing decisions:** preserve docs/architecture/ADR-0001-replaceable-engines.md and ADR-0002-hunt-expeditions-and-journey.md.  
+**Existing decisions:** preserve docs/architecture/ADR-0001-replaceable-engines.md and ADR-0002-hunt-expeditions-and-journey.md; this document makes the backend/frontend boundary explicit.  
 **Safety:** This PR adds documentation only, does not rewrite engines or overwrite parallel active branches.
 
-## 0. Correct the platform contract
+## 0. Locked product architecture: C# engine authority, interchangeable presentations
 
-- Deliverable is an installable, **native iOS game and native Android game**. A web page or a WebView wrapper is not acceptable.
-- Core gameplay/terrain/AI is C# and runs in native builds, with GPU rendering performed through platform graphics APIs (Metal on iOS, Vulkan/OpenGL ES as supported on Android).
-- Fixed oblique/orthographic 2.5D pixel-first presentation over genuine editable 3D terrain. One metre world blocks; ten divisions per axis when microvoxel detail is needed.
-- Mobile is the actual product. Desktop is permitted as an editor/debugging environment, never the acceptance environment.
-- Target 60 FPS on a defined supported-device tier; do not call that achieved until physical-device sustained profiles pass. Include quality tiers, memory, thermal, battery and resume.
-- Never import V1 runtime/assets or couple new production packages to the JavaScript/WebGL implementation. Existing V2 JS is a behavioural reference and migration evidence only, not the production runtime.
-- All engine boundaries must be replaceable and verifiable; no new direct dependency on another engine's implementation.
-- Do not declare any engine complete from a web-lab demonstration or CI-only test.
+**Owner correction (2026-11-22):** Preserve the V1 model of a **C# domain/game simulation core** with a **GitHub Pages browser frontend** during development; make presentation fully replaceable. Final distribution remains **native iOS and Android apps**, with their own presentation adapters, **not a hosted WebView**. Do not assume Unity owns the game, and do not move the game's authoritative state to JavaScript/WebGL.
 
-## 1. Proposed native host; approval gate
+V1 source verification:
+- `Wyrmforge.Domain` and `Wyrmforge.Application` are standalone C# projects; Application references Domain.
+- `Wyrmforge.Presentation.Web` uses `Microsoft.NET.Sdk.BlazorWebAssembly` and references Application and Bootstrap. Program.cs registers the C# game services in a browser WebAssembly host.
+- **GitHub Pages is static hosting**, not a server-side .NET backend. The C# simulation executes in the client through WebAssembly. "Backend" here means the **authoritative game/simulation layer**, not a remote HTTP server.
+- The browser's JavaScript/WebGL implementation is a **presentation adapter**, not a second physics/combat authority.
+- Actual mobile releases must host the **same game engine source/logic** inside native iOS and Android applications, with native GPU presentation. The native rendering framework is **not chosen yet**; qualify candidates by building both platforms rather than selecting one prematurely.
 
-**Recommended starting candidate:** Unity 6 LTS, C#, IL2CPP/AOT, Universal Render Pipeline (mobile Forward path). This creates real iOS/Android applications, rather than loading a website in a wrapper. Unity owns the platform runtime, native graphics integration, editor and packaging; **Wyrmforge owns the custom modules** below.
+### Immutable constraints
 
-**Why this candidate:** C# skills are reusable; iOS and Android builds are supported; stable per-assembly boundaries are possible; URP provides a mobile GPU integration point without writing Metal/Vulkan backends from scratch.
+- Game semantics, state, fixed-step progression, collision, terrain, combat, AI, water/lava simulation, progression and saves are C# domain/engine responsibilities.
+- Web frontend: Blazor WebAssembly + replaceable WebGL/Canvas renderer, deployed to Pages for fast playable iteration.
+- Native frontend: separate future mobile presentation package with real installable iOS and Android apps and native rendering/input/lifecycle.
+- One stable protocol between C# engine and any presentation: **input commands in; immutable scene/render deltas, audio/VFX intents, and UI view models out**. No frontend writes authoritative domain state.
+- Preserve 1m terrain blocks with 10 x 10 x 10 microvoxels where needed; fixed camera, pixel-first 2.5D look.
+- Mobile target 60 FPS on defined supported devices, to be measured; no claim of achievement from desktop or Pages-only tests.
+- Avoid V1 runtime/asset reuse in V2 as already mandated; V1 architecture can be studied, not copied blindly. The V2 JavaScript implementations become migration references/fixtures, not production game authorities.
+- Different **hosts** may compose the same core differently. The engine itself must not import browser DOM/JS, Blazor, UnityEngine, GPU APIs, mobile OS APIs or a presentation assembly.
+- Native runtime/AOT compatibility must be verified **early on both platforms**. Do not build months of C# that only runs in Blazor WebAssembly.
 
-**Trade-offs:** an engine vendor/runtime dependency remains; stock Unity physics/lighting is not automatically appropriate for a microvoxel, pixel-first game; IL2CPP imposes AOT/linker constraints; profiling remains mandatory. Godot C# mobile support is documented as experimental in 4.5 and deserves evaluation only if this candidate fails a proof gate. A bespoke Metal/Vulkan/C++ renderer is a larger engineering commitment, not the default.
+### Why this is different from a hosted server
 
-**Required first proof before selecting Unity permanently:** commit a reproducible native project; build/install an Android APK or AAB and an iOS app using Xcode/macOS or a macOS CI runner; display the same native 2.5D orthographic scene; run pure C# gameplay logic and one GPU draw; collect CPU/GPU frame, startup/memory, suspend/resume and touch evidence on both devices. No WebView, no browser URL, no JS game runtime.
+This is an **offline-first local game simulation** running inside each host. No HTTP transport is required between the engine and its frontend. Within the browser, C# lives in WASM; the presentation can use efficient batched JS/GPU interop. In native apps, the C# engine runs locally with a native rendering adapter. An online backend may be added later for optional features, but does not own an offline Hunt by default.
 
-**Critical build dependency:** Windows may be used for Unity editing and Android work, but local iOS builds require Xcode/macOS or a macOS-based build service. Device/Apple signing setup is a required task, not a reason to postpone iOS until the end.
+## 1. Host-neutral engine/presentation boundary
 
-The candidate is a **proposal**, not silent approval for a full rewrite. The first implementation PR must prove both platforms.
+Conceptual direction:
+
+    Browser / GitHub Pages                   Native iOS / Android app
+    Blazor WASM + WebGL presenter             Native renderer/input/audio presenter
+                   |                                       |
+            IPlayerCommandSink                         IPlayerCommandSink
+            IScenePresentationFeed                      IScenePresentationFeed
+                   +-------------------+-------------------+
+                                       |
+                             C# Hunt application
+                         C# fixed-step coordinator
+                                       |
+                      C# domain engines behind ports
+                Terrain / WorldGen / Physics / Fluids
+                Objects / Navigation / AI / Encounters
+                     Combat / Progression / Save
+
+**The browser and native app are alternative hosts**, not two simultaneously running simulations and not a network backend-client arrangement. A frontend must not read internal chunks or actor state via implementation-specific imports. Use stable display DTOs with explicit units, revision, lifetime and ownership.
+
+### Public contracts (small, versioned and independently tested)
+
+- `IPlayerCommandSink.Submit(PlayerCommand)`: intentions (move, aim, cast, interact, select choice), with sequence/tick metadata, never direct position/health mutation.
+- `ISimulationSession.Advance(FixedTick)`: the only coordinator of authoritative advancement; hosts may request time progression but not skip gameplay logic.
+- `IScenePresentationFeed.ReadSince(SceneRevision)`: camera-independent world geometry/mesh change descriptors, visible actors, poses, fluid surfaces, material IDs, lighting source/occluder descriptors, render-layer order and presentational events. Prefer deltas and binary/packed buffers for large scenes, not full per-frame JSON.
+- `IUiViewModelFeed`: read-only health, resources, encounter, progress, map, crafting and menu state; browser and native UI may render it differently.
+- `ISaveStore`, `IAudioSink`, `IHaptics`, `IPlatformLifecycle`: host-provided adapters; core owns save data format, not browser local storage or iOS file APIs.
+- `IGeometryQuery`, `ITerrainCommandPort`, `IObjectQuery`, `IFluidSnapshot`: engine-to-engine public ports; no frontend owns these authorities.
+
+**Anti-corruption rule:** Frontends can interpolate/extrapolate *visual poses* and run visual-only particles, but may not resolve hits, decide gravity, change terrain, spawn enemies, grant rewards, modify fluid levels or persist canonical gameplay state.
+
+**High-frequency performance:** Scene transitions and UI may use normal Blazor binding. Terrain/actor frame data should use coarse batched boundaries, stable IDs, typed buffers/mesh revisions and limited allocations. Benchmark WASM-to-JS cost and native renderer feed separately. Domain code must not depend on JS interop.
 
 ## 2. Repository layout (target, not yet created)
 
-    native/
-      Wyrmforge.Mobile/             # Unity application/project, composition, scenes, platform settings
-      packages/
-        com.wyrmforge.contracts/    # DTOs, IDs, units, ports, events; no UnityEngine references
-        com.wyrmforge.core/         # tick scheduler, deterministic commands, ownership/lifecycle
-        com.wyrmforge.terrain/      # voxel authority, edit ledger, spatial queries
-        com.wyrmforge.worldgen/     # seeded world and expedition geography
-        com.wyrmforge.physics/      # world collision and actor/projectile movement
-        com.wyrmforge.worldobjects/ # props and structural support state
-        com.wyrmforge.fluids/       # water/lava simulation
-        com.wyrmforge.navigation/   # route/path capability checks
-        com.wyrmforge.gameplay/     # combat, AI, encounters, hunt, progression
-        com.wyrmforge.presentation/# material, rendering adapters, lighting, animation, VFX
-        com.wyrmforge.platform/    # native input, audio/haptics, storage/lifecycle
-      tests/                        # host-independent contract + simulation suites
-      benchmarks/                   # seeded stress, memory/thermal/performance fixtures
-      docs/                         # native build evidence and device matrix
+    game/
+      Wyrmforge.V2.slnx
+      src/
+        Wyrmforge.V2.Contracts/      # host-neutral commands, DTOs, ports, versioned events
+        Wyrmforge.V2.Domain/         # immutable rules/entities, no frontend or engine adapters
+        Wyrmforge.V2.Application/    # Hunt orchestration, fixed steps, gameplay
+        Wyrmforge.V2.Engine.Terrain/ # Voxel authority and terrain edit ledger
+        Wyrmforge.V2.Engine.World/   # procedural generation, residency, objects, gravity
+        Wyrmforge.V2.Engine.Physics/ # actor/projectile movement and collision
+        Wyrmforge.V2.Engine.Fluids/  # water/lava physical simulation
+        Wyrmforge.V2.Engine.Agents/  # navigation and AI intent
+        Wyrmforge.V2.Engine.Combat/  # spells, damage, status
+        Wyrmforge.V2.Engine.Encounter/ # waves, rare rolls, boss phases
+        Wyrmforge.V2.Engine.Progression/ # Web, mutators, economy
+        Wyrmforge.V2.Presentation.Contracts/ # render deltas, UI views, FX/audio intents
+      tests/                          # pure .NET contract/replay/integration tests
+    frontends/
+      web/                            # Blazor WASM + JS/WebGL/Canvas presenter on Pages
+      native/                         # future native iOS/Android renderer + app host
+    benchmarks/                       # shared scenarios; separate web and native perf records
 
-These are ownership packages, **not a demand for one assembly for every tiny utility**. Major modules may use separate Runtime and Adapters assemblies with explicit assembly-definition references. Pure model/simulation packages must not import UnityEngine; Unity-specific implementations reside in adapter/host assemblies. No feature imports internal implementation namespaces across packages.
+Engine projects are **regular C# libraries**, not separate services. Package boundaries may be grouped until independent deployment/compilation is useful; keep public contracts explicit. Choose compatible target frameworks after proving compilation/execution in the selected browser and native hosts, rather than assuming every `.NET 10` API is usable from Unity/another native runtime.
 
-The current root src/, art/, tests/ and web labs remain intact during staged migration. Relocation/archival occurs only after parity and explicit review.
+The current root `src/`, `art/`, `tests/` and browser labs stay intact while replacement C# modules and the web presenter are built incrementally; don't delete or mass-port anything in the first PR.
 
 ## 3. Engine and system inventory
 
@@ -62,8 +101,8 @@ The current root src/, art/, tests/ and web labs remain intact during staged mig
 
 | ID / owner | What it does | Why we need it | Priority |
 | --- | --- | --- | --- |
-| P00 Native host | Owns iOS/Android application lifecycle, platform graphics startup, asset loading and composition root | Without real app binaries all other native requirements are unproved | A |
-| P01 Contracts and coordinates | Defines immutable DTOs, stable IDs, metres/micro-units, chunk keys, interfaces, event schema versions | Allows engine implementation replacement without gameplay rewrites | A |
+| P00 Multi-host bootstrap | Composes the same C# core into Blazor WASM/Pages and separately into native iOS/Android app hosts | Stops presentation runtime from silently becoming gameplay authority | A |
+| P01 Contracts and coordinates | Defines immutable C# DTOs, stable IDs, metres/micro-units, chunk keys, ports, presentation snapshots and event schema versions | Allows engine **and frontend** replacement without rewriting gameplay | A |
 | P02 Simulation coordinator | Fixed-step clock, command ordering, lifecycle, dependency injection, revisioned event delivery | Prevents two engines competing to mutate the same state; stable replays | A |
 | P03 Save, restore and replay | Versioned world/actor/hunt snapshots, accepted edit log, resume after app suspension | Hunts/destruction must survive restarts and iOS/Android lifecycle | A |
 | W01 Voxel authority | Sparse signed 3D terrain store, materials IDs, microvoxel occupancy, authoritative terrain edits and raycasts | The physical destructible world must not be a painted heightmap | A |
@@ -76,13 +115,13 @@ The current root src/, art/, tests/ and web labs remain intact during staged mig
 | W08 Environment state | Weather, wetness, temperature hazards, corruption and time-of-day inputs | Healthy wet forest must evolve naturally toward the Wyrm's corrupted territory | B |
 | S01 Physics and collision | Swept actor/projectile movement, grounding, knockback, jumps, object and terrain collision | Player and enemies must respond to the same committed world geometry | A |
 | S02 Navigation | Traversability and pathfinding using physical snapshots plus actor movement capabilities | Packs, smart hunters and frightened enemies need valid routes, not wall cheating | B |
-| R01 Native renderer | Mobile GPU buffers, draw scheduling, terrain/props/sprite composition, pixel-perfect camera | Replaces browser WebGL and produces the actual 2.5D scene | A |
+| R01 Presentation/rendering adapters | WebGL/Canvas renderer for Pages, native GPU renderer for iOS/Android; consumes the same versioned scene deltas | Both platforms show the same game without owning simulation rules | A |
 | R02 Materials / surface | Physical-vs-visual material descriptors, albedo, normals, roughness, wetness, emission and variants | Textures remain reusable and do not own geography or lighting | B |
 | R03 Lighting / shadows | Generic light/occluder inputs, directional/contact shadows, emissive spells/lava, mobile budgets | Grounds trees, actors and cliffs; readable contrast across corruption stages | B |
 | R04 Effects / particles | Projectile trails, impacts, fire, smoke, ash, rain, foam, sparks and camera feedback | Expresses gameplay events without changing authoritative state | B |
 | R05 Animation / presentation | Wizard/enemy directional sprites, attack telegraphs, skeletal or frame animation, facing and timing | Combat needs readable 2.5D pixel characters and accurate hit feedback | B |
 | R06 Sound and haptics | Native audio mixer, ambience, spell feedback, spatial cues and phone haptic adapters | Reusable gameplay event consumers with native platform delivery | B |
-| G01 Input and camera controls | Touch joystick/gestures, safe area, orientation, remappable commands, oblique camera follow | Smartphone gameplay must work without desktop mouse/keyboard | A |
+| G01 Host input and camera adapters | Translates touch gestures/joystick and camera presentation into the shared C# player-command and camera-view contracts | Web and native controls can evolve without changing physics or combat | A |
 | G02 Spells and combat | Spell definitions, Fireball, schools, mutators, costs/cooldowns, impact intent, damage/status resolution | Core wizard fantasy; gameplay decides outcomes, not voxel/renderer | A |
 | G03 Enemy AI | Perception, bounded memory, sophistication, temperament, morale, pack tactics and action intent | Hollowed, Ashling, Wolf and later enemies must behave distinctly and fairly | B |
 | G04 Encounter / boss director | Seeded waves, rare rolls, pack composition, Reliquary, Warden and multi-phase Wyrm encounters | Separation of *when/what spawns* from *how each agent thinks* | B |
@@ -108,8 +147,8 @@ The current root src/, art/, tests/ and web labs remain intact during staged mig
 
 ## 4. One-way ownership / dependency architecture
 
-    Native iOS/Android host
-      -> Game/Hunt composition and command dispatcher
+    Web/Pages host OR native iOS/Android host
+      -> Shared game/Hunt C# composition and command dispatcher
           -> Core contracts + fixed-step coordinator
           -> Gameplay (spells, AI, encounter, progression, objectives)
           -> WorldGen -> terrain initialization descriptors -> Voxel authority
@@ -118,7 +157,7 @@ The current root src/, art/, tests/ and web labs remain intact during staged mig
           -> Fluids -> read-only terrain queries + terrain-change events
           -> World Objects -> read-only terrain/support events
           -> Rendering/Lighting/VFX/Audio -> read-only snapshots and events
-      -> Unity adapters / native GPU / OS services
+      -> WebGL/Blazor OR native GPU/OS presentation adapters
 
 Only the composition root may reference multiple concrete engine implementations. Business/scene rules never import other engines' private types. Avoid a universal service locator and an unbounded global event bus. Use specific command, query and event contracts. The dependency graph must be acyclic.
 
@@ -154,45 +193,44 @@ For **every** module, require: (1) owner and responsibility; (2) minimal public 
 - Avoid concurrent modifications to the old JS engines; port in independent native branches with reviewable scope.
 - Changes to public contracts require versioning and tests for old/new consumers.
 - A package must be swappable with an intentionally simple fake at the composition root.
-- AOT/IL2CPP compatibility gate: no hidden runtime code generation/reflection-only dependency; run real release-style native builds.
+- Native/AOT compatibility gate: no hidden runtime code generation/reflection-only dependency; compile and run the *same* C# game core on the browser WASM host and selected native runtime.
 - Real device profile: named iPhone + named Android device, 10+ minute sustained load, actual p50/p95/p99 frame time, hitches, CPU/GPU, memory, heat and suspend/resume. 16.67 ms is the **full frame budget** at 60 FPS; do not promise components arbitrary shares without measurements.
 - Keep CI evidence separate from physical-device evidence. A signed iOS build or TestFlight install is independent of the Android APK/AAB.
-- The first real vertical slice must be playable on **both native platforms**, not just in the Unity Editor.
+- The first actual game vertical slice uses the **C# core** with the Pages renderer. A minimal **native iOS and Android execution proof of that same core** is required early; full native gameplay parity is a separate, explicit acceptance gate.
 
 ## 6. Delivery order and concrete exit gates
 
 | Gate | Deliverable | Cannot pass without |
 | --- | --- | --- |
-| N00 — Native reality check | iOS and Android installable apps from same committed C# project, actual native render and touch | Install/run evidence from each phone; no WebView; reproducible build instructions; Xcode/macOS path |
-| N01 — Engine skeleton | C# packages, pure contracts, composition root, fake/reference implementations, test pipeline | No cycles; compile-time boundary tests; module swap demonstrated |
-| N02 — Terrain vertical slice | Physical 3D/microvoxel chunk, derived mesh, collision, touch wizard, Fireball crater | Same resulting crater geometry and collision on both native phones; replay and frame metrics |
-| N03 — Interacting systems | Objects, navigation, terrain events, water/lava flows, lighting | Fireball breaches a riverbank; actor route updates; tree support/collision remains coherent |
-| N04 — Hunt vertical slice | Seeded Wet Forest, streamed regions, one horde, extraction, spells, saved run | Playable native start-to-extraction path with deterministic seed and resume |
+| N00 — Multi-host reality check | A pure C# simulation step runs via Blazor WASM/Pages and within two installable native test apps | Prove the same assembly/game rules on web, iOS and Android; no WebView; document signing/Xcode path |
+| N01 — Core and presentation seams | C# engine packages, commands/render snapshots, two composition roots, fake engine AND fake presenter, tests | No cycles; backend swap and renderer swap demonstrated without gameplay rewrite |
+| N02 — Pages C# terrain slice | Pure C# physical voxel chunk, mesh-change snapshot, collision, touch wizard, Fireball crater on the Pages frontend | Browser sim has **no JS game authority**; deterministic snapshot/replay and same core runs in native smoke apps |
+| N03 — Interacting engines | Objects, navigation, terrain events, water/lava flows and lighting presented via browser | C# owners produce coherent state; disabling or swapping the WebGL presenter changes visuals, not outcomes |
+| N04 — Pages Hunt vertical slice | Seeded Wet Forest, streamed regions, one horde, extraction, spells, saved run | Playable Pages start-to-extraction with C# core, no frontend simulation code; native parity tasks identified |
 | N05 — Expanding content | Biomes, packs, rares, miniboss phases, Wyrm tier, Arcane Web/Spell Lab | Independently extensible content and testable mechanics, no engine-specific switches |
-| N06 — Shipping acceptance | Sustained thermal/performance, accessibility, crash recovery, signing, platform store distribution | Both physical devices pass agreed thresholds and release evidence is archived |
+| N06 — Native parity and shipping acceptance | Native renderer(s), complete Hunt parity, sustained performance, accessibility, crash recovery, signing/store distribution | Both physical phones render and play the exact same C# rules, pass agreed thresholds and archived evidence |
 
-N00 and N01 block broad implementation of N02-N06. Within each gate prefer the smallest working **vertical slice** rather than finishing every isolated engine in a laboratory. Native build failures always block claims of completion.
+N00 and N01 validate that the shared C# domain can run in **both browser and future native hosts**, but Pages remains the primary rapid-feedback gameplay frontend during N02-N05. Within each gate prefer the smallest integrated **vertical slice**, not isolated labs. A Pages pass is **never** native release acceptance; native parity failures block N06.
 
 ## 7. Current repository disposition
 
-At branch main, the repository is JavaScript/HTML/WebGL-oriented. Its V2 docs already define healthy boundaries and known coupling problems (docs/ENGINE-COUPLING-REVIEW.md). The source tree has browser-bound presentation and no native project. Treat implementations in the following categories:
+At branch main, the V2 repository is JavaScript/HTML/WebGL-oriented; unlike V1 it does not yet have a C# domain/application solution. Its V2 docs already define healthy boundaries and known coupling problems (docs/ENGINE-COUPLING-REVIEW.md). The source tree has browser-bound presentation and no native project. Treat implementations in the following categories:
 
-1. **Re-specify and port algorithms:** voxel signed occupancy, deterministic edits/replay, WorldGen seeded topology, fluid flow solver, AI reasoning, collision rules.
-2. **Rewrite platform adapters:** renderer/shaders, WebGL mesh upload, Canvas sprite lighting, DOM touch, workers, browser persistence, audio.
+1. **Implement C# domain engines using existing V2 fixtures:** voxel signed occupancy, deterministic edits/replay, WorldGen seeded topology, fluid solver, AI reasoning, collision; keep current JS until new authoritative outputs are proven.
+2. **Keep and adapt the browser renderer as a presenter:** separate the existing WebGL, Canvas, DOM/touch and browser persistence paths from their JS simulation authorities; translate C# scene deltas and commands without moving game decisions into JS. Native adapters come later.
 3. **Reuse where valid after approval:** newly authored V2 image/audio assets and gameplay content descriptors, following native asset pipeline/import checks.
 4. **Retain as regression oracle:** seeded fixtures and browser outputs to compare contract outcomes, not as runtime dependencies.
-5. **Do not create false parity claims:** scripts, GLSL and mobile-browser benchmarks do not prove IL2CPP/Metal/Android performance.
+5. **Do not create false parity claims:** scripts, GLSL, Blazor WASM and mobile-browser benchmarks do not prove native iOS/Android performance or gameplay runtime compatibility.
 
 ## 8. Immediate next task
 
-**N00: Produce a native proof in a separate PR**, not another browser lab. Include the minimal Unity project, two platform build targets, one C# scene/tick, static terrain render, touch input, and real-device run evidence. After it works, freeze the host choice and implement N01 and a tiny N02 vertical slice. A framework decision without a native proof is provisional.
+**N00: Prove shared C# simulation with two frontends.** First demonstrate an authoritative C# tick, command and scene delta in Blazor WASM on GitHub Pages. In parallel create minimal iOS/Android executable host probes loading that *same C# simulation library* (native renderer framework TBD). Record exact build/phone evidence before choosing the production mobile renderer. Then implement N01 ports and N02 with Pages as the fast playable renderer, never making Pages-specific code authoritative.
 
 ## References
 
 - Existing repo decisions: docs/architecture/ADR-0001-replaceable-engines.md; docs/architecture/ADR-0002-hunt-expeditions-and-journey.md
 - Existing ownership audit: docs/ENGINE-BOUNDARIES.md; docs/ENGINE-COUPLING-REVIEW.md
 - Existing AI design: docs/AI-ENCOUNTER-V2-EXTENSIBILITY-AND-V1-LESSONS.md
-- Unity mobile platform support: https://docs.unity.com/en-us/engine/6000.3/manual/get-started/install-and-upgrade/getting-started-installing-unity/system-requirements
-- Unity iOS Xcode/macOS requirements: https://docs.unity.com/en-us/engine/6000.0/manual/platform-specific/iphone/ios-building-and-delivering/build-process
-- Unity AOT/IL2CPP: https://docs.unity.com/en-us/engine/6000.6/manual/programming-environment/scripting-backends/intro
-- Unity per-module assembly definitions: https://docs.unity.com/en-us/engine/6000.6/manual/scripting/compilation-and-code-reload/script-compilation/assembly-definition-files/assembly-definitions-intro
+- Verified V1 .NET WebAssembly frontend: https://github.com/pjotrcasteel/Wyrmforge/blob/main/src/Wyrmforge.Presentation.Web/Wyrmforge.Presentation.Web.csproj
+- Verified V1 pure C# domain/application: https://github.com/pjotrcasteel/Wyrmforge/tree/main/src
+- Native host/runtime choice is deliberately provisional until C# core build/execution on iOS and Android is demonstrated.
