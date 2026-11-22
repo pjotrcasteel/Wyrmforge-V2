@@ -3,8 +3,8 @@
 > **This file is an INDEX, not authoritative runtime evidence.** Every future chat must compare the listed refs against real GitHub HEADs, PR states and test runs before relying on them. Never treat an old checkpoint as proof that the current repo is unchanged.
 
 **Checkpoint captured:** 2026-11-22 (architecture review).  
-**Authorized current task:** documentation of working rules and testing strategy **only**.  
-**Engine implementation authorization:** **NOT GRANTED** for future stages by this request.  
+**Authorized current task:** documentation of working rules, testing strategy **and proposed handover mechanism** only.  
+**Engine implementation authorization:** **NOT GRANTED** for future stages by these requests; the handover design is documentation-only.  
 **Active delivery milestone:** pre-N00 architecture/roadmap and process agreement.  
 **Visual lock:** HEX colors and primitive shapes through N00–N07; N08 is final visual presentation.  
 **Reference repo:** `pjotrcasteel/Wyrmforge` (V1 first-Hunt behaviour only).  
@@ -28,7 +28,8 @@
 
 - The owner asked for **documentation**, then a **discussion about handovers**. This authorizes documentation changes only.
 - No source coding, testing-driven implementation, merge, Pages deployment or native build is authorized by this checkpoint.
-- Next deliverable in this chat: present the proposed **future-chat handover strategy** for discussion. Do not silently commit a final handover format.
+- Next deliverable in this chat: review the **proposed v1 GitHub handover standard** with the owner, clarify any unresolved choices, and treat approval as separate from code implementation authorization.
+- Proposed docs: `docs/process/HANDOVER-STANDARD.md` and `HANDOVER-TEMPLATE.md`, added to documentation PR #441; not a functioning automated handover service.
 - Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 
 ## Updating this checkpoint

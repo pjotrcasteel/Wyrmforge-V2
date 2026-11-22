@@ -4,7 +4,7 @@
 
 ## Mandatory development rules and authorization
 
-**Every new chat or contributor must start with [AGENTS.md](AGENTS.md) and read the [process index](docs/process/README.md).** The [single N00–N08 roadmap](docs/architecture/IMPLEMENTATION-ROADMAP.md) and [test/evidence requirements](docs/process/TEST-AND-EVIDENCE.md) are authoritative for new C# development.
+**Every new chat or contributor must start with [AGENTS.md](AGENTS.md), the [process index](docs/process/README.md) and the [handover standard](docs/process/HANDOVER-STANDARD.md).** The [single N00–N08 roadmap](docs/architecture/IMPLEMENTATION-ROADMAP.md) and [test/evidence requirements](docs/process/TEST-AND-EVIDENCE.md) are authoritative for new C# development.
 
 Planning and documenting do **not** authorize implementing engines. An exact task scope must be explicitly approved before coding. PRs are not automatically merged. GitHub's current refs and CI, not an old chat summary, determine what is actually implemented.
 

@@ -7,8 +7,9 @@ Read in this order:
 2. `docs/architecture/IMPLEMENTATION-ROADMAP.md` — the ONLY current new-C# development sequence (N00–N08).
 3. `docs/process/TEST-AND-EVIDENCE.md` — tests the assistant must run before user review.
 4. `docs/process/SESSION-PROTOCOL.md` — mandatory preflight, parallel-work check and evidence-based handover.
-5. `docs/process/WORK-STATE.md` — last recorded checkpoint; always reconcile it with GitHub's real branch/PR/CI state.
-6. Task-owned architecture, contracts and V1 Hunt acceptance documents identified by the selected milestone.
+5. `docs/process/HANDOVER-STANDARD.md` — GitHub-first handovers, one checkpoint per workstream, transfer authorization and stale-SHA detection.
+6. `docs/process/WORK-STATE.md` — navigation index only; reconcile it with GitHub's real branch/PR/CI state.
+7. Task-owned architecture, contracts and V1 Hunt acceptance documents identified by the selected milestone.
 
 ## STOP: authorization gate
 
@@ -32,6 +33,8 @@ Read in this order:
 ## Required work output
 
 Start every authorized task with an evidence-based **preflight**: current SHA/branch, active ID, explicit user authorization, allowed/forbidden files, neighbours/contracts, existing PRs, acceptance tests and known blockers.
+
+On handover, use [the single-file checkpoint template](docs/process/HANDOVER-TEMPLATE.md) and [handover protocol](docs/process/HANDOVER-STANDARD.md). An old chat summary or ZIP never overrides the live repository and does not transfer authorization to a new task.
 
 Finish with an **evidence report**: changes/commit/PR, tests actually run and outcomes, CI link/status, real-device evidence or explicit absence, remaining failures, and ONE next recommended task. Update WORK-STATE only for a verified meaningful checkpoint. If a tool cannot access necessary evidence, state BLOCKED/UNKNOWN and do not guess.
 
