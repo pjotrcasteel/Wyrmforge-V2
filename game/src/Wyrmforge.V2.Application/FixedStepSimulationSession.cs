@@ -8,7 +8,7 @@ namespace Wyrmforge.V2.Application;
 /// Owns a bounded, ordered command journal and a fixed simulation tick.
 /// This N00 foundation intentionally does not simulate physics, combat or rendering.
 /// </summary>
-public sealed class FixedStepSimulationSession : ISimulationSession, IPlayerCommandSink
+public sealed class FixedStepSimulationSession : IHeadlessSession
 {
     private const int HashContractVersion = 1;
     private readonly SortedDictionary<long, PlayerCommand> pending = [];
