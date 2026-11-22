@@ -29,7 +29,8 @@
 - The owner asked for **documentation**, then a **discussion about handovers**. This authorizes documentation changes only.
 - No source coding, testing-driven implementation, merge, Pages deployment or native build is authorized by this checkpoint.
 - Next deliverable in this chat: review the **proposed v1 GitHub handover standard** with the owner, clarify any unresolved choices, and treat approval as separate from code implementation authorization.
-- Proposed docs: `docs/process/HANDOVER-STANDARD.md` and `HANDOVER-TEMPLATE.md`, added to documentation PR #441; not a functioning automated handover service.
+- Proposed docs: `docs/process/HANDOVER-STANDARD.md`, `HANDOVER-TEMPLATE.md`, and `CONTEXT-LOSS-RECOVERY.md`, added to documentation PR #441; no functioning automated/background service.
+- The **abrupt-chat-limit solution is rolling task checkpoints written while the active task is being done**, not a handover at the end. Owner agreement and a no-code rehearsal remain pending.
 - Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 
 ## Updating this checkpoint

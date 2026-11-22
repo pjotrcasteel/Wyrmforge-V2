@@ -28,6 +28,14 @@ parallel_workstreams:
 next_action: "<one in-scope action or STOP>"
 ```
 
+## Rolling checkpoint rule (even if this chat crashes)
+
+This same file is created when the task starts and updated after each meaningful pushed code/test result. **Do not wait until the owner asks for a handover.** The latest copy records the most recent **source_sha**; the PR/branch history can recover additional commits if the chat ends abruptly. Only mark evidence actually checked; do not pretend a subsequent CI run already passed.
+
+Record a `recovery_state` in the first section below as one of `CURRENT`, `MAY_BE_STALE`, or `UNKNOWN` when checking. The receiving chat must recompute that status against live branch HEAD.
+
+See [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md) for the no-final-message recovery workflow.
+
 ## A. What the owner wanted
 
 **Requirement / player outcome:**  

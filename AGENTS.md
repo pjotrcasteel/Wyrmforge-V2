@@ -7,7 +7,7 @@ Read in this order:
 2. `docs/architecture/IMPLEMENTATION-ROADMAP.md` — the ONLY current new-C# development sequence (N00–N08).
 3. `docs/process/TEST-AND-EVIDENCE.md` — tests the assistant must run before user review.
 4. `docs/process/SESSION-PROTOCOL.md` — mandatory preflight, parallel-work check and evidence-based handover.
-5. `docs/process/HANDOVER-STANDARD.md` — GitHub-first handovers, one checkpoint per workstream, transfer authorization and stale-SHA detection.
+5. `docs/process/HANDOVER-STANDARD.md` and `docs/process/CONTEXT-LOSS-RECOVERY.md` — GitHub-first handovers, rolling checkpoints and recovery when the prior chat cannot reply.
 6. `docs/process/WORK-STATE.md` — navigation index only; reconcile it with GitHub's real branch/PR/CI state.
 7. Task-owned architecture, contracts and V1 Hunt acceptance documents identified by the selected milestone.
 

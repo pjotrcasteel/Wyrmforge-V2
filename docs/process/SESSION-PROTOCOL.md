@@ -23,6 +23,12 @@
 - Report progress and blockers without promising work will happen outside an active tool-backed session.
 - A task that cannot be completed should end in `BLOCKED`, with a reproducible failure and the smallest next dependency.
 
+## C0. Protect against abrupt chat exhaustion
+
+**Never assume this chat will still be open when a handover is needed.** Once an implementation task is authorized, create its source branch and checkpoint before significant implementation; update that task checkpoint at each meaningful code/test boundary. A fresh chat must be able to recover from live GitHub without a last message, even if the checkpoint is one commit behind. Follow [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md).
+
+Do not trigger unapproved background work. Do not demand the user copy a huge chat summary. Read-only recovery is always permissible; resuming code requires explicit same-task continuation.
+
 ## C. Before any chat handover
 
 - Stop implementing; do not begin the next task during handover creation.

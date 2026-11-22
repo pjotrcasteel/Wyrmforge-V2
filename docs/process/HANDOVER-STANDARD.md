@@ -4,6 +4,12 @@
 **Scope:** any workstream that may move between chats, contributors or work sessions.  
 **Non-goal:** handovers do not start a new task, run code, merge a PR, deploy, or create a scheduled/background process.
 
+## Emergency recovery does NOT require a final handover
+
+The problem with a traditional handover is that a chat may suddenly become full, leaving no opportunity to ask for one. **Do not rely on a last-message handover.** During an authorized task, keep an incremental GitHub checkpoint updated at meaningful code/test milestones; a new chat can reconstruct the rest from commits and CI. The proposed detailed procedure and one universal no-context restart prompt are in [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md).
+
+This is an **owner-review proposal**, not a background monitor or automatic service. The normal freeze-and-handover steps below remain useful when possible, but are **not required for recovery**.
+
 ## 1. Goal and the five invariants
 
 A handover must let a fresh chat **reconstruct the real state without trusting the old chat** and continue exactly one previously authorized task, without task drift or conflicts.
