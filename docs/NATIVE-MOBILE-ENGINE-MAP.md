@@ -97,6 +97,14 @@ The current root `src/`, `art/`, `tests/` and browser labs stay intact while rep
 
 ## 3. Engine and system inventory
 
+### Engine-side versus frontend-side ownership
+
+| Shared C# simulation/game backend | Replaceable presentation frontend | Shared handshake |
+| --- | --- | --- |
+| Voxel, destruction, world generation and streaming authority; physics/collision; structural gravity; water/lava state; world objects; navigation; AI; combat and spell outcomes; encounter/boss phases; corruption rules; progression; saves and replay | Terrain/prop/actor GPU drawing; material shader implementations; light/shadow rendering; pixel sprite animation; particles; audio/haptics; camera framing; touch input gesture translation; HUD/world map/Arcane Web visualization | Player commands -> C#; scene/material/light/pose/FX deltas and UI view models <- C#; lifecycle/storage/audio adapters provided by host |
+
+**Renderer portability nuance:** gameplay publishes light-source events, material identities, occluder geometry and presentation intents in stable C# contracts. The actual WebGL and future Metal/Vulkan/etc shading implementations can differ; their visual fidelity is assessed separately. The renderer is never the source of truth for combat, terrain or fluid state.
+
 **Symbols:** P = platform/foundation; W = world; S = simulation/movement; R = visual/audio; G = gameplay; Q = quality/tooling. Priority: **A = native proof / first playable vertical slice**, **B = Hunt baseline**, **C = later product/release**.
 
 | ID / owner | What it does | Why we need it | Priority |
