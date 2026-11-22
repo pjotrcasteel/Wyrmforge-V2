@@ -3,6 +3,14 @@ import { chromium } from 'playwright';
 
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+const errors = [];
+page.on('pageerror', error => errors.push('pageerror: ' + error.message));
+page.on('console', message => {
+  if (message.type() === 'error') {
+    errors.push('console: ' + message.text());
+  }
+});
+page.on('requestfailed', request => errors.push('requestfailed: ' + request.url() + ' ' + request.failure()?.errorText));
 
 try {
   let loaded = false;
@@ -46,6 +54,14 @@ try {
 
   await page.screenshot({ path: '/tmp/n00-web-e2e-proof.png', fullPage: true });
   console.log('PASS: real Blazor WASM loads C# terrain and commits input/tick snapshots on mobile viewport.');
+} catch (error) {
+  console.error('Blazor browser failure:', error);
+  console.error('Browser diagnostics:', errors.join(' | '));
+  console.error('Rendered tick:', await page.getByTestId('tick').allTextContents().catch(() => []));
+  console.error('Rendered accepted:', await page.getByTestId('accepted').allTextContents().catch(() => []));
+  console.error('Visible HTML:', (await page.locator('body').innerHTML().catch(() => ''))?.slice(0, 5000));
+  await page.screenshot({ path: '/tmp/n00-web-e2e-proof.png', fullPage: true }).catch(() => {});
+  throw error;
 } finally {
   await browser.close();
 }
