@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - 'feature/n00-04-*'
+    paths:
+      - '.github/workflows/n00-native.yml'
+      - 'frontends/native/probes/**'
+      - 'game/src/**'
   workflow_dispatch:
 
 permissions:
