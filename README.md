@@ -2,6 +2,14 @@
 
 **Architecture migration in progress.** This branch establishes a new independent C# engine codebase. The complete previous JavaScript/WebGL V2 implementation is preserved under [old/](old/). It is not imported into the new runtime.
 
+## Mandatory development rules and authorization
+
+**Every new chat or contributor must start with [AGENTS.md](AGENTS.md) and read the [process index](docs/process/README.md).** The [single N00–N08 roadmap](docs/architecture/IMPLEMENTATION-ROADMAP.md) and [test/evidence requirements](docs/process/TEST-AND-EVIDENCE.md) are authoritative for new C# development.
+
+Planning and documenting do **not** authorize implementing engines. An exact task scope must be explicitly approved before coding. PRs are not automatically merged. GitHub's current refs and CI, not an old chat summary, determine what is actually implemented.
+
+**Assistant handles routine tests and CI whenever possible; the user is not the regression-test runner.** Keep presentation HEX-only until N08. Native iOS and Android are non-negotiable release targets.
+
 ## Locked direction
 
 - The game backend means **authoritative C# simulation**, running locally in the host (Blazor WebAssembly on GitHub Pages during development; native C# host on iOS/Android at release). GitHub Pages does not run a C# server.
