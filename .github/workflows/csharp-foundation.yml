@@ -19,6 +19,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Verify new engine project dependency rules
         run: python3 scripts/validate-engine-references.py
+      - name: Guard HEX-only presentation assets
+        run: python3 scripts/validate-hex-only.py
       - name: Restore
         run: dotnet restore Wyrmforge.V2.slnx
       - name: Build new C# engine solution
