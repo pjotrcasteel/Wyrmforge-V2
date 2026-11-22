@@ -1,0 +1,16 @@
+:root { font-family: system-ui, sans-serif; color: #E4E9E8; background: #14191D; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { width: min(930px, 100%); margin: 0 auto; padding: 22px; }
+h1 { margin: 0; font-size: 1.4rem; }
+.subheading { margin: 6px 0 22px; color: #9BA9A5; }
+.layout { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(210px, 290px); gap: 24px; }
+.terrain { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; padding: 12px; background: #252C30; border-radius: 8px; aspect-ratio: 1; }
+.voxel { display: block; border-radius: 2px; outline: 1px solid #37483C; }
+.inspector { background: #252C30; border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.inspector p { margin: 8px 0 18px; }
+.digest { font-family: ui-monospace, monospace; font-size: 0.7rem; color: #A1B1AD; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+button { background: #527E50; color: #FFFFFF; border: 1px solid #688F66; border-radius: 5px; padding: 10px 12px; cursor: pointer; }
+button:focus-visible { outline: 2px solid #A8C6A5; outline-offset: 2px; }
+@media (max-width: 610px) { .layout { grid-template-columns: 1fr; } .shell { padding: 14px; } }
