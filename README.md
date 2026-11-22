@@ -33,5 +33,5 @@ CI runs these commands on the migration branch. This does not publish to GitHub 
 ## Historical reference
 
 V1: https://github.com/pjotrcasteel/Wyrmforge  
-Archived V2 browser experiments: [old/README.md](old/README.md)  
+Archived V2 browser experiments: [old/ARCHIVE.md](old/ARCHIVE.md)  
 New architecture ADR: [ADR-0003](docs/architecture/ADR-0003-csharp-core-swappable-frontends.md)

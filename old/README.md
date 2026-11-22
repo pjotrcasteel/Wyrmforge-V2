@@ -1,10 +1,70 @@
-# Previous Wyrmforge V2 JavaScript implementation — archived
+# Wyrmforge V2 — clean-room voxel engine
 
-This directory contains the **unaltered legacy files**, moved using their existing Git blob IDs from commit a2d7713f91d046d374734ce638c297db8be086ad on 2026-11-22. The new architecture files ADR-0003 and the native engine map were kept at docs/ in the new root.
+An independent mobile-first **true-3D destructible terrain engine**, built for
+the eventual **Wyrmforge Hunt** game. The long-term required deliverables are
+stable mobile performance, destructible hills/cliffs/arches/overhangs,
+authoritative character/projectile collision, **bounded structural gravity**,
+pixel-readable 2.5D rendering and real integration into Wyrmforge.
 
-The archive includes the original JS/HTML labs, source, Node tests, scripts, art, all historical docs, AGENTS.md and the former GitHub Actions workflows. Relative references inside the archive were not rewritten.
+**V1 protection:** no V1 runtime, engine code, shaders, material schemas,
+internal contracts or assets are reused. The existing game remains playable
+and unchanged during standalone engine development. Any future game-side
+integration must use newly authored V2 contracts and a guarded rollout.
 
-- This is source evidence and a behaviour/benchmark reference, **not a build or runtime dependency**.
-- To run an older demo, check out the archival commit in a separate worktree or use the historical live deploy; do not assume old links work from this new folder without changes.
-- The new product starts at root README.md, game/ and frontends/. All new engine code is C#.
-- Do not delete old/ as part of project cleanup; retain it until a separately reviewed archival decision.
+## Current task and playable-Hunt development
+
+**[Delivery Tasks](docs/DELIVERY-TASKS.md)** is the version-controlled task backlog under the original V2.0–V2.10 milestone structure. Start with **H08-01 — Play Hunt movement**, then connected region travel, natural terrain, trees/boulders, exploration, enemies and extraction. Every task has a visible effect, technical owner, verification and mobile performance gates. Use the stable task ID in future chats and PRs; the backlog can evolve without making another competing roadmap.
+
+## One authoritative roadmap
+
+**[docs/ROADMAP.md](docs/ROADMAP.md)** is the single source of truth. It
+preserves the original November 9 Work implementation handover's foundation
+milestones **V2.0–V2.7**, incorporates the independent research, and names
+the required outcomes beyond the first lab release:
+
+- **V2.8:** first genuine Wyrmforge V2 Hunt terrain integration.
+- **V2.9:** bounded hybrid structural gravity, falling clusters and settlement.
+- **V2.10:** sustained full-game mobile acceptance and controlled production cutover.
+
+Read [the gravity design](docs/VOXEL-GRAVITY-V2.md),
+[architecture decisions](docs/ARCHITECTURE-DECISIONS.md), and
+[current evidence / gaps](docs/PROGRESS.md) alongside that **same roadmap**.
+Build numbers such as `0.0.024` are **laboratory increments**, not completed
+roadmap milestones.
+
+## Play Hunt — playable exploration candidate (H08-01)
+
+**[Open Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells)** to explore the streamed Wet Forest. Fireballs can trigger bounded, shape-preserving terrain collapses. To compare with craters alone, use [Play Hunt with gravity disabled](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells&gravity=off) in the same browser. Both routes use the same normal Hunt terrain save.
+
+## Playable standalone V2 lab
+
+https://pjotrcasteel.github.io/Wyrmforge-V2/
+
+The lab currently exercises sparse signed-coordinate voxel terrain, WebGL2
+exposed-face rendering, deterministic damage and replays, worker-based
+meshing experiments, orthographic camera controls, and targeted projectile
+terrain rays. **It is not yet the Wyrmforge Hunt renderer or finished engine**.
+
+## Local V2 checks
+
+```bash
+node --test tests/*.test.mjs
+python -m http.server 8000
+```
+
+Open http://localhost:8000/ to inspect the standalone lab.
+
+## Device and production gates
+
+A green GitHub CI result, a working iPhone demo and a Pages deployment are
+**not** proof that the whole engine meets its performance goals. Require the
+original Work thresholds as initial measured targets (including 60 FPS
+supported-device baseline, ~2 ms/frame main-thread terrain budget,
+<=100 ms typical edit-to-visible latency, and >=10-minute sustained sessions),
+plus physical iPhone Safari **and** Android Chrome evidence under realistic
+Hunt enemy, spell, gravity and destruction workloads. Hardware-specific
+quality tiers and a slower-device fallback must be measured, not invented.
+
+This repository deploys only the independent V2 lab. Actual Wyrmforge
+integration is a required **future milestone**, with separate device and
+production-safety acceptance and no automatic replacement of V1.
