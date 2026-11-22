@@ -69,9 +69,13 @@ jobs:
     needs: portable-core
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.401'
+      - name: Install isolated .NET 10 SDK for iOS (avoid runner .NET 11 workload manifest conflicts)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/wyrmforge-install-dotnet.sh"
+          bash "$RUNNER_TEMP/wyrmforge-install-dotnet.sh" --version 10.0.401 --install-dir "$RUNNER_TEMP/wyrmforge-dotnet"
+          echo "$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_ENV"
+          echo "DOTNET_MULTILEVEL_LOOKUP=0" >> "$GITHUB_ENV"
       - name: Verify current macOS, Xcode and .NET workload
         run: |
           sw_vers
