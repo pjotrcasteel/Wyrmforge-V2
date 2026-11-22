@@ -1,0 +1,29 @@
+<Solution>
+  <Folder Name="/game/src/">
+    <Project Path="game/src/Wyrmforge.V2.Application/Wyrmforge.V2.Application.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Contracts/Wyrmforge.V2.Contracts.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Domain/Wyrmforge.V2.Domain.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.AI/Wyrmforge.V2.Engine.AI.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Combat/Wyrmforge.V2.Engine.Combat.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Encounters/Wyrmforge.V2.Engine.Encounters.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Fluids/Wyrmforge.V2.Engine.Fluids.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Hunt/Wyrmforge.V2.Engine.Hunt.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Meshing/Wyrmforge.V2.Engine.Meshing.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Navigation/Wyrmforge.V2.Engine.Navigation.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Physics/Wyrmforge.V2.Engine.Physics.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Progression/Wyrmforge.V2.Engine.Progression.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Streaming/Wyrmforge.V2.Engine.Streaming.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.Terrain/Wyrmforge.V2.Engine.Terrain.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.WorldGeneration/Wyrmforge.V2.Engine.WorldGeneration.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Engine.WorldObjects/Wyrmforge.V2.Engine.WorldObjects.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Host.Composition/Wyrmforge.V2.Host.Composition.csproj" />
+    <Project Path="game/src/Wyrmforge.V2.Presentation.Contracts/Wyrmforge.V2.Presentation.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/game/tests/">
+    <Project Path="game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
+</Solution>
