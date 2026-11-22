@@ -1,70 +1,50 @@
-# Wyrmforge V2 — clean-room voxel engine
+# Wyrmforge V2 — clean-room C# game engines
 
-An independent mobile-first **true-3D destructible terrain engine**, built for
-the eventual **Wyrmforge Hunt** game. The long-term required deliverables are
-stable mobile performance, destructible hills/cliffs/arches/overhangs,
-authoritative character/projectile collision, **bounded structural gravity**,
-pixel-readable 2.5D rendering and real integration into Wyrmforge.
+**Architecture migration in progress.** This branch establishes a new independent C# engine codebase. The complete previous JavaScript/WebGL V2 implementation is preserved under [old/](old/). It is not imported into the new runtime.
 
-**V1 protection:** no V1 runtime, engine code, shaders, material schemas,
-internal contracts or assets are reused. The existing game remains playable
-and unchanged during standalone engine development. Any future game-side
-integration must use newly authored V2 contracts and a guarded rollout.
+## Mandatory development rules and authorization
 
-## Current task and playable-Hunt development
+**Every new chat or contributor must start with [AGENTS.md](AGENTS.md), the [process index](docs/process/README.md) and the [handover standard](docs/process/HANDOVER-STANDARD.md).** The [single N00–N08 roadmap](docs/architecture/IMPLEMENTATION-ROADMAP.md) and [test/evidence requirements](docs/process/TEST-AND-EVIDENCE.md) are authoritative for new C# development.
 
-**[Delivery Tasks](docs/DELIVERY-TASKS.md)** is the version-controlled task backlog under the original V2.0–V2.10 milestone structure. Start with **H08-01 — Play Hunt movement**, then connected region travel, natural terrain, trees/boulders, exploration, enemies and extraction. Every task has a visible effect, technical owner, verification and mobile performance gates. Use the stable task ID in future chats and PRs; the backlog can evolve without making another competing roadmap.
+Planning and documenting do **not** authorize implementing engines. An exact task scope must be explicitly approved before coding. PRs are not automatically merged. GitHub's current refs and CI, not an old chat summary, determine what is actually implemented.
 
-## One authoritative roadmap
+**Assistant handles routine tests and CI whenever possible; the user is not the regression-test runner.** Keep presentation HEX-only until N08. Native iOS and Android are non-negotiable release targets.
 
-**[docs/ROADMAP.md](docs/ROADMAP.md)** is the single source of truth. It
-preserves the original November 9 Work implementation handover's foundation
-milestones **V2.0–V2.7**, incorporates the independent research, and names
-the required outcomes beyond the first lab release:
 
-- **V2.8:** first genuine Wyrmforge V2 Hunt terrain integration.
-- **V2.9:** bounded hybrid structural gravity, falling clusters and settlement.
-- **V2.10:** sustained full-game mobile acceptance and controlled production cutover.
+## Release separation approved — 2026-11-22
 
-Read [the gravity design](docs/VOXEL-GRAVITY-V2.md),
-[architecture decisions](docs/ARCHITECTURE-DECISIONS.md), and
-[current evidence / gaps](docs/PROGRESS.md) alongside that **same roadmap**.
-Build numbers such as `0.0.024` are **laboratory increments**, not completed
-roadmap milestones.
+The user explicitly approved a **deferred `main` / GitHub Pages cutover**: retain the current playable JavaScript site and existing legacy Lava PR #432 as-is, while future approved N00 C# work proceeds independently from the architecture branch. PR #439 remains unmerged to `main` until a genuinely playable/usable compiled Blazor WASM frontend exists and a separate release review authorizes the switch. The draft Physics PR #440 and DRILL PRs #442/#443 are not part of this integration. This does **not** grant N00 implementation approval.
 
-## Play Hunt — playable exploration candidate (H08-01)
+## Locked direction
 
-**[Open Play Hunt](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells)** to explore the streamed Wet Forest. Fireballs can trigger bounded, shape-preserving terrain collapses. To compare with craters alone, use [Play Hunt with gravity disabled](https://pjotrcasteel.github.io/Wyrmforge-V2/play-hunt.html?stream=cells&gravity=off) in the same browser. Both routes use the same normal Hunt terrain save.
+- The game backend means **authoritative C# simulation**, running locally in the host (Blazor WebAssembly on GitHub Pages during development; native C# host on iOS/Android at release). GitHub Pages does not run a C# server.
+- Every engine is a separate C# assembly with a small public contract. Different engines can be replaced independently. Frontends send actions and render read-only snapshots; they never own gameplay state.
+- Begin from a **complete Hunt behaviour checklist** based on V1: entry, travel, horde, upgrades, Wyrm, extraction and persistent rewards. Do not copy any V1 or legacy V2 runtime code.
+- While building the new game, **all visible worlds use primitive geometric shapes and literal #RRGGBB HEX colors**. No approved art or complex visual features are necessary to prove a gameplay milestone.
+- Native iOS and Android remain release targets. A web demo is not evidence of native delivery. Validate the same C# core in both hosts early.
 
-## Playable standalone V2 lab
+## New source
 
-https://pjotrcasteel.github.io/Wyrmforge-V2/
+- [Engine architecture](docs/architecture/ENGINE-OWNERSHIP.md)
+- [V1 first-Hunt behaviour requirements](docs/architecture/V1-FIRST-HUNT-PARITY.md)
+- [Frontend/backend contract](docs/architecture/FRONTEND-BOUNDARY.md)
+- [HEX and primitive presentation rule](docs/architecture/PLACEHOLDER-WORLD.md)
+- [Migration and build plan](docs/architecture/IMPLEMENTATION-ROADMAP.md)
+- [Legacy archive mapping](docs/architecture/REPO-MIGRATION.md)
+- C# projects and solution: [game/](game/); new web and mobile hosts: [frontends/](frontends/).
 
-The lab currently exercises sparse signed-coordinate voxel terrain, WebGL2
-exposed-face rendering, deterministic damage and replays, worker-based
-meshing experiments, orthographic camera controls, and targeted projectile
-terrain rays. **It is not yet the Wyrmforge Hunt renderer or finished engine**.
+The first compiled slice consists of independent C# contracts, a minimal terrain occupancy authority and deterministic placeholder site generation. **All other C# engine projects are boundary scaffolds, not implemented engines.** No new playable Hunt or native app is claimed.
 
-## Local V2 checks
+## Build (requires .NET SDK 10)
 
-```bash
-node --test tests/*.test.mjs
-python -m http.server 8000
-```
+    dotnet restore Wyrmforge.V2.slnx
+    dotnet build Wyrmforge.V2.slnx --no-restore
+    dotnet test game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj --no-restore
 
-Open http://localhost:8000/ to inspect the standalone lab.
+CI runs these commands on the migration branch. This does not publish to GitHub Pages until the new C# WASM frontend exists.
 
-## Device and production gates
+## Historical reference
 
-A green GitHub CI result, a working iPhone demo and a Pages deployment are
-**not** proof that the whole engine meets its performance goals. Require the
-original Work thresholds as initial measured targets (including 60 FPS
-supported-device baseline, ~2 ms/frame main-thread terrain budget,
-<=100 ms typical edit-to-visible latency, and >=10-minute sustained sessions),
-plus physical iPhone Safari **and** Android Chrome evidence under realistic
-Hunt enemy, spell, gravity and destruction workloads. Hardware-specific
-quality tiers and a slower-device fallback must be measured, not invented.
-
-This repository deploys only the independent V2 lab. Actual Wyrmforge
-integration is a required **future milestone**, with separate device and
-production-safety acceptance and no automatic replacement of V1.
+V1: https://github.com/pjotrcasteel/Wyrmforge  
+Archived V2 browser experiments: [old/ARCHIVE.md](old/ARCHIVE.md)  
+New architecture ADR: [ADR-0003](docs/architecture/ADR-0003-csharp-core-swappable-frontends.md)

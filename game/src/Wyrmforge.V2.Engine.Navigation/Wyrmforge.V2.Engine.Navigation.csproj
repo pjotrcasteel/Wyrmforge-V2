@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../Wyrmforge.V2.Contracts/Wyrmforge.V2.Contracts.csproj" />
+  </ItemGroup>
+</Project>

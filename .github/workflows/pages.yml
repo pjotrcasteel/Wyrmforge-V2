@@ -1,8 +1,6 @@
-name: V2 tests and independent Pages
+name: V2 HEX primitive preview Pages
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -12,101 +10,20 @@ permissions:
   id-token: write
 
 concurrency:
-  # PR checks must not queue behind Pages deployment or unrelated PRs.
-  # Preserve sequential production deployment while superseding stale PR checks.
-  group: ${{ github.event_name == 'pull_request' && format('v2-pr-{0}', github.event.pull_request.number) || 'v2-pages-main' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: wyrmforge-v2-new-pages
+  cancel-in-progress: false
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Run independent V2 unit tests
-        run: node --test tests/*.test.mjs
-      - name: Audit clean-room V2 dependencies
-        run: node scripts/audit-v2-dependencies.mjs
-      - name: Verify static entry
-        run: test -s index.html && test -s main.mjs && test -s src/voxel-world.mjs && test -s external-terrain-lab.html && test -s external-terrain-lab.mjs
-      - name: Install GLSL ES shader compiler
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq glslang-tools
-      - name: Compile actual WebGL2 vertex and fragment GLSL ES 3.00 shaders
-        run: node scripts/validate-webgl-glsl.mjs
-      - name: Syntax-check every V2 JavaScript module
-        run: |
-          set -eu
-          node --check main.mjs
-          find src scripts tests -type f \( -name '*.mjs' -o -name '*.js' \) -print0 |
-            xargs -0 -r -n1 node --check
-      - name: Verify live Grass 002 integration is included
-        run: |
-          grep -q 'grass-texture-file' index.html
-          grep -q 'setGrassMaterial' src/webgl-voxel-view.mjs
-          grep -q 'uGrassTexture' src/webgl-voxel-view.mjs
-      - name: Run independent 16-vs-32 storage benchmark
-        run: node scripts/benchmark-chunks.mjs > chunk-comparison.json
-      - name: Compare greedy and exposed meshing on V2 fixtures
-        run: node scripts/benchmark-meshes.mjs > mesh-comparison.json
-      - name: Stress World Generation V2 across authored kinds and seeded site variants
-        run: node scripts/benchmark-world-generation.mjs > worldgen-stress.json
-
-  # Packaging owns the single github-pages artifact for this run. Re-running
-  # a failed deploy job must NOT upload another identically named artifact.
-  package:
-    if: github.event_name != 'pull_request'
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Stamp exact deployed commit
-        run: node scripts/write-build-info.mjs
-      - name: Verify build stamp
-        run: node --input-type=module -e "import { COMMIT } from './src/build-info.mjs'; if (COMMIT !== process.env.GITHUB_SHA) process.exit(1)"
-      - name: Create cache-independent V2 test URL
-        run: node scripts/create-versioned-lab.mjs
-      - name: Validate versioned Pages artifact and stable player fallback
-        run: |
-          test -s 404.html
-          grep -Fq 'Wyrmforge V2 — Game link moved' 404.html
-          test -s play-hunt.html
-          test -s "builds/$GITHUB_SHA/index.html"
-          test -s "builds/$GITHUB_SHA/main.mjs"
-          test -s "builds/$GITHUB_SHA/external-terrain-lab.html"
-          test -s "builds/$GITHUB_SHA/external-terrain-lab.mjs"
-          test -s "builds/$GITHUB_SHA/play-hunt.html"
-          grep -Fq "Build ${GITHUB_SHA:0:7} · initializing" "builds/$GITHUB_SHA/play-hunt.html"
-          grep -Fq 'src="./external-terrain-lab.mjs"' "builds/$GITHUB_SHA/play-hunt.html"
-          grep -q 'external-terrain-lab.mjs' "builds/$GITHUB_SHA/external-terrain-lab.html"
-          test -s "builds/$GITHUB_SHA/src/build-info.mjs"
-          grep -q "$GITHUB_SHA" "builds/$GITHUB_SHA/src/build-info.mjs"
-          grep -q 'grass-texture-file' "builds/$GITHUB_SHA/index.html"
-          grep -q 'setGrassMaterial' "builds/$GITHUB_SHA/src/webgl-voxel-view.mjs"
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: .
-
   deploy:
-    if: github.event_name != 'pull_request'
-    needs: package
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Allow completed Pages artifact to become visible to deployment API
-        run: sleep 12
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontends/web/preview
       - id: deployment
         uses: actions/deploy-pages@v4
-      - name: Verify stable player routes, mobile HTTP responses, old-link fallback and CDN propagation
-        shell: bash
-        run: bash scripts/verify-pages-release.sh
