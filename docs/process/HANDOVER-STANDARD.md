@@ -76,7 +76,7 @@ GitHub can provide immutable history, but a narrative checkpoint is still only a
 ### Step C — Receive in a new chat (read-only preflight)
 
 1. Fetch live **root `AGENTS.md`** and follow its mandated reading order.
-2. Locate the **named** task/PR checkpoint. If several workstreams exist and the user says just "continue", **do not guess which**; identify the options and ask for the intended task.
+2. Locate the named task/PR checkpoint. If **one uniquely identifiable and already authorized workstream exists**, `continue` is sufficient to resume it after verification. If several competing workstreams exist, do not guess; ask which one. See [CONTINUE-POLICY.md](CONTINUE-POLICY.md).
 3. Verify full SHA values, source-to-checkpoint ancestry, latest PR state, changed files, conflicts, checks and any later merged work. Treat mismatches as stale until explained.
 4. Confirm the exact user-authorized scope, transfer intent, owned files and remaining acceptance criteria.
 5. Produce an **evidence-based restart receipt** showing:
@@ -86,7 +86,7 @@ GitHub can provide immutable history, but a narrative checkpoint is still only a
    - last test pass/fail/not-run and blockers,
    - next one action inside existing scope,
    - explicit things **not** being changed.
-6. **Only after the user asks to resume the same task** may implementation restart. A handover link alone is not approval to start writing code.
+6. **A one-word `continue` is sufficient** to resume that same uniquely identified and previously approved scope after preflight; no reapproval needed for its ordinary subtasks and tests. A handover link alone is not approval, and new milestones still require separate authorization.
 7. Never change another chat's files, merge or deploy under a general "continue" instruction.
 
 ## 4. What must be included in every checkpoint
@@ -125,7 +125,7 @@ Never put credentials, tokens, sensitive user data, private device identifiers o
 - a summary claims a feature is complete but GitHub sources/tests show otherwise;
 - the only evidence of "native" support is a browser demo or WebView.
 
-If a blocker is fixable **within the already-authorized task**, report and request continuation; never silently expand authority to another engine.
+If a blocker is fixable **within the already-authorized scope**, fix it and verify the correction without routine reapproval when the user said `continue`. Report unresolved blockers; never silently expand authority to another engine or milestone.
 
 ## 7. Two kinds of handover outcomes
 

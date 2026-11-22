@@ -9,7 +9,7 @@
 3. Get live GitHub `main`, active branches, PR head/base/merged state, last commits, changed filenames, active owners and most recent CI checks. Do not assume a ZIP, a chat's claimed version or a task-status note is current.
 4. Reconcile the checkpoint and the real repository. If a SHA moved, inspect the diff and affected files. A checkpoint with different SHA is **STALE** until reconciled.
 5. Identify exactly **one** active task ID, owner, allowed files, forbidden files, expected interfaces and proof gates. Check whether another chat/PR has already assigned or implemented it.
-6. Establish whether the owner's **current request** authorizes implementation. A previous task's authorization may be resumed only if the owner asks to continue **that same task** and the checkpoint is verified. A handover link alone is NOT authorization, and a generic 'continue' across multiple workstreams is ambiguous. It never authorizes a new engine, feature, merge or cleanup. Otherwise **STOP at planning/read-only**.
+6. Apply [the owner-approved `continue` policy](CONTINUE-POLICY.md): if the user says `continue` and exactly one previously authorized, verified workstream is identifiable, **proceed with the next in-scope action without routine confirmation**. A task checkpoint alone is not permission to implement; multiple ambiguous workstreams require one clarifying question. Never start an unauthorized milestone, merge, deploy or expand scope. Otherwise **STOP at planning/read-only**.
 7. Post a concise preflight to the user showing facts: branch/head SHA, active task, accepted vs blocked tests, planned changes and what will not be touched.
 
 **No editing before step 7.** If access is unavailable, explain the blocker; do not invent the repository state or unverified acceptance.
@@ -27,7 +27,7 @@
 
 **Never assume this chat will still be open when a handover is needed.** Once an implementation task is authorized, create its source branch and checkpoint before significant implementation; update that task checkpoint at each meaningful code/test boundary. A fresh chat must be able to recover from live GitHub without a last message, even if the checkpoint is one commit behind. Follow [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md).
 
-Do not trigger unapproved background work. Do not demand the user copy a huge chat summary. Read-only recovery is always permissible; resuming code requires explicit same-task continuation.
+Do not trigger unapproved background work. Do not demand the user copy a huge chat summary. Read-only recovery is always permissible; a one-word `continue` is sufficient same-task continuation when the owning task is unique and the original authorization is verifiable. See [CONTINUE-POLICY.md](CONTINUE-POLICY.md).
 
 ## C. Before any chat handover
 

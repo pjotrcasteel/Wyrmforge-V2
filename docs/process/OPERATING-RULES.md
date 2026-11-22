@@ -16,6 +16,8 @@
 
 ## 2. Authorization and protection against scope drift
 
+**One-word `continue` is an explicit instruction to advance the uniquely identified already-authorized task/milestone.** Within that scope, implement, fix, self-test, commit and checkpoint independently without requesting permission for each ordinary next step. Move to the next subtask only if included in the previously authorized milestone; never start a new unauthorized milestone or merge/deploy. See [CONTINUE-POLICY.md](CONTINUE-POLICY.md).
+
 **No implicit "go".** A user asking to map architecture, create folders, review, discuss, or document does NOT authorize coding, tests that mutate production data, migrations beyond the requested scope, merging PRs or deployment. Explicitly scoped instructions are required for those actions. When authorization is unclear, remain read-only or documentation-only and say exactly which action is not authorized.
 
 For an authorized task, write a task contract before editing:

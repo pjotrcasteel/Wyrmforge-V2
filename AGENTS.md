@@ -7,12 +7,14 @@ Read in this order:
 2. `docs/architecture/IMPLEMENTATION-ROADMAP.md` — the ONLY current new-C# development sequence (N00–N08).
 3. `docs/process/TEST-AND-EVIDENCE.md` — tests the assistant must run before user review.
 4. `docs/process/SESSION-PROTOCOL.md` — mandatory preflight, parallel-work check and evidence-based handover.
-5. `docs/process/HANDOVER-STANDARD.md` and `docs/process/CONTEXT-LOSS-RECOVERY.md` — GitHub-first handovers, rolling checkpoints and recovery when the prior chat cannot reply.
-6. `docs/process/WORK-STATE.md` — navigation index only; reconcile it with GitHub's real branch/PR/CI state.
-7. Task-owned architecture, contracts and V1 Hunt acceptance documents identified by the selected milestone.
+5. `docs/process/CONTINUE-POLICY.md` — owner-approved one-word `continue` rule: independently advance the uniquely identified, already-authorized scope without repeated approvals.
+6. `docs/process/HANDOVER-STANDARD.md` and `docs/process/CONTEXT-LOSS-RECOVERY.md` — GitHub-first handovers, rolling checkpoints and recovery when the prior chat cannot reply.
+7. `docs/process/WORK-STATE.md` — navigation index only; reconcile it with GitHub's real branch/PR/CI state.
+8. Task-owned architecture, contracts and V1 Hunt acceptance documents identified by the selected milestone.
 
 ## STOP: authorization gate
 
+- A one-word **`continue` means make the next useful in-scope change or run the next automated verification** when one already-approved workstream is uniquely identifiable. Never ask for routine reconfirmation. This rule does not grant permission for a new engine/milestone/merge. See `docs/process/CONTINUE-POLICY.md`.
 - **Architecture discussion and planning are NOT authorization to implement.** The user must explicitly instruct implementation of a named task/milestone or authorize a clearly scoped development action.
 - Without that instruction, make ONLY the requested documentation/review changes. No engine code, migration execution, deployment, PR merge, branch cleanup, asset generation or speculative refactor.
 - PR creation is not a merge authorization. Never auto-merge, even when checks pass.

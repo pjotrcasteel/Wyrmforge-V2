@@ -4,7 +4,7 @@
 
 **Checkpoint captured:** 2026-11-22 (architecture review).  
 **Authorized current task:** documentation and acceptance of working rules, testing strategy and handover process only.  
-**Engine implementation authorization:** **NOT GRANTED** for future stages by these requests; the handover design is documentation-only.  
+**Engine implementation authorization:** **NOT GRANTED** for future stages by these requests; documentation and approval of `continue` semantics does **not** authorize N00.  
 **Active delivery milestone:** pre-N00 architecture/roadmap and process agreement.  
 **Visual lock:** HEX colors and primitive shapes through N00–N07; N08 is final visual presentation.  
 **Reference repo:** `pjotrcasteel/Wyrmforge` (V1 first-Hunt behaviour only).  
@@ -31,6 +31,7 @@
 - Next process gate: **perform the two-chat no-code recovery rehearsal** and record verifiable evidence before N00 engine work is authorized. Approval of the handover rules is **not** approval to start N00 or merge PRs.
 - Proposed docs: `docs/process/HANDOVER-STANDARD.md`, `HANDOVER-TEMPLATE.md`, and `CONTEXT-LOSS-RECOVERY.md`, added to documentation PR #441; no functioning automated/background service.
 - **Owner decision on 2026-11-22: APPROVED.** The GitHub-first handover and abrupt-chat recovery policy uses rolling task checkpoints during authorized work, not a handover at the end. The **two-chat rehearsal remains NOT RUN and is required before N00 implementation**.
+- **Owner decision on 2026-11-22: APPROVED.** The one-word `continue` advances the unique, verified, already-authorized workstream without repeated checks with the user. It does not authorize an unapproved engine/milestone, merge or deployment. See `docs/process/CONTINUE-POLICY.md`.
 - Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 
 ## Updating this checkpoint

@@ -48,7 +48,7 @@ When multiple workstreams are active and none is named in the restart request, t
 3. Select the **explicitly named** task. If unspecified and exactly one active authorized task exists, identify it for confirmation; if multiple, ask the user which. Do not use unrelated branch guesses.
 4. Compare recorded `source_sha`, checkpoint commit SHA, current branch HEAD, PR diffs and actual CI runs. If the code HEAD is newer than the latest checkpoint, reconstruct missing steps from the Git commits and tests and mark the gap **UNVERIFIED** until checked.
 5. Report a **recovery receipt**: task, exact HEAD, what is known/unknown, last proven outcome, one in-scope next step, protected files and current authorization.
-6. Resume **only** when the user explicitly requests continuation of that same authorized task; never infer authorization merely from seeing the checkpoint. No new task, merge or deployment.
+6. A single `continue` counts as explicit continuation of the **uniquely identified, previously authorized** task after verified preflight, without asking for routine reapproval. A checkpoint alone is not permission; no new task, merge or deployment. See [CONTINUE-POLICY.md](CONTINUE-POLICY.md).
 7. If the source branch is missing, use GitHub PR/commit history to locate source; do not claim that an archived chat or deleted branch is restored if it isn't.
 
 ### 5. One universal restart message
@@ -67,7 +67,7 @@ This works without uploading files, asking the previous chat to produce a final 
 
 **The current active assistant writes them while carrying out the user's authorized task**; the owner should not have to remember a "handover" command or maintain the state manually. GitHub writes must be made using real available tools. There is **no automatic timer, background service or guarantee of activity after the chat closes**.
 
-A task can continue only with the owner's original explicitly approved scope. When a task is DONE or at a review gate, record `TASK_COMPLETE` / `WAIT_FOR_REVIEW` and do not silently start a successor.
+A task can continue on a one-word `continue` within the owner's original explicitly approved scope; see [CONTINUE-POLICY.md](CONTINUE-POLICY.md). When a task is DONE or at a review gate, record `TASK_COMPLETE` / `WAIT_FOR_REVIEW` and do not silently start a successor.
 
 ### 7. Acceptance rehearsal before depending on it
 
