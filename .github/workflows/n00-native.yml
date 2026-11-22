@@ -1,0 +1,110 @@
+name: N00 native OS SDK feasibility
+
+on:
+  push:
+    branches:
+      - 'feature/n00-04-*'
+    paths:
+      - '.github/workflows/n00-native.yml'
+      - 'frontends/native/probes/**'
+      - 'game/src/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test actual shared C# replay vector
+        run: dotnet test frontends/native/probes/Wyrmforge.V2.NativeProbe.Tests/Wyrmforge.V2.NativeProbe.Tests.csproj --configuration Release
+      - name: Verify N00 architecture and existing session regressions
+        run: |
+          python3 scripts/validate-engine-references.py
+          dotnet test game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj --configuration Release
+
+  android-sdk:
+    # Standard Linux GitHub runners expose no /dev/kvm; this OS SDK emulator needs macOS Intel virtualization.
+    runs-on: macos-15-intel
+    timeout-minutes: 55
+    needs: portable-core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated .NET 10 SDK for Android (no global runner workload contamination)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/wyrmforge-install-dotnet.sh"
+          bash "$RUNNER_TEMP/wyrmforge-install-dotnet.sh" --version 10.0.401 --install-dir "$RUNNER_TEMP/wyrmforge-dotnet"
+          echo "$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_ENV"
+          echo "DOTNET_MULTILEVEL_LOOKUP=0" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Native Android SDK/workload versions
+        run: |
+          dotnet --info
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          java -version
+          dotnet workload install android --version 10.0.401
+          dotnet workload list
+      - name: Build native Android APK (no production release)
+        run: dotnet build frontends/native/probes/Wyrmforge.V2.NativeProbe.Android/Wyrmforge.V2.NativeProbe.Android.csproj --configuration Debug -p:RuntimeIdentifier=android-x64
+      - name: Run actual Android emulator and verify C# journal receipt
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 600
+          script: bash frontends/native/probes/scripts/test-android-emulator.sh
+      - name: Preserve Android runtime receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n00-android-sdk-probe
+          path: /tmp/n00-android-emulator-receipt.txt
+          if-no-files-found: ignore
+
+  ios-sdk:
+    runs-on: macos-26
+    timeout-minutes: 55
+    needs: portable-core
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated .NET 10 SDK for iOS (avoid runner .NET 11 workload manifest conflicts)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/wyrmforge-install-dotnet.sh"
+          bash "$RUNNER_TEMP/wyrmforge-install-dotnet.sh" --version 10.0.401 --install-dir "$RUNNER_TEMP/wyrmforge-dotnet"
+          echo "$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_ENV"
+          echo "DOTNET_MULTILEVEL_LOOKUP=0" >> "$GITHUB_ENV"
+      - name: Verify current macOS, Xcode and .NET workload
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
+          dotnet --info
+          dotnet workload install ios --version 10.0.401
+          dotnet workload list
+      - name: Compile and bundle a real iOS simulator app, no signing
+        run: dotnet build frontends/native/probes/Wyrmforge.V2.NativeProbe.iOS/Wyrmforge.V2.NativeProbe.iOS.csproj --framework net10.0-ios --configuration Debug -p:RuntimeIdentifier=iossimulator-arm64 -p:EnableCodeSigning=false
+      - name: Run iOS simulator and verify actual native C# receipt
+        run: bash frontends/native/probes/scripts/test-ios-simulator.sh
+      - name: Preserve iOS runtime receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n00-ios-sdk-probe
+          path: |
+            /tmp/n00-ios-simulator-receipt.txt
+            /tmp/n00-ios-simulator-diagnostics.txt
+            /tmp/n00-ios-simulator-screenshot.png
+          if-no-files-found: ignore
