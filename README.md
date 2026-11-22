@@ -10,6 +10,11 @@ Planning and documenting do **not** authorize implementing engines. An exact tas
 
 **Assistant handles routine tests and CI whenever possible; the user is not the regression-test runner.** Keep presentation HEX-only until N08. Native iOS and Android are non-negotiable release targets.
 
+
+## Release separation approved — 2026-11-22
+
+The user explicitly approved a **deferred `main` / GitHub Pages cutover**: retain the current playable JavaScript site and existing legacy Lava PR #432 as-is, while future approved N00 C# work proceeds independently from the architecture branch. PR #439 remains unmerged to `main` until a genuinely playable/usable compiled Blazor WASM frontend exists and a separate release review authorizes the switch. The draft Physics PR #440 and DRILL PRs #442/#443 are not part of this integration. This does **not** grant N00 implementation approval.
+
 ## Locked direction
 
 - The game backend means **authoritative C# simulation**, running locally in the host (Blazor WebAssembly on GitHub Pages during development; native C# host on iOS/Android at release). GitHub Pages does not run a C# server.

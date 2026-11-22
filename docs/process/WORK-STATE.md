@@ -3,8 +3,8 @@
 > **This file is an INDEX, not authoritative runtime evidence.** Every future chat must compare the listed refs against real GitHub HEADs, PR states and test runs before relying on them. Never treat an old checkpoint as proof that the current repo is unchanged.
 
 **Checkpoint captured:** 2026-11-22 (architecture review).  
-**Authorized current task:** pre-N00 repository integration (step 2): PR #441 integrated into #439; review combined C# CI and main cutover risk. **Main cutover is awaiting a specific release/legacy-work decision.**  
-**Engine implementation authorization:** **NOT GRANTED** for future stages by these requests; documentation and approval of `continue` semantics does **not** authorize N00.  
+**Authorized current task:** **PRE-N00 step 2 COMPLETE**: PR #441 integrated into #439, combined CI PASS, and safe no-main-cutover strategy approved on 2026-11-22. **Next engineering milestone N00 remains NOT AUTHORIZED.**  
+**Engine implementation authorization:** **NOT GRANTED** for N00 by the step-2/cutover agreement. The next task requires a specific owner start instruction.  
 **Active delivery milestone:** pre-N00 architecture/roadmap and process agreement.  
 **Visual lock:** HEX colors and primitive shapes through N00–N07; N08 is final visual presentation.  
 **Reference repo:** `pjotrcasteel/Wyrmforge` (V1 first-Hunt behaviour only).  
@@ -31,19 +31,20 @@
 - PR #441 **merged** into PR #439's architecture branch at **`7c37882b6ed7900a4ded05aef3334834b4338f21`**; documentation only (17 markdown files since the previous architecture HEAD).
 - CI on that commit: **PASS** [PR run 45067457240](https://github.com/pjotrcasteel/Wyrmforge-V2/actions/runs/45067457240) and [push run 45067452104](https://github.com/pjotrcasteel/Wyrmforge-V2/actions/runs/45067452104). Engine source and `old/` were not altered by the docs merge.
 - `main` still at `a2d7713f91d046d374734ce638c297db8be086ad` before this checkpoint; PR #439 remains open/draft.
-- **BLOCKER:** merging PR #439 to `main` activates `.github/workflows/pages.yml` on `push: main` and deploys `frontends/web/preview`, a **static HTML/HEX placeholder**, replacing the old playable GitHub Pages build. This release change requires an explicit owner decision.
-- **PARALLEL:** old JS Lava PR #432 edits root JS paths that #439 archives/removes; leave open, no automatic merge/abandonment. Physics PR #440 remains separately owned and unmerged. DRILL PR #442/#443 remain unchanged.
-- **Next:** owner chooses safe Pages/main migration strategy and what to do with legacy Lava PR #432; after that execute a scoped approved plan, reverify `main` SHA, PR conflicts and CI. Until then **do not merge #439 into `main`**.
+- **OWNER DECISION 2026-11-22:** preserve the existing playable JS game on `main` and GitHub Pages. Do NOT merge #439 to `main` or deploy its static preview. A separate cutover will be reviewed only once a genuinely compiled and usable Blazor WASM C# game is available.
+- **PARALLEL:** preserve open legacy Lava PR #432 and its history, with no merge/discard or silent port to C#. Physics PR #440 remains separately owned/unmerged; DRILL PR #442/#443 remain unchanged.
+- **Step-2 closeout:** PASS on integration and CI. N00 may develop on a dedicated child feature branch of the architecture line **when specifically authorized**; keep `main`/Pages playable until a reviewed playable Blazor cutover. No automatic merge/deploy.
 
 ## Governance
 
 - The owner subsequently authorized **step 2 pre-N00 integration**; PR #441 was merged into the architecture branch. This authorization does not permit replacing the live Pages game by an unrequested deployment or discarding parallel legacy PR #432.
-- No **N00 implementation**, Pages deployment or native build is authorized by this checkpoint. PR #439 -> `main` has **not** been merged; its Pages workflow would deploy a static HEX preview on push to `main`, replacing the current playable JS Pages artifact.
+- No **N00 implementation**, Pages deployment or native build is authorized by this checkpoint. PR #439 -> `main` has **not** been merged; its Pages workflow would replace the currently playable JS Pages artifact with a static HEX preview. Owner-approved strategy deliberately defers this.
 - **Process gate DRILL-001: PASS**, documented in [`DRILL-001-RESULT.md`](DRILL-001-RESULT.md) after the owner supplied the separate-chat read-only audit and the GitHub history was independently verified. The synthetic DRILL-001 fixture itself remains `BLOCKED` as expected. **N00 still requires explicit authorization**, as do merges/deployments.
 - Proposed docs: `docs/process/HANDOVER-STANDARD.md`, `HANDOVER-TEMPLATE.md`, and `CONTEXT-LOSS-RECOVERY.md`, added to documentation PR #441; no functioning automated/background service.
 - **Owner decision on 2026-11-22: APPROVED.** GitHub-first handovers use rolling task checkpoints during authorized work, not a final chat message. **Two-chat read-only rehearsal DRILL-001 PASSED 2026-11-22**; actual platform cutoff/automatic checkpoint persistence was NOT TESTED.
 - **Owner decision on 2026-11-22: APPROVED.** The one-word `continue` advances the unique, verified, already-authorized workstream without repeated checks with the user. It does not authorize an unapproved engine/milestone, merge or deployment. See `docs/process/CONTINUE-POLICY.md`.
-- Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
+- **Step-2 decision:** OWNER APPROVED 2026-11-22. Protect the existing playable JS `main` and Pages, preserve Lava PR #432, build C# N00 separately from architecture branch, and consider `main`/Pages migration only when playable Blazor WASM is ready and reviewed.
+- Next possible engineering milestone (**requires explicit owner start authorization**): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 
 ## Updating this checkpoint
 
