@@ -71,14 +71,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.3xx'
+          dotnet-version: '10.0.401'
       - name: Verify current macOS, Xcode and .NET workload
         run: |
           sw_vers
           xcodebuild -version
           xcode-select -p
           dotnet --info
-          dotnet workload install ios
+          dotnet workload install ios --version 10.0.401
           dotnet workload list
       - name: Compile and bundle a real iOS simulator app, no signing
         run: dotnet build frontends/native/probes/Wyrmforge.V2.NativeProbe.iOS/Wyrmforge.V2.NativeProbe.iOS.csproj --framework net10.0-ios --configuration Debug -p:RuntimeIdentifier=iossimulator-arm64 -p:EnableCodeSigning=false
