@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wyrmforge V2 — Primitive World</title>
+  <style>
+    :root{color-scheme:dark;--bg:#10161D;--panel:#18242C;--text:#E8ECEF;--muted:#9BACB7}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);font-family:system-ui,sans-serif;color:var(--text)}
+    main{max-width:1120px;margin:0 auto;padding:24px 16px}
+    header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    h1{font-size:clamp(20px,4vw,32px);margin:0 0 6px}
+    p{color:var(--muted);margin:0 0 18px;font-size:14px;line-height:1.5}
+    .status{border:1px solid #4C6670;padding:7px 11px;border-radius:8px;font-size:12px;color:#BDCED3}
+    .scene{width:100%;display:block;border:1px solid #40525D;border-radius:12px;background:#10161D}
+    svg{display:block;width:100%;height:auto;max-height:70vh}
+    .swatches{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}
+    .swatch{font:12px ui-monospace,monospace;color:var(--muted);display:flex;gap:7px;align-items:center}
+    .swatch b{width:18px;height:18px;border:1px solid #73828A;display:inline-block}
+    footer{margin-top:16px;font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Wyrmforge V2</h1>
+      <p>Primitive world placeholder — every object is a basic shape with an explicit HEX color.</p>
+    </div>
+    <span class="status">Static visual fixture · C# gameplay not connected</span>
+  </header>
+  <div class="scene">
+    <svg viewBox="0 0 960 565" role="img" aria-label="Isometric-style placeholder world: rectangular green ground, grey cliffs, flat blue river, cube trees, cylindrical wizard, enemy capsules, and orange lava. No textures.">
+      <rect x="0" y="0" width="960" height="565" fill="#10161D" />
+      <polygon points="100,247 470,75 875,275 500,459" fill="#527E50" />
+      <polygon points="100,247 500,459 500,490 100,279" fill="#705038" />
+      <polygon points="500,459 875,275 875,305 500,490" fill="#705038" />
+      <polygon points="120,252 476,85 857,278 496,448" fill="none" stroke="#65965E" stroke-width="3" />
+      <!-- Cliffs; simple rectangles and polygons, physical simulation will be C#-owned. -->
+      <polygon points="555,150 654,103 768,158 669,205" fill="#7F8892"/>
+      <polygon points="555,150 669,205 669,248 555,193" fill="#616A74"/>
+      <polygon points="669,205 768,158 768,202 669,248" fill="#525D69"/>
+      <polygon points="607,126 669,97 735,129 674,157" fill="#6F7780"/>
+      <polygon points="607,126 674,157 674,201 607,171" fill="#56616A"/>
+      <polygon points="674,157 735,129 735,174 674,201" fill="#4C555E"/>
+      <!-- Water is a simple blue polygon, no visual fluid authority. -->
+      <polygon points="150,242 215,207 380,285 560,370 509,395 340,307" fill="#3A7EA4"/>
+      <polygon points="150,242 509,395 509,402 150,249" fill="#2B5D7D"/>
+      <!-- Terrain boxes are visual proxies of future voxel snapshots. -->
+      <polygon points="262,184 310,162 354,183 308,205" fill="#6F7780"/>
+      <polygon points="262,184 308,205 308,239 262,216" fill="#55606B"/>
+      <polygon points="308,205 354,183 354,217 308,239" fill="#48525D"/>
+      <polygon points="735,274 779,254 817,274 772,296" fill="#6F7780"/>
+      <polygon points="735,274 772,296 772,329 735,307" fill="#55606B"/>
+      <polygon points="772,296 817,274 817,307 772,329" fill="#48525D"/>
+      <!-- Cuboid trees, explicit green and brown tones. -->
+      <rect x="178" y="173" width="18" height="91" fill="#705038"/>
+      <polygon points="137,167 188,141 236,165 188,193" fill="#3D6F46"/>
+      <polygon points="137,167 188,193 188,216 137,187" fill="#31593D"/>
+      <polygon points="188,193 236,165 236,190 188,216" fill="#294C37"/>
+      <rect x="400" y="110" width="17" height="75" fill="#705038"/>
+      <polygon points="369,104 409,84 452,105 411,126" fill="#3D6F46"/>
+      <polygon points="369,104 411,126 411,148 369,124" fill="#31593D"/>
+      <polygon points="411,126 452,105 452,126 411,148" fill="#294C37"/>
+      <rect x="797" y="194" width="16" height="68" fill="#705038"/>
+      <polygon points="773,188 805,170 840,188 806,207" fill="#3D6F46"/>
+      <polygon points="773,188 806,207 806,227 773,207" fill="#31593D"/>
+      <polygon points="806,207 840,188 840,208 806,227" fill="#294C37"/>
+      <!-- Actor cylinders/capsules. -->
+      <ellipse cx="457" cy="311" rx="28" ry="13" fill="#243B34"/>
+      <rect x="443" y="254" width="28" height="55" rx="13" fill="#6575D9" stroke="#D4DBFA" stroke-width="3"/>
+      <circle cx="457" cy="254" r="16" fill="#6575D9" stroke="#D4DBFA" stroke-width="3"/>
+      <rect x="478" y="238" width="5" height="72" fill="#B19156"/>
+      <circle cx="480" cy="234" r="9" fill="#E8A84B"/>
+      <ellipse cx="608" cy="304" rx="20" ry="10" fill="#243B34"/>
+      <rect x="595" y="258" width="25" height="47" rx="12" fill="#8A9B7A"/>
+      <ellipse cx="698" cy="337" rx="20" ry="10" fill="#243B34"/>
+      <rect x="687" y="295" width="24" height="43" rx="12" fill="#C3693B"/>
+      <!-- Minimal orange lava, no detailed particles, no texture. -->
+      <polygon points="708,381 774,354 814,372 750,400" fill="#E25A29"/>
+      <polygon points="752,402 815,371 829,377 766,409" fill="#A63A24"/>
+      <!-- Portal as a pair of solid boxes. -->
+      <rect x="370" y="255" width="15" height="66" fill="#6EBAAC"/>
+      <rect x="405" y="237" width="15" height="84" fill="#6EBAAC"/>
+      <rect x="370" y="236" width="50" height="15" fill="#6EBAAC"/>
+      <rect x="384" y="251" width="23" height="58" fill="#24484B"/>
+      <g fill="#E8ECEF" font-size="15" font-family="system-ui, sans-serif">
+        <text x="425" y="225">WIZARD</text>
+        <text x="565" y="243">HOLLOWED</text>
+        <text x="681" y="282">ASHLING</text>
+        <text x="756" y="428">LAVA</text>
+        <text x="203" y="345">RIVER</text>
+      </g>
+    </svg>
+  </div>
+  <div class="swatches">
+    <span class="swatch"><b style="background:#527E50"></b>#527E50 ground</span>
+    <span class="swatch"><b style="background:#705038"></b>#705038 dirt</span>
+    <span class="swatch"><b style="background:#6F7780"></b>#6F7780 stone</span>
+    <span class="swatch"><b style="background:#3A7EA4"></b>#3A7EA4 water</span>
+    <span class="swatch"><b style="background:#E25A29"></b>#E25A29 lava</span>
+    <span class="swatch"><b style="background:#6575D9"></b>#6575D9 wizard</span>
+  </div>
+  <footer>Architecture fixture only. Gameplay and physical world authority will come exclusively from the new C# engine contracts.</footer>
+</main>
+</body>
+</html>
