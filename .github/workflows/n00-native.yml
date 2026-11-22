@@ -30,14 +30,19 @@ jobs:
           dotnet test game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj --configuration Release
 
   android-sdk:
-    runs-on: ubuntu-24.04
+    # Standard Linux GitHub runners expose no /dev/kvm; this OS SDK emulator needs macOS Intel virtualization.
+    runs-on: macos-15-intel
     timeout-minutes: 55
     needs: portable-core
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+      - name: Install isolated .NET 10 SDK for Android (no global runner workload contamination)
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/wyrmforge-install-dotnet.sh"
+          bash "$RUNNER_TEMP/wyrmforge-install-dotnet.sh" --version 10.0.401 --install-dir "$RUNNER_TEMP/wyrmforge-dotnet"
+          echo "$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$RUNNER_TEMP/wyrmforge-dotnet" >> "$GITHUB_ENV"
+          echo "DOTNET_MULTILEVEL_LOOKUP=0" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -47,7 +52,7 @@ jobs:
           dotnet --info
           echo "ANDROID_HOME=${ANDROID_HOME}"
           java -version
-          dotnet workload install android
+          dotnet workload install android --version 10.0.401
           dotnet workload list
       - name: Build native Android APK (no production release)
         run: dotnet build frontends/native/probes/Wyrmforge.V2.NativeProbe.Android/Wyrmforge.V2.NativeProbe.Android.csproj --configuration Debug -p:RuntimeIdentifier=android-x64
@@ -58,6 +63,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          emulator-boot-timeout: 600
           script: bash frontends/native/probes/scripts/test-android-emulator.sh
       - name: Preserve Android runtime receipt
         if: always()
@@ -97,5 +103,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: n00-ios-sdk-probe
-          path: /tmp/n00-ios-simulator-receipt.txt
+          path: |
+            /tmp/n00-ios-simulator-receipt.txt
+            /tmp/n00-ios-simulator-diagnostics.txt
+            /tmp/n00-ios-simulator-screenshot.png
           if-no-files-found: ignore

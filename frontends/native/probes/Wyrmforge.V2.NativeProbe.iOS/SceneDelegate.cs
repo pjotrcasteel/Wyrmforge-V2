@@ -1,11 +1,10 @@
 using CoreGraphics;
 using ObjCRuntime;
 using UIKit;
-using Wyrmforge.V2.NativeProbe.Core;
 
 namespace Wyrmforge.V2.NativeProbe.iOS;
 
-/// <summary>Provides an ephemeral UIKit shell for the C# core parity and launch probe.</summary>
+/// <summary>Ephemeral native UIKit shell, never the authority for gameplay state.</summary>
 [Register("SceneDelegate")]
 public sealed class SceneDelegate : UIWindowSceneDelegate
 {
@@ -23,14 +22,10 @@ public sealed class SceneDelegate : UIWindowSceneDelegate
             throw new InvalidOperationException("The native iOS probe requires a window scene.");
         }
 
-        var proof = NativeSessionProof.Run();
-        var receipt = $"status={proof.Status} tick={proof.Tick} accepted={proof.AcceptedCommands} " +
-                      $"hash={proof.CanonicalHash} random={proof.RandomSample}";
-
-        // A simulator can verify the exact receipt from the native app sandbox without
-        // relying on build logs, screenshot interpretation or an application-owned server.
-        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        File.WriteAllText(Path.Combine(documents, "wyrmforge-n00-probe.txt"), receipt);
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            AppDelegate.ReceiptName);
+        var receipt = File.Exists(path) ? File.ReadAllText(path) : "status=NO_RECEIPT";
 
         Window = new UIWindow(windowScene);
         var root = new UIViewController();
