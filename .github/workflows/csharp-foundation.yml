@@ -1,9 +1,9 @@
 name: V2 C# foundation checks
 on:
   push:
-    branches: [main, architecture/native-mobile-engine-blueprint]
+    branches: [main, architecture/native-mobile-engine-blueprint, 'feature/n00-*']
   pull_request:
-    branches: [main]
+    branches: [main, architecture/native-mobile-engine-blueprint]
   workflow_dispatch:
 
 permissions:
