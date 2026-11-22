@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.wyrmforge.v2.n00probe.ios</ApplicationId>
+    <ApplicationTitle>Wyrmforge N00 SDK Probe</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>0.0.1</ApplicationDisplayVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Wyrmforge.V2.NativeProbe.Core/Wyrmforge.V2.NativeProbe.Core.csproj" />
+  </ItemGroup>
+</Project>
