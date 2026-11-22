@@ -1,3 +1,5 @@
+> **Superseded proposal note (2026-11-22):** The original document below is the earlier platform-migration inventory. The authoritative **new clean-room C# project layout and HEX placeholder rule** are [ENGINE-OWNERSHIP.md](architecture/ENGINE-OWNERSHIP.md), [PLACEHOLDER-WORLD.md](architecture/PLACEHOLDER-WORLD.md), and [IMPLEMENTATION-ROADMAP.md](architecture/IMPLEMENTATION-ROADMAP.md). Actual projects are under game/src/ and frontends/. Nothing below authorizes porting V1/old V2 runtime source, selecting Unity as the game engine, or resuming JavaScript simulation ownership. The whole first Hunt is a **fresh C# implementation**; V1 is a functional reference only.
+
 # Wyrmforge V2 — Native Mobile Engine Map
 
 **Status:** PROPOSED ARCHITECTURE, updated for owner-confirmed C# backend + swappable Pages/native presentation; not implemented.  

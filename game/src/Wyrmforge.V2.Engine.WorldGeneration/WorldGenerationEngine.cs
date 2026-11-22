@@ -36,6 +36,6 @@ public sealed class WorldGenerationEngine : IWorldGenerationEngine
             }
         }
 
-        return new SiteDefinition(recipe.Seed, mutations);
+        return new SiteDefinition(recipe.Seed, mutations.AsReadOnly());
     }
 }

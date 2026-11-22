@@ -50,3 +50,12 @@ All contracts must document coordinate units, update ordering, snapshot lifetime
 ## Non-goals
 
 No remote game backend by default; no automatic migration of all old JS in one PR; no assumption that a particular native framework is already chosen; no promise that C# libraries can be loaded unchanged by every native runtime until the cross-compile proof passes; no WebView workaround to claim native success.
+
+## Owner confirmation — brand-new C# engines and primitive-only visuals (2026-11-22)
+
+- New engines must be authored **from scratch in separate C# libraries**, not copied V1 C# code and not direct ports of previous V2 JavaScript. Historical source may guide expected game behaviour, fixtures and performance risks only.
+- The complete V1 Fire Tier-I Hunt is a **product behaviour reference** for the first V2 Hunt, not a source-code dependency or permission to retain V1 physics.
+- The sole authoritative physical terrain implementation will be the new V2 3D voxel/microvoxel engine.
+- Until the new engines and first playable Hunt have passed the agreed gates, all frontend world presentation must use **basic geometric shapes with explicit #RRGGBB HEX colors**. See PLACEHOLDER-WORLD.md.
+- The new engine-project layout and acceptance states are governed by ENGINE-OWNERSHIP.md. The old JavaScript/WebGL tree is frozen under old/.
+

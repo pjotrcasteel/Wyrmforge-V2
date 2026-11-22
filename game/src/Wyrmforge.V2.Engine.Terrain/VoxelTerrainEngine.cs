@@ -47,6 +47,6 @@ public sealed class VoxelTerrainEngine : ITerrainEngine
             .ThenBy(cell => cell.Cell.Z)
             .ToArray();
 
-        return new TerrainSnapshot(Revision, cells);
+        return new TerrainSnapshot(Revision, Array.AsReadOnly(cells));
     }
 }

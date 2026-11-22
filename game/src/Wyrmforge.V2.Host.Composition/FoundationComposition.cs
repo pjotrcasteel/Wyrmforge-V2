@@ -36,6 +36,6 @@ public static class FoundationComposition
                 solid.MaterialId == 2 ? PlaceholderPalette.Stone : PlaceholderPalette.Grass))
             .ToArray();
 
-        return new PlaceholderScene(snapshot.Revision, primitives);
+        return new PlaceholderScene(snapshot.Revision, Array.AsReadOnly(primitives));
     }
 }
