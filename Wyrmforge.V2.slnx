@@ -21,6 +21,7 @@
   </Folder>
   <Folder Name="/game/tests/">
     <Project Path="game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj" />
+    <Project Path="game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="Directory.Build.props" />

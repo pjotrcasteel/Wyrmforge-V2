@@ -1,0 +1,29 @@
+name: N00 deterministic session checks
+
+on:
+  push:
+    branches:
+      - 'feature/n00-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check independent engine references
+        run: python3 scripts/validate-engine-references.py
+      - name: Restore entire C# solution
+        run: dotnet restore Wyrmforge.V2.slnx
+      - name: Build entire C# solution
+        run: dotnet build Wyrmforge.V2.slnx --no-restore --configuration Release
+      - name: Test N00 deterministic session
+        run: dotnet test game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj --no-restore --configuration Release
+      - name: Regression-test existing foundation
+        run: dotnet test game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj --no-restore --configuration Release
