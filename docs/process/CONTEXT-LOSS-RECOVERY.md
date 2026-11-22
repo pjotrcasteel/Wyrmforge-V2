@@ -1,6 +1,6 @@
 # Wyrmforge V2 — context-limit / abrupt-chat-loss recovery
 
-**Status:** PROPOSAL for owner agreement (2026-11-22). Documentation only; not an automated service.
+**Status:** OWNER APPROVED on 2026-11-22 as the Wyrmforge V2 handover and emergency recovery policy. **Practical two-chat rehearsal: PENDING.** Documentation only; not an automated service.
 
 ## The problem
 
@@ -8,7 +8,7 @@ Chats can hit a conversation/context limit without warning. The previous chat ma
 
 We cannot reliably predict, increase or reset a platform chat limit from a repository. We also cannot promise that an assistant will automatically execute work while a chat is closed. We can make the GitHub state durable **as work proceeds**, so the final goodbye is optional.
 
-## Proposed fix: always-on, incremental checkpoints while an authorized task is underway
+## Agreed fix: incremental checkpoints while an authorized task is underway
 
 ### 1. Create a recovery pointer *before* coding
 
@@ -77,4 +77,4 @@ A task can continue only with the owner's original explicitly approved scope. Wh
 - Make one more test commit without updating the checkpoint to simulate an abrupt stop. Verify the receiver detects the stale checkpoint and reconstructs progress instead of declaring it complete.
 - Test two simultaneous workstreams and verify the receiver does not seize another chat's ownership.
 
-**Status:** rehearsal not executed; process is a draft. It can only be relied upon after the user approves and the team actually follows it.
+**Status:** owner has approved the process. The two-chat rehearsal has **NOT** been executed and is a required gate before N00 engine development; until it passes, do not claim proven cross-chat recovery. A documentation agreement alone cannot force unattended checkpoint writes or override platform limits.

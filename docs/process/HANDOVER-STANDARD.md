@@ -1,14 +1,14 @@
-# Wyrmforge V2 — GitHub-first chat handover standard (v1 proposal)
+# Wyrmforge V2 — GitHub-first chat handover standard (v1)
 
-**Status:** PROPOSED FOR OWNER REVIEW. Documented 2026-11-22 on the documentation PR; not yet an approved automated workflow.  
+**Status:** OWNER APPROVED 2026-11-22. Two-chat recovery rehearsal **PENDING**. This is an agreed manual/work-session procedure, not an automated background workflow.  
 **Scope:** any workstream that may move between chats, contributors or work sessions.  
 **Non-goal:** handovers do not start a new task, run code, merge a PR, deploy, or create a scheduled/background process.
 
 ## Emergency recovery does NOT require a final handover
 
-The problem with a traditional handover is that a chat may suddenly become full, leaving no opportunity to ask for one. **Do not rely on a last-message handover.** During an authorized task, keep an incremental GitHub checkpoint updated at meaningful code/test milestones; a new chat can reconstruct the rest from commits and CI. The proposed detailed procedure and one universal no-context restart prompt are in [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md).
+The problem with a traditional handover is that a chat may suddenly become full, leaving no opportunity to ask for one. **Do not rely on a last-message handover.** During an authorized task, keep an incremental GitHub checkpoint updated at meaningful code/test milestones; a new chat can reconstruct the rest from commits and CI. The agreed detailed procedure and one universal no-context restart prompt are in [CONTEXT-LOSS-RECOVERY.md](CONTEXT-LOSS-RECOVERY.md).
 
-This is an **owner-review proposal**, not a background monitor or automatic service. The normal freeze-and-handover steps below remain useful when possible, but are **not required for recovery**.
+This is **owner-approved** working policy, not a background monitor or automatic service. The normal freeze-and-handover steps below remain useful when possible, but are **not required for recovery**.
 
 ## 1. Goal and the five invariants
 
@@ -146,7 +146,7 @@ Before calling the process reliable, stage a **no-code rehearsal** after PR merg
 4. Introduce a later change to the task branch; verify the receiver detects the stale checkpoint rather than using the old SHA.
 5. Simulate a second workstream owning the same files; verify it reports the collision and stops.
 
-This rehearsal is only a proposed acceptance test; it has **not been run**.
+This rehearsal is **approved and required before the first engine-implementation milestone**. It has **not been run**. Record its outcome with actual new-chat verification evidence and do not claim it passed prematurely.
 
 ## 10. One-line restart instruction
 

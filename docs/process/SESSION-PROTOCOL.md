@@ -56,4 +56,4 @@ The proposed v1 **single checkpoint per workstream** format is [HANDOVER-STANDAR
 - `WORK-STATE.md` stays a navigation index; do not race another chat to update it.
 - Do not mistake an accepted prior task's next recommendation as authorization for another task.
 
-**Status:** v1 mechanism is documented for owner agreement; no automatic generation, enforcement, or background work exists. The initial read-only preflight and authorization gate above remain mandatory.
+**Status:** v1 is approved by the owner on 2026-11-22; the required two-chat recovery rehearsal has NOT RUN. No automatic generation, enforcement, or background work exists. The initial read-only preflight and authorization gate above remain mandatory.

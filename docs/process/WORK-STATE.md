@@ -3,7 +3,7 @@
 > **This file is an INDEX, not authoritative runtime evidence.** Every future chat must compare the listed refs against real GitHub HEADs, PR states and test runs before relying on them. Never treat an old checkpoint as proof that the current repo is unchanged.
 
 **Checkpoint captured:** 2026-11-22 (architecture review).  
-**Authorized current task:** documentation of working rules, testing strategy **and proposed handover mechanism** only.  
+**Authorized current task:** documentation and acceptance of working rules, testing strategy and handover process only.  
 **Engine implementation authorization:** **NOT GRANTED** for future stages by these requests; the handover design is documentation-only.  
 **Active delivery milestone:** pre-N00 architecture/roadmap and process agreement.  
 **Visual lock:** HEX colors and primitive shapes through N00–N07; N08 is final visual presentation.  
@@ -28,9 +28,9 @@
 
 - The owner asked for **documentation**, then a **discussion about handovers**. This authorizes documentation changes only.
 - No source coding, testing-driven implementation, merge, Pages deployment or native build is authorized by this checkpoint.
-- Next deliverable in this chat: review the **proposed v1 GitHub handover standard** with the owner, clarify any unresolved choices, and treat approval as separate from code implementation authorization.
+- Next process gate: **perform the two-chat no-code recovery rehearsal** and record verifiable evidence before N00 engine work is authorized. Approval of the handover rules is **not** approval to start N00 or merge PRs.
 - Proposed docs: `docs/process/HANDOVER-STANDARD.md`, `HANDOVER-TEMPLATE.md`, and `CONTEXT-LOSS-RECOVERY.md`, added to documentation PR #441; no functioning automated/background service.
-- The **abrupt-chat-limit solution is rolling task checkpoints written while the active task is being done**, not a handover at the end. Owner agreement and a no-code rehearsal remain pending.
+- **Owner decision on 2026-11-22: APPROVED.** The GitHub-first handover and abrupt-chat recovery policy uses rolling task checkpoints during authorized work, not a handover at the end. The **two-chat rehearsal remains NOT RUN and is required before N00 implementation**.
 - Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 
 ## Updating this checkpoint
