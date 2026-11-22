@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
+    <ProjectReference Include="../../../game/src/Wyrmforge.V2.Contracts/Wyrmforge.V2.Contracts.csproj" />
+    <ProjectReference Include="../../../game/src/Wyrmforge.V2.Application/Wyrmforge.V2.Application.csproj" />
+    <ProjectReference Include="../../../game/src/Wyrmforge.V2.Host.Composition/Wyrmforge.V2.Host.Composition.csproj" />
+    <ProjectReference Include="../../../game/src/Wyrmforge.V2.Presentation.Contracts/Wyrmforge.V2.Presentation.Contracts.csproj" />
+  </ItemGroup>
+</Project>

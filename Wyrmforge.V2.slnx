@@ -19,6 +19,9 @@
     <Project Path="game/src/Wyrmforge.V2.Host.Composition/Wyrmforge.V2.Host.Composition.csproj" />
     <Project Path="game/src/Wyrmforge.V2.Presentation.Contracts/Wyrmforge.V2.Presentation.Contracts.csproj" />
   </Folder>
+  <Folder Name="/frontends/web/">
+    <Project Path="frontends/web/Wyrmforge.V2.Web/Wyrmforge.V2.Web.csproj" />
+  </Folder>
   <Folder Name="/game/tests/">
     <Project Path="game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj" />
     <Project Path="game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj" />

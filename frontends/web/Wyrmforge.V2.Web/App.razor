@@ -1,0 +1,69 @@
+@using Wyrmforge.V2.Application
+@using Wyrmforge.V2.Contracts
+@using Wyrmforge.V2.Host.Composition
+@using Wyrmforge.V2.Presentation.Contracts
+
+<main class="shell">
+    <h1>Wyrmforge V2</h1>
+    <p class="subheading">C# Foundation / HEX World</p>
+
+    <section class="layout" aria-label="Foundation scene">
+        <div class="terrain" aria-label="C# voxel terrain">
+            @foreach (var block in scene.Primitives)
+            {
+                <span class="voxel" title="@block.Id" style="@($"background-color:{block.Color.Value};")"></span>
+            }
+        </div>
+
+        <div class="inspector">
+            <p data-testid="tick">Tick: @Snapshot.Tick</p>
+            <p data-testid="accepted">Accepted: @Snapshot.AcceptedCommandCount</p>
+            <p data-testid="voxels">Voxels: @scene.Primitives.Count</p>
+            <p class="digest" data-testid="hash">@Snapshot.CanonicalStateHash</p>
+            <div class="actions">
+                <button data-testid="next-tick" @onclick="NextTick">Next tick</button>
+                <button data-testid="move-intent" @onclick="SendMoveIntent">Move intention</button>
+            </div>
+        </div>
+    </section>
+</main>
+
+@code {
+    private readonly FixedStepSimulationSession session = new(
+        Guid.Parse("bbaee9bb-c5bd-42f1-a5b0-62183cccf5f8"), seed: 7);
+
+    private readonly LatestSnapshotReceiver receiver = new();
+    private HeadlessSessionRunner runner = default!;
+    private PlaceholderScene scene = default!;
+
+    private SessionStateSnapshot Snapshot => receiver.Latest ?? session.Capture();
+
+    protected override void OnInitialized()
+    {
+        var terrain = FoundationComposition.BuildTerrain(new SiteRecipe(7, 1, 1));
+        scene = FoundationComposition.CreatePlaceholderScene(terrain.Capture());
+        runner = new HeadlessSessionRunner(session, receiver);
+    }
+
+    private void NextTick()
+    {
+        runner.RunUntil(checked(session.Tick + 1), []);
+    }
+
+    private void SendMoveIntent()
+    {
+        var tick = checked(session.Tick + 1);
+        var command = new PlayerCommand(session.SessionId, session.NextSequence, PlayerActionKind.Move, 1, 0);
+        runner.RunUntil(tick, [new ScheduledPlayerCommand(tick, command)]);
+    }
+
+    private sealed class LatestSnapshotReceiver : ISessionSnapshotReceiver
+    {
+        public SessionStateSnapshot? Latest { get; private set; }
+
+        public void Receive(SessionStateSnapshot snapshot)
+        {
+            Latest = snapshot;
+        }
+    }
+}

@@ -1,0 +1,56 @@
+name: N00 compiled Blazor WASM and browser E2E
+
+on:
+  push:
+    branches:
+      - 'feature/n00-03-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify engine reference boundaries
+        run: python3 scripts/validate-engine-references.py
+      - name: Restore C# solution
+        run: dotnet restore Wyrmforge.V2.slnx
+      - name: Build C# solution including real WASM frontend
+        run: dotnet build Wyrmforge.V2.slnx --no-restore --configuration Release
+      - name: Test deterministic session and existing foundation
+        run: |
+          dotnet test game/tests/Wyrmforge.V2.Session.Tests/Wyrmforge.V2.Session.Tests.csproj --no-restore --configuration Release
+          dotnet test game/tests/Wyrmforge.V2.Foundation.Tests/Wyrmforge.V2.Foundation.Tests.csproj --no-restore --configuration Release
+      - name: Publish standalone compiled WASM assets, no deployment
+        run: dotnet publish frontends/web/Wyrmforge.V2.Web/Wyrmforge.V2.Web.csproj --no-restore --configuration Release --output /tmp/n00-web
+      - name: Verify C# WebAssembly runtime is in output
+        run: |
+          test -s /tmp/n00-web/wwwroot/index.html
+          test -s /tmp/n00-web/wwwroot/_framework/blazor.webassembly.js
+          find /tmp/n00-web/wwwroot/_framework -type f -name '*.wasm' | grep -q .
+      - name: Install isolated browser test dependency
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify C# host, command input and read-only HEX rendering in mobile Chromium
+        run: |
+          python3 -m http.server 8765 --directory /tmp/n00-web/wwwroot > /tmp/n00-http-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          node scripts/test-n00-web-e2e.mjs
+      - name: Upload real browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n00-blazor-browser-evidence
+          path: /tmp/n00-web-e2e-proof.png
+          if-no-files-found: ignore
