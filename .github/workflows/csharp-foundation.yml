@@ -1,9 +1,9 @@
 name: V2 C# foundation checks
 on:
   push:
-    branches: [main, architecture/native-mobile-engine-blueprint]
+    branches: [main, architecture/native-mobile-engine-blueprint, 'feature/n00-*']
   pull_request:
-    branches: [main]
+    branches: [main, architecture/native-mobile-engine-blueprint]
   workflow_dispatch:
 
 permissions:
@@ -19,6 +19,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Verify new engine project dependency rules
         run: python3 scripts/validate-engine-references.py
+      - name: Guard HEX-only presentation assets
+        run: python3 scripts/validate-hex-only.py
       - name: Restore
         run: dotnet restore Wyrmforge.V2.slnx
       - name: Build new C# engine solution

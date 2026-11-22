@@ -7,6 +7,7 @@
     <ProjectReference Include="../../src/Wyrmforge.V2.Contracts/Wyrmforge.V2.Contracts.csproj" />
     <ProjectReference Include="../../src/Wyrmforge.V2.Presentation.Contracts/Wyrmforge.V2.Presentation.Contracts.csproj" />
     <ProjectReference Include="../../src/Wyrmforge.V2.Engine.Terrain/Wyrmforge.V2.Engine.Terrain.csproj" />
+    <ProjectReference Include="../../src/Wyrmforge.V2.Engine.Physics/Wyrmforge.V2.Engine.Physics.csproj" />
     <ProjectReference Include="../../src/Wyrmforge.V2.Engine.WorldGeneration/Wyrmforge.V2.Engine.WorldGeneration.csproj" />
     <ProjectReference Include="../../src/Wyrmforge.V2.Host.Composition/Wyrmforge.V2.Host.Composition.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

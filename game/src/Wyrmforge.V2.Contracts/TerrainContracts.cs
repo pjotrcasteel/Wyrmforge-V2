@@ -15,12 +15,17 @@ public readonly record struct SolidVoxel(MicroVoxel Cell, byte MaterialId);
 /// <summary>Read-only capture of a terrain revision.</summary>
 public sealed record TerrainSnapshot(long Revision, IReadOnlyList<SolidVoxel> SolidCells);
 
+/// <summary>Read-only microvoxel occupancy. Physics and navigation cannot write terrain.</summary>
+public interface IWorldGeometry
+{
+    /// <summary>Return whether the given signed 100 mm microcell is solid.</summary>
+    bool IsSolid(MicroVoxel cell);
+}
+
 /// <summary>Owns authoritative terrain occupancy, independent of every renderer.</summary>
-public interface ITerrainEngine
+public interface ITerrainEngine : IWorldGeometry
 {
     long Revision { get; }
-
-    bool IsSolid(MicroVoxel cell);
 
     bool Apply(TerrainMutation mutation);
 

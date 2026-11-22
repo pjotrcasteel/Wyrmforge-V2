@@ -19,7 +19,7 @@
 | WorldGeneration | Deterministic seeded geography and route/landmark/terrain descriptors | SiteRecipe | Minimal C# placeholder ground implementation |
 | Meshing | Read-only terrain derived mesh revisions and dirty work scheduling | TerrainSnapshot | Scaffold |
 | Streaming | Residency, region prefetch/eviction, snapshot reload | RegionQuery, world revision | Scaffold |
-| Physics | Authoritative actor/projectile poses, contact, gravity and collision response | Terrain/Object queries, movement requests | Scaffold |
+| Physics | Collision/step rules and eventual actor/projectile motion | Read-only geometry via IWorldGeometry, movement capabilities | N00 reference grid-step implemented; continuous physics pending |
 | WorldObjects | Physical IDs, tree/rock/structure damage, support lifecycle | Terrain and support change facts | Scaffold |
 | Fluids | Water/lava state and bounded deterministic flow/heat | Terrain snapshots and mutation facts | Scaffold |
 | Navigation | Traversability paths respecting physical mover capabilities | Physics mover profile, spatial occupancy | Scaffold |
