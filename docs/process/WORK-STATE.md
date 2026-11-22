@@ -28,9 +28,9 @@
 
 - The owner asked for **documentation**, then a **discussion about handovers**. This authorizes documentation changes only.
 - No source coding, testing-driven implementation, merge, Pages deployment or native build is authorized by this checkpoint.
-- Next process gate: **perform the two-chat no-code recovery rehearsal** and record verifiable evidence before N00 engine work is authorized. Approval of the handover rules is **not** approval to start N00 or merge PRs.
+- **Process gate DRILL-001: PASS**, documented in [`DRILL-001-RESULT.md`](DRILL-001-RESULT.md) after the owner supplied the separate-chat read-only audit and the GitHub history was independently verified. The synthetic DRILL-001 fixture itself remains `BLOCKED` as expected. **N00 still requires explicit authorization**, as do merges/deployments.
 - Proposed docs: `docs/process/HANDOVER-STANDARD.md`, `HANDOVER-TEMPLATE.md`, and `CONTEXT-LOSS-RECOVERY.md`, added to documentation PR #441; no functioning automated/background service.
-- **Owner decision on 2026-11-22: APPROVED.** The GitHub-first handover and abrupt-chat recovery policy uses rolling task checkpoints during authorized work, not a handover at the end. The **two-chat rehearsal remains NOT RUN and is required before N00 implementation**.
+- **Owner decision on 2026-11-22: APPROVED.** GitHub-first handovers use rolling task checkpoints during authorized work, not a final chat message. **Two-chat read-only rehearsal DRILL-001 PASSED 2026-11-22**; actual platform cutoff/automatic checkpoint persistence was NOT TESTED.
 - **Owner decision on 2026-11-22: APPROVED.** The one-word `continue` advances the unique, verified, already-authorized workstream without repeated checks with the user. It does not authorize an unapproved engine/milestone, merge or deployment. See `docs/process/CONTINUE-POLICY.md`.
 - Next possible engineering milestone (only on fresh user authorization): N00 Contracts + simulation clock + automated Test Harness + cross-host feasibility proof.
 

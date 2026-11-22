@@ -1,6 +1,6 @@
 # Wyrmforge V2 — GitHub-first chat handover standard (v1)
 
-**Status:** OWNER APPROVED 2026-11-22. Two-chat recovery rehearsal **PENDING**. This is an agreed manual/work-session procedure, not an automated background workflow.  
+**Status:** OWNER APPROVED 2026-11-22. Two-chat read-only DRILL-001 **PASS** (2026-11-22); actual platform exhaustion and unattended checkpointing not tested. This is an agreed manual/work-session procedure, not an automated background workflow.  
 **Scope:** any workstream that may move between chats, contributors or work sessions.  
 **Non-goal:** handovers do not start a new task, run code, merge a PR, deploy, or create a scheduled/background process.
 
@@ -146,7 +146,7 @@ Before calling the process reliable, stage a **no-code rehearsal** after PR merg
 4. Introduce a later change to the task branch; verify the receiver detects the stale checkpoint rather than using the old SHA.
 5. Simulate a second workstream owning the same files; verify it reports the collision and stops.
 
-This rehearsal is **approved and required before the first engine-implementation milestone**. It has **not been run**. Record its outcome with actual new-chat verification evidence and do not claim it passed prematurely.
+This rehearsal was performed as **DRILL-001** and the read-only safety checks **PASSED**, supported by [the owner-supplied new-chat report and independently verified GitHub evidence](DRILL-001-RESULT.md). The expected simulated workstream state was **BLOCKED**, which is the correct safe decision; the live fixture remains unchanged. The drill does **not** prove automatic ongoing writes or successful recovery from a real platform cutoff. Engine implementation and merges still require explicit authorization.
 
 ## 10. One-line restart instruction
 
